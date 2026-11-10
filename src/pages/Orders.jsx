@@ -79,7 +79,7 @@ export default function Orders() {
           {[['', '全部'], ['active', '进行中'], ['done', '已完成'], ['cancelled', '已取消']].map(([k, l]) => (
             <button type="button" key={k || 'all'} className={`chip ${light === k ? 'on' : ''}`} onClick={() => setLight(k)}>{k ? <Light v={k} /> : l} <b>{k ? counts[k] : (data || []).length}</b></button>))}
         </div>
-        <Grid id="orders" table="deals" columns={cols} rows={rows} onRowClick={(d) => go('deal/' + d.id)} empty={data ? '没有符合条件的订单' : '加载中…'}
+        <Grid id="orders" table="deals" columns={cols} rows={rows} onRowClick={(d) => go('deal/' + d.id)} empty={!data ? '加载中…' : light ? `${custom && period === 'custom' ? `${custom[0]} 至 ${custom[1]} ` : '这个时间段'}没有「${LIGHT_LABEL[light]}」的订单` : (data.length ? '没有符合条件的订单' : '这个时间段还没有订单')}
           tools={(
             <span style={{ position: 'relative' }} ref={ref}>
               <button type="button" className={`btn sm ${active ? 'primary' : ''}`} onClick={() => setOpen(!open)}>⌕ 筛选{active ? ' · 已筛' : ''}</button>
