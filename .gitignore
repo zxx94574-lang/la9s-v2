@@ -1,0 +1,11 @@
+node_modules/
+.env*
+la9s-v2.git-bundle
+dist-artifact/
+dist-real/
+dist-artifact/
+dist/
+*.git-bundle
+*.tgz
+real.tmp.mjs
+真实数据*/

@@ -1,0 +1,26 @@
+{
+  "name": "la9s-operations",
+  "version": "1.0.0",
+  "description": "LA&9S 科特迪瓦销售系统 v2",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "node scripts/serve.mjs dist 5173",
+    "test": "node --test tests/rules.test.mjs tests/flow.test.mjs tests/security.test.mjs tests/demo-seed.test.mjs tests/crm.test.mjs tests/cash.test.mjs tests/supply.test.mjs tests/modules.test.mjs tests/approval.test.mjs tests/accounts.test.mjs tests/v9.test.mjs"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.16",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  },
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "html-to-image": "^1.11.11",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}
