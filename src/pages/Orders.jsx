@@ -36,7 +36,7 @@ export default function Orders() {
     if (grp && !['open', 'unpaid'].includes(grp) && !grp.split(',').includes(d.status)) return false;
     if (text) { const t = text.toUpperCase(); if (![d.biz_no, d.customer_name, d.customer_code, d.city, d.quote_no, d.so_no].some((x) => String(x || '').toUpperCase().includes(t))) return false; }
     return true;
-  }), [data, text, tier, grp]);
+  }), [data, text, tier, grp, light]);
   const price = seesPrice(role);
   const cols = [
     { key: 'biz_no', label: '订单号', w: 150, render: (d) => <b className="mono">{d.biz_no}</b> },
