@@ -1,3 +1,4 @@
+import { DealLink, CustLink } from '../components/Archives.jsx';
 import React from 'react';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -60,7 +61,7 @@ export function OverdueBar({ orders, go, compact }) {
         return (
           <div key={d.id} className="orow" onClick={() => go('deal/' + d.id)}>
             <span className={`age ${o.tier}`}>{o.label}</span>
-            <span><b>{d.customer_name}</b> <span className="muted small">{d.biz_no}</span></span>
+            <span><CustLink id={d.customer_id} name={d.customer_name} /> <span className="small"><DealLink id={d.id} no={d.biz_no} /></span></span>
             <span className="hm"><Pill tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Pill></span>
             <span className="hm small">负责：<b>{nx ? nx.roles.map((r) => ROLES[r]?.label || r).join(' / ') : '—'}</b>{d.owner_name ? ` · 归属 ${d.owner_name}` : <span className="red-t"> · 没有归属销售</span>}</span>
             <span className="muted">›</span>
@@ -153,7 +154,7 @@ function OpenReturns() {
       <div className="row between" style={{ padding: '10px 18px', borderBottom: '1px solid var(--line-2)' }}><b>↩ 没走完的退货 {data.length} 张</b></div>
       {data.map((r) => (
         <div key={r.id} className="row between" style={{ padding: '8px 18px', borderBottom: '1px solid var(--line-2)', gap: 10 }}>
-          <span><a style={{ cursor: 'pointer' }} onClick={() => go('deal/' + r.deal_id)}><b className="mono">{r.rt_no}</b> · {r.customer_name}</a> <span className="muted small">原单 {r.biz_no} · 收货 {r.received_at ? dt(r.received_at) : dt(r.requested_at)}</span></span>
+          <span><b><DealLink id={r.deal_id} no={r.rt_no} /></b> · {r.customer_name} <span className="muted small">原单 {r.biz_no} · 收货 {r.received_at ? dt(r.received_at) : dt(r.requested_at)}</span></span>
           <Pill tone={P[r.pending]?.[1] || 'gray'}>{P[r.pending]?.[0] || r.pending}</Pill>
         </div>))}
     </div>

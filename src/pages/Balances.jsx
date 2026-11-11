@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { PhotoInput, TierPill, Light, useApp, useData, Pill, Modal, OptionNote, BigNum } from '../components/ui.jsx';
-import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
+import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import { BalanceCopy } from '../components/Doc.jsx';
 import { DealDrawer, DealChip, BalanceLine } from '../components/ReceiptForm.jsx';
@@ -94,7 +94,7 @@ export function CustomerLedger({ id }) {
         <Grid id="cust-ledger" rowKey={(e) => e.id} rows={ledger} columns={[
           { key: 'at', label: '日期', w: 130, render: (e) => (e.kind === 'receipt' ? dDate(e.eff_at) : dt(e.eff_at)) },
           { key: 'kind', label: '类型', w: 90, render: (e) => <Pill tone={KIND[e.kind]?.[1] || 'gray'}>{KIND[e.kind]?.[0] || e.kind}</Pill> },
-          { key: 'doc_no', label: '单据', w: 150, render: (e) => <span className="mono">{e.doc_no || e.note || ''}</span> },
+          { key: 'doc_no', label: '单据', w: 150, render: (e) => (e.deal_id && e.doc_no ? <DealLink id={e.deal_id} no={e.doc_no} /> : <span className="mono">{e.doc_no || e.note || ''}</span>) },
           { key: 'biz_no', label: '订单', w: 150, render: (e) => (e.deal_id && e.biz_no ? <DealChip id={e.deal_id} no={e.biz_no} onOpen={setDrawer} /> : '') },
           { key: 'amount', label: '金额（+欠 / −减）', w: 140, render: (e) => <b style={{ color: N(e.amount) < 0 ? 'var(--green)' : '' }}>{N(e.amount) > 0 ? '+' : ''}{money(e.amount)}</b> },
           { key: 'running', label: '余额', w: 170, render: (e) => { const x = balanceWords(e.running); return <b className={`${x.tone}-t2`}>{x.label === '已结清' ? '已结清' : `${x.label === '预付' ? '预付 ' : '欠 '}${money(x.amount)}`}</b>; } },
@@ -104,7 +104,7 @@ export function CustomerLedger({ id }) {
         <div className="card">
           <div className="card-h"><h2>退货记录</h2><span className="muted small">点单号打开原单的「退货对账」</span></div>
           <Grid id="cust-returns" rowKey={(r) => r.id} rows={returns} columns={[
-            { key: 'rt_no', label: '退货单号', w: 150, render: (r) => <b className="mono">{r.rt_no}</b> },
+            { key: 'rt_no', label: '退货单号', w: 150, render: (r) => <b><DealLink id={r.deal_id} no={r.rt_no} /></b> },
             { key: 'batch_no', label: '批次', w: 130 },
             { key: 'biz_no', label: '原订单', w: 150, render: (r) => <DealChip id={r.deal_id} no={r.biz_no} onOpen={setDrawer} /> },
             { key: 'requested_at', label: '日期', w: 100, render: (r) => dDate(r.requested_at) },
@@ -169,7 +169,7 @@ function CustomerReturnModal({ customerId, name, onClose }) {
             {prod && <span className="hint">该客户这个型号最多可退 {cap} 件</span>}
           </div>
           {prod && <Grid id="cret-split" noTools rowKey={(l) => l.line_id} rows={rows} columns={[
-            { key: 'biz_no', label: '订单', w: 150, render: (l) => <b className="mono">{l.biz_no}</b> },
+            { key: 'biz_no', label: '订单', w: 150, render: (l) => <DealLink id={l.deal_id} no={l.biz_no} /> },
             { key: 'last_shipped', label: '出库日期', w: 100, render: (l) => dDate(l.last_shipped) },
             { key: 'qty_shipped', label: '出库数量', w: 80 },
             { key: 'unit_price', label: '单价', w: 90, render: (l) => money(l.unit_price, l.currency) },

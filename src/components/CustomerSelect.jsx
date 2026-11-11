@@ -20,7 +20,7 @@ export default function CustomerSelect({ customers, value, onChange, onlyActive 
   const list = useMemo(() => {
     const t = text.trim().toUpperCase();
     return customers.filter((c) => (!onlyActive || c.status === 'active') &&
-      (!t || [c.code, c.temp_code, c.name, c.city, c.phone].some((x) => String(x || '').toUpperCase().includes(t))))
+      (!t || [c.code, c.temp_code, c.name, c.city, c.phone].some((x) => String(x || '').toUpperCase().includes(t)) || (/\d{3,}/.test(t) && String(c.phone || '').replace(/\D/g, '').includes(t.replace(/\D/g, '')))))
       .sort((a, b) => (a.status === 'prospect') - (b.status === 'prospect')).slice(0, 40);
   }, [customers, text, onlyActive]);
   const pick = (c) => { onChange(c.id); setOpen(false); setText(''); };

@@ -29,7 +29,7 @@ function FobList() {
   if (!data) return <div className="empty">加载中…</div>;
   const price = seesPrice(role);
   const cols = [
-    { key: 'fob_no', label: 'FOB 单号', w: 130, render: (f) => <span className="mono">{f.fob_no}</span> },
+    { key: 'fob_no', label: 'FOB 单号', w: 130, render: (f) => <button type="button" className="linkbtn mono" onClick={(e) => { e.stopPropagation(); go('fob/' + f.id); }}>{f.fob_no}</button> },
     { key: 'customer_name', label: '客户', w: 160, value: (f) => `${f.customer_code} ${f.customer_name}`, render: (f) => <><span className="mono muted">{f.customer_code}</span> <b><CustLink id={f.customer_id} name={f.customer_name} /></b></> },
     { key: 'country', label: '国家', w: 60 },
     { key: 'control', label: '控货', w: 90, value: (f) => ctrl[f.control] },

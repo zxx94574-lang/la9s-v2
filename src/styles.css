@@ -768,6 +768,7 @@ tr.pd-add td { background: #f6f8fc; }
 .tone-dot.gray { background: #94a3b8; }
 .tone-dot.green { background: var(--green); box-shadow: none; }
 .tone-dot.on { border-color: #0b1220; }
+.price-warn { background: var(--amber-bg, #fff6e0); color: var(--amber, #a8670a); padding: 2px 6px; border-radius: 6px; display: inline-flex; gap: 4px; align-items: center; }
 .price-low { background: var(--red-bg); color: var(--red); padding: 2px 6px; border-radius: 6px; display: inline-flex; gap: 4px; align-items: center; }
 td.cell-price-low { background: #fdf0f0 !important; }
 /* 灰按钮旁写明原因 (11-09 202) */
@@ -831,3 +832,20 @@ td.cell-price-low { background: #fdf0f0 !important; }
 .more-box > summary { cursor: pointer; font-weight: 600; color: var(--muted); }
 .more-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
 @media (max-width: 1100px) { .more-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rate-in { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.phone-in { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.phone-in .in { width: 200px; max-width: 100%; }
+/* 216 任何屏幕都不许超出框: 除表格外一律在框里换行 / 缩 */
+.card, .card-b, .card-h, .panel, .frow > .fc, .substep, .two > *, .rgrid > *, .stack > * { min-width: 0; }
+.card-b, .panel, .frow > .fc, .substep .grow { overflow-wrap: anywhere; }
+.proofbox, .proofbox-wrap { max-width: 100%; min-width: 0; }
+.proofbox { flex-wrap: wrap; }
+.proofbox .pb-text { flex: 1 1 140px; }
+.dup-warn { margin-top: 4px; background: var(--red-bg); color: var(--red); border-radius: 8px; padding: 4px 8px; font-size: 13px; font-weight: 600; max-width: 100%; overflow-wrap: anywhere; }
+.card-h { flex-wrap: wrap; gap: 8px; }
+.card-h > .row { flex-wrap: wrap; min-width: 0; }
+.chips, .seg { flex-wrap: wrap; }
+img { max-width: 100%; }
+/* 大屏 (≥1920): 内容区限宽居中, 字号略放大 */
+@media (min-width: 1920px) { .content { max-width: 1760px; } html { font-size: 17px; } }
+@media (min-width: 2560px) { html { font-size: 19px; } .content { max-width: 2200px; } }

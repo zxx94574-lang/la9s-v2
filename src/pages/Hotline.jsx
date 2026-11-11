@@ -1,5 +1,6 @@
 // 热线回访 (Frank 2026-10-29): 热线每天打开就看到「今天要打谁」，打完点一下记结果，不用再录飞书.
 // 今天要打 = 约好今天或更早跟进的 + 正式客户 14 天没联系也没下单的 (沉睡). 备件、回收分开.
+import { fmtPhone, telHref } from '../lib/phone.js';
 import React, { useMemo, useState } from 'react';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -44,7 +45,7 @@ export default function Hotline() {
     { key: 'code', label: '编码', w: 90, value: (c) => c.code || c.temp_code, render: (c) => <span className="mono">{c.code || c.temp_code}</span> },
     { key: 'name', label: '客户', w: 170, render: (c) => <b>{c.name}</b> },
     { key: 'city', label: '城市', w: 90 },
-    { key: 'phone', label: '电话', w: 140, render: (c) => (c.phone ? <a href={`tel:${c.phone.replace(/\s/g, '')}`} onClick={(e) => e.stopPropagation()}>{c.phone}</a> : '—') },
+    { key: 'phone', label: '电话', w: 140, render: (c) => (c.phone ? <a href={telHref(c.phone)} onClick={(e) => e.stopPropagation()}>{fmtPhone(c.phone)}</a> : '—') },
     { key: 'why', label: '为什么要打', w: 200, render: (c) => (c.rank === 0 ? <Pill tone="red">{c.why}</Pill> : <span className="muted">{c.why}</span>) },
     { key: 'kind', label: '类型', w: 90, value: (c) => (c.status === 'prospect' ? '潜客' : KIND[c.kind]), render: (c) => (c.status === 'prospect' ? <Pill tone="amber">潜客</Pill> : KIND[c.kind]) },
     { key: 'act', label: '', w: 90, render: (c) => can(role, 'prospect') && <button type="button" className="btn sm primary" onClick={(e) => { e.stopPropagation(); setCallFor(c); }}>☎ 记结果</button> },

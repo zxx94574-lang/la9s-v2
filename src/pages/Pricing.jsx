@@ -4,7 +4,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal , RateInput} from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import ProductDrawer from '../components/ProductDrawer.jsx';
 import { can, seesPrice } from '../lib/domain.js';
@@ -135,9 +135,9 @@ function RatesModal({ org, rates, setRates, onClose }) {
     <Modal title="汇率与取整（只中方）" onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" onClick={save}>保存并重算全部价格</button></>}>
       <div className="stack">
-        <div className="field"><label>本地价汇率：1 XOF = ? RMB（飞书公式里的 0.0107）</label><input className="in" inputMode="decimal" value={rates.rate} onChange={(e) => setRates({ ...rates, rate: e.target.value })} style={{ maxWidth: 160 }} /></div>
-        <div className="field"><label>FOB 成本汇率：1 XOF = ? RMB（飞书里的 0.01135）</label><input className="in" inputMode="decimal" value={rates.fob} onChange={(e) => setRates({ ...rates, fob: e.target.value })} style={{ maxWidth: 160 }} /></div>
-        <div className="field"><label>美元汇率：1 USD = ? XOF（金蝶采购单是美元，物料档案里批次单价按它折西法）</label><input className="in" inputMode="decimal" value={rates.usd} onChange={(e) => setRates({ ...rates, usd: e.target.value })} style={{ maxWidth: 160 }} /></div>
+        <div className="field"><label>本地价汇率（飞书公式里的 1 XOF = 0.0107 RMB）</label><RateInput a="CNY" b="XOF" value={Number(rates.rate) > 0 ? 1 / Number(rates.rate) : ''} onChange={(v) => setRates({ ...rates, rate: v ? String(+(1 / v).toPrecision(6)) : '' })} /></div>
+        <div className="field"><label>FOB 成本汇率（飞书里的 1 XOF = 0.01135 RMB）</label><RateInput a="CNY" b="XOF" value={Number(rates.fob) > 0 ? 1 / Number(rates.fob) : ''} onChange={(v) => setRates({ ...rates, fob: v ? String(+(1 / v).toPrecision(6)) : '' })} /></div>
+        <div className="field"><label>美元汇率（金蝶采购单是美元，物料档案里批次单价按它折西法）</label><RateInput a="USD" b="XOF" value={rates.usd} onChange={(v) => setRates({ ...rates, usd: v ? String(+v.toPrecision(6)) : '' })} /></div>
         <div className="field"><label>到岸成本取整到</label><div className="seg">{['10', '50', '100', '500'].map((v) => <button type="button" key={v} className={rates.round === v ? 'on' : ''} onClick={() => setRates({ ...rates, round: v })}>{v}</button>)}</div></div>
         <div className="hint">汇率一改，所有有成本的物料都按新汇率重算；一口价不动。改之前想清楚：已经报出去、还没出销售订单的价格不会自动变，要在单子里点「获取价格」。</div>
       </div>

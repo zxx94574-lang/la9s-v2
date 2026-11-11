@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { TierPill, Light, Info, useApp, useData, DatePicker, Pill, useOutside } from '../components/ui.jsx';
-import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
+import { ModelLink, CustLink, EmpLink , DealLink} from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import { money, qty, dt, dDate, periodRange, PERIODS, today } from '../lib/format.js';
 import { SHIP_METHODS, PAY_METHODS, TIERS, STATUS, dealLight, stuckOf } from '../lib/domain.js';
@@ -179,7 +179,7 @@ function TodoStrip({ orders, role, go }) {
       <div className="card-h"><h2>要你处理的 <span className="muted small">{all.length} 单</span></h2><button type="button" className="btn sm" onClick={() => go('todo')}>全部待办 →</button></div>
       {list.length === 0 ? <div className="empty">当前岗位没有待办 ✓</div> : list.map((d) => (
         <div key={d.id} className="row between" style={{ padding: '10px 18px', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }} onClick={() => go('deal/' + d.id)}>
-          <div><b>{d.customer_name}</b> <span className="muted small">{d.city} · {d.biz_no}</span></div>
+          <div><CustLink id={d.customer_id} name={d.customer_name} /> <span className="muted small">{d.city} · </span><DealLink id={d.id} no={d.biz_no} /></div>
           <div className="row"><span className="small muted">卡在：{stuckOf(d)}</span><span className="muted">›</span></div>
         </div>
       ))}

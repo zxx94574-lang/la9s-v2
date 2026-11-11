@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { createPortal } from 'react-dom';
 import { ymd, today, pad } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
+import { normPhone } from '../lib/phone.js';
 
 export const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
@@ -271,7 +272,7 @@ export function PhotoInput({ value, onChange, label = '拍照 / 上传', camera 
         <input ref={cam} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { take(e.target.files[0], 'camera'); e.target.value = ''; }} />
         <input ref={pick} type="file" accept="image/*" hidden onChange={(e) => { take(e.target.files[0], 'gallery'); e.target.value = ''; }} />
       </div>
-      {dup.length > 0 && <div className="pill red" style={{ marginTop: 4 }}>⚠ 这张图片已用于 {dup.join('、')}</div>}
+      {dup.length > 0 && <div className="dup-warn">⚠ 这张图片已用于 {dup.slice(0, 2).join('、')}{dup.length > 2 && <span title={dup.join('\n')}> 等 {dup.length} 处</span>}</div>}
     </div>
   );
 }
@@ -531,3 +532,48 @@ export const Info = ({ children }) => (children ? <span className="info-i" tabIn
 export const FRow = ({ label, req, children, style }) => (
   <div className="frow" style={style}><span className={`fl ${req ? 'req' : ''}`}>{label}</span><div className="fc">{children}</div></div>
 );
+
+// 电话输入 (Frank 11-11 211): 全站同一个. 打字随意, 离开格子自动整理成 +225 07 00 00 00 04; 位数不对标红并写原因.
+export function PhoneInput({ value, onChange, invalid, placeholder = '例如 07 00 00 00 04', style, autoFocus }) {
+  const [txt, setTxt] = React.useState(value || '');
+  React.useEffect(() => { setTxt(value || ''); }, [value]);
+  const n = normPhone(txt);
+  const bad = !n.empty && !n.valid;
+  const done = () => { if (!n.empty && n.valid) { setTxt(n.formatted); onChange?.(n.formatted); } else onChange?.(n.empty ? '' : txt); };
+  return (
+    <span className="phone-in" style={style}>
+      <input className={`in ${bad || invalid ? 'err-in' : ''}`} inputMode="tel" autoFocus={autoFocus} value={txt} placeholder={placeholder}
+        onChange={(e) => setTxt(e.target.value)} onBlur={done} onKeyDown={(e) => { if (e.key === 'Enter') done(); }} />
+      {bad && <span className="why">{n.need ? `+${n.cc} 要 ${n.need} 位，现在 ${n.local.length} 位` : '位数不对'}</span>}
+    </span>
+  );
+}
+export const phoneValid = (v) => { const n = normPhone(v); return n.empty || n.valid; };
+
+// 汇率输入 (Frank 11-11 213): 两种写法随时切 (⇄)。value 永远是「1 a = value b」(例 1 CNY = 93.46 XOF), 只存这一个数, 不会存反。
+// 算人民币习惯「1 XOF = 0.0107 CNY」, 算美元习惯「1 USD = 600 XOF」; 每个币种记住上次用的写法; 旁边实时显示另一种写法防填反。
+const RATE_MODE_KEY = 'la9s.rateMode';
+const readMode = (a, b) => { try { return JSON.parse(localStorage.getItem(RATE_MODE_KEY) || '{}')[`${a}/${b}`]; } catch { return null; } };
+const saveMode = (a, b, m) => { try { const o = JSON.parse(localStorage.getItem(RATE_MODE_KEY) || '{}'); o[`${a}/${b}`] = m; localStorage.setItem(RATE_MODE_KEY, JSON.stringify(o)); } catch { /* 浏览器不让存就算了 */ } };
+const trimNum = (n, d) => (n > 0 && Number.isFinite(n) ? String(+n.toFixed(d)) : '');
+export function RateInput({ a, b = 'XOF', value, onChange, placeholder, invalid, width = 110 }) {
+  const [mode, setMode] = useState(() => readMode(a, b) || (a === 'CNY' ? 'inv' : 'per'));   // per: 1 a = ? b ; inv: 1 b = ? a
+  useEffect(() => { setMode(readMode(a, b) || (a === 'CNY' ? 'inv' : 'per')); }, [a, b]);
+  const v = Number(value) || 0;
+  const shown = (m) => (m === 'per' ? trimNum(v, 4) : trimNum(v ? 1 / v : 0, 6));
+  const [txt, setTxt] = useState(shown(mode));
+  useEffect(() => { setTxt((t) => { const n = Number(t); const cur = mode === 'per' ? n : (n ? 1 / n : 0); return Math.abs(cur - v) > 1e-9 ? shown(mode) : t; }); }, [value, mode]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const type = (s) => { const t = s.replace(/[^\d.]/g, ''); setTxt(t); const n = Number(t); onChange?.(n > 0 ? (mode === 'per' ? n : 1 / n) : ''); };
+  const flip = () => { const m = mode === 'per' ? 'inv' : 'per'; setMode(m); saveMode(a, b, m); setTxt(shown(m)); };
+  const [l, r] = mode === 'per' ? [a, b] : [b, a];
+  const other = v > 0 ? (mode === 'per' ? `1 ${b} ≈ ${trimNum(1 / v, 6)} ${a}` : `1 ${a} ≈ ${trimNum(v, 2)} ${b}`) : '';
+  return (
+    <span className="rate-in">
+      <span className="rate-l">1 {l} =</span>
+      <input className={`in ${invalid ? 'err-in' : ''}`} inputMode="decimal" style={{ width }} value={txt} placeholder={placeholder != null ? (mode === 'per' ? placeholder : (Number(placeholder) ? trimNum(1 / Number(placeholder), 6) : '')) : '手填'} onChange={(e) => type(e.target.value)} />
+      <span className="rate-l">{r}</span>
+      <button type="button" className="btn sm ghost" title="换一种写法" onClick={flip}>⇄</button>
+      {other && <span className="small muted">（{other}）</span>}
+    </span>
+  );
+}

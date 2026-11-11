@@ -1,10 +1,11 @@
 // One receipt form for both entries (待改 36): inside the deal (⑨ 收款, defaults to this deal) and on the finance page.
 // 3 modes only (待改 28) · receipt currency → the order currency at a locked rate written one way only (待改 30)
 // · live preview sentence + before/after (待改 31) · info bar next to the modes (待改 32) · orders open in a drawer (待改 34)
+import { DealLink } from './Archives.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, DatePicker, PhotoInput, Drawer, BigNum, Modal, FRow, Info } from './ui.jsx';
+import { useApp, useData, DatePicker, PhotoInput, Drawer, BigNum, Modal, FRow, Info, RateInput } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { can, whoCan, PAY_METHODS, balanceWords } from '../lib/domain.js';
 import { money, today, dDate, friendlyError } from '../lib/format.js';
@@ -23,9 +24,7 @@ export function DealDrawer({ id, onClose }) {
     </Drawer>
   );
 }
-export const DealChip = ({ id, no, onOpen }) => (
-  <button type="button" className="dealchip" onClick={(e) => { e.stopPropagation(); onOpen(id); }} title={`查看 ${no}`}>{no}</button>
-);
+export const DealChip = ({ id, no, onOpen }) => <DealLink id={id} no={no} onOpen={onOpen} />;   // 207: 和全站单号链接同一个样式
 
 export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDeal, defaultAmount, onDone, compact }) {
   const { org, role, toast, refresh } = useApp();
@@ -140,9 +139,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
           <FRow label="凭证" req={method !== 'cash'}><PhotoInput value={proof} onChange={setProof} label="收款截图" camera invalid={errs && method !== 'cash'} />{method === 'cash' && <span className="small muted">现金可不传</span>}</FRow>
           {foreign && (
             <FRow label="汇率" req>
-              <span className="rate-l">1 {foreign} =</span>
-              <input className="in" inputMode="decimal" style={{ width: 100 }} value={rate} onChange={(e) => { setRate(e.target.value.replace(/[^\d.]/g, '')); setRateOk(false); }} placeholder={refRate ? String(+refRate.toFixed(3)) : ''} />
-              <span className="rate-l">{base}</span>
+              <RateInput a={foreign} b={base} value={rate} onChange={(v) => { setRate(v === '' ? '' : String(v)); setRateOk(false); }} placeholder={refRate ? String(+refRate.toFixed(4)) : undefined} />
               <Info>汇率登记后锁定，以后不变。{refRate ? `参考 1 ${foreign} = ${+refRate.toFixed(3)} ${base}。` : ''}偏差 ≥10% 确认时要再点一次。</Info>
               {N(rate) > 0 && dev >= 3 && <span className={`small ${dev >= 10 ? 'red-t' : 'amber-t'}`}>偏差 {dev.toFixed(1)}%</span>}
             </FRow>

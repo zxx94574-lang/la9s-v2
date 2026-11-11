@@ -2,7 +2,7 @@ import DebtBanner from '../components/DebtBanner.jsx';
 import React, { useEffect, useState } from 'react';
 import { q, callValue } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, DatePicker, Modal, SortList } from '../components/ui.jsx';
+import { useApp, useData, DatePicker, Modal, SortList , RateInput} from '../components/ui.jsx';
 import ProductDrawer from '../components/ProductDrawer.jsx';
 import { CustomerDrawer } from './Customers.jsx';
 import { STEPS } from '../lib/domain.js';
@@ -114,8 +114,8 @@ export default function QuoteNew() {
         {cust && !cust.tier && <span className="pill amber" title="没档位报不了价：在档案里给档位，或建客户时选店铺类型">没档位</span>}
         <select className="in" style={{ width: 96 }} value={currency} onChange={(e) => { setCurrency(e.target.value); setPriceOk(false); }}>
           <option>XOF</option><option>CNY</option><option>USD</option></select>
-        {currency !== 'XOF' && <span className="row" style={{ gap: 6 }}><span className="small">汇率 1 {currency} =</span>
-          <input className={`in ${!fx && errs ? 'invalid' : ''}`} inputMode="decimal" style={{ width: 110 }} value={fxIn} onChange={(e) => setFxIn(e.target.value.replace(/[^\d.]/g, ''))} placeholder="手填" autoFocus /><span className="small">XOF</span></span>}
+        {currency !== 'XOF' && <span className="row" style={{ gap: 6 }}><span className="small">汇率</span>
+          <RateInput a={currency} b="XOF" value={fxIn} onChange={(v) => setFxIn(v === '' ? '' : String(v))} invalid={!fx && errs} /></span>}
         <span className="pill gray" title="由账号决定，不能改">🇨🇮 科特迪瓦 · 账号固定</span>
       </div>
       {customer && <div style={{ marginTop: 10 }}><DebtBanner customerId={customer} /></div>}</>) },

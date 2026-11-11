@@ -36,7 +36,7 @@ export default function Purchase() {
   const act = async (msg, sql, p) => { try { await call(role, sql, p); toast(msg); refresh(); setAdv(null); } catch (e) { toast(friendlyError(e), 'err'); } };
   const next = { submitted: ['ordered', '国内已下单'], ordered: ['shipped', '已发货'], shipped: ['arrived', '已到'], arrived: ['received', '收货完成'] };
   const cols = [
-    { key: 'req_no', label: '申请单号', w: 130, render: (r) => <span className="mono">{r.req_no}</span> },
+    { key: 'req_no', label: '申请单号', w: 130, render: (r) => (['draft', 'submitted'].includes(r.status) ? <button type="button" className="linkbtn mono" onClick={(e) => { e.stopPropagation(); setEdit(r); }}>{r.req_no}</button> : <span className="mono">{r.req_no}</span>) },
     { key: 'kind', label: '用途', w: 110, value: (r) => PR_KIND[r.kind][0], render: (r) => <><Pill tone={PR_KIND[r.kind][1]}>{PR_KIND[r.kind][0]}</Pill>{r.fob_no && <span className="mono small"> {r.fob_no}</span>}</> },
     { key: 'title', label: '申请什么', w: 200, render: (r) => <b>{r.title}</b> },
     { key: 'lines', label: '明细', w: 240, value: (r) => r.lines.map((l) => `${l.item}${l.spec ? ' ' + l.spec : ''} ×${l.qty}`).join('，') },

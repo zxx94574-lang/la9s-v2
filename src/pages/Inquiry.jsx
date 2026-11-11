@@ -12,7 +12,7 @@ import ModelPicker, { avail } from '../components/ModelPicker.jsx';
 import { ProspectModal } from '../components/Crm.jsx';
 import { STATUS } from '../lib/domain.js';
 import { dt, friendlyError , money} from '../lib/format.js';
-import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
+import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 
 const AP = { auto: ['自动通过', 'green'], pending: ['等中方审批', 'amber'], approved: ['中方已批', 'green'], rejected: ['没批', 'red'] };
 
@@ -43,7 +43,7 @@ export default function Inquiry({ embedded } = {}) {
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
   const mCols = [
-    { key: 'biz_no', label: '单号', w: 130, render: (d) => <span className="mono">{d.biz_no}</span> },
+    { key: 'biz_no', label: '单号', w: 130, render: (d) => <DealLink id={d.id} no={d.biz_no} /> },
     { key: 'customer_name', label: '客户', w: 170, value: (d) => `${d.code || d.temp_code} ${d.customer_name}`, render: (d) => <><span className="mono muted">{d.code || d.temp_code}</span> <CustLink id={d.customer_id} name={d.customer_name} /></> },
     { key: 'created_at', label: '时间', w: 130, render: (d) => dt(d.created_at) },
     { key: 'lines', label: '型号数', w: 70, value: (d) => Number(d.lines) },

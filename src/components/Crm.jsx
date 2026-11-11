@@ -2,7 +2,7 @@
 // 回访结果用选项不手打; 下次跟进日期一键 (明天 / 3 天 / 一周 / 自选); 新潜客自动临时编码.
 import React, { useState } from 'react';
 import { call, q } from '../db/client.js';
-import { useApp, Modal, Pill, PhotoInput, DatePicker } from './ui.jsx';
+import { useApp, Modal, Pill, PhotoInput, DatePicker , PhoneInput} from './ui.jsx';
 import { friendlyError, ymd } from '../lib/format.js';
 
 export const CALL_RESULTS = [['order', '下单', 'green'], ['quote', '要报价', 'blue'], ['later', '以后再要', 'amber'], ['no_need', '暂不需要', 'gray'],
@@ -79,7 +79,7 @@ export function ProspectModal({ onClose, onDone, kind = 'spare' }) {
         <button type="button" className="btn primary" disabled={!f.name.trim()} onClick={save}>建档</button></>}>
       <div className="grid2">
         <div className="field req"><label>客户名（人名 / 店名）</label><input className="in" autoFocus value={f.name} onChange={set('name')} /></div>
-        <div className="field"><label>电话（可以先不填）</label><input className="in" inputMode="tel" value={f.phone} onChange={set('phone')} placeholder="+225 …" /></div>
+        <div className="field"><label>电话（可以先不填）</label><PhoneInput value={f.phone} onChange={(v) => setF((x) => ({ ...x, phone: v }))} /></div>
         <div className="field"><label>城市 / 区</label><input className="in" value={f.city} onChange={set('city')} placeholder="Adjamé / Yopougon …" /></div>
         <div className="field"><label>市场</label><input className="in" value={f.market} onChange={set('market')} placeholder="Roxy / Siporex …" /></div>
         <div className="field"><label>客户类型</label><div className="seg">{Object.entries(KIND).map(([v, l]) => <button type="button" key={v} className={f.kind === v ? 'on' : ''} onClick={() => set('kind')(v)}>{l}</button>)}</div></div>

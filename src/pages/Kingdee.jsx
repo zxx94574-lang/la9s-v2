@@ -9,7 +9,7 @@ import { useApp, useData, Pill, Modal, DatePicker } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { can } from '../lib/domain.js';
 import { money, dDate, dt, today, friendlyError, qty } from '../lib/format.js';
-import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
+import { ModelLink, CustLink, EmpLink , DealLink} from '../components/Archives.jsx';
 
 const ST = { await_receipt: ['待客户签收', 'gray'], ready: ['待录金蝶', 'amber'], saved: ['已保存', 'blue'], submitted: ['已提交 · 待审核', 'blue'], synced: ['已审核', 'green'], error: ['出错', 'red'], void: ['已撤销出库', 'gray'] };
 const WH = { 'CI LA MATERIAL WH': 'LA', 'CI 9S MATERIAL WH': '9S', 'CI LA FOB MATERIAL WH': 'FOB', 'CI PENDING LIABILITY WH': 'PENDING', 'CI DEFECTIVE WH-LA': 'SCRAP', 'CI DEFECTIVE WH-9S': 'SCRAP', 'CI PCBA RECYCLE WH': 'RECYCLE', 'CI CHIP RECYCLE WH': 'RECYCLE' };
@@ -31,7 +31,7 @@ export default function Kingdee() {
   const counts = Object.fromEntries(Object.keys(ST).map((k) => [k, data.rows.filter((r) => r.status === k).length]));
   const rows = data.rows.filter((r) => !f || r.status === f);
   const cols = [
-    { key: 'out_no', label: '出库单', w: 130, render: (r) => <span className="mono">{r.out_no}</span> },
+    { key: 'out_no', label: '出库单', w: 130, render: (r) => <DealLink id={r.deal_id} no={r.out_no} /> },
     { key: 'customer_name', label: '客户', w: 150, value: (r) => `${r.customer_code} ${r.customer_name}`, render: (r) => <><span className="mono muted">{r.customer_code}</span> <CustLink id={r.customer_id} name={r.customer_name} /></> },
     { key: 'shipped_at', label: '出库', w: 110, render: (r) => dDate(r.shipped_at) },
     { key: 'customer_received_at', label: '客户签收', w: 110, render: (r) => dDate(r.customer_received_at) || <span className="muted">未签收</span> },

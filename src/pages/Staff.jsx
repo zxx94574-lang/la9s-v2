@@ -2,10 +2,11 @@
 //  表 1「员工档案」: 全名 / 工作名 / 邮箱 / 电话 / 部门 / 职位 / 入职 / 状态 / 证件照, 能单选的都单选, 日期用日期选择.
 //  表 2「工资发放记录」: 每月一张, 列和 8 月 Excel 一样, 能导出同样式的 Excel; 中方批准、中方标记已付, 付了就锁死永久留底.
 //  真实员工以飞书 STAFF INF 为准 (真实数据版开局导入), Excel 只是参考模板.
+import { normPhone, fmtPhone } from '../lib/phone.js';
 import React, { useMemo, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop , PhoneInput} from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { ROLE_LABELS } from '../lib/domain.js';
 import { staffOptions, optLabel, SYS_ROLES } from '../lib/staffOptions.js';
@@ -78,7 +79,7 @@ function StaffTable({ staff, opts }) {
     { key: 'joined_on', label: '入职日期', w: 110, value: (e) => cur(e, 'joined_on'), edit: (e) => ({ type: 'date', value: cur(e, 'joined_on'), onChange: (v, m) => saveCell(e, 'joined_on', v, m) }) },
     { key: 'tenure', label: '在职天数', w: 90, type: 'number', value: (e) => daysSince(e.active ? e.joined : null) ?? (e.joined && e.resigned ? Math.floor((new Date(e.resigned) - new Date(e.joined)) / 864e5) : null), render: (e) => { const d = e.active ? daysSince(e.joined) : (e.joined && e.resigned ? Math.floor((new Date(e.resigned) - new Date(e.joined)) / 864e5) : null); return d == null ? '' : <span title={e.active ? '从入职日期算到今天' : '入职到离职'}>{d.toLocaleString('en-US')}</span>; } },
     { key: 'city', label: '负责城市', w: 100, value: (e) => cur(e, 'city'), edit: txt('city') },
-    { key: 'phone', label: '电话', w: 130, value: (e) => cur(e, 'phone'), edit: txt('phone') },
+    { key: 'phone', label: '电话', w: 150, value: (e) => cur(e, 'phone'), render: (e) => fmtPhone(cur(e, 'phone')), edit: (e) => ({ type: 'text', value: cur(e, 'phone'), onChange: (v, m) => { const n = normPhone(v); if (!n.valid) return toast(`电话位数不对：${v}（+${n.cc} 要 ${n.need} 位）`, 'err'); saveCell(e, 'phone', n.formatted, m); } }) },
     { key: 'email', label: '邮箱', w: 190, value: (e) => cur(e, 'email'), edit: txt('email') },
     { key: 'address', label: '住址', w: 200, value: (e) => cur(e, 'address'), edit: txt('address') },
     { key: 'files', label: '身份证照片', w: 90, value: (e) => N(e.files), render: (e) => (N(e.files) ? <Pill tone="blue">{N(e.files)} 张</Pill> : <span className="muted small">没有</span>) },
@@ -157,7 +158,7 @@ export function EmpModal({ e, opts, onClose }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!f.short_name.trim() || emailBad} onClick={go}>保存</button></>}>
       <div className="grid2">
         {inp('emp_no', '工号（S + 三位数字，比如 S001；你自己编，离职不回收）', { ph: 'S001' })}{inp('full_name', '全称（大写，和证件一致）')}{inp('short_name', '简称 *（比如 Grace）')}
-        {inp('phone', '电话', { mode: 'tel', ph: '07 00 00 00 00' })}{inp('city', '负责城市', { ph: 'Abidjan' })}{inp('address', '住址')}
+        <div className="field"><label>电话</label><PhoneInput value={f.phone} onChange={(v) => setF((x) => ({ ...x, phone: v }))} /></div>{inp('city', '负责城市', { ph: 'Abidjan' })}{inp('address', '住址')}
         <div className="field"><label>邮箱</label><input className={`in ${emailBad ? 'err' : ''}`} inputMode="email" value={f.email} onChange={(x) => set('email')(x.target.value.trim())} />{emailBad && <span className="small red-t">格式不对</span>}</div>
         <div className="field"><label>部门</label><Select value={f.department} onChange={(v) => setF((x) => ({ ...x, department: v, position: opts.positions.find((p) => p.v === x.position && (!p.dept || p.dept === v)) ? x.position : '' }))} options={opts.departments} /></div>
         <div className="field"><label>职位</label><Select value={f.position} onChange={setPos} options={posOpts} /></div>

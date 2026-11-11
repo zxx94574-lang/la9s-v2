@@ -52,7 +52,11 @@ export default function Deal({ id }) {
   const reached = reachedStep(deal);                       // partial 在 REACHED 里 = 4 (出库这一步还没完)
   const current = cancelled ? -1 : Math.min(reached + 1, LAST_STEP);
   const allDone = reached >= LAST_STEP;
-  const curKey = view || (cancelled ? 'quote' : allDone ? 'pay' : STEP_KEYS[current]);
+  // 212: 下一步换了岗位 (签收 → 收款 是财务的事; 出库 → 签收 是热线的事) 就停在自己刚做完的那一步, 不自动跳过去
+  let defKey = cancelled ? 'quote' : allDone ? 'pay' : STEP_KEYS[current];
+  const STEP_PERM = { sign: 'mark_received', pay: 'receipt' };
+  for (let i = STEP_KEYS.indexOf(defKey); i > 0 && STEP_PERM[STEP_KEYS[i]] && !can(role, STEP_PERM[STEP_KEYS[i]]); i -= 1) defKey = STEP_KEYS[i - 1];
+  const curKey = view || defKey;
   const curIdx = STEP_KEYS.indexOf(curKey);
   const readOnly = curIdx >= 0 && curIdx <= reached && !['ship', 'sign', 'pay'].includes(curKey) && !(curKey === 'so' && ['ordered', 'confirmed', 'reviewed', 'partial'].includes(deal.status));
 

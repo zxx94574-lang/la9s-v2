@@ -26,6 +26,13 @@ export function EmpLink({ id, name, children }) {
   return <button type="button" className="linkbtn" title="打开员工档案" onClick={stop(() => openArchive({ kind: 'employee', id }))}>{children ?? name}</button>;
 }
 
+// 单号 → 打开那张单 (Frank 11-11 207, 底层统一): 有 onOpen 就在抽屉里看, 没有就跳到订单页
+export function DealLink({ id, no, onOpen, children }) {
+  const { go } = useApp();
+  if (!id) return <span className="mono">{children ?? no}</span>;
+  return <button type="button" className="linkbtn mono" title={`打开 ${no}`} onClick={stop(() => (onOpen ? onOpen(id) : go('deal/' + id)))}>{children ?? no}</button>;
+}
+
 function EmpArchive({ id, onClose }) {
   const { org } = useApp();
   const { data } = useData(async () => {

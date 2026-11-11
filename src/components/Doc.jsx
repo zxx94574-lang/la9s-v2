@@ -8,7 +8,7 @@ import { toBlob } from 'html-to-image';
 import { money, qty, dDate, dt, today } from '../lib/format.js';
 import { balanceWords } from '../lib/domain.js';
 import { t } from '../lib/i18n.js';
-import { useApp, useData } from './ui.jsx';
+import { useApp, useData, Info } from './ui.jsx';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
 
@@ -250,7 +250,7 @@ export function BalancePreview({ customerId, currency = 'XOF', deal, title = '�
   if (!data?.b) return <div className="card card-b muted small">对账单生成中…</div>;
   return (
     <div className="card">
-      <div className="card-h"><h2>{title} <span className="muted small">下面就是发给客户的那张图，实时</span></h2>
+      <div className="card-h"><h2>{title} <Info>下面就是发给客户的那张图，实时更新</Info></h2>
         <div className="row" style={{ gap: 6 }}>{extra}<DocActions kind="balance" balance={data.b} deal={data.d} copyLabel="复制 Balance 图片（发客户群）" primary="copy" /></div></div>
       <div className="card-b doc-preview"><div className="doc-preview-in"><DocSheet kind="balance" balance={data.b} deal={data.d} /></div></div>
     </div>

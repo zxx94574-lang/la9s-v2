@@ -444,7 +444,8 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
   const isFill = (c) => c.fill || (!!c.edit && shown.some((r, i) => { const ed = c.edit(r, i); return ed && !ed.disabled; }));
   // 有可编辑列的表: 点格子 = 选格子, 不再整行打开; 打开走行号旁的 ↗ (飞书的「查看」)
   const hasEdit = vis.some((c) => !!c.edit);
-  const rowOpen = onRowClick && !hasEdit ? onRowClick : null;
+  // 11-11 Frank 207 (底层统一): 点格子 = 选中, 永远不整行打开; 打开走单号 / 名字链接或行号旁 ↗
+  const rowOpen = null;
   // 页面可以让表格选中某一格 (Excel: 回车后跳到下一行同一列)
   if (api) api.current = { select: (rowK, colK, dr = 0) => { const r = shown.findIndex((x) => rowKey(x) === rowK) + dr; const c = vis.findIndex((x) => x.key === colK); if (r >= 0 && r < shown.length && c >= 0) { setSel({ a: [r, c], b: [r, c] }); anchor.current = [r, c]; } } };
   // Frank 11-09 16:15 定: 鼠标滚轮 = 上下滚页面 (不动表格左右); 按住 Shift 滚轮 = 表格左右滚; 触控板横滑照旧
@@ -543,7 +544,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
                     <span className="rgrip" title="按住拖动，上下挪行" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); startRowDrag(e, r); }}>⋮⋮</span>
                     {selectable && <input type="checkbox" checked={selectable.selected.has(k)} onChange={() => { const s = new Set(selectable.selected); s.has(k) ? s.delete(k) : s.add(k); selectable.onChange(s); }} />}
                     <span className="rnum">{r + 1}</span>
-                    {onRowClick && hasEdit && <button type="button" className="ropen" title="打开" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onRowClick(row); }}>↗</button>}
+                    {onRowClick && <button type="button" className="ropen" title="打开" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onRowClick(row); }}>↗</button>}
                   </td>
                   {vis.map((c, ci) => {
                     const ed = c.edit?.(row, r);

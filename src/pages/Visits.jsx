@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Modal, PhotoInput, DatePicker, Thumb } from '../components/ui.jsx';
+import { useApp, useData, Modal, PhotoInput, DatePicker, Thumb , PhoneInput} from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { ResultPill, FollowDate, VISIT_RESULTS } from '../components/Crm.jsx';
@@ -84,7 +84,7 @@ function VisitModal({ onClose }) {
         ) : (
           <div className="grid2">
             <div className="field req"><label>店名 Nom de la boutique</label><input className="in" value={p.name} onChange={setPv('name')} /></div>
-            <div className="field req"><label>电话 Téléphone</label><input className="in" inputMode="tel" value={p.phone} onChange={setPv('phone')} placeholder="+225 …" /></div>
+            <div className="field req"><label>电话 Téléphone</label><PhoneInput value={p.phone} onChange={(v) => setP((x) => ({ ...x, phone: v }))} /></div>
             <div className="field"><label>城市 / 区 Commune</label><input className="in" value={p.city} onChange={setPv('city')} /></div>
             <div className="field"><label>市场 Marché</label><input className="in" value={p.market} onChange={setPv('market')} /></div>
             <div className="field"><label>店铺类型</label><div className="chips">{['Wholesale shop', 'Retail shop', 'Repair shop'].map((v) =>

@@ -4,7 +4,7 @@ import * as Q from '../db/queries.js';
 import { TierPill, Light, useApp, useData, Pill, DatePicker, useOutside } from '../components/ui.jsx';
 import { call } from '../db/client.js';
 import { friendlyError, dDate, today } from '../lib/format.js';
-import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
+import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import Inquiry from './Inquiry.jsx';
 import { STATUS, TIERS, seesPrice, can, dealLight, stuckOf, LIGHT_LABEL } from '../lib/domain.js';
@@ -39,7 +39,7 @@ export default function Orders() {
   }), [data, text, tier, grp, light]);
   const price = seesPrice(role);
   const cols = [
-    { key: 'biz_no', label: '订单号', w: 150, render: (d) => <b className="mono">{d.biz_no}</b> },
+    { key: 'biz_no', label: '订单号', w: 150, render: (d) => <b><DealLink id={d.id} no={d.biz_no} /></b> },
     { key: 'created_at', label: '创建时间', w: 130, render: (d) => dt(d.created_at) },
     { key: 'customer_code', label: '客户编码', w: 70 },
     { key: 'customer_name', label: '客户', w: 160, render: (d) => <><CustLink id={d.customer_id} name={d.customer_name} /> <span className="muted small">{d.city}</span></> },
@@ -108,7 +108,7 @@ function VoidedList({ rows }) {
   return (
     <div className="card">
       <Grid id="orders-void" table="deals" rows={rows} onRowClick={(d) => go('deal/' + d.id)} empty="没有作废的订单" columns={[
-        { key: 'biz_no', label: '订单号', w: 150, render: (d) => <b className="mono">{d.biz_no}</b> },
+        { key: 'biz_no', label: '订单号', w: 150, render: (d) => <b><DealLink id={d.id} no={d.biz_no} /></b> },
         { key: 'customer_name', label: '客户', w: 160 },
         { key: 'updated_at', label: '作废时间', w: 130, render: (d) => dt(d.updated_at) },
         { key: 'reason', label: '原因', w: 160 },
@@ -129,8 +129,8 @@ function ShipmentsList({ from, to }) {
   const price = seesPrice(role);
   const st = (s) => (s.voided_at ? '已撤销' : s.customer_received_at ? '已签收' : '待签收');
   const cols = [
-    { key: 'out_no', label: '出库单号', w: 150, render: (s) => <b className={`mono ${s.voided_at ? 'strike' : ''}`}>{s.out_no}</b> },
-    { key: 'bl_no', label: 'BL 号', w: 190, render: (s) => (s.bl_no ? <span className="mono">{s.bl_no}</span> : <span className="muted small">没生成</span>) },
+    { key: 'out_no', label: '出库单号', w: 150, render: (s) => <b className={s.voided_at ? 'strike' : ''}><DealLink id={s.deal_id} no={s.out_no} /></b> },
+    { key: 'bl_no', label: 'BL 号', w: 190, render: (s) => (s.bl_no ? <DealLink id={s.deal_id} no={s.bl_no} /> : <span className="muted small">没生成</span>) },
     { key: 'shipped_at', label: '发货时间', w: 130, render: (s) => dt(s.shipped_at) },
     { key: 'customer_name', label: '客户', w: 170, render: (s) => <><CustLink id={s.customer_id} name={s.customer_name} /> <span className="muted small">{s.city}</span></> },
     { key: 'customer_code', label: '客户编码', w: 80 },
@@ -141,7 +141,7 @@ function ShipmentsList({ from, to }) {
     { key: 'docs', label: '发货文件', w: 150, value: (s) => [s.bl_printed_at && 'BL 已打', s.signed_at && '已签字回传'].filter(Boolean).join(' · '),
       render: (s) => <span className="row" style={{ gap: 4 }}>{s.bl_printed_at && <Pill tone="blue">BL 已打</Pill>}{s.signed_at && <Pill tone="green">签字回传</Pill>}</span> },
     { key: 'kingdee_status', label: '金蝶', w: 90, value: (s) => s.kingdee_status || '' },
-    { key: 'biz_no', label: '订单号', w: 150, render: (s) => <span className="mono small">{s.biz_no}</span> },
+    { key: 'biz_no', label: '订单号', w: 150, render: (s) => <DealLink id={s.deal_id} no={s.biz_no} /> },
   ];
   return (
     <div className="card">

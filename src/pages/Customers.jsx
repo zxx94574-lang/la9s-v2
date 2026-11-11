@@ -1,9 +1,10 @@
 // 客户档案 (Frank 2026-10-29): 一个客户一张档案 —— 正式 / 潜客 / 回收 都在这里.
 // 欠款上限和账期只预警不拦截 (THOMAS 这类有协议的大客户照常出货); 档位、正式编码、上限、账期只中方改.
+import { normPhone, fmtPhone } from '../lib/phone.js';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker } from '../components/ui.jsx';
+import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker , PhoneInput} from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { CallModal, ProspectModal, ResultPill, KIND, custLabel } from '../components/Crm.jsx';
 import { AccountPanel, ACC } from '../components/Account.jsx';
@@ -64,7 +65,7 @@ export default function Customers() {
     { key: 'shop_type', label: '店铺类型', w: 100, value: (c) => optLabel(O.shop_types, c.shop_type), edit: sel('shop_type', O.shop_types) },
     { key: 'follow_status', label: '跟进状态', w: 100, value: (c) => optLabel(O.follow_statuses, c.follow_status), edit: sel('follow_status', O.follow_statuses) },
     { key: 'contact_name', label: '负责人', w: 110, value: (c) => c.contact_name || '', edit: txt('contact_name') },
-    { key: 'phone', label: '电话', w: 120, value: (c) => c.phone || '', edit: txt('phone') },
+    { key: 'phone', label: '电话', w: 150, value: (c) => c.phone || '', render: (c) => fmtPhone(c.phone), edit: (c) => (canEdit ? { type: 'text', value: c.phone || '', onChange: (v, m) => { const n = normPhone(v); if (!n.valid) return toast(`电话位数不对：${v}（+${n.cc} 要 ${n.need} 位）`, 'err'); saveCell(c, 'phone', n.formatted, m); } } : null) },
     { key: 'address', label: '地址', w: 160, hidden: true, value: (c) => c.address || '', edit: txt('address') },
     { key: 'kind', label: '类型', w: 90, value: (c) => KIND[c.kind], render: (c) => (c.kind === 'spare' ? KIND.spare : <Pill tone="blue">{KIND[c.kind]}</Pill>) },
     { key: 'tier', label: '档位', w: 130, value: (c) => (c.status === 'prospect' ? '潜客' : TIERS[c.tier]),
@@ -129,7 +130,7 @@ export function CustomerDrawer({ id, onClose }) {
             <dt>状态</dt><dd>{c.status === 'prospect' ? <Pill tone="amber">潜客</Pill> : c.status === 'active' ? <Pill tone="green">正式</Pill> : <Pill>停用</Pill>} {KIND[c.kind]}{c.recycle_type ? ` · ${c.recycle_type}` : ''}</dd>
             <dt>档位</dt><dd><TierPill tier={c.tier} empty="—（中方定）" /> · {SUPPLY[c.supply] || SUPPLY.local}</dd>
             <dt>负责人</dt><dd>{c.contact_name || '—'}</dd>
-            <dt>电话</dt><dd>{c.phone || '—'}</dd>
+            <dt>电话</dt><dd>{fmtPhone(c.phone) || '—'}</dd>
             <dt>地址</dt><dd>{c.address || '—'}</dd>
             <dt>城市 / 市场</dt><dd>{[c.city, c.market, c.zone].filter(Boolean).join(' · ') || '—'}</dd>
             <dt>店铺</dt><dd>{[c.shop_type, c.monthly_qty ? `月用量约 ${c.monthly_qty}` : null].filter(Boolean).join(' · ') || '—'}</dd>
@@ -228,7 +229,7 @@ function InfoModal({ c, onClose }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!f.name.trim()} onClick={go}>保存</button></>}>
       <div className="grid2">
         {inp('name', '客户名称（大写）')}{inp('contact_name', '负责人（BL 上的 Responsable）', 'M. Moumouni')}
-        {inp('phone', '电话（BL 上要印）', '07 49 33 88 43')}{inp('city', '城市（BL 上的 Ville）', 'Yamoussoukro')}
+        <div className="field"><label>电话（BL 上要印）</label><PhoneInput value={f.phone} onChange={(v) => setF((x) => ({ ...x, phone: v }))} /></div>{inp('city', '城市（BL 上的 Ville）', 'Yamoussoukro')}
         {inp('address', '地址')}
       </div>
     </Modal>

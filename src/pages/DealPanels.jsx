@@ -1,6 +1,7 @@
 // The panels of one deal. Each workflow step has its own panel: the action when it is the current step,
 // a read-only record once it has been pushed (待改 13). Every button calls exactly one SQL business function.
 import PeoplePick from '../components/PeoplePick.jsx';
+import { fmtPhone, telHref } from '../lib/phone.js';
 import React, { useMemo, useRef, useState } from 'react';
 import Grid from '../components/Grid.jsx';
 import { call } from '../db/client.js';
@@ -8,7 +9,7 @@ import LineEntry, { newKey, finalizeLines, tierPrice } from '../components/LineE
 import { DocActions, DocSheet, BalanceCopy, BalancePreview } from '../components/Doc.jsx';
 import { BlActions } from '../components/Bl.jsx';
 import ReceiptForm, { BalanceLine, VoidReceiptModal } from '../components/ReceiptForm.jsx';
-import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useHistory, UndoBar, Info, FRow } from '../components/ui.jsx';
+import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid} from '../components/ui.jsx';
 import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, PAY_METHODS, RETURN_REASONS, CONFIRM_METHODS, CHECK_RESULTS, priceLevel, getThresholds, balanceWords } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, pad, ymd } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
@@ -139,7 +140,7 @@ export function CustomerInfo({ deal }) {
       <dl className="infolist">
         <dt>客户</dt><dd><CustLink id={deal.customer_id} name={deal.customer_name} /> <span className="mono muted small">{deal.customer_code || deal.temp_code}</span></dd>
         <dt>负责人</dt><dd>{deal.customer_contact || '—'}</dd>
-        <dt>电话</dt><dd>{phone ? <><a href={`tel:${phone.replace(/\s/g, '')}`}>{phone}</a><CopyButton text={phone} what="电话" /></> : '—'}</dd>
+        <dt>电话</dt><dd>{phone ? <><a href={telHref(phone)}>{fmtPhone(phone)}</a><CopyButton text={fmtPhone(phone)} what="电话" /></> : '—'}</dd>
         <dt>城市</dt><dd>{deal.city || '—'}</dd>
         <dt>销售员</dt><dd>{deal.owner_name || '—'}</dd>
         {Number(deal.customer_balance) > 0 && seesPrice(role) && <><dt>欠款</dt><dd style={{ color: 'var(--red)' }}>{money(deal.customer_balance)} XOF</dd></>}
@@ -396,14 +397,16 @@ export const lowFlag = (l, role) => {
   if (Number(l.tier_xof) > 0 && px < Number(l.tier_xof)) return '低于档位';
   return null;
 };
-const LowTag = ({ l }) => { const { role } = useApp(); const fl = lowFlag(l, role); return fl ? <span className="pill red">{fl}</span> : null; };
+// 208 三色: 会亏 = 红 (肯定有问题); 低于底价 / 低于档位 = 黄 (没亏, 要留意)
+export const flagTone = (fl) => (fl === '会亏' ? 'red' : 'amber');
+const LowTag = ({ l }) => { const { role } = useApp(); const fl = lowFlag(l, role); return fl ? <span className={`pill ${flagTone(fl)}`}>{fl}</span> : null; };
 const PriceTag = ({ l, cur }) => {
   const { role } = useApp();
   const { level, pct } = priceLevel(l.unit_price, l.tier_price);
   if (!l.product_id) return null;
   if (level === 4) return <Pill tone="red">单价 0</Pill>;
   const fl = lowFlag(l, role);
-  if (fl) return <span className="pill red" title={`本档 ${money(l.tier_xof)} · S 档 ${money(l.s_xof)} XOF${role === 'admin' && l.cost_xof ? ` · 成本 ${money(l.cost_xof)}` : ''}`}>{fl}</span>;
+  if (fl) return <span className={`pill ${flagTone(fl)}`} title={`本档 ${money(l.tier_xof)} · S 档 ${money(l.s_xof)} XOF${role === 'admin' && l.cost_xof ? ` · 成本 ${money(l.cost_xof)}` : ''}`}>{fl}</span>;
   if (!level) return null;
   return <span className={`dev dev${level}`} title={`档位价 ${money(l.tier_price, cur)}`}>{pct < 0 ? '低' : '高'} {Math.abs(pct).toFixed(0)}%</span>;
 };
@@ -463,9 +466,12 @@ export function SoPanel({ deal, lines, catalog, categories, act, role, events })
   return (
     <div className="card">
       <div className="card-h">
-        <h2>③ 销售订单 <span className="muted small mono">{deal.so_no || '（初检后生成）'}</span> <Info>出了单把图发群，下面接客户确认</Info></h2>
-        <div className="row">
+        {/* 209: 改单类 (追加货 / 获取价格) 在左, 往外发的在右 */}
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+          <h2>③ 销售订单 <span className="muted small mono">{deal.so_no || '（初检后生成）'}</span> <Info>出了单把图发群，下面接客户确认</Info></h2>
           {canAdd && <button type="button" className="btn" onClick={() => setAdding([])}>＋ 出库前追加货</button>}
+        </div>
+        <div className="row">
           {deal.so_no && price && <DocActions kind="so" deal={deal} lines={lines} copyLabel="复制销售单图片" primary="copy" />}
         </div>
       </div>
@@ -604,24 +610,22 @@ export function ConfirmPanel({ deal, lines, events, act, role }) {
       <div className="card-h"><h2>③ 客户最终确认 <Info>确认的是销售单上的数量和价格；确认后主管复检打包，再出库</Info></h2></div>
       <div className="card-b stack">
         {changed.length > 0 && <div className="lock">复检后有变动，只需要客户重新确认这几行：{changed.map((l) => `${l.model} ${l.category} → ${l.qty_supply} 件`).join('；')}</div>}
-        <div className="substep"><span className="sn">1</span><div className="grow"><b>把销售单图片发到客户群</b><div className="hint">没发也能确认（当面给客户看过），但一般先发再确认。</div></div>
+        <div className="substep"><span className="sn">1</span><div className="grow"><b>把销售单图片发到客户群</b> <Info>没发也能确认（当面给客户看过），但一般先发再确认。</Info></div>
           {price && <DocActions kind="so" deal={deal} lines={lines} copyLabel="复制销售单图片" primary="copy" />}</div>
         <div className="substep"><span className="sn">2</span><div className="grow stack">
           <b>客户确认</b>
           {can(role, 'customer_confirm') ? (
             <>
-              <div className="field req"><label>确认方式</label>
-                <div className="chips">{Object.entries(CONFIRM_METHODS).map(([k, v]) => <button type="button" key={k} className={`chip ${method === k ? 'on' : ''} ${errs && !method ? 'err' : ''}`} onClick={() => setMethod(k)}>{v}</button>)}</div></div>
-              <div className="field req"><label>确认截图（必传）</label><PhotoInput value={proof} onChange={setProof} label="客户回复 OK 的截图" invalid={errs} />
-                <span className="hint">电话确认的：先在群里补发一句确认文字，再截那一句。以后有「我没同意这个价」的纠纷靠这张。</span></div>
-              <div className="field req"><label>约定发货日期</label>
-                <div className="row" style={{ gap: 8 }}>
-                  <div className="seg">{[['today', '今天'], ['tomorrow', '明天'], ['date', '指定日期']].map(([k, l]) => <button type="button" key={k} className={when === k ? 'on' : ''} onClick={() => setWhen(k)}>{l}</button>)}</div>
-                  {when === 'date' && <DatePicker value={date} onChange={setDate} />}
-                  <span className="muted small">= {shipDate}，到期未出库会在待办和铃铛里提醒</span>
-                </div></div>
-              <div className="field"><label>备注（可选）</label><input className="in" value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如 客户下午 3 点后在店" /></div>
-              <div className="row" style={{ justifyContent: 'flex-end' }}><button type="button" className="btn primary lg" onClick={go}>客户已确认 →</button></div>
+              {/* 210: 电脑上「标签：选项」一行一项, 手机自动上下 */}
+              <FRow label="确认方式" req><div className="chips">{Object.entries(CONFIRM_METHODS).map(([k, v]) => <button type="button" key={k} className={`chip ${method === k ? 'on' : ''} ${errs && !method ? 'err' : ''}`} onClick={() => setMethod(k)}>{v}</button>)}</div></FRow>
+              <FRow label="确认截图" req><div className="proofbox-wrap" style={{ flex: 1, minWidth: 0 }}><PhotoInput value={proof} onChange={setProof} label="客户回复 OK 的截图" invalid={errs} /></div><Info>电话确认的：先在群里补发一句确认文字，再截那一句。以后有「我没同意这个价」的纠纷靠这张。</Info></FRow>
+              <FRow label="约定发货" req>
+                <div className="seg">{[['today', '今天'], ['tomorrow', '明天'], ['date', '指定日期']].map(([k, l]) => <button type="button" key={k} className={when === k ? 'on' : ''} onClick={() => setWhen(k)}>{l}</button>)}</div>
+                {when === 'date' && <DatePicker value={date} onChange={setDate} />}
+                <span className="muted small">= {shipDate}</span><Info>到期没出库，会在待办和铃铛里提醒</Info>
+              </FRow>
+              <FRow label="备注"><input className="in" style={{ maxWidth: 420, width: '100%' }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="可不填，例如 客户下午 3 点后在店" /></FRow>
+              <div className="actbar">{(!method || !proof) && <span className="why">还差：{[!method && '确认方式', !proof && '确认截图'].filter(Boolean).join('、')}</span>}<button type="button" className="btn primary lg" onClick={go}>客户已确认 →</button></div>
             </>
           ) : <Blocked action="customer_confirm" />}
         </div></div>
@@ -672,7 +676,7 @@ function ShipForm({ deal, lines, shipments, act }) {
   const thisTime = left.reduce((a, l) => a + now(l), 0);
   const check = () => {
     setErrs(true);
-    const miss = [!date && '日期', !time && '时间', !method && '发货方式', !phone.trim() && '电话', !addr.trim() && '收货地址 / 联系人', !proof && '发货凭证截图'].filter(Boolean);
+    const miss = [!date && '日期', !time && '时间', !method && '发货方式', !phone.trim() && '电话', phone.trim() && !phoneValid(phone) && '电话位数不对', !addr.trim() && '收货地址 / 联系人', !proof && '发货凭证截图'].filter(Boolean);
     if (miss.length) return toast(`出库必填：${miss.join('、')}`, 'err');
     if (left.some((l) => now(l) > remain(l))) return toast('本次出库超过剩余数量', 'err');
     if (!(thisTime > 0)) return toast('本次出库数量为 0', 'err');
@@ -697,7 +701,7 @@ function ShipForm({ deal, lines, shipments, act }) {
         </div>
         <div className="row" style={{ gap: 16, alignItems: 'flex-end' }}>
           <div className="field req" style={{ width: 220 }}><label>{method.startsWith('yango') ? 'Yango 司机电话' : method === 'customer_pickup' ? '取货人电话' : '联系电话'}</label>
-            <input className={`in ${errs && !phone.trim() ? 'err-in' : ''}`} value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" /></div>
+            <PhoneInput value={phone} onChange={setPhone} invalid={errs && !phone.trim()} /></div>
           <div className="field req grow"><label>收货地址 / 联系人</label>
             <input className={`in ${errs && !addr.trim() ? 'err-in' : ''}`} value={addr} onChange={(e) => setAddr(e.target.value)} placeholder="例如 Adjamé 市场 · 店主本人" /></div>
           <div className="field req"><label>发货凭证（Yango 截图 / 现场照片）</label><PhotoInput value={proof} onChange={setProof} label="司机 / 车辆截图" invalid={errs} /></div>

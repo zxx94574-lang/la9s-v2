@@ -4,7 +4,7 @@ import * as Q from '../db/queries.js';
 import { useApp, useData } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { qty, dDate } from '../lib/format.js';
-import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
+import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 
 export default function Unmet() {
   const { org, go } = useApp();
@@ -42,7 +42,7 @@ export default function Unmet() {
         <div className="card-h"><h2>逐条来源</h2></div>
         <Grid id={'unmet-' + kind} rowKey={(r) => r.line_id} rows={rows} onRowClick={(r) => go('deal/' + r.deal_id)} columns={[
           { key: 'created_at', label: '日期', w: 100, render: (r) => dDate(r.created_at) },
-          { key: 'biz_no', label: '订单', w: 150, render: (r) => <span className="mono">{r.biz_no}</span> },
+          { key: 'biz_no', label: '订单', w: 150, render: (r) => <DealLink id={r.deal_id} no={r.biz_no} /> },
           { key: 'source', label: '来源', w: 90, value: (r) => ({ guest: '游客询价', portal: '客户下单端', staff: '员工建单' })[r.source] || r.source,
             render: (r) => <span className={`pill ${r.source === 'guest' ? 'amber' : r.source === 'portal' ? 'blue' : 'gray'}`}>{({ guest: '游客询价', portal: '客户下单端', staff: '员工建单' })[r.source] || r.source}</span> },
           { key: 'customer_name', label: '客户', w: 170, render: (r) => <><CustLink id={r.customer_id} name={r.customer_name} /> <span className="muted small">{r.cust_code} · {r.city}{r.customer_status === 'prospect' ? ' · 潜客' : ''}</span></> },
