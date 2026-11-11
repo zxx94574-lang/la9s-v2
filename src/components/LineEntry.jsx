@@ -9,7 +9,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Grid from './Grid.jsx';
-import ModelPicker, { avail } from './ModelPicker.jsx';
+import ModelPicker, { avail, StockPill } from './ModelPicker.jsx';
 import { Modal, Shared, useApp, useHistory, UndoBar } from './ui.jsx';
 import { money, qty } from '../lib/format.js';
 import { makeResolver, normModel, pasteRows, isQty } from '../lib/resolve.js';
@@ -327,7 +327,7 @@ export default function LineEntry({ id, catalog, categories, tier, lines, setLin
       } },
       { key: 'on_hand', label: '实存', w: 60, value: (l) => (l.product ? stockOf(l).on_hand : null), render: (l) => (l.product ? qty(stockOf(l).on_hand) : null) },
       { key: 'reserved', label: '预占', w: 60, value: (l) => (l.product ? stockOf(l).reserved : null), render: (l) => (l.product ? qty(stockOf(l).reserved) : null) },
-      { key: 'avail', label: '可售', w: 60, value: (l) => (l.product ? stockOf(l).on_hand - stockOf(l).reserved : null), render: (l) => { if (!l.product) return null; const a = stockOf(l).on_hand - stockOf(l).reserved; return <b style={{ color: a < (Number(l.qty_req) || 0) ? 'var(--red)' : '' }}>{qty(a)}</b>; } },
+      { key: 'avail', label: '可售', w: 120, value: (l) => (l.product ? stockOf(l).on_hand - stockOf(l).reserved : null), render: (l) => { if (!l.product) return null; const a = stockOf(l).on_hand - stockOf(l).reserved; const need = Number(l.qty_req) || 0; return <span><b style={{ color: a < need ? 'var(--red)' : '' }}>{qty(a)}</b>{need > Math.max(a, 0) && <span className="pill amber" style={{ marginLeft: 4 }} title="客户要的比库存多：需求数量照实填，差的自动记进未满足需求（备货依据）">缺 {qty(need - Math.max(a, 0))}</span>}</span>; } },
       { key: 'qty_req', label: '需求数量', w: 96, type: 'number', fill: true, value: (l) => Number(l.qty_req) || 0,
         render: (l) => cell(l, 'qty_req', <span className={showErrors && lineStatus(l) !== 'blank' && !(Number(l.qty_req) > 0) ? 'red-t' : ''}>{l.qty_req === '' ? '' : Number(l.qty_req) || 0}</span>) },
       ...(showPrice ? [
@@ -439,7 +439,9 @@ export function PickList({ catalog, categories, picked, onClose, onAdd, stockLab
   const [chosen, setChosen] = useState({});   // id → qty string
   const t = text.trim().toUpperCase();
   const all = catalog.filter((p) => (!cat || p.category_id === cat) && (!t || p.model.includes(t) || String(p.code).toUpperCase().includes(t) || (p.shared_models || []).some((s) => s.includes(t))));
-  const list = all.slice(0, 300);
+  // 230: 库存多的排前面 (客户端按 有货 → 可预订)
+  const rk = (p) => (p.band ? { ok: 1e9, low: 1e8, none: 0 }[p.band] : avail(p));
+  const list = [...all].sort((a, b) => rk(b) - rk(a)).slice(0, 300);
   const n = Object.keys(chosen).length;
   const toggle = (p) => setChosen((c) => { const x = { ...c }; if (p.id in x) delete x[p.id]; else x[p.id] = ''; return x; });
   useEffect(() => { const k = (e) => e.key === 'Escape' && onClose(); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onClose]);
@@ -460,8 +462,8 @@ export function PickList({ catalog, categories, picked, onClose, onAdd, stockLab
               { key: 'category', label: '种类', w: 110, value: (p) => p.category },
               { key: 'model', label: '机型', w: 140, value: (p) => p.model, render: (p) => <><b>{p.model}</b>{p.variant && <span className="muted small"> {p.variant}</span>}</> },
               { key: 'shared', label: '通用性', w: 160, value: (p) => (p.shared_models || []).join(' / '), render: (p) => <Shared list={p.shared_models} /> },
-              { key: 'avail', label: stockLabel || '可售', w: 80, align: 'center', value: (p) => (p.band ? { ok: '有货', low: '少量', none: '无货' }[p.band] : avail(p)),
-                render: (p) => (p.band ? <span className={`pill ${{ ok: 'green', low: 'amber', none: 'gray' }[p.band]}`}>{{ ok: '有货', low: '少量', none: '无货' }[p.band]}</span> : avail(p) > 0 ? qty(avail(p)) : <span className="pill red">无货</span>) },
+              { key: 'avail', label: stockLabel || '可售', w: 80, align: 'center', value: (p) => (p.band ? { ok: '有货', low: '有货', none: '可预订' }[p.band] : avail(p)),
+                render: (p) => (p.band ? <span className={`pill ${{ ok: 'green', low: 'green', none: 'amber' }[p.band]}`}>{{ ok: '有货', low: '有货', none: '可预订' }[p.band]}</span> : <StockPill n={avail(p)} />) },
               { key: 'qty', label: '数量', w: 90, fill: true, value: (p) => (picked?.has(p.id) ? '已在明细' : chosen[p.id] ?? ''), render: (p) => (picked?.has(p.id) ? <span className="small muted">已在明细</span> : p.id in chosen ? (chosen[p.id] || <span className="muted">数量</span>) : ''),
                 edit: (p) => (picked?.has(p.id) ? null : { type: 'number', value: chosen[p.id] ?? '', onChange: (v) => setChosen((c) => ({ ...c, [p.id]: String(v ?? '').replace(/\D/g, '') })) }) },
             ]} />

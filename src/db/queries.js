@@ -42,11 +42,12 @@ const dealTotals = `
      from app.deal_lines l where l.deal_id = d.id) as amount`;
 
 export const orders = `
-select d.id, d.biz_no, d.quote_no, d.pick_no, d.so_no, d.kind, d.status, d.currency, d.created_at, d.updated_at, d.planned_ship_date, d.approval, d.source, d.want_on, d.hotline_opened_at, d.hotline_busy_at,
+select d.id, d.biz_no, d.quote_no, d.pick_no, d.so_no, d.kind, d.status, d.currency, d.created_at, d.updated_at, d.planned_ship_date, d.urgent, d.staged_at, d.staged_photo, d.staged_note, (select count(*) from app.deal_events ev where ev.deal_id = d.id and ev.action = 'hotline_busy')::int as busy_n, d.approval, d.source, d.want_on, d.hotline_opened_at, d.hotline_busy_at,
   c.id as customer_id, coalesce(c.code, c.temp_code) as customer_code, c.name as customer_name, c.city, c.tier,
   (select string_agg(distinct coalesce(p.model, l.req_model), ' / ') from app.deal_lines l left join app.products p on p.id = l.product_id where l.deal_id = d.id) as models,
   ${dealTotals},
   t.first_shipped_at, t.shipped_amount, t.returned_amount, t.allocated_amount, t.shipped_amount - t.returned_amount - t.allocated_amount - t.writeoff_amount as due, t.writeoff_amount,
+  (select coalesce(sum(a.amount), 0) from app.receipt_allocations a join app.receipts r on r.id = a.receipt_id where a.deal_id = d.id and r.voided_at is null and a.at > r.created_at + interval '1 minute') as prepaid_used,
   (select count(*) from app.shipments sx where sx.deal_id = d.id and sx.voided_at is null and sx.customer_received_at is null)::int as unsigned_n,
   (select count(*) from app.returns rx where rx.deal_id = d.id and (rx.status = 'requested' or (rx.status = 'approved' and rx.reconciled_at is null)))::int as open_returns_n,
   app.balance_pending(d.id) as balance_pending,
@@ -68,6 +69,7 @@ select d.*, c.code as customer_code, c.name as customer_name, c.city, c.tier, c.
      where pd.picker_employee_id = d.picker_employee_id and pc.result <> 'ok' and pc.at > now() - interval '30 days') as picker_errors,
   ${dealTotals},
   t.first_shipped_at, t.shipped_amount, t.returned_amount, t.allocated_amount, t.shipped_amount - t.returned_amount - t.allocated_amount - t.writeoff_amount as due, t.writeoff_amount,
+  (select coalesce(sum(a.amount), 0) from app.receipt_allocations a join app.receipts r on r.id = a.receipt_id where a.deal_id = d.id and r.voided_at is null and a.at > r.created_at + interval '1 minute') as prepaid_used,
   (select coalesce(sum(e.amount),0) from app.ar_entries e where e.customer_id = d.customer_id and e.currency = d.currency) as customer_balance
 from app.deals d
 join app.customers c on c.id = d.customer_id

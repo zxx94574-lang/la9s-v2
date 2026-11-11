@@ -11,7 +11,8 @@ import CustomerSelect from '../components/CustomerSelect.jsx';
 import { balanceWords } from '../lib/domain.js';
 import { money, dDate, dt, friendlyError } from '../lib/format.js';
 
-const BAND = { ok: ['有货 · En stock', 'green'], low: ['少量 · Stock faible', 'amber'], none: ['无货 · Rupture', 'gray'] };
+// 230 / 231 (Frank 11-11): 客户端只有两种 —— 有货 (绿) / 可预订 (不叫无货, 不显示少量和数量); 点了可预订的照样能下, 差的自动记进未满足需求
+const BAND = { ok: ['有货 · En stock', 'green'], low: ['有货 · En stock', 'green'], none: ['可预订 · Sur commande', 'amber'] };
 const PSTATUS = { quoted: '已收到，等热线确认 · Reçue', hotline_ok: '已确认，排队备货 · Confirmée', picking: '备货中 · En préparation', picked: '备货中 · En préparation',
   ordered: '销售单已出，请确认 · À confirmer', confirmed: '已确认，打包中 · Emballage', reviewed: '已打包，待发货 · Prête', partial: '部分已发货 · Livrée en partie', shipped: '已发货 · Livrée' };
 const SOSTATUS = { submitted: ['待老板处理', 'amber'], accepted: ['老板自己发', 'blue'], rejected: ['已拒绝', 'gray'], forwarded: ['已转给 LA&9S', 'blue'], delivered: ['已送达', 'green'] };
@@ -36,7 +37,8 @@ export function PortalShop() {
   if (!me) return <div className="empty">加载中…</div>;
   if (!me.customer_id) return <div className="card card-b">这个账号还没有对上客户。</div>;
   const t = text.trim().toUpperCase();
-  const list = (data || []).filter((p) => (!cat || p.category_id === cat) && (!t || p.model.includes(t) || p.code.includes(t) || p.shared_models.some((s) => s.includes(t)))).slice(0, 60);
+  const list = (data || []).filter((p) => (!cat || p.category_id === cat) && (!t || p.model.includes(t) || p.code.includes(t) || p.shared_models.some((s) => s.includes(t))))
+    .sort((a, b) => ({ ok: 0, low: 1, none: 2 }[a.band] ?? 3) - ({ ok: 0, low: 1, none: 2 }[b.band] ?? 3)).slice(0, 60);   // 230: 有货的排前面, 可预订的沉底
   const byId = Object.fromEntries((data || []).map((p) => [p.id, p]));
   const items = Object.entries(cart).filter(([, n]) => Number(n) > 0);
   const n = items.length + extra.length;

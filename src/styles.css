@@ -865,3 +865,18 @@ fieldset.lockset:disabled .in, fieldset.lockset:disabled select, fieldset.lockse
 /* 216: 卡片行写死几列的 (资金账户等) 窄屏自动降列, 不许挤出框 */
 @media (max-width: 900px) { .kpis[style] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
 @media (max-width: 480px) { .kpis[style] { grid-template-columns: minmax(0, 1fr) !important; } }
+/* 224 ⑤ (Frank 11-11): 每页标题下面的说明小字全站收成标题旁的 ⓘ, 鼠标移上去 / 手机点一下才显示 */
+header .info-tip { left: auto; right: 0; }
+.pagehead > div:first-child { position: relative; min-width: 0; }
+.pagehead h1:has(+ .sub)::after { content: 'i'; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 8px; border: 1.5px solid var(--line-2, #c7cfdd); border-radius: 50%; font-size: 11px; font-weight: 700; font-style: normal; color: var(--muted); vertical-align: middle; cursor: help; }
+.pagehead h1 + .sub { display: none; position: absolute; left: 0; top: 100%; z-index: 30; max-width: min(520px, 92vw); background: #0b1220; color: #fff; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; line-height: 1.5; margin-top: 4px; box-shadow: 0 8px 24px #0003; }
+.pagehead h1:hover + .sub, .pagehead h1:focus + .sub, .pagehead h1 + .sub:hover { display: block; }
+.bpre { margin-top: 10px; padding: 9px 12px; border-radius: 8px; background: #e7f5ec; color: #14532d; font-size: 15px; line-height: 1.5; }
+.bpre b { font-weight: 700; }
+/* 227: 待办三个板块 */
+.todo-sec .card-h h2 { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.todo-red { border-left: 4px solid #d93025; } .todo-amber { border-left: 4px solid #e0a100; } .todo-green { border-left: 4px solid #1e8e3e; }
+.todo-row { padding: 12px 18px; border-bottom: 1px solid var(--line-2); cursor: pointer; gap: 10px; }
+.todo-row:hover { background: #f7f9fc; } .todo-row:last-child { border-bottom: 0; }
+.other-pending { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px 14px; }
+.other-pending .pill { border: 0; cursor: pointer; white-space: normal; text-align: left; }

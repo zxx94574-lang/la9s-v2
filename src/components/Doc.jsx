@@ -39,7 +39,10 @@ export function DocSheet({ kind, deal, lines, balance, ret }) {
   const no = { quote: deal.quote_no, pick: deal.pick_no, so: deal.so_no }[kind];
   const cur = deal.currency || 'XOF';
   const qf = (l) => (kind === 'so' ? l.qty_supply : l.qty_req);
-  const rows = lines.filter((l) => (kind === 'so' ? N(l.qty_supply) > 0 : true));
+  // 234 (Frank 11-11): 销售单两列 —— 需求数量 (灰, 客户要多少) + 实际供货数量 / 单价 / 金额 (蓝色块, 按这个发货收钱); 没给够的写「本次未供 N」, 不印「预订」
+  const so = kind === 'so';
+  const rows = lines.filter((l) => (so ? (N(l.qty_supply) > 0 || (l.product_id && N(l.qty_req) > 0)) : true));
+  const G = { ...C, color: '#8a94a6', whiteSpace: 'nowrap' };
   const totQ = rows.reduce((a, l) => a + N(qf(l)), 0);
   const totA = rows.reduce((a, l) => a + N(qf(l)) * N(l.unit_price), 0);
   // 销售订单 (Frank 11-08): 实际供货数量 / 单价 / 金额三列加品牌蓝浅底, 客户一眼看到按什么发货、按什么收钱
@@ -52,18 +55,21 @@ export function DocSheet({ kind, deal, lines, balance, ret }) {
         <thead><tr>
           <th style={C}>#</th><th>{t('编码')}</th><th>{t('种类')}</th><th>{t('型号')}</th><th>{t('通用性')}</th>
           {kind === 'pick' && <><th>{t('仓库')}</th><th>{t('库位')}</th></>}
-          <th style={HC}>{kind === 'pick' ? '需求' : kind === 'so' ? t('供货数量') : t('数量')}</th>
+          {so && <th style={G}>{t('需求数量')}</th>}
+          <th style={HC}>{kind === 'pick' ? '需求' : so ? t('实际供货数量') : t('数量')}</th>
           {kind === 'pick' ? <><th style={C}>{t('预占')}</th><th style={C}>{t('实际供货')}</th></> : <><th style={HR}>{t('单价')} {cur}</th><th style={HR}>{t('金额')} {cur}</th></>}
         </tr></thead>
         <tbody>{rows.map((l, i) => (
           <tr key={l.id}>
             <td style={C}>{i + 1}</td><td>{l.code || '未建档'}</td><td>{l.category}</td><td><b>{l.model}</b></td><td>{sharedShort(l.shared_models)}</td>
             {kind === 'pick' && <><td>{l.warehouse}</td><td><b>{l.bin}</b></td></>}
+            {so && <td style={G}>{qty(l.qty_req)}{N(l.qty_req) > N(l.qty_supply) && <div style={{ fontSize: 11, lineHeight: 1.2 }}>{t('本次未供')} {qty(N(l.qty_req) - N(l.qty_supply))}</div>}</td>}
             <td style={HC}>{qty(qf(l))}</td>
             {kind === 'pick' ? <><td style={C}>{qty(l.qty_supply)}</td><td style={{ width: 90 }} /></> : <><td style={HR}>{money(l.unit_price, cur)}</td><td style={HR}><b>{money(N(qf(l)) * N(l.unit_price), cur)}</b></td></>}
           </tr>))}</tbody>
         <tfoot><tr>
           <td colSpan={kind === 'pick' ? 7 : 5}>{t('合计')} · {rows.length} {t('个型号')}</td>
+          {so && <td style={G}>{qty(rows.reduce((a, l) => a + N(l.qty_req), 0))}</td>}
           <td style={HC}>{qty(totQ)} {t('件')}</td>
           {kind === 'pick' ? <><td style={C}>{qty(rows.reduce((a, l) => a + N(l.qty_supply), 0))}</td><td /></> : <><td style={H} /><td style={HR}><b>{money(totA, cur)} {cur}</b></td></>}
         </tr></tfoot>
@@ -81,6 +87,7 @@ function BalanceSheet({ balance: b, deal }) {
   const top = open.slice(0, 5), rest = open.slice(5);
   const has = deal && N(deal.shipped_amount) > 0;
   const rec = deal ? N(deal.shipped_amount) - N(deal.returned_amount) : 0;
+  const pre = deal ? Math.min(N(deal.prepaid_used), N(deal.allocated_amount)) : 0;
   return (
     <div className="doc doc-portrait">
       <Head kind="balance" name={b.name} date={today()} />
@@ -89,10 +96,12 @@ function BalanceSheet({ balance: b, deal }) {
           <div className="bsec-h"><span>{t('本单')}</span><span className="mono">{deal.biz_no}</span><span>出库 {dDate(deal.first_shipped_at || deal.updated_at)}</span></div>
           <div className="b3">
             <div><div className="k">{t('应收')}</div><div className="v">{money(rec, cur)}</div></div>
-            <div><div className="k">{t('实收')}</div><div className="v">{money(deal.allocated_amount, cur)}</div></div>
+            <div><div className="k">{t(pre > 0 && pre >= N(deal.allocated_amount) ? '预付抵扣' : '实收')}</div><div className="v">{money(deal.allocated_amount, cur)}</div></div>
             <div><div className="k">{t('待付')}</div><div className={`v ${N(deal.due) > 0 ? 'red' : 'green'}`}>{N(deal.due) > 0 ? money(deal.due, cur) : t('已付清')}</div></div>
           </div>
           <div className="bunit">{t('金额单位')} {cur}</div>
+          {/* 242 (Frank 11-11): 从预付款里扣的要写清楚, 不然客户以为这次又付了一笔 */}
+          {pre > 0 && <div className="bpre">本单 <b>{money(pre, cur)}</b> 已从预付款扣除{N(deal.allocated_amount) - pre > 0 ? <>，本次另付 <b>{money(N(deal.allocated_amount) - pre, cur)}</b></> : ''}{w.label === '预付' && w.amount > 0 ? <> · 预付款还剩 <b>{money(w.amount, cur)} {cur}</b></> : ''}</div>}
         </div>
       )}
       <div className="bsec">
@@ -188,7 +197,7 @@ export function docText({ kind, deal, lines, balance, ret }) {
   const out = [`*${TITLES[kind]}* ${no || ''} · ${deal.customer_name} · ${dDate(deal.updated_at || deal.created_at)}`];
   rows.forEach((l, i) => out.push(kind === 'pick'
     ? `${i + 1}. ${l.code || ''} ${l.model} ${l.category} × ${qty(qf(l))}  [${l.warehouse || ''} ${l.bin || ''}]`
-    : `${i + 1}. ${l.model} ${l.category} × ${qty(qf(l))} @ ${money(l.unit_price, cur)} = ${money(N(qf(l)) * N(l.unit_price), cur)}`));
+    : `${i + 1}. ${l.model} ${l.category} × ${qty(qf(l))} @ ${money(l.unit_price, cur)} = ${money(N(qf(l)) * N(l.unit_price), cur)}${kind === 'so' && N(l.qty_req) > N(l.qty_supply) ? `（要 ${qty(l.qty_req)}，本次未供 ${qty(N(l.qty_req) - N(l.qty_supply))}）` : ''}`));
   const totQ = rows.reduce((a, l) => a + N(qf(l)), 0), totA = rows.reduce((a, l) => a + N(qf(l)) * N(l.unit_price), 0);
   out.push(kind === 'pick' ? `合计 ${qty(totQ)} 件` : `*合计 ${qty(totQ)} 件 · ${m(totA)}*`);
   return out.join('\n');

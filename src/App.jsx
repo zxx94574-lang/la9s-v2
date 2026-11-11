@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { openDb, resetDemo, q, isPersistent, REAL, setCustomerSession, customerSession } from './db/client.js';
 import { CustomerLogin, GuestShop, MustChange } from './pages/Guest.jsx';
 import * as Q from './db/queries.js';
-import { Ctx, Modal, useToasts, useOutside } from './components/ui.jsx';
+import { Ctx, Modal, useToasts, useOutside, Info } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
 import { ExportPanel, DocSettings, PermPanel } from './components/SettingsPanels.jsx';
 import { ROLES, can, getThresholds, setThresholds, DEFAULT_THRESHOLDS, setPermOverride } from './lib/domain.js';
@@ -104,14 +104,17 @@ export default function App() {
     if (!org || !['hotline', 'manager', 'admin'].includes(role)) return undefined;
     const check = async () => {
       try {
-        const rows = await q(`select d.id, d.created_at, d.hotline_opened_at, c.name as customer_name from app.deals d join app.customers c on c.id = d.customer_id
+        const rows = await q(`select d.id, d.created_at, d.hotline_opened_at, d.hotline_busy_at, (select count(*) from app.deal_events ev where ev.deal_id = d.id and ev.action = 'hotline_busy')::int as busy_n, c.name as customer_name from app.deals d join app.customers c on c.id = d.customer_id
           where d.org_id = $1 and d.status = 'quoted' and d.kind = 'normal' and d.approval <> 'pending' and d.approval <> 'rejected'`, [org]);
         const cur = location.hash.match(/deal\/([\w-]+)/)?.[1];
         const now = Date.now(); const due = [];
         for (const d of rows) {
           if (d.id === cur) { remindRef.current[d.id] = now; continue; }
-          const iv = (d.hotline_opened_at ? 10 : 5) * 60e3;
-          const last = remindRef.current[d.id] ?? new Date(d.created_at).getTime();
+          if (d.busy_n >= 3) continue;                    // 235: 联系 3 次客户都忙 → 不再吵, 在待办绿色板块里等人决定
+          // 235 (Frank 11-11): 点过「客户忙」的, 从那一刻起 30 分钟后再提醒一次, 不按 5 / 10 分钟
+          const busyAt = d.hotline_busy_at ? new Date(d.hotline_busy_at).getTime() : 0;
+          const iv = (busyAt ? 30 : d.hotline_opened_at ? 10 : 5) * 60e3;
+          const last = Math.max(remindRef.current[d.id] ?? new Date(d.created_at).getTime(), busyAt);
           if (now - last >= iv) { due.push(d); remindRef.current[d.id] = now; }
         }
         if (due.length) toast(`☎ ${due.length} 张报价等热线确认：${due.slice(0, 3).map((d) => d.customer_name).join('、')}${due.length > 3 ? '…' : ''}（打开「待办」处理）`, 'err');
@@ -260,15 +263,14 @@ export default function App() {
               {!portal && <button type="button" className="btn icon-btn" onClick={() => go('todo')} aria-label="待办" title="我的待办">
                 🔔{(overdueN > 0 || todoCount > 0) && <span className={`badge ${overdueN ? 'hot' : ''}`} title={overdueN ? `${overdueN} 张超过 24 小时没发货` : ''}>{overdueN || todoCount}</span>}
               </button>}
+              <Info>{REAL ? '真实数据快照（金蝶 10-19 库存 / 在途，飞书物料与客户；应收还没导）。在这里操作只存在本浏览器，不会写回金蝶 / 飞书。' : '演示版 · 虚构数据。'}数据保存在本浏览器，刷新不丢。未连接金蝶 / WhatsApp。</Info>
               <button type="button" className="btn icon-btn" onClick={() => setSettings(true)} aria-label="设置" title="设置">⚙</button>
             </div>
           </header>
 
           <main className="content">
-            <div className="demo-banner">
-              <span className={`dot ${isPersistent() ? '' : 'warn'}`} />
-              <span>{REAL ? '真实数据快照（金蝶 10-19 库存 / 在途，飞书物料与客户；应收还没导）· 在这里操作只存在本浏览器，不会写回金蝶 / 飞书' : '演示版 · 虚构数据'} · {isPersistent() ? '数据保存在本浏览器，刷新不丢' : '浏览器禁止存储，关闭页面后数据会重置'} · 未连接金蝶 / WhatsApp</span>
-            </div>
+            {/* Frank 11-11 (224 ⑤): 说明小字不占版面, 收进右上角 ⓘ; 只有「存不住数据」这种真问题才显示红条 */}
+            {!isPersistent() && <div className="demo-banner"><span className="dot warn" /><span>浏览器禁止存储，关闭页面后数据会重置</span></div>}
             {view}
           </main>
         </div>

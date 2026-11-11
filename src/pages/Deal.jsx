@@ -24,8 +24,13 @@ const REVERT_LABEL = {
 const short = (no) => (no ? '…' + String(no).slice(-4) : '');
 const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩';
 
+// 操作记录每一条属于流程条的哪一步 (点了就回到那一步)
+const EVENT_STEP = { quote_created: 'quote', quote_edited: 'quote', hotline_confirmed: 'quote', hotline_busy: 'quote', quote_approved: 'quote', quote_rejected: 'quote', fx_set: 'quote', price_requested: 'quote',
+  picking_started: 'pick', pick_submitted: 'pick', sales_order_created: 'so', price_set: 'so', customer_confirmed: 'so', lines_added: 'so', staged: 'ship',
+  pick_reviewed: 'ship', bl_issued: 'ship', shipped: 'ship', shipment_voided: 'ship', customer_received: 'sign', balance_confirmed: 'sign', receipt_discrepancy: 'sign', discrepancy_decided: 'sign',
+  prepayment_applied: 'pay', written_off: 'pay', receipt_voided: 'pay', bad_debt_written_off: 'pay', return_requested: 'return', return_approved: 'return', return_reconciled: 'return' };
 export default function Deal({ id }) {
-  const { org, role, toast, refresh } = useApp();
+  const { org, role, toast, refresh, go: nav } = useApp();
   const [view, setView] = useState(null);
   const [approve, setApprove] = useState(false);
   const [revert, setRevert] = useState(false);
@@ -36,7 +41,14 @@ export default function Deal({ id }) {
     const [lines, events, shipments, returns, receipts, employees, catalog, categories, [credit]] = await Promise.all([
       q(Q.dealLines, [id]), q(Q.dealEvents, [id]), q(Q.dealShipments, [id]), q(Q.dealReturns, [id]), q(Q.dealReceipts, [id]),
       q(Q.employees, [org]), q(Q.catalog, [org]), q(Q.categories, [org]), q(`select * from app.v_customer_credit where customer_id = $1`, [deal.customer_id])]);
-    return { deal, lines, events, shipments, returns, receipts, employees, catalog, categories, credit };
+    // 239 ② (Frank 11-11): 订单之间联动 —— 这个客户别的单上还没办完的事, 在这张单里也看得到
+    const others = await q(`select * from (select d.id, d.biz_no,
+        (select count(*) from app.shipments sx where sx.deal_id = d.id and sx.voided_at is null and sx.customer_received_at is null)::int as unsigned_n,
+        app.balance_pending(d.id) as balance_pending,
+        (select count(*) from app.returns rx where rx.deal_id = d.id and (rx.status = 'requested' or (rx.status = 'approved' and rx.reconciled_at is null)))::int as open_returns_n
+      from app.deals d where d.customer_id = $1 and d.id <> $2 and d.status <> 'cancelled' and d.kind = 'normal') x
+      where unsigned_n > 0 or balance_pending or open_returns_n > 0 order by biz_no`, [deal.customer_id, id]);
+    return { deal, lines, events, shipments, returns, receipts, employees, catalog, categories, credit, others };
   }, [id]);
 
   // 下推成功 (状态变了) → 回到当前这一步, 不停在刚才点开看的那一步
@@ -140,6 +152,15 @@ export default function Deal({ id }) {
         </div>)}
       {custOpen && <CustomerDrawer id={deal.customer_id} onClose={() => setCustOpen(false)} />}
       {!cancelled && seesPrice(role) && !['shipped'].includes(deal.status) && <DebtBanner customerId={deal.customer_id} deal={deal} />}
+      {data.others?.length > 0 && (
+        <div className="card card-b other-pending">
+          <b>{deal.customer_name} 还有：</b>
+          {data.others.map((o) => (
+            <button type="button" key={o.id} className="pill amber" onClick={() => nav('deal/' + o.id)} title="打开那张单">
+              {o.biz_no} · {[o.unsigned_n > 0 && `${o.unsigned_n} 批没签收`, o.balance_pending && '待对账', o.open_returns_n > 0 && '退货没走完'].filter(Boolean).join('、')} →
+            </button>))}
+        </div>
+      )}
       {!cancelled && deal.status === 'quoted' && deal.approval === 'pending' && (
         <div className="banner info row" style={{ marginBottom: 12, gap: 8 }}>
           <span>⏳ 等中方审批：{deal.approval_reasons.join('、')}。批了以后才看得到价格、才能往下推。</span><span className="grow" />
@@ -161,9 +182,16 @@ export default function Deal({ id }) {
         <div className="card-h"><h2>操作记录</h2><span className="muted small">谁、什么时候、做了什么</span></div>
         <div className="card-b">
           <ul className="timeline">
-            {data.events.map((e, i) => (
-              <li key={i}><b>{EVENT_LABELS[e.action] || e.action}</b>
-                {e.short_name && <span className="muted"> · {e.short_name}{e.roles ? `（${e.roles.map((r) => ROLES[r]?.label || r).join('/')}）` : ''}</span>}
+            {data.events.map((e, i) => {
+              const stepKey = EVENT_STEP[e.action]; const line = e.detail?.line && data.lines.find((l) => l.id === e.detail.line);
+              const emp = (id) => data.employees.find((x) => x.id === id)?.short_name;
+              // 221 (Frank 11-11): 写清楚 —— 谁点的按钮、替谁做的 (找货人 / 复核人)、改的是哪个型号; 点这一条回到那一步看当时的记录 (只读)
+              const doer = e.action === 'pick_submitted' ? ['找货人', emp(e.detail?.picker)] : e.action === 'pick_reviewed' ? ['复核人', emp(e.detail?.reviewer)] : null;
+              return (
+              <li key={i}><b>{stepKey ? <button type="button" className="linkbtn" title="回到这一步看当时的记录（只读）" onClick={() => { setView(stepKey); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{EVENT_LABELS[e.action] || e.action}</button> : (EVENT_LABELS[e.action] || e.action)}</b>
+                {doer && doer[1] && <span> · {doer[0]}：<b>{doer[1]}</b></span>}
+                {e.short_name && !(doer && doer[1] === e.short_name) && <span className="muted"> · {doer && doer[1] ? `${e.short_name} 代点` : e.short_name}{e.roles ? `（${e.roles.map((r) => ROLES[r]?.label || r).join('/')}）` : ''}</span>}
+                {line && <span> · <b>{line.model || line.req_model}</b></span>}
                 {e.detail?.method && <span> · {CONFIRM_METHODS[e.detail.method] || e.detail.method}</span>}
                 {e.detail?.note && <span> · {e.detail.note}</span>}
                 {e.detail?.reason && <span> · 原因：{e.detail.reason}</span>}
@@ -171,10 +199,12 @@ export default function Deal({ id }) {
                 {e.action === 'step_reverted' && <span> · {STATUS[e.detail.from]?.label} → {STATUS[e.detail.to]?.label}</span>}
                 {e.action === 'qty_changed' && <span> · {e.detail.from} → {e.detail.to}</span>}
                 {e.action === 'price_set' && <span> · {money(e.detail.from)} → {money(e.detail.to)}</span>}
+                {e.action === 'pick_submitted' && Array.isArray(e.detail?.changes) && e.detail.changes.length > 0 && <span> · {e.detail.changes.length} 行实际供货和需求不一样</span>}
                 {(e.action === 'shipped' || e.action === 'shipment_voided') && <span> · {e.detail.out_no} · {money(e.detail.amount)}</span>}
                 {(e.action === 'prepayment_applied' || e.action === 'written_off') && <span> · {money(e.detail.amount)}</span>}
                 <div className="when">{dt(e.at)}</div></li>
-            ))}
+              );
+            })}
           </ul>
         </div>
       </div>

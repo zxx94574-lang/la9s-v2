@@ -10,7 +10,8 @@ import { callAnon, setCustomerSession, getOrg, REAL } from '../db/client.js';
 import { useApp, useData, Pill, Modal } from '../components/ui.jsx';
 import { friendlyError, dt } from '../lib/format.js';
 
-const BAND = { ok: ['有货 · En stock', 'green'], low: ['少量 · Stock faible', 'amber'], none: ['无货 · Rupture', 'gray'] };
+// 230 / 231 (Frank 11-11): 客户端只有两种 —— 有货 (绿) / 可预订 (不叫无货, 不显示少量和数量); 点了可预订的照样能下, 差的自动记进未满足需求
+const BAND = { ok: ['有货 · En stock', 'green'], low: ['有货 · En stock', 'green'], none: ['可预订 · Sur commande', 'amber'] };
 const T = (zh, fr) => <>{zh}<span className="fr"> · {fr}</span></>;
 
 function Shell({ children, sub }) {
@@ -129,7 +130,8 @@ export function GuestShop() {
   const cats = useMemo(() => [...new Map((data?.cat || []).map((p) => [p.category_id, p.category])).entries()], [data]);
   if (!data) return <Shell sub="Visiteur · 游客"><div className="empty">加载中…</div></Shell>;
   const t = text.trim().toUpperCase();
-  const list = data.cat.filter((p) => (!cat || p.category_id === cat) && (!t || p.model.includes(t) || String(p.code).includes(t) || (p.shared_models || []).some((s) => s.includes(t)))).slice(0, 80);
+  const list = data.cat.filter((p) => (!cat || p.category_id === cat) && (!t || p.model.includes(t) || String(p.code).includes(t) || (p.shared_models || []).some((s) => s.includes(t))))
+    .sort((a, b) => ({ ok: 0, low: 1, none: 2 }[a.band] ?? 3) - ({ ok: 0, low: 1, none: 2 }[b.band] ?? 3)).slice(0, 80);   // 230: 有货的排前面, 可预订的沉底
   const byId = Object.fromEntries(data.cat.map((p) => [p.id, p]));
   const items = Object.entries(cart).filter(([, n]) => Number(n) > 0).map(([id, n]) => ({ p: byId[id], qty: Number(n) }));
   const n = items.length + extra.length;

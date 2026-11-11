@@ -47,7 +47,7 @@ export function QuotePanel({ deal, lines, catalog, categories, act, role }) {
   // 打开这一步就记时间: 未处理报价提醒从 5 分钟一次变 10 分钟一次 (Frank 11-07)
   React.useEffect(() => { if (deal.status === 'quoted' && can(role, 'hotline_confirm')) call(role, `select app.mark_hotline_opened($1)`, [deal.id]).catch(() => {}); }, [deal.id, deal.status, role]);
   const cols = baseCols({ price, cur, extra: [
-    { key: 'qty_available', label: '可售', w: 60, render: (l) => (l.product_id ? <b style={{ color: N(l.qty_available) < N(l.qty_req) && editable ? 'var(--red)' : '' }}>{qty(l.qty_available)}</b> : '—') },
+    { key: 'qty_available', label: '可售', w: 120, render: (l) => (l.product_id ? <span><b style={{ color: N(l.qty_available) < N(l.qty_req) && editable ? 'var(--red)' : '' }}>{qty(l.qty_available)}</b>{editable && N(l.qty_req) > Math.max(N(l.qty_available), 0) && <span className="pill amber" style={{ marginLeft: 4 }} title="差的已自动记进未满足需求">缺 {qty(N(l.qty_req) - Math.max(N(l.qty_available), 0))}</span>}</span> : '—') },
     { key: 'qty_req', label: '需求数量', w: 80, render: (l) => <b>{qty(l.qty_req)}</b> },
   ] });
   if (price) cols.push({ key: 'amount', label: `金额 ${cur}`, w: 110, value: (l) => N(l.qty_req) * N(l.unit_price), render: (l) => <b>{money(N(l.qty_req) * N(l.unit_price), cur)}</b> });
@@ -150,6 +150,7 @@ export function CustomerInfo({ deal }) {
 }
 
 export function ConfirmBlock({ deal, events, act, role }) {
+  const { go: nav } = useApp();
   const [method, setMethod] = useState('');
   const [when, setWhen] = useState('');          // today / tomorrow / date
   const [date, setDate] = useState('');
@@ -182,7 +183,7 @@ export function ConfirmBlock({ deal, events, act, role }) {
     setErrs(true);
     if (!method || !when || (when === 'date' && !date)) return;
     const push = when === 'today';
-    await act(push ? '已确认并下推找货，库存已预占' : '已确认，到客户要货那天待办会前移', `select app.quote_confirm($1,$2,$3,$4,$5,$6)`, [deal.id, note || null, method, proof || null, wantOn, push]).catch(() => {});
+    await act(push ? '已确认并下推找货，库存已预占' : '已确认，到客户要货那天待办会前移', `select app.quote_confirm($1,$2,$3,$4,$5,$6)`, [deal.id, note || null, method, proof || null, wantOn, push]).then(() => { if (!push) nav('todo'); }, () => {});   // 235: 改天要的先放一放 → 回待办
   };
   return (
     <div className="card">
@@ -200,7 +201,7 @@ export function ConfirmBlock({ deal, events, act, role }) {
               <FRow label="截图"><PhotoInput value={proof} onChange={setProof} label="WhatsApp 截图（可选）" /></FRow>
             </div>
             <div className="actbar">
-              <button type="button" className="btn" title="客户现在忙、没法确认：单子留在这一步、进待办，提醒照旧" onClick={() => act('已记：客户稍后再联系，这张单留在待办里', `select app.hotline_busy($1,$2)`, [deal.id, note || null]).catch(() => {})}>客户现在忙，稍后再联系</button>
+              <button type="button" className="btn" title="客户现在忙、没法确认：单子留在这一步、进待办，提醒照旧" onClick={() => act(`已记下：${deal.customer_name} 这张单稍后再联系（30 分钟后提醒）`, `select app.hotline_busy($1,$2)`, [deal.id, note || null]).then(() => nav('todo'), () => {})}>客户现在忙，稍后再联系</button>
               <button type="button" className="btn primary lg" onClick={go}>{when === 'today' ? '确认 → 下推找货' : '确认 →'}</button>
             </div>
           </div>
@@ -304,6 +305,10 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
   const { toast, org } = useApp();
   const real = lines.filter((l) => l.product_id && N(l.qty_supply) > 0);
   const reviewing = deal.status === 'confirmed';
+  // 236 (Frank 11-11): 约定发货日还没到 → 先不复检打包 (免得客户第二天加货白打包), 仓管把货放暂存位置; 到那天再从头检到尾
+  const hold = reviewing && deal.planned_ship_date && dDate(deal.planned_ship_date) > today();
+  const [early, setEarly] = useState(false);
+  const [stagePhoto, setStagePhoto] = useState(''); const [stageNote, setStageNote] = useState('');
   const [reviewer, setReviewer] = useState('');   // 复核人候选: 中方在 ⚙ 里勾 (第 15 条)
   const [photo, setPhoto] = useState('');
   const [dup, setDup] = useState([]);
@@ -358,6 +363,33 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
     }
     await act(actual.length ? '复检有变动：已退回热线，请客户重新确认变动的行' : '复检打包完成，可以出库', `select app.review_pick($1,$2,$3,$4,$5)`, [deal.id, reviewer, photo, JSON.stringify(actual), JSON.stringify(checks)]).then(() => dup.length && flagAnomaly(role, org, deal.id, 'ship', `打包照片和 ${dup.join('、')} 是同一张图，请核实`), () => {});
   };
+  if (hold && !early) {
+    return (
+      <div className="card">
+        <div className="card-h"><h2>④-1 复检 + 打包 <Info>约定发货日还没到的单不提前打包：客户第二天可能加货。到了那天再从头检到尾。</Info></h2>
+          <span className="pill amber">约 {dDate(deal.planned_ship_date)} 发货 · 先不打包</span></div>
+        <div className="card-b stack">
+          {deal.staged_at ? (
+            <div className="kv">
+              <div><div className="k">暂存位置</div><div className="v"><span className="pill green">已放好</span> {dt(deal.staged_at)}</div></div>
+              <div><div className="k">放在哪</div><div className="v" style={{ fontSize: 15 }}>{deal.staged_note || '—'}</div></div>
+              <div><div className="k">照片</div><div className="v">{deal.staged_photo && <Thumb src={deal.staged_photo} size={56} label="暂存位置照片" />}</div></div>
+            </div>
+          ) : can(role, 'review_pick') || role === 'picker' ? (
+            <div className="panel">
+              <div className="hint">把这单的货集中放到暂存位置，<b>不要打包</b>。放好后拍一张照片，写一下放在哪。</div>
+              <div className="fgrid">
+                <FRow label="放在哪"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={stageNote} onChange={(ev) => setStageNote(ev.target.value)} placeholder="例如 门口第二排架子" /></FRow>
+                <FRow label="照片" req><PhotoInput value={stagePhoto} onChange={setStagePhoto} label="拍放好的那一堆货" /></FRow>
+              </div>
+              <div className="actbar">{!stagePhoto && <span className="why">还差：照片</span>}<button type="button" className="btn primary" disabled={!stagePhoto} onClick={() => act('已记：货放在暂存位置，等发货那天复检', `select app.mark_staged($1,$2,$3)`, [deal.id, stagePhoto, stageNote || null]).catch(() => {})}>已放到暂存位置 ✓</button></div>
+            </div>
+          ) : <div className="hint">等仓管把货放到暂存位置。</div>}
+          {can(role, 'review_pick') && <div className="row"><span className="small muted">客户改主意要提前发？</span><button type="button" className="btn sm" onClick={() => setEarly(true)}>现在就复检打包</button></div>}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="card" ref={scope}>
       <div className="card-h"><h2>④-1 复检 + 打包 <Info>客户确认后由主管抽检、打包；打完包出发货文件，再出库</Info></h2>
@@ -577,6 +609,7 @@ function PriceModal({ line, cur, onClose, onSave }) {
 
 // ───────────────────────── ⑦ 客户最终确认（先发图，再确认：方式 + 截图必传 + 发货日期）─────────────────────────
 export function ConfirmPanel({ deal, lines, events, act, role }) {
+  const { go: nav2 } = useApp();
   const [method, setMethod] = useState('');
   const [proof, setProof] = useState('');
   const [when, setWhen] = useState('today');
@@ -603,7 +636,8 @@ export function ConfirmPanel({ deal, lines, events, act, role }) {
   const go = () => {
     setErrs(true);
     if (!method || !proof) return;
-    act(deal.reviewed_at ? '客户已重新确认，可以出库' : '客户已确认，请主管复检打包', `select app.customer_confirm($1,$2,$3,$4,$5)`, [deal.id, note || null, method, proof, shipDate]).catch(() => {});
+    const later = shipDate > today();   // 236 (Frank 11-11): 约定发货日不是今天 → 不提前复检打包, 回待办; 仓管先把货放暂存位置
+    act(deal.reviewed_at ? '客户已重新确认，可以出库' : later ? `客户已确认，约 ${shipDate} 发货：先不打包，通知仓管把货放到暂存位置` : '客户已确认，请主管复检打包', `select app.customer_confirm($1,$2,$3,$4,$5)`, [deal.id, note || null, method, proof, shipDate]).then(() => { if (later && !deal.reviewed_at) nav2('todo'); }, () => {});
   };
   return (
     <div className="card">
@@ -1072,14 +1106,14 @@ function DocsBlock({ deal, lines, role }) {
 }
 
 // ───────────────────────── ⑤ 签收 · 对账 (Frank 11-09 第 18 条: 出库后不直接到收款; 客户签收 (时间 + 照片) + Balance 发群, 全部签收才到收款) ─────────────────────────
-export function SignPanel({ deal, shipments, events, act, role }) {
+export function SignPanel({ deal, shipments, events, act, role, others }) {
   const live = shipments.filter((s) => !s.voided_at);
   const unsigned = live.filter((s) => !s.customer_received_at);
   return (
     <>
       <div className="card">
         <div className="card-h"><h2>① 客户签收 <Info>出库后打电话或发 WhatsApp 问客户收到货没有；客户发了照片就传照片，没有就传 WhatsApp 聊天截图或通话截图。签收后接着做下面的 ② 和客户对账。</Info></h2>
-          {unsigned.length ? <span className="pill amber">还有 {unsigned.length} 批没签收</span> : live.length ? <span className="pill green">已签收</span> : <span className="muted small">还没出库</span>}</div>
+          {unsigned.length ? <span className={`pill ${unsigned.length < live.length ? 'amber' : 'red'}`}>还有 {unsigned.length} 批没签收</span> : live.length ? <span className="pill green">已签收</span> : <span className="muted small">还没出库</span>}</div>
         <div className="card-b two">
           <CustomerInfo deal={deal} />
           <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
@@ -1088,23 +1122,28 @@ export function SignPanel({ deal, shipments, events, act, role }) {
         </div>
       </div>
       {live.length > 0 && <BalancePreview customerId={deal.customer_id} currency={deal.currency} deal={deal} title={`② 和客户对账 · ${deal.customer_name}`} />}
-      {live.length > 0 && <BalanceConfirm deal={deal} events={events} act={act} role={role} unsigned={unsigned.length} />}
+      {live.length > 0 && <BalanceConfirm deal={deal} events={events} act={act} role={role} unsigned={unsigned.length} others={(others || []).filter((o) => o.balance_pending)} />}
     </>
   );
 }
 // ③ 客户确认对账 (Frank 11-11 16:34, 迁移 0036): 跟报价确认 / 退货对账一样 —— 客户信息 + 确认方式 + 确认截图; 之后又签收了新一批要重新对
-function BalanceConfirm({ deal, events, act, role, unsigned }) {
+function BalanceConfirm({ deal, events, act, role, unsigned, others = [] }) {
+  const [also, setAlso] = useState(() => new Set(others.map((o) => o.id)));   // 238: Balance 是按客户出的 → 一张截图可以同时勾掉这个客户所有待对账的单
   const [method, setMethod] = useState('');
   const [proof, setProof] = useState('');
   const [note, setNote] = useState('');
   const [errs, setErrs] = useState(false);
   const e = evOf(events || [], 'balance_confirmed');
   const done = deal.balance_confirmed_at && !deal.balance_pending;
-  const go = async () => { setErrs(true); if (!method || !proof) return; await act('客户已确认对账 ✓', `select app.confirm_balance($1,$2,$3,$4)`, [deal.id, method, proof, note || null]).catch(() => {}); };
+  const go = async () => {
+    setErrs(true); if (!method || !proof) return;
+    const ids = [deal.id, ...others.filter((o) => also.has(o.id)).map((o) => o.id)];
+    await act(ids.length > 1 ? `客户已确认对账 ✓（${ids.length} 张单一起）` : '客户已确认对账 ✓', `select app.confirm_balance(x, $2, $3, $4) from unnest($1::uuid[]) x`, [`{${ids.join(',')}}`, method, proof, note || null]).catch(() => {});
+  };
   return (
     <div className="card">
       <div className="card-h"><h2>③ 客户确认对账 <Info>把上面的 Balance 发客户群，客户回复确认（或电话确认）后，选确认方式、传截图。之后又签收了新的一批，要重新对一次。</Info></h2>
-        {done ? <span className="row" style={{ gap: 6 }}><span className="pill green">已对账</span><Who e={e} /></span> : unsigned ? <span className="pill amber">先签收</span> : <span className="pill amber">待对账</span>}</div>
+        {done ? <span className="row" style={{ gap: 6 }}><span className="pill green">已对账</span><Who e={e} /></span> : unsigned ? <span className="pill amber">先签收</span> : <span className="pill red">待对账</span>}</div>
       {done ? (
         <div className="card-b kv">
           <div><div className="k">确认方式</div><div className="v">{CONFIRM_METHODS[deal.balance_method] || '（以前的单，默认已对账）'}</div></div>
@@ -1123,6 +1162,10 @@ function BalanceConfirm({ deal, events, act, role, unsigned }) {
                   <FRow label="确认方式" req><div className="chips">{Object.entries(CONFIRM_METHODS).map(([k, v]) => <button type="button" key={k} className={`chip ${method === k ? 'on' : ''} ${errs && !method ? 'err' : ''}`} onClick={() => setMethod(k)}>{v}</button>)}</div></FRow>
                   <FRow label="确认截图" req><PhotoInput value={proof} onChange={setProof} invalid={errs && !proof} label="客户回复确认的 WhatsApp / 通话截图" /></FRow>
                   <FRow label="备注"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(ev) => setNote(ev.target.value)} placeholder="例如 客户说月底一起付" /></FRow>
+                  {others.length > 0 && <FRow label="一起对掉"><div className="stack" style={{ gap: 4 }}>
+                    <span className="small muted">这个客户还有 {others.length} 张单待对账。Balance 上是他所有的单，客户这次确认的就是全部 —— 勾上的一起记成已对账：</span>
+                    {others.map((o) => <label key={o.id} className="row" style={{ gap: 6 }}><input type="checkbox" checked={also.has(o.id)} onChange={() => { const n = new Set(also); n.has(o.id) ? n.delete(o.id) : n.add(o.id); setAlso(n); }} /><span className="mono">{o.biz_no}</span></label>)}
+                  </div></FRow>}
                 </div>
                 <div className="actbar">{(!method || !proof) && <span className="why">还差：{[!method && '确认方式', !proof && '确认截图'].filter(Boolean).join('、')}</span>}<button type="button" className="btn primary lg" onClick={go}>客户已确认对账 ✓</button></div>
               </div>

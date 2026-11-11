@@ -5,6 +5,8 @@ import { money, qty } from '../lib/format.js';
 import { useOutside } from './ui.jsx';
 
 export const avail = (p) => p.stock.reduce((a, s) => a + s.on_hand - s.reserved, 0);
+// 内部看库存 (230): 直接给数量 + 颜色 —— 充足绿 / 快没了黄 (< 20) / 0 红; 全站同一个
+export const StockPill = ({ n }) => <span className={`pill ${n >= 20 ? 'green' : n > 0 ? 'amber' : 'red'}`}>{qty(n)} 片</span>;
 
 export default function ModelPicker({ catalog, categories, tier, onPick, onUnpick, showPrice = true, extra, picked }) {
   const [cat, setCat] = useState('');
@@ -17,7 +19,8 @@ export default function ModelPicker({ catalog, categories, tier, onPick, onUnpic
   const list = useMemo(() => {
     const t = text.trim().toUpperCase();
     return catalog.filter((p) => (!cat || p.category_id === cat) && (!t || p.model.includes(t) || p.code.includes(t) || (p.variant || '').toUpperCase().includes(t) || p.shared_models.some((s) => s.includes(t))))
-      .sort((a, b) => (b.model.startsWith(t) - a.model.startsWith(t)) || a.model.localeCompare(b.model)).slice(0, 40);
+      // Frank 11-11 (230): 库存多的排前面 (搜索时: 型号开头匹配的优先, 再按库存), 不要一打开全是没货的
+      .sort((a, b) => (t ? (b.model.startsWith(t) - a.model.startsWith(t)) : 0) || (avail(b) - avail(a)) || a.model.localeCompare(b.model)).slice(0, 60);
   }, [catalog, cat, text]);
 
   const pick = (p) => {
@@ -51,7 +54,7 @@ export default function ModelPicker({ catalog, categories, tier, onPick, onUnpic
                   <span className="muted mono">{picked?.has(p.id) ? '✓ ' : ''}{p.code}</span>
                   <span>{p.category}</span>
                   <span><span className="m">{p.model}</span>{p.variant && <span className="pill blue" style={{ marginLeft: 4 }}>{p.variant}</span>} <span className="muted small">{p.shared_models.slice(0, 3).join(' / ')}{p.shared_models.length > 3 ? ' …' : ''}</span></span>
-                  <span className="small mono">{avail(p) > 0 ? `可售 ${qty(avail(p))}` : <span className="pill red">无货</span>}{showPrice && tier ? ` · ${money(p.prices[tier])}` : ''}</span>
+                  <span className="small mono"><StockPill n={avail(p)} />{showPrice && tier ? <span className="muted"> · {money(p.prices[tier])} XOF</span> : ''}</span>
                 </button>
               ))}
             </div>
