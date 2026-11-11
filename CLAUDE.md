@@ -38,7 +38,7 @@ Frank 决定**重建**：保留已确认的需求和界面细节，换掉底层�
 - **2026-11-11（真实 v37 / v38）**：迁移 0034（`landed_cost` 改 ceil；`product_batches.freight_total/freight_pieces` + `batch_freight` 每片进到 50；`edit_product_info`、`log_archive_edit`、`archive_history`（要用 `call(role, …)` 查，需要 uid））、0035（收款 `record_receipt2`：手续费 + `fee_bearer`、`account_id`、员工代收 `collector_employee_id`、`verify_status` pending / verified；`verify_receipt`（登记人不能自己确认，中方除外）、`auto_verify_receipts`、`receipt_handed`、`v_staff_held`、`reallocate_receipt`；`cash_checks` + `record_cash_check`、`account_balance`；`period_locks` + `lock_month` / `unlock_month` + 触发器 `guard_locked_period`；`write_off_bad_debt`、`refund_customer`、`transfer_between` / `transfer_arrived`（在途）、`classify_move`）。前端：Grid 点格子只选中不跳转；单号 `DealLink`；`lib/phone.js` + `PhoneInput`；`RateInput`（⇄ 方向）；`ProductDrawer` 七块 + 解锁改 + `ConfirmEdit`；资金账户页 `CashControls.jsx`（待核对到账 / 员工代收 / 对账与盘点 / 账户互转 / 月结锁账 + 财务提醒，规则 org_settings `cash_rules`、分类选项 `cash_classes`）。`.tabs` 全站可换行、`.kpis[style]` 窄屏降列。`npm test` 75。
 - **Frank 真实版里手改的数据（工号、员工资料、客户资料…）是唯一真相**：更新只换代码不动数据（已多次升级验证）；**staff-pack 版本号永远不再升**（升了会用飞书旧数据覆盖他手改的），以后员工信息只在系统里改。每周「导出整库」是他唯一的备份。
 - **铁规矩（10-31 起）**：已发布的迁移文件**不再修改**，改规则只加新迁移；否则真实数据版会拒绝升级（为了不丢数据）。
-- **演示版仍未做**：手续费目前写进收款备注（没有单独科目）；凭证「拍摄时间」用的是文件时间，没读 EXIF；客户单据语言（法语 / 中法双语）待 Frank 定。
+- **演示版仍未做**：凭证「拍摄时间」用的是文件时间，没读 EXIF；客户单据语言（法语 / 中法双语）待 Frank 定。
 - **演示版未做**：中英法三语（只有中文，入口已放在设置里）、Yango 截图识别、WhatsApp 自动发送、金蝶写入、登录。（侧栏宽度可调、看板板块拖动已在 10-29 / 11-01 做了）
 - **下一步（待 Frank 试用后用截图红框提修改）**：先改演示版的细节，再接真实数据小批量导入（价格母表、客户、库存），最后部署。
 - **部署（Frank 要求放到最后）**：所有功能整理好之后，再买 `la9s.com`（Cloudflare）、建 Supabase 项目（欧洲区）、连 GitHub。演示版不得录入真实业务数据。
