@@ -24,6 +24,8 @@ export function shipAlert(d) {
   return p < t ? { tone: 'red', text: `约定 ${p} 发货，已过期未出库` } : p === t ? { tone: 'amber', text: '今天该出库' } : { tone: 'gray', text: `约定 ${p} 发货` };
 }
 export function nextAction(d) {
+  if (d.status === 'shipped' && Number(d.unsigned_n || 0) > 0) return { roles: ['hotline', 'manager'], what: `联系客户确认收货，${d.unsigned_n} 批待签收（传签收凭证）` };
+  if (d.status === 'shipped' && d.balance_pending) return { roles: ['hotline', 'finance'], what: '和客户对账：发 Balance，客户确认后传截图' };
   if (d.status === 'shipped' && Number(d.due) > 0) return { roles: ['finance'], what: `催收 / 登记收款，未付 ${money(d.due)}` };
   const a = shipAlert(d);
   if (a && a.tone !== 'gray') return { roles: ['manager'], what: `${a.text}：安排发货，填出库信息和凭证`, alert: a };
@@ -33,7 +35,7 @@ export function nextAction(d) {
 export function todoFor(role, d) {
   const n = nextAction(d);
   if (!n) return false;
-  return role === 'admin' ? !['shipped', 'cancelled'].includes(d.status) || Number(d.due) > 0 : n.roles.includes(role);
+  return role === 'admin' ? !['shipped', 'cancelled'].includes(d.status) || Number(d.due) > 0 || Number(d.unsigned_n || 0) > 0 || !!d.balance_pending : n.roles.includes(role);
 }
 
 // 超期未发货 (Frank 11-01: 没人跟进, 十几天后才发现没发货, 客户就不理我们了):

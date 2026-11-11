@@ -56,6 +56,8 @@ export default function Deal({ id }) {
   let defKey = cancelled ? 'quote' : allDone ? 'pay' : STEP_KEYS[current];
   const STEP_PERM = { sign: 'mark_received', pay: 'receipt' };
   for (let i = STEP_KEYS.indexOf(defKey); i > 0 && STEP_PERM[STEP_KEYS[i]] && !can(role, STEP_PERM[STEP_KEYS[i]]); i -= 1) defKey = STEP_KEYS[i - 1];
+  // Frank 11-11 16:31: 签收完 (不管收没收款) 谁来看都停在「签收 · 对账」: 上面显示已签收, 下面接着和客户对账; 收款是财务在收款页做的, 要看点流程条「收款」
+  if (defKey === 'pay' && !cancelled && live.length) defKey = 'sign';
   const curKey = view || defKey;
   const curIdx = STEP_KEYS.indexOf(curKey);
   const readOnly = curIdx >= 0 && curIdx <= reached && !['ship', 'sign', 'pay'].includes(curKey) && !(curKey === 'so' && ['ordered', 'confirmed', 'reviewed', 'partial'].includes(deal.status));
@@ -68,7 +70,7 @@ export default function Deal({ id }) {
 
   const docOf = (k) => ({
     quote: deal.quote_no, pick: deal.pick_no, so: deal.so_no, ship: live[0]?.out_no || deal.reviewer_name,
-    sign: live.length ? (Number(deal.unsigned_n) > 0 ? `${deal.unsigned_n} 批待签收` : '已签收') : '',
+    sign: live.length ? (Number(deal.unsigned_n) > 0 ? `${deal.unsigned_n} 批待签收` : deal.balance_pending ? '已签收 · 待对账' : '已对账') : '',
     pay: Number(deal.shipped_amount) > 0 ? (Number(deal.due) > 0 ? `欠 ${money(deal.due, deal.currency)}` : '已结清') : '',
   }[k]);
   const nextLabel = current >= 0 && current < LAST_STEP ? STEPS[current + 1]?.label : null;

@@ -49,6 +49,7 @@ select d.id, d.biz_no, d.quote_no, d.pick_no, d.so_no, d.kind, d.status, d.curre
   t.first_shipped_at, t.shipped_amount, t.returned_amount, t.allocated_amount, t.shipped_amount - t.returned_amount - t.allocated_amount - t.writeoff_amount as due, t.writeoff_amount,
   (select count(*) from app.shipments sx where sx.deal_id = d.id and sx.voided_at is null and sx.customer_received_at is null)::int as unsigned_n,
   (select count(*) from app.returns rx where rx.deal_id = d.id and (rx.status = 'requested' or (rx.status = 'approved' and rx.reconciled_at is null)))::int as open_returns_n,
+  app.balance_pending(d.id) as balance_pending,
   (select short_name from app.employees oe where oe.id = d.owner_employee_id) as owner_name
 from app.deals d
 join app.customers c on c.id = d.customer_id
@@ -61,6 +62,7 @@ select d.*, c.code as customer_code, c.name as customer_name, c.city, c.tier, c.
   (select count(*) from app.shipments sx where sx.deal_id = d.id and sx.voided_at is null and sx.customer_received_at is null)::int as unsigned_n,
   (select count(*) from app.shipments sx where sx.deal_id = d.id and sx.voided_at is null)::int as live_shipments_n,
   (select count(*) from app.returns rx where rx.deal_id = d.id and (rx.status = 'requested' or (rx.status = 'approved' and rx.reconciled_at is null)))::int as open_returns_n,
+  app.balance_pending(d.id) as balance_pending,
   pe.short_name as picker_name, oe.short_name as owner_name, re.short_name as reviewer_name,
   (select count(*) from app.pick_checks pc join app.deal_lines pl on pl.id = pc.deal_line_id join app.deals pd on pd.id = pl.deal_id
      where pd.picker_employee_id = d.picker_employee_id and pc.result <> 'ok' and pc.at > now() - interval '30 days') as picker_errors,

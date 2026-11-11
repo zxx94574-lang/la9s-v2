@@ -24,6 +24,7 @@ const P = {
   customer_confirm: ['hotline', 'manager'],
   ship: ['manager'],
   mark_received: ['hotline', 'manager'],
+  balance_confirm: ['hotline', 'manager', 'sales_manager', 'finance'],
   cancel: ['manager'],
   receipt: ['finance'],
   request_return: ['hotline', 'manager'],
@@ -102,8 +103,9 @@ export const LAST_STEP = STEPS.length - 1;   // 5
 const REACHED = { quoted: -1, hotline_ok: -1, picking: 0, picked: 1, ordered: 1, confirmed: 2, reviewed: 2, partial: 2, shipped: 3, cancelled: -2 };
 export function reachedStep(deal) {
   let r = REACHED[deal.status] ?? -1;
-  if (deal.status === 'shipped' && Number(deal.unsigned_n ?? 1) === 0) r = 4;            // 全部签收 → 签收·对账完成, 收款当前
-  if (deal.status === 'shipped' && Number(deal.unsigned_n ?? 1) === 0 && Number(deal.due) <= 0 && Number(deal.shipped_amount) > 0) r = LAST_STEP;
+  // 全部签收 + 客户确认过对账 (0036) → 签收·对账完成, 收款当前
+  if (deal.status === 'shipped' && Number(deal.unsigned_n ?? 1) === 0 && !deal.balance_pending) r = 4;
+  if (deal.status === 'shipped' && Number(deal.unsigned_n ?? 1) === 0 && !deal.balance_pending && Number(deal.due) <= 0 && Number(deal.shipped_amount) > 0) r = LAST_STEP;
   return r;
 }
 
@@ -163,7 +165,7 @@ export function priceLevel(price, tierPrice, th = getThresholds()) {
 export const EVENT_LABELS = {
   quote_approved: '中方批准', quote_rejected: '中方没批', approval_resubmitted: '重新提交审批', approval_auto_cleared: '客户付款后自动通过审批',
   debt_released: '中方放行（欠款）', fx_set: '设定汇率', price_requested: '员工申请改价',
-  hotline_busy: '客户忙，稍后再联系', bl_issued: '出 BL 编号', customer_received: '客户签收', issue_reported: '⚠ 上报问题', issue_closed: '✓ 中方处理了上报',
+  hotline_busy: '客户忙，稍后再联系', bl_issued: '出 BL 编号', customer_received: '客户签收', balance_confirmed: '客户确认对账', issue_reported: '⚠ 上报问题', issue_closed: '✓ 中方处理了上报',
   quote_created: '创建报价', quote_edited: '修改报价', price_set: '中方改价', hotline_confirmed: '热线确认',
   picking_started: '下推找货单（预占库存）', pick_submitted: '初拣完成', pick_reviewed: '主管复检打包',
   sales_order_created: '生成销售订单', lines_added: '出库前追加货', customer_confirmed: '客户确认',
@@ -177,7 +179,7 @@ export const LIGHT_LABEL = { done: '已完成', active: '进行中', cancelled: 
 export function dealLight(d) {
   if (!d) return 'active';
   if (d.status === 'cancelled') return 'cancelled';
-  if (d.status === 'shipped' && Number(d.unsigned_n || 0) === 0 && Number(d.due || 0) <= 0 && Number(d.open_returns_n || 0) === 0) return 'done';
+  if (d.status === 'shipped' && Number(d.unsigned_n || 0) === 0 && Number(d.due || 0) <= 0 && Number(d.open_returns_n || 0) === 0 && !d.balance_pending) return 'done';
   return 'active';
 }
 export function stuckOf(d) {
@@ -198,6 +200,7 @@ export function stuckOf(d) {
   if (s === 'reviewed') return '④ 待出库';
   if (s === 'partial') return '④ 部分出库 · 还有货要发';
   if (Number(d.unsigned_n || 0) > 0) return '⑤ 等客户确认收货';
+  if (d.balance_pending) return '⑤ 待和客户对账';
   if (Number(d.due || 0) > 0) return '⑥ 等客户付款';
   if (Number(d.open_returns_n || 0) > 0) return '退货 · 还没对完账';
   return '已完成';

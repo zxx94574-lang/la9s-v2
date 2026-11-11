@@ -1071,14 +1071,14 @@ function DocsBlock({ deal, lines, role }) {
 }
 
 // ───────────────────────── ⑤ 签收 · 对账 (Frank 11-09 第 18 条: 出库后不直接到收款; 客户签收 (时间 + 照片) + Balance 发群, 全部签收才到收款) ─────────────────────────
-export function SignPanel({ deal, shipments, act, role }) {
+export function SignPanel({ deal, shipments, events, act, role }) {
   const live = shipments.filter((s) => !s.voided_at);
   const unsigned = live.filter((s) => !s.customer_received_at);
   return (
     <>
       <div className="card">
-        <div className="card-h"><h2>⑤ 联系客户确认收货 <Info>出库后打电话或发 WhatsApp 问客户收到货没有；客户发了照片就传照片，没有就传 WhatsApp 聊天截图或通话截图。签收后再把下面的 Balance 发客户群。</Info></h2>
-          <span className="muted small">{unsigned.length ? `还有 ${unsigned.length} 批没签收` : live.length ? '全部签收 ✓' : '还没出库'}</span></div>
+        <div className="card-h"><h2>① 客户签收 <Info>出库后打电话或发 WhatsApp 问客户收到货没有；客户发了照片就传照片，没有就传 WhatsApp 聊天截图或通话截图。签收后接着做下面的 ② 和客户对账。</Info></h2>
+          {unsigned.length ? <span className="pill amber">还有 {unsigned.length} 批没签收</span> : live.length ? <span className="pill green">已签收</span> : <span className="muted small">还没出库</span>}</div>
         <div className="card-b two">
           <CustomerInfo deal={deal} />
           <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
@@ -1086,8 +1086,49 @@ export function SignPanel({ deal, shipments, act, role }) {
           </div>
         </div>
       </div>
-      {live.length > 0 && <BalancePreview customerId={deal.customer_id} currency={deal.currency} deal={deal} title={`和客户对账 · ${deal.customer_name}`} />}
+      {live.length > 0 && <BalancePreview customerId={deal.customer_id} currency={deal.currency} deal={deal} title={`② 和客户对账 · ${deal.customer_name}`} />}
+      {live.length > 0 && <BalanceConfirm deal={deal} events={events} act={act} role={role} unsigned={unsigned.length} />}
     </>
+  );
+}
+// ③ 客户确认对账 (Frank 11-11 16:34, 迁移 0036): 跟报价确认 / 退货对账一样 —— 客户信息 + 确认方式 + 确认截图; 之后又签收了新一批要重新对
+function BalanceConfirm({ deal, events, act, role, unsigned }) {
+  const [method, setMethod] = useState('');
+  const [proof, setProof] = useState('');
+  const [note, setNote] = useState('');
+  const [errs, setErrs] = useState(false);
+  const e = evOf(events || [], 'balance_confirmed');
+  const done = deal.balance_confirmed_at && !deal.balance_pending;
+  const go = async () => { setErrs(true); if (!method || !proof) return; await act('客户已确认对账 ✓', `select app.confirm_balance($1,$2,$3,$4)`, [deal.id, method, proof, note || null]).catch(() => {}); };
+  return (
+    <div className="card">
+      <div className="card-h"><h2>③ 客户确认对账 <Info>把上面的 Balance 发客户群，客户回复确认（或电话确认）后，选确认方式、传截图。之后又签收了新的一批，要重新对一次。</Info></h2>
+        {done ? <span className="row" style={{ gap: 6 }}><span className="pill green">已对账</span><Who e={e} /></span> : unsigned ? <span className="pill amber">先签收</span> : <span className="pill amber">待对账</span>}</div>
+      {done ? (
+        <div className="card-b kv">
+          <div><div className="k">确认方式</div><div className="v">{CONFIRM_METHODS[deal.balance_method] || '（以前的单，默认已对账）'}</div></div>
+          <div><div className="k">时间</div><div className="v" style={{ fontSize: 15 }}>{dt(deal.balance_confirmed_at)}</div></div>
+          <div><div className="k">备注</div><div className="v" style={{ fontSize: 15 }}>{deal.balance_note || '—'}</div></div>
+          <div><div className="k">截图</div><div className="v">{deal.balance_proof ? <Thumb src={deal.balance_proof} size={56} label="对账截图" /> : <span className="muted small">未传</span>}</div></div>
+        </div>
+      ) : (
+        <div className="card-b two">
+          <CustomerInfo deal={deal} />
+          {unsigned ? <div className="panel"><span className="why">还有 {unsigned} 批没签收，签收完再对账</span></div>
+            : can(role, 'balance_confirm') ? (
+              <div className="panel">
+                {deal.balance_confirmed_at && <div className="pill amber" style={{ marginBottom: 8 }}>上次对账后又签收了新的一批，要重新对一次</div>}
+                <div className="fgrid">
+                  <FRow label="确认方式" req><div className="chips">{Object.entries(CONFIRM_METHODS).map(([k, v]) => <button type="button" key={k} className={`chip ${method === k ? 'on' : ''} ${errs && !method ? 'err' : ''}`} onClick={() => setMethod(k)}>{v}</button>)}</div></FRow>
+                  <FRow label="确认截图" req><PhotoInput value={proof} onChange={setProof} invalid={errs && !proof} label="客户回复确认的 WhatsApp / 通话截图" /></FRow>
+                  <FRow label="备注"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(ev) => setNote(ev.target.value)} placeholder="例如 客户说月底一起付" /></FRow>
+                </div>
+                <div className="actbar">{(!method || !proof) && <span className="why">还差：{[!method && '确认方式', !proof && '确认截图'].filter(Boolean).join('、')}</span>}<button type="button" className="btn primary lg" onClick={go}>客户已确认对账 ✓</button></div>
+              </div>
+            ) : <div className="panel"><Blocked action="balance_confirm" /></div>}
+        </div>
+      )}
+    </div>
   );
 }
 function SignRow({ s, act, role }) {
