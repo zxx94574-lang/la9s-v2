@@ -849,3 +849,14 @@ img { max-width: 100%; }
 /* 大屏 (≥1920): 内容区限宽居中, 字号略放大 */
 @media (min-width: 1920px) { .content { max-width: 1760px; } html { font-size: 17px; } }
 @media (min-width: 2560px) { html { font-size: 19px; } .content { max-width: 2200px; } }
+/* 206 物料档案分块: 每块一个框 */
+.pd-sec { border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 12px; background: #fff; min-width: 0; }
+.pd-sec > .pd-h:first-child { margin-top: 0; }
+.pd-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 12px; margin: 6px 0 8px; }
+.pd-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+.pd-form label.wide { grid-column: 1 / -1; }
+.pd-form .in { width: 100%; }
+.hist-row { border-left: 3px solid var(--line-2); padding: 2px 0 2px 8px; }
+.tscroll { overflow-x: auto; max-width: 100%; }
+fieldset.lockset { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset.lockset:disabled .in, fieldset.lockset:disabled select, fieldset.lockset:disabled button { opacity: .75; cursor: default; }

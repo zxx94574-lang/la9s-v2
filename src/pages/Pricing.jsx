@@ -33,7 +33,7 @@ export default function Pricing() {
   const s = data.s;
   const rate = Number(s.rmb_per_xof), step = Number(s.round_to);
   const val = (r, k) => (draft[r.id] && k in draft[r.id] ? draft[r.id][k] : r[k]);
-  const landed = (r) => { const c = N(val(r, 'rmb_cost')); return c == null ? null : Math.round((c / rate + (N(val(r, 'freight_xof')) || 0)) / step) * step; };
+  const landed = (r) => { const c = N(val(r, 'rmb_cost')); return c == null ? null : Math.ceil((c / rate + (N(val(r, 'freight_xof')) || 0)) / step) * step; };
   const set = (r, k, v) => setDraft((d) => ({ ...d, [r.id]: { ...(d[r.id] || {}), [k]: v.replace(/[^\d.]/g, '') } }));
   const changed = Object.keys(draft);
   const rows = data.rows.filter((r) => !cat || r.category === cat);

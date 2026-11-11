@@ -1,10 +1,11 @@
 // 客户档案 (Frank 2026-10-29): 一个客户一张档案 —— 正式 / 潜客 / 回收 都在这里.
 // 欠款上限和账期只预警不拦截 (THOMAS 这类有协议的大客户照常出货); 档位、正式编码、上限、账期只中方改.
 import { normPhone, fmtPhone } from '../lib/phone.js';
+import { ConfirmEdit, HistoryBlock } from '../components/ProductDrawer.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker , PhoneInput} from '../components/ui.jsx';
+import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker , PhoneInput, phoneValid} from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { CallModal, ProspectModal, ResultPill, KIND, custLabel } from '../components/Crm.jsx';
 import { AccountPanel, ACC } from '../components/Account.jsx';
@@ -118,7 +119,7 @@ export function CustomerDrawer({ id, onClose }) {
   const warn = creditWarn(c);
   return (
     <Drawer title={custLabel(c)} onClose={onClose}
-      actions={<>{can(role, 'prospect') && <button type="button" className="btn sm" onClick={() => setCallOpen(true)}>☎ 记回访</button>}
+      actions={<>{['admin', 'manager', 'sales_manager', 'hotline'].includes(role) && <button type="button" className="btn sm" onClick={() => setEdit('info')} title="解锁修改：保存前列出改了什么并自检">✎ 修改</button>}{can(role, 'prospect') && <button type="button" className="btn sm" onClick={() => setCallOpen(true)}>☎ 记回访</button>}
         {c.status === 'active' && can(role, 'quote') && <button type="button" className="btn sm" onClick={() => go('quote/new')}>＋ 报价</button>}
         {c.status === 'active' && price && <button type="button" className="btn sm" onClick={() => go('customer/' + c.id)}>总账</button>}</>}>
       <div className="stack">
@@ -144,9 +145,10 @@ export function CustomerDrawer({ id, onClose }) {
           <div className="row" style={{ gap: 8 }}>
             {c.status === 'prospect' && <button type="button" className="btn primary sm" onClick={() => setEdit('activate')}>转正式客户（给编码 + 档位）</button>}
             <button type="button" className="btn sm" onClick={() => setEdit('terms')}>欠款上限 / 账期 / 归属</button>
-            <button type="button" className="btn sm" onClick={() => setEdit('info')}>改资料（负责人 / 电话 / 城市 / 地址）</button>
+            <button type="button" className="btn sm" onClick={() => setEdit('info')}>✎ 修改档案（负责人 / 电话 / 城市 / 地址{role === 'admin' ? ' / 档位' : ''}）</button>
           </div>)}
         <AccountPanel customer={c} />
+        {role === 'admin' && <CustHistory c={c} />}
         <h3 style={{ margin: '8px 0 0' }}>联系记录 <span className="muted small">{contacts.length} 次</span></h3>
         {contacts.length === 0 ? <div className="empty">还没有回访或拜访记录</div> : (
           <ul className="timeline">{contacts.map((x) => (
@@ -217,21 +219,44 @@ function TermsModal({ c, emps, onClose }) {
 
 // 客户基本资料 (Frank 11-07: 电话 / 负责人 / 城市要进客户表, BL 从这里取)
 function InfoModal({ c, onClose }) {
-  const { role, toast, refresh } = useApp();
-  const [f, setF] = useState({ name: c.name || '', contact_name: c.contact_name || '', phone: c.phone || '', city: c.city || '', address: c.address || '' });
+  const { org, role, toast, refresh } = useApp();
+  const init = { name: c.name || '', contact_name: c.contact_name || '', phone: c.phone || '', city: c.city || '', address: c.address || '', ...(role === 'admin' && c.status === 'active' ? { tier: c.tier || '' } : {}) };
+  const [f, setF] = useState(init);
+  const [confirm, setConfirm] = useState(null);
   const inp = (k, l, ph) => <div className="field"><label>{l}</label><input className="in" value={f[k]} placeholder={ph} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></div>;
-  const go = async () => {
-    try { await call(role, `select app.edit_customer_info($1,$2)`, [c.id, JSON.stringify(f)]); toast('资料已保存'); refresh(); onClose(); }
-    catch (e) { toast(friendlyError(e), 'err'); }
+  const LABEL = { name: '客户名称', contact_name: '负责人', phone: '电话', city: '城市', address: '地址', tier: '档位' };
+  // 206: 保存前列出改前 → 改后 + 自检 (电话位数红 / 和别的客户重号黄 / 改档位黄)
+  const review = async () => {
+    const rows = Object.keys(f).filter((k) => String(init[k] ?? '') !== String(f[k] ?? '')).map((k) => [LABEL[k], k === 'tier' ? (TIERS[init[k]] || '—') : (init[k] || '—'), k === 'tier' ? (TIERS[f[k]] || '—') : (f[k] || '—')]);
+    if (!rows.length) { toast('没有改动'); return onClose(); }
+    const checks = [];
+    if (f.phone && !phoneValid(f.phone)) return toast(`电话位数不对：${f.phone}，改对了再存`, 'err');
+    const digits = String(f.phone || '').replace(/\D/g, '').slice(-10);
+    if (digits.length >= 8 && f.phone !== init.phone) {
+      const dup = await q(`select name from app.customers where org_id = $1 and id <> $2 and right(regexp_replace(coalesce(phone,''), '\\D', '', 'g'), 10) = $3 limit 3`, [org, c.id, digits]).catch(() => []);
+      if (dup.length) checks.push({ tone: 'amber', msg: `这个电话别的客户也在用：${dup.map((d) => d.name).join('、')}` });
+    }
+    if (f.tier && f.tier !== init.tier) checks.push({ tone: 'amber', msg: `档位从 ${TIERS[init.tier] || '—'} 改成 ${TIERS[f.tier]}：以后新报价按新档位带价，已报的单不变` });
+    setConfirm({ rows, checks });
+  };
+  const go = async (reason) => {
+    try {
+      const patch = Object.fromEntries(Object.keys(f).filter((k) => String(init[k] ?? '') !== String(f[k] ?? '')).map((k) => [k, f[k]]));
+      await call(role, `select app.edit_customer_info($1,$2)`, [c.id, JSON.stringify(patch)]);
+      await call(role, `select app.log_archive_edit($1,'customer',$2,$3,$4,$5)`, [org, c.id, JSON.stringify(Object.fromEntries(confirm.rows.map(([l, a, b]) => [l, [a, b]]))), JSON.stringify(confirm.checks.map((x) => `${x.tone === 'red' ? '红' : '黄'}：${x.msg}`)), reason || null]).catch(() => {});
+      toast('客户档案已保存'); refresh(); onClose();
+    } catch (e) { toast(friendlyError(e), 'err'); }
   };
   return (
-    <Modal title={`资料 · ${c.name}`} onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!f.name.trim()} onClick={go}>保存</button></>}>
+    <Modal title={`修改档案 · ${c.name}`} onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>取消修改</button><button type="button" className="btn primary" disabled={!f.name.trim()} onClick={review}>保存修改…</button></>}>
       <div className="grid2">
         {inp('name', '客户名称（大写）')}{inp('contact_name', '负责人（BL 上的 Responsable）', 'M. Moumouni')}
         <div className="field"><label>电话（BL 上要印）</label><PhoneInput value={f.phone} onChange={(v) => setF((x) => ({ ...x, phone: v }))} /></div>{inp('city', '城市（BL 上的 Ville）', 'Yamoussoukro')}
         {inp('address', '地址')}
+        {'tier' in f && <div className="field"><label>客户档位（只中方）</label><div className="chips">{Object.entries(TIERS).map(([k, l]) => <button type="button" key={k} className={`chip ${f.tier === k ? 'on' : ''}`} onClick={() => setF({ ...f, tier: k })}>{l}</button>)}</div></div>}
       </div>
+      {confirm && <ConfirmEdit c={confirm} title="确认修改客户档案" onBack={() => setConfirm(null)} onSave={go} />}
     </Modal>
   );
 }
@@ -287,4 +312,10 @@ function CustomerOptionsEditor({ opts }) {
         <button type="button" className="btn primary" onClick={() => save(o)}>保存选项</button></div>
     </div>
   );
+}
+
+function CustHistory({ c }) {
+  const { org, role, tick } = useApp();
+  const { data } = useData(() => call(role, `select * from app.archive_history($1,'customer',$2)`, [org, c.id]).catch(() => []), [org, role, c.id, tick]);
+  return <HistoryBlock hist={data || []} title="修改记录" />;
 }

@@ -3,10 +3,11 @@
 //  表 2「工资发放记录」: 每月一张, 列和 8 月 Excel 一样, 能导出同样式的 Excel; 中方批准、中方标记已付, 付了就锁死永久留底.
 //  真实员工以飞书 STAFF INF 为准 (真实数据版开局导入), Excel 只是参考模板.
 import { normPhone, fmtPhone } from '../lib/phone.js';
+import { ConfirmEdit, HistoryBlock } from '../components/ProductDrawer.jsx';
 import React, { useMemo, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop , PhoneInput} from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop , PhoneInput, phoneValid} from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { ROLE_LABELS } from '../lib/domain.js';
 import { staffOptions, optLabel, SYS_ROLES } from '../lib/staffOptions.js';
@@ -135,6 +136,11 @@ export function EmpModal({ e, opts, onClose }) {
   });
   const [kind, setKind] = useState('id_front');
   const [queued, setQueued] = useState([]);
+  // 206: 已有员工的档案先锁着, 点「✎ 修改」解锁; 保存前列出改前 → 改后 + 自检, 确认后存并留记录
+  const [f0] = useState(() => f);
+  const [locked, setLocked] = useState(!!e.id);
+  const [confirm, setConfirm] = useState(null);
+  const { data: hist } = useData(() => (e.id && role === 'admin' ? call(role, `select * from app.archive_history($1,'employee',$2)`, [org, e.id]) : Promise.resolve([])), [e.id, org]);
   const { data: files } = useData(() => (e.id ? q(Q.employeeFiles, [e.id]) : Promise.resolve([])), [e.id]);
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v }));
   const setPos = (v) => { const p = opts.positions.find((x) => x.v === v); setF((x) => ({ ...x, position: v, sys_role: p?.role || x.sys_role, department: x.department || p?.dept || '', sales_channel: /SALES STAFF/.test(v) ? x.sales_channel : '' })); };
@@ -142,11 +148,27 @@ export function EmpModal({ e, opts, onClose }) {
   const inp = (k, l, o = {}) => <div className="field"><label>{l}</label><input className="in" inputMode={o.num ? 'decimal' : o.mode} value={f[k]} placeholder={o.ph}
     onChange={(x) => set(k)(o.num ? x.target.value.replace(/[^\d.]/g, '') : x.target.value)} /></div>;
   const emailBad = f.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email);
-  const go = async () => {
+  const LABEL = { emp_no: '工号', short_name: '简称', full_name: '全称', phone: '电话', email: '邮箱', feishu_name: '飞书账号', city: '负责城市', address: '住址', department: '部门', position: '职位', sys_role: '系统岗位', sales_channel: '销售类型', joined_on: '入职日期', resigned_on: '离职日期', active: '在职', base_salary: '合同底薪', allowance: '每月补贴', incentive_rate: '奖金 %', incentive_per_piece: '奖金 每件', note: '备注' };
+  const review = () => {
+    if (!e.id) return go();
+    const rows = Object.keys(LABEL).filter((k) => String(f0[k] ?? '') !== String(f[k] ?? '')).map((k) => [LABEL[k], k === 'active' ? (f0[k] ? '在职' : '离职') : (f0[k] || '—'), k === 'active' ? (f[k] ? '在职' : '离职') : (f[k] || '—')]);
+    if (!rows.length && !queued.length) { setLocked(true); return toast('没有改动，已锁回'); }
+    const checks = [];
+    if (f.phone && !phoneValid(f.phone)) return toast(`电话位数不对：${f.phone}，改对了再存`, 'err');
+    for (const k of ['base_salary', 'allowance']) {
+      const a = Number(f0[k] || 0), b = Number(f[k] || 0);
+      if (b < 0) checks.push({ tone: 'red', msg: `${LABEL[k]}不能是负数` });
+      else if (a > 0 && Math.abs(b - a) / a > 0.1) checks.push({ tone: 'amber', msg: `${LABEL[k]}从 ${a.toLocaleString('en-US')} 改到 ${b.toLocaleString('en-US')}，变动超过 10%` });
+    }
+    if (f0.active && !f.active) checks.push({ tone: 'amber', msg: '改成离职：名下客户要重新分配，未完成的单要转给主管' });
+    setConfirm({ rows: rows.length ? rows : [['证件照', '—', `新加 ${queued.length} 张`]], checks });
+  };
+  const go = async (reason) => {
     try {
       const [{ id }] = await call(role, `select app.upsert_employee($1,$2,$3) as id`, [org, e.id || null, JSON.stringify(f)]);
       for (const p of queued) await call(role, `select app.add_employee_file($1,$2,$3,$4,'image/jpeg',$5,$6,$7)`, [org, id, p.kind, p.name, p.data, p.w, p.h]);
-      toast('已保存'); refresh(); onClose();
+      if (e.id && confirm) await call(role, `select app.log_archive_edit($1,'employee',$2,$3,$4,$5)`, [org, e.id, JSON.stringify(Object.fromEntries(confirm.rows.map(([l, a, b]) => [l, [a, b]]))), JSON.stringify(confirm.checks.map((c) => `${c.tone === 'red' ? '红' : '黄'}：${c.msg}`)), reason || null]).catch(() => {});
+      toast(e.id ? '已保存，档案已锁回' : '已保存'); refresh(); onClose();
     } catch (x) { toast(friendlyError(x), 'err'); }
   };
   const addFile = async (file) => { if (!file?.type?.startsWith('image/')) return toast('请选图片', 'err'); const p = await compress(file); setQueued((x) => [...x, { ...p, kind }]); };
@@ -155,7 +177,10 @@ export function EmpModal({ e, opts, onClose }) {
   const all = [...(files || []).map((x) => ({ ...x, src: `data:${x.mime};base64,${x.data}`, saved: true })), ...queued.map((x, i) => ({ ...x, i, src: `data:image/jpeg;base64,${x.data}` }))];
   return (
     <Modal wide title={e.id ? `员工 · ${e.short_name}` : '新员工'} onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!f.short_name.trim() || emailBad} onClick={go}>保存</button></>}>
+      footer={locked ? <><button type="button" className="btn" onClick={onClose}>关闭</button>{['admin', 'sales_manager'].includes(role) && <button type="button" className="btn primary" onClick={() => setLocked(false)}>✎ 修改</button>}</>
+        : <><button type="button" className="btn" onClick={() => (e.id ? (setF(f0), setQueued([]), setLocked(true)) : onClose())}>{e.id ? '取消修改' : '取消'}</button><button type="button" className="btn primary" disabled={!f.short_name.trim() || emailBad} onClick={review}>{e.id ? '保存修改…' : '保存'}</button></>}>
+      {locked && <div className="banner info" style={{ marginBottom: 10 }}>档案已锁住，点右下角「✎ 修改」解锁；保存前会列出改了什么并自检，存完自动锁回。</div>}
+      <fieldset className="lockset" disabled={locked}>
       <div className="grid2">
         {inp('emp_no', '工号（S + 三位数字，比如 S001；你自己编，离职不回收）', { ph: 'S001' })}{inp('full_name', '全称（大写，和证件一致）')}{inp('short_name', '简称 *（比如 Grace）')}
         <div className="field"><label>电话</label><PhoneInput value={f.phone} onChange={(v) => setF((x) => ({ ...x, phone: v }))} /></div>{inp('city', '负责城市', { ph: 'Abidjan' })}{inp('address', '住址')}
@@ -175,6 +200,7 @@ export function EmpModal({ e, opts, onClose }) {
         {inp('incentive_rate', '个人奖金：归属客户出库金额 %（待对规则）', { num: true })}{inp('incentive_per_piece', '个人奖金：每件 XOF（待对规则）', { num: true })}
         {inp('note', '备注')}
       </div>
+      </fieldset>
       <div className="stack" style={{ marginTop: 14, gap: 8 }}>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><b>证件照</b><span className="small muted">只有中方能看。存在系统里，不会删除（移除只是隐藏，审计里有记录）。</span><span className="grow" />
           <span className="small">这张是</span><select className="in" style={{ maxWidth: 140 }} value={kind} onChange={(x) => setKind(x.target.value)}>{Object.entries(KIND).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
@@ -190,6 +216,8 @@ export function EmpModal({ e, opts, onClose }) {
             </div>))}
         </div>
       </div>
+      {e.id && role === 'admin' && <div style={{ marginTop: 12 }}><HistoryBlock hist={hist} title="修改记录" /></div>}
+      {confirm && <ConfirmEdit c={confirm} title="确认修改员工档案" onBack={() => setConfirm(null)} onSave={(r) => go(r)} />}
     </Modal>
   );
 }
