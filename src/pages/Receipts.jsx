@@ -63,7 +63,7 @@ export default function Receipts({ preset }) {
         }}>把预付冲到订单</button>}
       </span>) },
     ...(can(role, 'receipt') ? [{ key: 'undo', label: '', w: 90, sortable: false, filterable: false, render: (r) => (r.voided_at ? <Pill tone="gray">已撤销</Pill> : <button type="button" className="btn sm soft-red" onClick={() => setVoidRc(r)}>↶ 撤销</button>) }] : []),
-    { key: 'proof', label: '凭证', w: 60, sortable: false, filterable: false, render: (r) => <Thumb src={r.proof_path} size={30} label={`${r.rcv_no} 收款凭证`} /> },
+    { key: 'proof', label: '凭证', w: 80, sortable: false, filterable: false, render: (r) => (r.proof_path ? <Thumb src={r.proof_path} size={30} label={`${r.rcv_no} 收款凭证`} /> : r.voided_at ? null : <span className="pill red">缺凭证</span>) },
   ];
   const settledCols = [
     { key: 'biz_no', label: '订单', w: 150, render: (d) => (d.kind === 'opening' ? '期初欠款' : <DealChip id={d.deal_id} no={d.biz_no} onOpen={setDrawer} />) },

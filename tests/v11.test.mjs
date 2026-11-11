@@ -64,7 +64,7 @@ test('对账 / 盘点: 差额要写原因, 盘点要照片; 月结: 有问题不
   await rejects(t.as(U.finance, `select app.record_cash_check($1,'recon',$2,6500,null,null)`, [a, last]), /要写原因/);
   await rejects(t.as(U.finance, `select app.record_cash_check($1,'count',$2,7000,null,null)`, [a, last]), /拍照/);
   await rejects(t.as(U.admin, `select app.lock_month($1,$2)`, [t.ids.org, last]), /没对账/);
-  await t.as(U.finance, `select app.record_cash_check($1,'recon',$2,7000,null,null)`, [a, last]);
+  await t.as(U.finance, `select app.record_cash_check($1,'recon',$2,7000,null,'app.jpg')`, [a, last]);
   await t.as(U.admin, `select app.lock_month($1,$2)`, [t.ids.org, last]);
   await rejects(t.as(U.finance, `select app.record_deposit($1,$2::date,100,'Y',null,null)`, [a, last]), /已锁账/);
   await rejects(t.as(U.admin, `select app.unlock_month($1,$2,'')`, [t.ids.org, last]), /原因/);
@@ -77,7 +77,7 @@ test('坏账核销只中方 + 原因 + 留记录; 账户互转在途到了才加
   const d = await t.toConfirmed(t.ids.camaraAbobo, [{ product_id: t.ids.bg6mCover, qty_req: 1 }]); await t.shipAll(d);
   const due = Number(await t.due(d));
   await rejects(t.as(U.finance, `select app.write_off_bad_debt($1,$2,'跑了')`, [d, due]), /PERMISSION_DENIED/);
-  await t.as(U.admin, `select app.write_off_bad_debt($1,$2,'客户跑了，追不回')`, [d, due]);
+  await t.as(U.admin, `select app.write_off_bad_debt($1,$2,'客户跑了，追不回','chat.jpg')`, [d, due]);
   assert.equal(Number(await t.due(d)), 0);
   assert.equal((await t.as(U.admin, `select * from app.bad_debt_writeoffs`)).length, 1);
   await t.as(U.finance, `select app.record_deposit($1,current_date,20000,'Z',null,null)`, [a]);

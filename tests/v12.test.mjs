@@ -23,3 +23,18 @@ test('签收完才能对账; 方式 + 截图必填; 对完 pending = false; 新�
   await t.db.query(`update app.shipments set customer_received_at = now() + interval '1 minute' where id = $1`, [sh]);
   assert.equal(await pending(t, d), true, '对账之后又签收 → 要重新对');
 });
+
+test('0037 凭证一律必传: 现金收款 / 员工交款 / 坏账核销 / 对账', async () => {
+  const t = await setup();
+  const a = await t.val(U.admin, `select app.upsert_cash_account($1,null,'Cash-XOF','cash','XOF',null,null,null)`, [t.ids.org]);
+  const rc = (p) => t.val(U.finance, `select app.record_receipt2($1,$2)`, [t.ids.org, JSON.stringify({ customer_id: t.ids.camaraAbobo, received_on: new Date().toISOString().slice(0, 10), currency: 'XOF', method: 'cash', mode: 'oldest', amount_landed: 5000, ...p })]);
+  await rejects(rc({}), /现金收款也要传凭证/);
+  await rejects(rc({ method: 'wave' }), /付款截图/);
+  const id = await rc({ proof: 'group.jpg', collector_employee_id: t.ids.sales });
+  await rejects(t.as(U.admin, `select app.receipt_handed($1,$2,null)`, [id, a]), /交款要传凭证/);
+  await t.as(U.admin, `select app.receipt_handed($1,$2,'cash.jpg')`, [id, a]);
+  await rejects(t.as(U.finance, `select app.record_cash_check($1,'recon',current_date,5000,null,null)`, [a]), /余额图/);
+  await t.as(U.finance, `select app.record_cash_check($1,'recon',current_date,5000,null,'app.jpg')`, [a]);
+  const d = await t.toConfirmed(t.ids.camaraAbobo, [{ product_id: t.ids.bg6mCover, qty_req: 10 }]); await t.shipAll(d);
+  await rejects(t.as(U.admin, `select app.write_off_bad_debt($1,100,'跑了',null)`, [d]), /坏账核销要传凭证/);
+});

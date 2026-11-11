@@ -105,7 +105,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
     const dueAll = data.open.reduce((a, d) => a + N(d.due), 0);
     const cap = lockDeal && defaultAmount != null ? N(defaultAmount) : dueAll;
     if (cap > 0 && conv > cap && !overOk) { setOverOk(true); return toast(`实收 ${money(conv, acc)} 比${lockDeal ? '本单待付' : '全部欠款'} ${money(cap, acc)} 多 ${money(conv - cap, acc)}，多出的记为预付。核对过金额再点一次「确认收款」`, 'err'); }
-    if (method !== 'cash' && !proof) return toast(`${PAY_METHODS[method]} 收款请上传凭证截图（现金可不传）`, 'err');
+    if (!proof) return toast(method === 'cash' ? '现金也要传凭证：在客户群里说「收到现金 XX」，客户回复确认后截图传上来' : `${PAY_METHODS[method]} 收款请上传付款截图`, 'err');
     if (mode === 'specific' && !picked.length) return toast('请点选要冲的单', 'err');
     if (feeV > 0 && !bearer) return toast('有手续费，请选谁出（客户出 / 我方出）', 'err');
     if (byStaff && !collector) return toast('员工代收：选是哪位员工收的', 'err');
@@ -154,7 +154,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
             <select className="in" style={{ width: 84 }} value={currency} onChange={(e) => { setCurrency(e.target.value); setRate(''); setRateOk(false); }}>{[...new Set(['XOF', acc, 'USD', 'CNY', 'EUR'])].map((c) => <option key={c} value={c}>{c}</option>)}</select>
             {lockDeal && defaultAmount != null && <Info>本单待付 {money(defaultAmount, acc)}，只作参考，实收请按到账手填。</Info>}
           </FRow>
-          <FRow label="凭证" req={method !== 'cash'}><PhotoInput value={proof} onChange={setProof} label="收款截图" camera invalid={errs && method !== 'cash'} />{method === 'cash' && <span className="small muted">现金可不传</span>}</FRow>
+          <FRow label="凭证" req><PhotoInput value={proof} onChange={setProof} label={method === 'cash' ? '群里客户确认收到现金的截图' : '付款截图'} camera invalid={errs && !proof} />{method === 'cash' && <Info>收现金：先在客户群里说「收到现金 XX」，客户回复没问题后，把这段聊天截图传上来。</Info>}</FRow>
           {foreign && (
             <FRow label="汇率" req>
               <RateInput a={foreign} b={base} value={rate} onChange={(v) => { setRate(v === '' ? '' : String(v)); setRateOk(false); }} placeholder={refRate ? String(+refRate.toFixed(4)) : undefined} />

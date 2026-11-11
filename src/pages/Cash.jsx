@@ -216,7 +216,7 @@ function MoveModal({ t, acc, onClose }) {
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v?.target ? v.target.value : v }));
   const a = acc.find((x) => x.account_id === f.account);
   const title = { deposit: '登记到账', expense: '登记支出', handover: '交款给公司' }[t];
-  const ok = f.account && Number(f.amount) > 0 && (t !== 'expense' || f.cat) && (t !== 'handover' || f.proof);
+  const ok = f.account && Number(f.amount) > 0 && (t !== 'expense' || f.cat) && f.proof;   // 0037: 凭证一律必传
   const go = async () => {
     if (t === 'expense' && f.cat === '其他' && !f.note.trim()) return toast('科目选了「其他」，说明里写清楚是什么', 'err');
     try {
@@ -237,7 +237,7 @@ function MoveModal({ t, acc, onClose }) {
             <div className="field"><label>流水号</label><input className="in" value={f.ref} onChange={set('ref')} /></div></>}
         </div>
         {t === 'expense' && <div className="field req"><label>科目</label><div className="chips">{EXPENSE_CATS.map((c) => <button type="button" key={c} className={`chip ${f.cat === c ? 'on' : ''}`} onClick={() => set('cat')(c)}>{c}</button>)}</div></div>}
-        <div className={`field ${t === 'handover' ? 'req' : ''}`}><label>{t === 'handover' ? '交款凭证（转账截图 / 收条）' : '凭证'}</label><PhotoInput value={f.proof} onChange={set('proof')} /></div>
+        <div className="field req"><label>{t === 'handover' ? '交款凭证（转账截图 / 收条）' : t === 'expense' ? '凭证（发票 / 收条 / 转账截图）' : '凭证（到账截图）'}</label><PhotoInput value={f.proof} onChange={set('proof')} invalid={!f.proof} /></div>
         <div className={`field ${t === 'expense' && f.cat === '其他' ? 'req' : ''}`}><label>说明{t === 'expense' && f.cat === '其他' ? '（选了「其他」必填）' : ''}</label><input className={`in ${t === 'expense' && f.cat === '其他' && !f.note.trim() ? 'invalid' : ''}`} value={f.note} onChange={set('note')} /></div>
         {t === 'expense' && <div className="hint">{Number(a?.approval_over) > 0 ? `超过 ${money(a.approval_over)} 要中方批，以下直接记账。` : '目前所有支出都要中方批（审批线待中方定）。'}</div>}
       </div>

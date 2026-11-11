@@ -2,7 +2,7 @@
 // 分工制衡做成三步 (登记 → 确认到账 → 对账), 现在中方一个人也能走完; 以后招了财务在权限配置里分出去.
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, PhotoInput, DatePicker, FRow, Info } from '../components/ui.jsx';
+import { useApp, useData, Modal, PhotoInput, DatePicker, FRow, Info, Thumb } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { CustLink } from '../components/Archives.jsx';
 import { RcvStatus } from '../components/ReceiptForm.jsx';
@@ -95,6 +95,7 @@ function VerifyPanel({ ctl }) {
         { key: 'days', label: '几天了', w: 70, render: (r) => <span className={r.days > 3 ? 'red-t2' : ''}>{r.days} 天</span> },
         { key: 'customer_name', label: '客户', w: 150, render: (r) => <CustLink id={r.customer_id} name={r.customer_name} /> },
         { key: 'landed', label: '到账金额', w: 120, render: (r) => <b>{money(r.landed ?? r.amount, r.currency)} {r.currency}</b> },
+        { key: 'proof_path', label: '凭证', w: 80, sortable: false, filterable: false, render: (r) => (r.proof_path ? <Thumb src={r.proof_path} size={34} label={`${r.rcv_no} 收款凭证`} /> : <span className="pill red">缺凭证</span>) },
         { key: 'account_name', label: '账户', w: 110, render: (r) => r.account_name || <span className="pill amber">没选账户</span> },
         { key: 'state', label: '状态', w: 260, sortable: false, render: (r) => <RcvStatus r={r} onDone={refresh} /> },
       ]} />
@@ -129,10 +130,10 @@ function HandModal({ r, acc, onClose }) {
   const [proof, setProof] = useState('');
   const go = async () => { try { await call(role, `select app.receipt_handed($1,$2,$3)`, [r.receipt_id, account, proof || null]); toast(`${r.employee_name} 已交 ${money(r.landed ?? r.amount)}，已进 ${opts.find((a) => a.account_id === account)?.name}`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
-    <Modal title={`员工交款 · ${r.rcv_no}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!account} onClick={go}>确认收到</button></>}>
+    <Modal title={`员工交款 · ${r.rcv_no}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!account || !proof} onClick={go}>确认收到</button></>}>
       <div className="stack">
         <FRow label="进哪个账户" req><select className="in" value={account} onChange={(e) => setAccount(e.target.value)}>{opts.map((a) => <option key={a.account_id} value={a.account_id}>{a.name}</option>)}</select></FRow>
-        <FRow label="凭证"><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="Wave 转账截图 / 当面交现金照片" /></div></FRow>
+        <FRow label="凭证" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="Wave 转账截图 / 当面交现金照片" /></div></FRow>
       </div>
     </Modal>
   );
@@ -173,18 +174,18 @@ function CheckModal({ a, kind, onClose }) {
   const [note, setNote] = useState('');
   const [proof, setProof] = useState('');
   const diff = actual === '' ? null : N(actual) - N(a.balance);
-  const ok = actual !== '' && (diff === 0 || note.trim()) && (kind !== 'count' || proof);
+  const ok = actual !== '' && (diff === 0 || note.trim()) && proof;
   const go = async () => { try { await call(role, `select app.record_cash_check($1,$2,$3,$4,$5,$6)`, [a.account_id, kind, on, N(actual), note || null, proof || null]); toast(diff === 0 ? '对上了 ✓' : `已记下，差 ${money(diff)}`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
     <Modal title={`${kind === 'count' ? '现金盘点' : '对账'} · ${a.name}`} onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && actual !== '' && <span className="why">{diff !== 0 && !note.trim() ? '有差额，写原因' : '盘点要拍照'}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>记下</button></>}>
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && actual !== '' && <span className="why">{diff !== 0 && !note.trim() ? '有差额，写原因' : kind === 'count' ? '盘点要拍照' : '截 App / 银行余额图'}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>记下</button></>}>
       <div className="stack">
         <FRow label="日期" req><DatePicker value={on} onChange={setOn} /></FRow>
         <FRow label="系统余额"><b>{money(a.balance, a.currency)} {a.currency}</b><Info>系统按流水算到今天的余额；日期选更早的，保存时按那天算。</Info></FRow>
         <FRow label={kind === 'count' ? '实点金额' : '实际余额'} req><input className="in" inputMode="decimal" style={{ width: 160 }} value={actual} onChange={(e) => setActual(e.target.value.replace(/[^\d.-]/g, ''))} placeholder={kind === 'count' ? '数出来多少' : 'App 里显示多少'} />
           {diff != null && (diff === 0 ? <span className="pill green">对上 ✓</span> : <span className="pill red">差 {money(diff)}</span>)}</FRow>
         <FRow label="原因" req={diff != null && diff !== 0}><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="有差额必须写" /></FRow>
-        {kind === 'count' && <FRow label="照片" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="现金照片" camera /></div></FRow>}
+        <FRow label={kind === 'count' ? '照片' : '余额截图'} req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label={kind === 'count' ? '现金照片' : 'App / 银行里的余额截图'} camera={kind === 'count'} /></div></FRow>
       </div>
     </Modal>
   );

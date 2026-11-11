@@ -823,6 +823,7 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
           { key: 'amount', label: `冲到本单 ${cur}`, w: 120, render: (r) => <b>{money(r.amount, cur)}</b> },
           // 217: 一单付几次, 每笔冲完还欠多少一行一行列清楚
           { key: 'left', label: '冲完还欠', w: 120, sortable: false, render: (r) => { const i = receipts.indexOf(r); const paid = receipts.slice(0, i + 1).reduce((a, x) => a + N(x.amount), 0); const left = rec - N(deal.writeoff_amount) - paid; return left > 0 ? money(left, cur) : <span className="green-t2">结清 ✓</span>; } },
+          { key: 'proof', label: '凭证', w: 80, sortable: false, filterable: false, render: (r) => (r.proof_path ? <Thumb src={r.proof_path} size={34} label={`${r.rcv_no} 收款凭证`} /> : <span className="pill red">缺凭证</span>) },
           { key: 'vstate', label: '到账状态', w: 190, sortable: false, render: (r) => <RcvStatus r={r} onDone={refresh} /> },
           ...(can(role, 'receipt') ? [{ key: 'undo', label: '', w: 90, sortable: false, filterable: false, render: (r) => <button type="button" className="btn sm soft-red" onClick={() => setVoidRc({ id: r.receipt_id, rcv_no: r.rcv_no, amount: r.receipt_amount, currency: r.currency })}>↶ 撤销</button> }] : []),
         ]} rows={receipts} rowKey={(r) => r.rcv_no + r.at} />}
@@ -846,15 +847,15 @@ function BadDebtModal({ deal, act, onClose }) {
   const [amt, setAmt] = useState(String(N(deal.due)));
   const [reason, setReason] = useState('');
   const [proof, setProof] = useState('');
-  const ok = N(amt) > 0 && N(amt) <= N(deal.due) && reason.trim();
+  const ok = N(amt) > 0 && N(amt) <= N(deal.due) && reason.trim() && proof;
   return (
     <Modal title={`坏账核销：${deal.biz_no}`} onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{!reason.trim() ? '写原因' : `金额 1 – ${money(deal.due, deal.currency)}`}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={() => act(`已核销坏账 ${money(amt, deal.currency)}`, `select app.write_off_bad_debt($1,$2,$3,$4)`, [deal.id, N(amt), reason, proof || null]).then(onClose, () => {})}>确认核销</button></>}>
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{!reason.trim() ? '写原因' : !proof ? '传凭证' : `金额 1 – ${money(deal.due, deal.currency)}`}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={() => act(`已核销坏账 ${money(amt, deal.currency)}`, `select app.write_off_bad_debt($1,$2,$3,$4)`, [deal.id, N(amt), reason, proof || null]).then(onClose, () => {})}>确认核销</button></>}>
       <div className="stack">
         <div className="hint">确认这笔钱收不回来才核销。核销后客户总账减少，但记录永久保留（谁、什么时候、多少、为什么），以后客户又付了照常登记收款。</div>
         <FRow label="核销金额" req><input className="in" inputMode="decimal" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{deal.currency}，本单还欠 {money(deal.due, deal.currency)}</span></FRow>
         <FRow label="原因" req><input className="in" style={{ width: '100%', maxWidth: 420 }} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例如 客户跑路、店已关" /></FRow>
-        <FRow label="凭证"><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="聊天记录 / 照片（可选）" camera={false} /></div></FRow>
+        <FRow label="凭证" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="聊天记录 / 照片" camera={false} /></div></FRow>
       </div>
     </Modal>
   );
