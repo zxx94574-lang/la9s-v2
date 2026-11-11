@@ -483,7 +483,7 @@ table.t tr.voided td { color: #98a4b5; }
 @media (max-width: 760px) { .paygrid, .recon { grid-template-columns: 1fr; } }
 .kpi .v { white-space: nowrap; overflow: hidden; font-size: clamp(18px, 2.1vw, 28px); }
 .kpi .kv-num { color: var(--ink); }
-.tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 0 4px; padding: 0 14px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
 .card .tabs { margin-bottom: 0; }
 .tabs button { border: 0; background: none; padding: 10px 14px; font-weight: 700; color: var(--muted); border-bottom: 2.5px solid transparent; cursor: pointer; }
 .tabs button.on { color: var(--brand); border-bottom-color: var(--brand); }
@@ -860,3 +860,8 @@ img { max-width: 100%; }
 .tscroll { overflow-x: auto; max-width: 100%; }
 fieldset.lockset { border: 0; padding: 0; margin: 0; min-width: 0; }
 fieldset.lockset:disabled .in, fieldset.lockset:disabled select, fieldset.lockset:disabled button { opacity: .75; cursor: default; }
+.cls-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 700px) { .cls-grid { grid-template-columns: 1fr; } }
+/* 216: 卡片行写死几列的 (资金账户等) 窄屏自动降列, 不许挤出框 */
+@media (max-width: 900px) { .kpis[style] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
+@media (max-width: 480px) { .kpis[style] { grid-template-columns: minmax(0, 1fr) !important; } }

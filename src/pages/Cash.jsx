@@ -1,6 +1,7 @@
 // 资金账户 / 公户 (Frank 2026-10-29)
 // 公户在员工名下 → 到账先挂在账户上（不动客户欠款），中方认领到客户才冲账；热线报「客户说付了」自动找对得上的到账。
 // 持有人最多压 500 万、最长 7 天（每个账户自己设）；交款要中方确认收到才算；支出超过审批线要中方批。
+import { useControls, CONTROL_TABS, ControlPanels, ControlAlerts, RefundModal } from './CashControls.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -11,9 +12,12 @@ import { can, PAY_METHODS } from '../lib/domain.js';
 import { money, dDate, today, friendlyError, periodRange } from '../lib/format.js';
 
 export const EXPENSE_CATS = ['交通费（出租车 / Yango）', '话费 / 网费', '运费 / 清关', '房租', '工资 / 补贴', '餐费', '水电', '办公用品', '采购付款', '其他'];
-const KIND_L = { opening: '期初', deposit: '到账', handover: '交款', expense: '支出', bank_out: '流水出账' };
+const KIND_L = { opening: '期初', deposit: '到账', handover: '交款', expense: '支出', bank_out: '流水出账', transfer_out: '互转转出', transfer_in: '互转转入', count_adjust: '盘点调整' };
+// 220: 流水分类照 Frank「基本信息」表 (中方在 选项设置 改: org_settings cash_classes)
+export const CASH_CLASSES = { biz: ['备件', '回收', '商企', '配件'], flow: ['运营费用', '采购支出', '账户互转-收款', '账户互转-付款', '回款HQ', '收客户货款'],
+  subject: ['办公费', '差旅费', '业务招待费', '生活费', '租赁费', '福利费', '本地物流费', '国际物流费', '人工成本', '维修费', '物料消耗', '退款', '其他'] };
 const STATUS_L = { unclaimed: ['待认领', 'amber'], claimed: ['已认领', 'green'], other_income: ['其他收入', 'gray'], pending: ['待中方确认', 'amber'],
-  confirmed: ['已确认', 'green'], approved: ['已批', 'green'], rejected: ['不同意', 'red'], unexplained: ['待说明', 'amber'] };
+  confirmed: ['已确认', 'green'], approved: ['已批', 'green'], rejected: ['不同意', 'red'], unexplained: ['待说明', 'amber'], in_transit: ['在途', 'amber'] };
 const ACC_KIND = { bank: '银行公户', cash: '现金', wave: 'Wave', orange: 'Orange', other: '其他' };
 
 export default function Cash() {
@@ -22,10 +26,11 @@ export default function Cash() {
   const [range, setRange] = useState(() => periodRange('month'));
   const [modal, setModal] = useState(null);
   const { data } = useData(async () => {
-    const [acc, open, notices, moves, customers] = await Promise.all([q(Q.cashHoldings, [org]), q(Q.cashOpen, [org]), q(Q.paymentNotices, [org]),
-      q(Q.cashMoves, [org, range[0], range[1]]), q(Q.customers, [org])]);
-    return { acc, open, notices, moves, customers };
+    const [acc, open, notices, moves, customers, [cls]] = await Promise.all([q(Q.cashHoldings, [org]), q(Q.cashOpen, [org]), q(Q.paymentNotices, [org]),
+      q(Q.cashMoves, [org, range[0], range[1]]), q(Q.customers, [org]), q(`select value from app.org_settings where org_id = $1 and key = 'cash_classes'`, [org])]);
+    return { acc, open, notices, moves, customers, classes: { ...CASH_CLASSES, ...(cls?.value || {}) } };
   }, [org, range[0], range[1]]);
+  const ctl = useControls();   // 220: 待核对到账 / 员工代收 / 对账盘点 / 月结 / 在途
   const custName = useMemo(() => Object.fromEntries((data?.customers || []).map((c) => [c.id, `${c.code || c.temp_code} ${c.name}`])), [data]);
   if (!data) return <div className="empty">加载中…</div>;
   const reg = can(role, 'cash_register'), dec = can(role, 'cash_decide'), notice = can(role, 'payment_notice');
@@ -76,18 +81,26 @@ export default function Cash() {
     { key: 'kind', label: '类型', w: 80, value: (m) => KIND_L[m.kind], render: (m) => KIND_L[m.kind] },
     { key: 'in', label: '进', w: 110, value: (m) => (m.sign > 0 ? Number(m.amount) : 0), render: (m) => (m.sign > 0 ? money(m.amount, m.currency) : '') },
     { key: 'out', label: '出', w: 110, value: (m) => (m.sign < 0 ? Number(m.amount) : 0), render: (m) => (m.sign < 0 ? money(m.amount, m.currency) : m.sign === 0 && m.kind !== 'deposit' ? <span className="muted">{money(m.amount, m.currency)}（未生效）</span> : '') },
-    { key: 'who', label: '客户 / 科目 / 付款人', w: 200, value: (m) => m.customer || m.category || m.payer || '',
-      render: (m) => (m.customer ? <><span className="mono muted">{m.code}</span> {m.customer} <span className="muted small">{m.rcv_no}</span></> : m.category || m.payer) },
+    { key: 'who', label: '客户 / 付款人', w: 200, value: (m) => m.customer || m.payer || '',
+      render: (m) => (m.customer ? <><span className="mono muted">{m.code}</span> {m.customer} <span className="muted small">{m.rcv_no}</span></> : m.payer) },
     { key: 'note', label: '说明', w: 180, value: (m) => [m.note, m.decide_note].filter(Boolean).join(' · ') },
+    { key: 'biz_type', label: '业务类别', w: 100, edit: cls('biz_type', 'biz') },
+    { key: 'flow_class', label: '收支大类', w: 130, edit: cls('flow_class', 'flow') },
+    { key: 'category', label: '一级科目', w: 120, edit: cls('category', 'subject') },
     { key: 'status', label: '状态', w: 100, render: (m) => st(m.status) },
     { key: 'proof', label: '凭证', w: 60, render: (m) => m.proof && <Thumb src={m.proof} size={30} /> },
   ];
+  function cls(k, list) {
+    return (m) => (can(role, 'receipt') || role === 'admin' ? { type: 'select', value: m[k] || '', options: [['', '—'], ...data.classes[list].map((o) => [o, o]), ...(m[k] && !data.classes[list].includes(m[k]) ? [[m[k], m[k]]] : [])],
+      onChange: async (v, meta) => { const n = { biz_type: m.biz_type, flow_class: m.flow_class, category: m.category, [k]: v };
+        try { await call(role, `select app.classify_move($1,$2,$3,$4)`, [m.id, n.biz_type || '', n.flow_class || '', n.category || '']); m[k] = v; if (!meta?.batch || meta.last) { toast('已保存'); refresh(); } } catch (e) { toast(friendlyError(e), 'err'); } } } : null);
+  }
   const decide = async (m, ok) => {
     try { const [{ s }] = await call(role, `select app.decide_move($1,$2,null) as s`, [m.id, ok]); toast(s === 'confirmed' ? '已确认收到交款' : '已同意'); refresh(); }
     catch (e) { toast(friendlyError(e), 'err'); }
   };
 
-  const TABS = [['open', '待认领到账', unclaimed.length], ['pending', '待中方处理', pending.length], ['notices', '付款通知', openNotices.length], ['moves', '账户流水', null]];
+  const TABS = [['open', '待认领到账', unclaimed.length], ['pending', '待中方处理', pending.length], ['notices', '付款通知', openNotices.length], ['moves', '账户流水', null], ...CONTROL_TABS(ctl)];
   return (
     <>
       <div className="pagehead"><div><div className="eyebrow">Comptes de trésorerie</div><h1>资金账户</h1>
@@ -98,6 +111,7 @@ export default function Cash() {
             <button type="button" className="btn" onClick={() => setModal({ t: 'expense' })}>登记支出</button>
             <button type="button" className="btn" onClick={() => setModal({ t: 'handover' })}>交款</button>
             <button type="button" className="btn" onClick={() => setModal({ t: 'import' })}>导入流水</button></>}
+          {role === 'admin' && <button type="button" className="btn" onClick={() => setModal({ t: 'refund' })}>退款给客户</button>}
           {dec && <button type="button" className="btn" onClick={() => setModal({ t: 'account' })}>账户设置</button>}
         </div>
       </div>
@@ -120,12 +134,14 @@ export default function Cash() {
             </div>);
         })}
       </div>
+      <ControlAlerts ctl={ctl} onGo={setTab} />
       <div className="card">
         <div className="tabs">{TABS.map(([k, l, n]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}{n ? <span className="queue-n"> {n}</span> : null}</button>)}</div>
         {tab === 'open' && <Grid id="cash-open" table="cash_moves" columns={openCols} rows={unclaimed} empty="没有待认领的到账" />}
         {tab === 'pending' && <Grid id="cash-pending" table="cash_moves" columns={pendCols} rows={pending} empty="没有要中方处理的交款 / 支出" />}
         {tab === 'notices' && <Grid id="cash-notices" table="payment_notices" columns={noticeCols} rows={data.notices} empty="没有付款通知" />}
         {tab === 'moves' && <Grid id="cash-moves" table="cash_moves" columns={moveCols} rows={data.moves} tools={<DatePicker range value={range} onChange={setRange} />} empty="这段时间没有流水" />}
+        <ControlPanels tab={tab} ctl={ctl} acc={data.acc} classes={data.classes} />
       </div>
       {modal?.t === 'claim' && <ClaimModal m={modal.m} customers={data.customers} notices={openNotices} onClose={() => setModal(null)} />}
       {modal?.t === 'other' && <NoteModal title="不是客户的钱" label="是什么钱（例：内部转入 / 退款）" sql="select app.mark_other_income($1,$2)" id={modal.m.id} onClose={() => setModal(null)} />}
@@ -134,6 +150,7 @@ export default function Cash() {
       {['deposit', 'expense', 'handover'].includes(modal?.t) && <MoveModal t={modal.t} acc={data.acc} onClose={() => setModal(null)} />}
       {modal?.t === 'notice' && <NoticeModal customers={data.customers} onClose={() => setModal(null)} />}
       {modal?.t === 'import' && <ImportModal acc={data.acc} onClose={() => setModal(null)} />}
+      {modal?.t === 'refund' && <RefundModal acc={data.acc} customers={data.customers} onClose={() => setModal(null)} />}
       {modal?.t === 'account' && <AccountModal acc={data.acc} onClose={() => setModal(null)} />}
     </>
   );
@@ -278,7 +295,8 @@ function ImportModal({ acc, onClose }) {
   const rows = parseStatement(text);
   const go = async () => {
     try { const [{ r }] = await call(role, `select app.import_statement($1,$2) as r`, [account, JSON.stringify(rows)]);
-      toast(`导入完成：进账 ${r.in} 笔（待认领），出账 ${r.out} 笔（待说明），重复跳过 ${r.dup} 笔`); refresh(); onClose(); }
+      const n = Number((await call(role, `select app.auto_verify_receipts($1) as n`, [account]))[0].n);   // 220: 流水和登记的收款自动配对 → 确认到账
+      toast(`导入完成：进账 ${r.in} 笔，其中 ${n} 笔和已登记的收款对上、自动确认到账；出账 ${r.out} 笔（待说明），重复跳过 ${r.dup} 笔`); refresh(); onClose(); }
     catch (e) { toast(friendlyError(e), 'err'); }
   };
   return (

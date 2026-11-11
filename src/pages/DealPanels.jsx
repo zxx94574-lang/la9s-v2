@@ -8,7 +8,7 @@ import { call } from '../db/client.js';
 import LineEntry, { newKey, finalizeLines, tierPrice } from '../components/LineEntry.jsx';
 import { DocActions, DocSheet, BalanceCopy, BalancePreview } from '../components/Doc.jsx';
 import { BlActions } from '../components/Bl.jsx';
-import ReceiptForm, { BalanceLine, VoidReceiptModal } from '../components/ReceiptForm.jsx';
+import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus } from '../components/ReceiptForm.jsx';
 import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid} from '../components/ui.jsx';
 import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, PAY_METHODS, RETURN_REASONS, CONFIRM_METHODS, CHECK_RESULTS, priceLevel, getThresholds, balanceWords } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, pad, ymd } from '../lib/format.js';
@@ -792,10 +792,12 @@ function VoidModal({ s, onClose, onOk }) {
 
 // ───────────────────────── ⑨ 收款（本单直接收款，不跳页）─────────────────────────
 export function PayPanel({ deal, receipts, shipments, act, role }) {
+  const { refresh } = useApp();
   const cur = deal.currency;
   const [done, setDone] = useState(null);
   const [wo, setWo] = useState(false);
   const [voidRc, setVoidRc] = useState(null);
+  const [bad, setBad] = useState(false);
   if (!seesPrice(role)) return <div className="card card-b"><Blocked action="receipt" /></div>;
   const rec = N(deal.shipped_amount) - N(deal.returned_amount);
   return (
@@ -804,6 +806,7 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
         <div className="card-h"><h2>⑥ 本单收款</h2>
           <div className="row">
             {can(role, 'write_off') && N(deal.due) > 0 && N(deal.due) <= (cur === 'XOF' ? 100 : 1) && <button type="button" className="btn" onClick={() => setWo(true)}>抹零 {money(deal.due, cur)}</button>}
+            {role === 'admin' && N(deal.due) > (cur === 'XOF' ? 100 : 1) && <button type="button" className="btn soft-red" onClick={() => setBad(true)}>坏账核销</button>}
           </div></div>
         <div className="card-b paygrid">
           <div><div className="k">本单应收</div><BigNum size={22}>{money(rec, cur)} <small>{cur}</small></BigNum><div className="small muted">出库 {money(deal.shipped_amount, cur)}{N(deal.returned_amount) > 0 && ` − 退货 ${money(deal.returned_amount, cur)}`}</div></div>
@@ -812,11 +815,15 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
         </div>
         {!shipments.some((s) => !s.voided_at) && <div className="card-b hint">还没出库：客户总账只在出库后增加。现在收的钱会记为预付，出库时自动抵扣。</div>}
         {receipts.length > 0 && <Grid id="deal-receipts" columns={[
+          { key: 'seq', label: '第几笔', w: 70, sortable: false, render: (r) => `第 ${receipts.indexOf(r) + 1} 笔` },
           { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <b className="mono">{r.rcv_no}</b> },
           { key: 'received_on', label: '收款日期', w: 100, render: (r) => dDate(r.received_on) },
           { key: 'method', label: '方式', w: 100, render: (r) => PAY_METHODS[r.method] },
           { key: 'receipt_amount', label: '这笔收款', w: 130, render: (r) => `${money(r.receipt_amount, r.currency)} ${r.currency}` },
           { key: 'amount', label: `冲到本单 ${cur}`, w: 120, render: (r) => <b>{money(r.amount, cur)}</b> },
+          // 217: 一单付几次, 每笔冲完还欠多少一行一行列清楚
+          { key: 'left', label: '冲完还欠', w: 120, sortable: false, render: (r) => { const i = receipts.indexOf(r); const paid = receipts.slice(0, i + 1).reduce((a, x) => a + N(x.amount), 0); const left = rec - N(deal.writeoff_amount) - paid; return left > 0 ? money(left, cur) : <span className="green-t2">结清 ✓</span>; } },
+          { key: 'vstate', label: '到账状态', w: 190, sortable: false, render: (r) => <RcvStatus r={r} onDone={refresh} /> },
           ...(can(role, 'receipt') ? [{ key: 'undo', label: '', w: 90, sortable: false, filterable: false, render: (r) => <button type="button" className="btn sm soft-red" onClick={() => setVoidRc({ id: r.receipt_id, rcv_no: r.rcv_no, amount: r.receipt_amount, currency: r.currency })}>↶ 撤销</button> }] : []),
         ]} rows={receipts} rowKey={(r) => r.rcv_no + r.at} />}
         {voidRc && <VoidReceiptModal rc={voidRc} onClose={() => setVoidRc(null)} />}
@@ -830,7 +837,26 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
       {done && <div className="card card-b" style={{ background: 'var(--green-bg)' }}>✓ 已登记 {money(done.amount, done.currency)} {done.currency}{done.hits.map(([n, v]) => ` → ${n} ${money(v, done.acc)}`).join('')}{done.left > 0 && `，剩 ${money(done.left, done.acc)} 记为预付`}。下面的 Balance 已更新，复制发给客户。</div>}
       <BalancePreview customerId={deal.customer_id} currency={cur} deal={deal} title={`客户最新 Balance · ${deal.customer_name}`} />
       {wo && <WriteOffModal deal={deal} act={act} onClose={() => setWo(false)} />}
+      {bad && <BadDebtModal deal={deal} act={act} onClose={() => setBad(false)} />}
     </>
+  );
+}
+// 219: 坏账核销 (只中方): 欠款确认收不回来 → 写原因 + 凭证, 冲掉应收但永不删除, 客户流水和坏账记录里都看得到
+function BadDebtModal({ deal, act, onClose }) {
+  const [amt, setAmt] = useState(String(N(deal.due)));
+  const [reason, setReason] = useState('');
+  const [proof, setProof] = useState('');
+  const ok = N(amt) > 0 && N(amt) <= N(deal.due) && reason.trim();
+  return (
+    <Modal title={`坏账核销：${deal.biz_no}`} onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{!reason.trim() ? '写原因' : `金额 1 – ${money(deal.due, deal.currency)}`}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={() => act(`已核销坏账 ${money(amt, deal.currency)}`, `select app.write_off_bad_debt($1,$2,$3,$4)`, [deal.id, N(amt), reason, proof || null]).then(onClose, () => {})}>确认核销</button></>}>
+      <div className="stack">
+        <div className="hint">确认这笔钱收不回来才核销。核销后客户总账减少，但记录永久保留（谁、什么时候、多少、为什么），以后客户又付了照常登记收款。</div>
+        <FRow label="核销金额" req><input className="in" inputMode="decimal" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{deal.currency}，本单还欠 {money(deal.due, deal.currency)}</span></FRow>
+        <FRow label="原因" req><input className="in" style={{ width: '100%', maxWidth: 420 }} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例如 客户跑路、店已关" /></FRow>
+        <FRow label="凭证"><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="聊天记录 / 照片（可选）" camera={false} /></div></FRow>
+      </div>
+    </Modal>
   );
 }
 function WriteOffModal({ deal, act, onClose }) {

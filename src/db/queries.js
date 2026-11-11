@@ -123,8 +123,9 @@ select r.*, coalesce((select jsonb_agg(jsonb_build_object('id', rl.id, 'deal_lin
 from app.returns r where r.deal_id = $1 order by r.requested_at`;
 
 export const dealReceipts = `
-select a.amount, a.at, r.id as receipt_id, r.rcv_no, r.received_on, r.method, r.amount as receipt_amount, r.currency, r.rate
-from app.receipt_allocations a join app.receipts r on r.id = a.receipt_id
+select a.amount, a.at, r.id as receipt_id, r.id, r.rcv_no, r.received_on, r.method, r.amount as receipt_amount, r.currency, r.rate,
+  r.verify_status, r.fee, r.fee_bearer, r.payer, r.collector_employee_id, r.handed_at, r.voided_at, e.short_name as collector_name
+from app.receipt_allocations a join app.receipts r on r.id = a.receipt_id left join app.employees e on e.id = r.collector_employee_id
 where a.deal_id = $1 order by a.at`;
 
 export const dashboard = `
@@ -168,11 +169,13 @@ order by s.shipped_at desc`;
 
 export const receipts = `
 select r.id, r.rcv_no, r.received_on, r.amount, r.currency, r.account_currency, r.rate, r.converted, r.method, r.note, r.proof_path, r.voided_at, r.void_reason,
+  r.verify_status, r.landed, r.fee, r.fee_bearer, r.payer, r.collector_employee_id, r.handed_at, r.created_by, ce.short_name as collector_name, ca.name as account_name,
   c.id as customer_id, c.code as customer_code, c.name as customer_name, c.city,
   o.unallocated,
   (select coalesce(jsonb_agg(jsonb_build_object('biz_no', d.biz_no, 'deal_id', d.id, 'amount', a.amount) order by a.at), '[]')
      from app.receipt_allocations a join app.deals d on d.id = a.deal_id where a.receipt_id = r.id) as allocations
 from app.receipts r join app.customers c on c.id = r.customer_id join app.v_receipt_open o on o.id = r.id
+left join app.employees ce on ce.id = r.collector_employee_id left join app.cash_accounts ca on ca.id = r.account_id
 where r.org_id = $1 and r.received_on >= $2::date and r.received_on <= $3::date
 order by r.received_on desc, r.created_at desc`;
 
@@ -349,7 +352,7 @@ where h.org_id = $1 order by h.kind, h.name`;
 
 export const cashMoves = `
 select m.id, m.account_id, a.name as account, a.currency, m.kind, m.amount, m.on_date, m.status, m.payer, m.ref, m.category, m.proof, m.note,
-  m.decide_note, m.source, m.created_at, m.customer_id, c.code, c.name as customer, r.rcv_no, app.move_sign(m) as sign
+  m.decide_note, m.source, m.created_at, m.customer_id, c.code, c.name as customer, r.rcv_no, app.move_sign(m) as sign, m.biz_type, m.flow_class
 from app.cash_moves m join app.cash_accounts a on a.id = m.account_id
 left join app.customers c on c.id = m.customer_id left join app.receipts r on r.id = m.receipt_id
 where m.org_id = $1 and m.on_date between $2::date and $3::date

@@ -43,13 +43,23 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
   const [drawer, setDrawer] = useState(null);
   const [errs, setErrs] = useState(false);
   const [overOk, setOverOk] = useState(false);
+  // 214 / 219 / 220: 进哪个账户、手续费谁出、别人代付、员工代收
+  const [accountId, setAccountId] = useState('');
+  const [feeTouched, setFeeTouched] = useState(false);
+  const [bearer, setBearer] = useState('');
+  const [payer, setPayer] = useState('');
+  const [byStaff, setByStaff] = useState(false);
+  const [collector, setCollector] = useState('');
 
   const { data } = useData(async () => {
     if (!customer) return null;
-    const [open, [bal], last] = await Promise.all([
+    const [open, [bal], last, accounts, staff, [feeCfg]] = await Promise.all([
       q(Q.customerOpenDeals, [customer, acc]), q(Q.customerBalance, [customer, acc]),
-      q(`select currency, account_currency, rate from app.receipts where org_id = $1 and currency <> account_currency order by created_at desc limit 20`, [org])]);
-    return { open, bal, last };
+      q(`select currency, account_currency, rate from app.receipts where org_id = $1 and currency <> account_currency order by created_at desc limit 20`, [org]),
+      q(`select id, name, kind, currency from app.cash_accounts where org_id = $1 and active order by name`, [org]).catch(() => []),
+      q(`select id, short_name from app.employees where org_id = $1 and active order by short_name`, [org]).catch(() => []),
+      q(`select value from app.org_settings where org_id = $1 and key = 'fee_rates'`, [org]).catch(() => [])]);
+    return { open, bal, last, accounts, staff, feeRates: { wave: 1, ...(feeCfg?.value || {}) } };
   }, [customer, acc]);
 
   // rate is always typed as "1 <foreign> = ? XOF" (or ? <acc> when the order is not XOF)
@@ -62,7 +72,13 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
     return base === 'XOF' ? REF[foreign] : null;
   }, [foreign, base, data]);
   const dbRate = !foreign ? 1 : currency === foreign ? N(rate) : (N(rate) > 0 ? 1 / N(rate) : 0);
-  const conv = Math.round(N(amount) * dbRate * (acc === 'XOF' ? 1 : 100)) / (acc === 'XOF' ? 1 : 100);
+  const feePct = N(data?.feeRates?.[method]);
+  const feeV = feeTouched ? N(fee) : (feePct > 0 && N(amount) > 0 ? Math.round(N(amount) * feePct / (100 - feePct) * (currency === 'XOF' ? 1 : 100)) / (currency === 'XOF' ? 1 : 100) : 0);
+  const credit = N(amount) + (bearer === 'company' ? feeV : 0);   // 冲客户账 = 到账 (+ 我方出的手续费)
+  const conv = Math.round(credit * dbRate * (acc === 'XOF' ? 1 : 100)) / (acc === 'XOF' ? 1 : 100);
+  const accOpts = (data?.accounts || []).filter((a) => a.currency === currency);
+  const accAuto = accOpts.find((a) => a.kind === method) || (accOpts.length === 1 ? accOpts[0] : null);
+  const accSel = accountId || accAuto?.id || '';
   const dev = foreign && refRate && N(rate) > 0 ? Math.abs(N(rate) - refRate) / refRate * 100 : 0;
 
   const preview = useMemo(() => {
@@ -91,14 +107,16 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
     if (cap > 0 && conv > cap && !overOk) { setOverOk(true); return toast(`实收 ${money(conv, acc)} 比${lockDeal ? '本单待付' : '全部欠款'} ${money(cap, acc)} 多 ${money(conv - cap, acc)}，多出的记为预付。核对过金额再点一次「确认收款」`, 'err'); }
     if (method !== 'cash' && !proof) return toast(`${PAY_METHODS[method]} 收款请上传凭证截图（现金可不传）`, 'err');
     if (mode === 'specific' && !picked.length) return toast('请点选要冲的单', 'err');
-    const note = N(fee) > 0 ? `到账扣手续费 ${money(fee, currency)} ${currency}（不算客户欠款）` : null;
+    if (feeV > 0 && !bearer) return toast('有手续费，请选谁出（客户出 / 我方出）', 'err');
+    if (byStaff && !collector) return toast('员工代收：选是哪位员工收的', 'err');
     setBusy(true);
     try {
-      await call(role, `select app.record_receipt($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [org, customer, date, N(amount), currency, method, acc, dbRate, mode, JSON.stringify(mode === 'specific' ? picked : []), proof || null, note]);
-      toast('收款已登记，客户总账已更新');
+      await call(role, `select app.record_receipt2($1,$2)`, [org, JSON.stringify({ customer_id: customer, received_on: date, amount_landed: N(amount), currency, method, account_currency: acc, rate: dbRate,
+        mode, targets: mode === 'specific' ? picked : [], proof: proof || null, fee: feeV, fee_bearer: feeV > 0 ? bearer : null, payer: payer || null,
+        account_id: byStaff ? null : (accSel || null), collector_employee_id: byStaff ? collector : null })]);
+      toast(byStaff ? '收款已登记：客户账已冲，钱挂在员工名下（在途），交到公司再确认到账' : '收款已登记（待核对到账），客户总账已更新');
       const sum = { amount: N(amount), currency, conv, acc, hits: hits.map(([id, v]) => [nameOf(id), v]), left: preview.left };
-      setAmount(''); setProof(''); setFee(''); setRate(''); setRateOk(false); setOverOk(false); setErrs(false); if (!lockDeal) setPicked([]);
+      setAmount(''); setProof(''); setFee(''); setFeeTouched(false); setBearer(''); setPayer(''); setByStaff(false); setCollector(''); setRate(''); setRateOk(false); setOverOk(false); setErrs(false); if (!lockDeal) setPicked([]);
       refresh(); onDone?.(sum);
     } catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
   };
@@ -131,7 +149,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
         <div className="rgrid">
           <FRow label="收款日期" req><DatePicker value={date} onChange={setDate} /></FRow>
           <FRow label="收款方式" req><div className="chips">{['cash', 'wave', 'orange', 'bank'].map((k) => <button type="button" key={k} className={`chip ${method === k ? 'on' : ''}`} onClick={() => setMethod(k)}>{PAY_METHODS[k]}</button>)}</div></FRow>
-          <FRow label="实收金额" req>
+          <FRow label="到账金额" req>
             <input className={`in ${errs && !(N(amount) > 0) ? 'err-in' : ''}`} inputMode="decimal" style={{ width: 150, fontSize: 17, fontWeight: 700 }} value={amount} onChange={(e) => { setAmount(e.target.value.replace(/[^\d.]/g, '')); setOverOk(false); }} placeholder="0" />
             <select className="in" style={{ width: 84 }} value={currency} onChange={(e) => { setCurrency(e.target.value); setRate(''); setRateOk(false); }}>{[...new Set(['XOF', acc, 'USD', 'CNY', 'EUR'])].map((c) => <option key={c} value={c}>{c}</option>)}</select>
             {lockDeal && defaultAmount != null && <Info>本单待付 {money(defaultAmount, acc)}，只作参考，实收请按到账手填。</Info>}
@@ -144,7 +162,19 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
               {N(rate) > 0 && dev >= 3 && <span className={`small ${dev >= 10 ? 'red-t' : 'amber-t'}`}>偏差 {dev.toFixed(1)}%</span>}
             </FRow>
           )}
-          {foreign && <FRow label="到账手续费"><input className="in" inputMode="decimal" style={{ width: 100 }} value={fee} onChange={(e) => setFee(e.target.value.replace(/[^\d.]/g, ''))} placeholder="0" /><span className="small muted">{currency}，可不填</span></FRow>}
+          <FRow label="手续费">
+            <input className="in" inputMode="decimal" style={{ width: 100 }} value={feeTouched ? fee : (feeV ? String(feeV) : '')} onChange={(e) => { setFeeTouched(true); setFee(e.target.value.replace(/[^\d.]/g, '')); }} placeholder="0" />
+            <span className="small muted">{currency}{feePct > 0 && !feeTouched ? `（${PAY_METHODS[method]} 默认 ${feePct}%）` : ''}</span>
+            {feeV > 0 && <span className="chips">{[['customer', '客户出'], ['company', '我方出']].map(([k, l]) => <button type="button" key={k} className={`chip ${bearer === k ? 'on' : ''} ${errs && !bearer ? 'err' : ''}`} onClick={() => setBearer(k)}>{l}</button>)}</span>}
+            <Info>客户出：客户多付了手续费（欠 10,000 付 10,100），冲客户账 = 到账金额。我方出：客户只付了 9,900，冲客户账 = 到账 + 手续费，差的记成我方手续费支出。手续费不算客户欠款。</Info>
+          </FRow>
+          <FRow label="进哪个账户">
+            {method === 'cash' && <span className="chips"><button type="button" className={`chip ${!byStaff ? 'on' : ''}`} onClick={() => setByStaff(false)}>交到公司</button><button type="button" className={`chip ${byStaff ? 'on' : ''}`} onClick={() => setByStaff(true)}>员工代收</button></span>}
+            {byStaff ? <select className={`in ${errs && !collector ? 'err-in' : ''}`} style={{ width: 160 }} value={collector} onChange={(e) => setCollector(e.target.value)}><option value="">选员工…</option>{(data.staff || []).map((e) => <option key={e.id} value={e.id}>{e.short_name}</option>)}</select>
+              : <select className="in" style={{ width: 170 }} value={accSel} onChange={(e) => setAccountId(e.target.value)}><option value="">（先不选账户）</option>{accOpts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>}
+            <Info>{byStaff ? '客户把现金给了员工：客户账照冲，钱挂在员工名下（在途）；员工存进 Wave 转给公司后，在「资金账户 → 员工代收」点「已交」才进账户。' : '选了账户：核对到账（或导入流水自动配对）后，这笔钱记进这个账户的流水，分类「收客户货款」。'}</Info>
+          </FRow>
+          <FRow label="付款人"><input className="in" style={{ width: 200 }} value={payer} onChange={(e) => setPayer(e.target.value)} placeholder="别人代付时写（可不填）" /></FRow>
         </div>
         {!lockDeal && (
           <div className="field"><label>冲账方式</label>
@@ -215,6 +245,56 @@ export function VoidReceiptModal({ rc, onClose }) {
         <div className="hint">撤销后：这笔钱冲到各单的金额全部收回、客户总账加回去、公户认领退回「待认领」。收款单不删，标「已撤销」留记录。撤完在下面重新登记正确的金额。</div>
         <div className="chips">{['金额输错', '小数点输错', '客户 / 订单选错', '重复登记', '客户没付成功'].map((x) => <button type="button" key={x} className={`chip ${why === x ? 'on' : ''}`} onClick={() => setWhy(x)}>{x}</button>)}</div>
         <input className="in" value={why} onChange={(e) => setWhy(e.target.value)} placeholder="撤销原因（必填）" />
+      </div>
+    </Modal>
+  );
+}
+
+
+// 收款三段状态 (Frank 11-11 219): 员工代收·在途 (黄) → 待核对到账 (黄) → 已到账 (绿); 撤销的灰
+export const rcvState = (r) => (r.voided_at ? ['gray', '已撤销'] : r.collector_employee_id && !r.handed_at ? ['amber', `员工代收 · 在途${r.collector_name ? `（${r.collector_name}）` : ''}`]
+  : r.verify_status === 'verified' ? ['green', '已到账'] : ['amber', '待核对到账']);
+export function RcvStatus({ r, onDone }) {
+  const { role, toast } = useApp();
+  const [tone, label] = rcvState(r);
+  const can2 = can(role, 'receipt') && !r.voided_at;
+  const verify = async () => { try { await call(role, `select app.verify_receipt($1)`, [r.id]); toast(`${r.rcv_no} 已确认到账`); onDone?.(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (
+    <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+      <span className={`pill ${tone}`}>{label}</span>
+      {can2 && r.verify_status !== 'verified' && !(r.collector_employee_id && !r.handed_at) && <button type="button" className="btn sm" onClick={verify} title="核对过 Wave / 银行 / 现金，钱确实到了">确认到账</button>}
+      {N(r.fee) > 0 && <span className="small muted">手续费 {money(r.fee, r.currency)}（{r.fee_bearer === 'company' ? '我方出' : '客户出'}）</span>}
+      {r.payer && <span className="small muted">付款人 {r.payer}</span>}
+    </span>
+  );
+}
+
+// 改冲账 (Frank 11-11 217): 把这笔钱从 A 单挪到 B 单 / 挪成预付; 收款本身不动; 只财务 / 中方; 原因必填, 留记录
+export function ReallocModal({ r, onClose, onDone }) {
+  const { role, toast } = useApp();
+  const { data } = useData(() => q(Q.customerOpenDeals, [r.customer_id, r.account_currency]), [r.customer_id, r.account_currency]);
+  const froms = [...r.allocations.map((a) => ({ id: a.deal_id, label: `${a.biz_no}（冲了 ${money(a.amount, r.account_currency)}）`, max: N(a.amount) })), ...(N(r.unallocated) > 0 ? [{ id: '', label: `预付（${money(r.unallocated, r.account_currency)}）`, max: N(r.unallocated) }] : [])];
+  const [from, setFrom] = useState(froms[0]?.id ?? '');
+  const [to, setTo] = useState('');
+  const [amt, setAmt] = useState('');
+  const [reason, setReason] = useState('');
+  const f = froms.find((x) => x.id === from);
+  const tos = [...(data || []).filter((d) => d.deal_id !== from && d.kind !== 'opening' && N(d.due) > 0).map((d) => ({ id: d.deal_id, label: `${d.biz_no}（还欠 ${money(d.due, r.account_currency)}）`, max: N(d.due) })), ...(from ? [{ id: 'prepay', label: '改成预付', max: Infinity }] : [])];
+  const t = tos.find((x) => x.id === to);
+  const ok = f && t && N(amt) > 0 && N(amt) <= f.max && N(amt) <= t.max && reason.trim();
+  const go = async () => {
+    try { await call(role, `select app.reallocate_receipt($1,$2,$3,$4,$5)`, [r.id, from || null, N(amt), to === 'prepay' ? null : to, reason.trim()]); toast('已改冲账，两张单的未付都已更新'); onDone?.(); onClose(); }
+    catch (e) { toast(friendlyError(e), 'err'); }
+  };
+  return (
+    <Modal title={`改冲账 · ${r.rcv_no}`} onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{!reason.trim() ? '要写原因' : f && N(amt) > f.max ? `最多挪 ${money(f.max)}` : t && N(amt) > t.max ? `目标单只欠 ${money(t.max)}` : '选好挪出 / 挪入和金额'}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>确认改冲账</button></>}>
+      <div className="stack">
+        <div className="hint">收款本身不动（金额、日期、凭证都不变），只改「这笔钱算在哪张单」。客户总欠款不变。</div>
+        <FRow label="从" req><select className="in" value={from} onChange={(e) => { setFrom(e.target.value); setTo(''); }}>{froms.map((x) => <option key={x.id || 'pre'} value={x.id}>{x.label}</option>)}</select></FRow>
+        <FRow label="挪到" req><select className="in" value={to} onChange={(e) => setTo(e.target.value)}><option value="">请选择</option>{tos.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select></FRow>
+        <FRow label="金额" req><input className="in" inputMode="decimal" style={{ width: 140 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} />{f && <button type="button" className="btn sm ghost" onClick={() => setAmt(String(Math.min(f.max, t?.max ?? Infinity)))}>全部</button>}</FRow>
+        <FRow label="原因" req><input className="in" style={{ width: '100%', maxWidth: 420 }} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例如 客户说这笔付的是另一张单" /></FRow>
       </div>
     </Modal>
   );

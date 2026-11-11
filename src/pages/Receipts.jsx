@@ -8,7 +8,7 @@ import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { BalanceCopy } from '../components/Doc.jsx';
-import ReceiptForm, { DealDrawer, DealChip, BalanceLine, VoidReceiptModal } from '../components/ReceiptForm.jsx';
+import ReceiptForm, { DealDrawer, DealChip, BalanceLine, VoidReceiptModal, RcvStatus, rcvState, ReallocModal } from '../components/ReceiptForm.jsx';
 import { can, PAY_METHODS } from '../lib/domain.js';
 import { money, dDate, friendlyError, periodRange } from '../lib/format.js';
 
@@ -22,6 +22,7 @@ export default function Receipts({ preset }) {
   const [done, setDone] = useState(null);
   const [drawer, setDrawer] = useState(null);
   const [voidRc, setVoidRc] = useState(null);
+  const [realloc, setRealloc] = useState(null);
   const [from, to] = periodRange('year');
 
   const { data } = useData(async () => {
@@ -50,10 +51,13 @@ export default function Receipts({ preset }) {
     { key: 'amount', label: '收款（原币）', w: 130, render: (r) => `${money(r.amount, r.currency)} ${r.currency}` },
     { key: 'rate', label: '锁定汇率', w: 120, hidden: !data.list.some((r) => r.currency !== r.account_currency), render: (r) => (r.currency === r.account_currency ? '—' : N(r.rate) >= 1 ? `1 ${r.currency} = ${+N(r.rate).toFixed(3)} ${r.account_currency}` : `1 ${r.account_currency} = ${+(1 / N(r.rate)).toFixed(3)} ${r.currency}`) },
     { key: 'converted', label: '入账金额', w: 120, render: (r) => <b>{money(r.converted, r.account_currency)} {r.account_currency}</b> },
+    { key: 'vstate', label: '到账状态', w: 200, value: (r) => rcvState(r)[1], render: (r) => <RcvStatus r={r} onDone={refresh} /> },
+    { key: 'account_name', label: '账户', w: 110, render: (r) => r.account_name || (r.collector_name ? `员工 ${r.collector_name}` : '—') },
     { key: 'alloc', label: '冲到', w: 200, render: (r) => r.allocations.map((a) => <DealChip key={a.deal_id} id={a.deal_id} no={a.biz_no} onOpen={setDrawer} />) },
     { key: 'status', label: '冲账情况', w: 300, value: sentence, render: (r) => (
       <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
         <span style={{ whiteSpace: 'normal' }}>{sentence(r)}</span>
+        {!r.voided_at && can(role, 'receipt') && (r.allocations.length > 0 || N(r.unallocated) > 0) && <button type="button" className="btn sm" onClick={() => setRealloc(r)}>改冲账</button>}
         {N(r.unallocated) > 0 && can(role, 'receipt') && <button type="button" className="btn sm" onClick={async () => {
           try { await call(role, `select app.apply_unallocated($1,'oldest','[]')`, [r.id]); toast('预付已冲到最老的未付单'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); }
         }}>把预付冲到订单</button>}
@@ -112,6 +116,7 @@ export default function Receipts({ preset }) {
       </div>
       {drawer && <DealDrawer id={drawer} onClose={() => setDrawer(null)} />}
       {voidRc && <VoidReceiptModal rc={voidRc} onClose={() => setVoidRc(null)} />}
+      {realloc && <ReallocModal r={realloc} onClose={() => setRealloc(null)} onDone={refresh} />}
     </>
   );
 }
