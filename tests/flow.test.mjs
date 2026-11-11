@@ -164,18 +164,18 @@ test('品牌：只中方能改；空字符串清空', async () => {
   assert.equal((await t.one(`select brand from app.products where id=$1`, [t.ids.bg6mCover])).brand, 'ITEL');
 });
 
-test('定价公式：到岸 = round(人民币 ÷ 0.0107 + 运费, 百位)；档位价 = 到岸 + FEE；锁定价不被重算；汇率只中方改', async () => {
+test('定价公式：到岸 = 向上进位(人民币 ÷ 0.0107 + 运费, 百位, Frank 11-11)；档位价 = 到岸 + FEE；锁定价不被重算；汇率只中方改', async () => {
   const t = await setup();
   const p = t.ids.bg6mCover;
   await rejects(t.as(U.manager, `select app.set_product_cost($1,110.26,200,500,1000,1500,3000)`, [p]), /PERMISSION_DENIED/);
-  await t.as(U.admin, `select app.set_product_cost($1,110.26,200,500,1000,1500,3000)`, [p]);   // 10304.67 + 200 → 10500
+  await t.as(U.admin, `select app.set_product_cost($1,110.26,200,500,1000,1500,3000)`, [p]);   // 10304.67 + 200 = 10504.67 → 向上进到 10600
   const price = async (tier) => Number((await t.one(`select price from app.product_prices where product_id=$1 and tier=$2 and currency='XOF'`, [p, tier])).price);
-  assert.equal(await price('S'), 11000); assert.equal(await price('WHOLESALE'), 11500); assert.equal(await price('RETAIL'), 12000); assert.equal(await price('REPAIR'), 13500);
+  assert.equal(await price('S'), 11100); assert.equal(await price('WHOLESALE'), 11600); assert.equal(await price('RETAIL'), 12100); assert.equal(await price('REPAIR'), 13600);
   await t.as(U.admin, `select app.set_tier_price($1,'WHOLESALE',11900,true)`, [p]);
   await rejects(t.as(U.manager, `select app.set_price_settings($1,0.0105,0.01135,100)`, [t.ids.org]), /PERMISSION_DENIED/);
-  await t.as(U.admin, `select app.set_price_settings($1,0.0105,0.01135,100)`, [t.ids.org]);       // 10500.95 + 200 → 10700
-  assert.equal(await price('S'), 11200);
+  await t.as(U.admin, `select app.set_price_settings($1,0.0105,0.01135,100)`, [t.ids.org]);       // 10500.95 + 200 = 10700.95 → 10800
+  assert.equal(await price('S'), 11300);
   assert.equal(await price('WHOLESALE'), 11900, '锁定的一口价不动');
   await t.as(U.admin, `select app.set_tier_price($1,'WHOLESALE',null,false)`, [p]);
-  assert.equal(await price('WHOLESALE'), 11700);
+  assert.equal(await price('WHOLESALE'), 11800);
 });
