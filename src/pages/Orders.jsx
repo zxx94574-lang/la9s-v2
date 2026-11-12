@@ -6,6 +6,7 @@ import { call } from '../db/client.js';
 import { friendlyError, dDate, today } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
+import { MultiPick, Schemes } from '../components/FilterBar.jsx';
 import Inquiry from './Inquiry.jsx';
 import { STATUS, TIERS, seesPrice, can, dealLight, stuckOf, LIGHT_LABEL } from '../lib/domain.js';
 import { money, qty, dt, periodRange, PERIODS } from '../lib/format.js';
@@ -27,16 +28,29 @@ export default function Orders() {
   const ref = useOutside(open, () => setOpen(false));
   const [tab, setTab] = useState('all');
   const { data } = useData(() => q(Q.orders, [org, from, to]), [org, from, to]);
+  // 229 (Frank 11-11): 筛选条 —— 客户 / 档位 / 机型 / 付款, 可叠加; 「按机型看」给出片数和金额; 可存成筛选方案
+  const olinesRaw = useData(() => q(Q.orderLines, [org, from, to]), [org, from, to]).data;
+  const olines = useMemo(() => olinesRaw || [], [olinesRaw]);
+  const [fcust, setFcust] = useState([]); const [ftier, setFtier] = useState([]); const [fmodel, setFmodel] = useState([]); const [fpay, setFpay] = useState([]);
+  const [mode, setMode] = useState('orders');
+  const curFilter = { period, custom: period === 'custom' ? custom : null, light, fcust, ftier, fmodel, fpay, mode, text };
+  const applyScheme = (f) => { if (f.period) setPeriod(f.period); if (f.period === 'custom' && f.custom) setCustom(f.custom); setLight(f.light || ''); setFcust(f.fcust || []); setFtier(f.ftier || []); setFmodel(f.fmodel || []); setFpay(f.fpay || []); setMode(f.mode || 'orders'); setText(f.text || ''); setTier(''); setGrp(''); };
+  const payOf = (d) => (!(Number(d.shipped_amount) > 0) ? 'none' : Number(d.due) <= 0 ? 'paid' : Number(d.allocated_amount) > 0 ? 'partial' : 'unpaid');
   const voided = useData(() => q(Q.voidedDeals, [org]), [org]).data || [];
+  const modelDeals = useMemo(() => new Set(olines.filter((l) => fmodel.includes(l.model)).map((l) => l.deal_id)), [olines, fmodel]);
   const rows = useMemo(() => (data || []).filter((d) => {
     if (light) { if (dealLight(d) !== light) return false; } else if (d.status === 'cancelled' && grp !== 'cancelled') return false;   // 作废的单默认在「已作废」页签; 选了红灯就显示
     if (tier && d.tier !== tier) return false;
+    if (fcust.length && !fcust.includes(d.customer_id)) return false;
+    if (ftier.length && !ftier.includes(d.tier)) return false;
+    if (fpay.length && !fpay.includes(payOf(d))) return false;
+    if (fmodel.length && !modelDeals.has(d.id)) return false;
     if (grp === 'open' && ['shipped', 'cancelled'].includes(d.status)) return false;
     if (grp === 'unpaid' && !(['partial', 'shipped'].includes(d.status) && Number(d.due) > 0)) return false;
     if (grp && !['open', 'unpaid'].includes(grp) && !grp.split(',').includes(d.status)) return false;
     if (text) { const t = text.toUpperCase(); if (![d.biz_no, d.customer_name, d.customer_code, d.city, d.quote_no, d.so_no].some((x) => String(x || '').toUpperCase().includes(t))) return false; }
     return true;
-  }), [data, text, tier, grp, light]);
+  }), [data, text, tier, grp, light, fcust, ftier, fpay, fmodel, modelDeals]);
   const price = seesPrice(role);
   const cols = [
     { key: 'biz_no', label: '订单号', w: 150, render: (d) => <b><DealLink id={d.id} no={d.biz_no} /></b> },
@@ -57,6 +71,18 @@ export default function Orders() {
     ] : []),
   ];
   const active = text || tier || grp || light;
+  const anyF = fcust.length || ftier.length || fmodel.length || fpay.length || text;
+  const custOpts = useMemo(() => { const m = new Map(); for (const d of data || []) m.set(d.customer_id, `${d.customer_name}${d.city ? ' · ' + d.city : ''}`); return [...m].sort((a, b) => a[1].localeCompare(b[1])); }, [data]);
+  const modelOpts = useMemo(() => [...new Set(olines.map((l) => l.model).filter(Boolean))].sort().map((m) => [m, m]), [olines]);
+  // 按机型看: 筛出来的这些单里, 每个机型卖了多少片、多少钱 (已出库 − 已退货, 按成交价)
+  const byModel = useMemo(() => {
+    const ok = new Map(rows.map((d) => [d.id, d])); const m = new Map();
+    for (const l of olines) { const d = ok.get(l.deal_id); if (!d || !l.model) continue; if (fmodel.length && !fmodel.includes(l.model)) continue;
+      const pcs = Number(l.qty_shipped) - Number(l.qty_returned); const k = l.model + '|' + (l.category || '');
+      const r = m.get(k) || { key: k, model: l.model, category: l.category, product_id: l.product_id, pcs: 0, amount: 0, req: 0, deals: new Set(), custs: new Set() };
+      r.pcs += pcs; r.amount += pcs * Number(l.unit_price || 0); r.req += Number(l.qty_req); r.deals.add(l.deal_id); r.custs.add(d.customer_id); m.set(k, r); }
+    return [...m.values()].map((r) => ({ ...r, deal_n: r.deals.size, cust_n: r.custs.size })).sort((a, b) => b.pcs - a.pcs);
+  }, [rows, olines, fmodel]);
   const counts = useMemo(() => { const c = { done: 0, active: 0, cancelled: 0 }; for (const d of data || []) c[dealLight(d)] += 1; return c; }, [data]);
   return (
     <>
@@ -65,7 +91,7 @@ export default function Orders() {
         <div className="row">
           <div className="seg">{PERIODS.map(([k, l]) => <button type="button" key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
           {period === 'custom' && <DatePicker range value={custom} onChange={setCustom} align="right" />}
-          {can(role, 'quote') || can(role, 'inquiry') ? <button type="button" className="btn primary" onClick={() => go('quote/new')}>＋ 新订单</button> : null}
+          {can(role, 'quote') || can(role, 'inquiry') ? <button type="button" className="btn primary lg" onClick={() => go('quote/new')}>＋ 新订单</button> : null}
         </div>
       </div>
       <div className="tabs" style={{ marginBottom: 0 }}>
@@ -75,11 +101,41 @@ export default function Orders() {
         <button type="button" className={tab === 'void' ? 'on' : ''} onClick={() => setTab('void')}>已作废 <span className="muted">{voided.length}</span></button>
       </div>
       {tab === 'ship' ? <ShipmentsList from={from} to={to} /> : tab === 'void' ? <VoidedList rows={voided} /> : tab === 'inq' ? <Inquiry embedded /> : <div className="card">
+        <div className="fbar">
+          <MultiPick label="客户" options={custOpts} value={fcust} onChange={setFcust} />
+          <MultiPick label="档位" options={Object.entries(TIERS)} value={ftier} onChange={setFtier} />
+          <MultiPick label="机型" options={modelOpts} value={fmodel} onChange={setFmodel} />
+          <MultiPick label="付款" options={[['paid', '已付清'], ['partial', '付了一部分'], ['unpaid', '没付'], ['none', '还没出库']]} value={fpay} onChange={setFpay} />
+          <input className="in sm" style={{ width: 170 }} value={text} onChange={(e) => setText(e.target.value)} placeholder="⌕ 单号 / 城市" />
+          {anyF ? <button type="button" className="btn sm" onClick={() => { setFcust([]); setFtier([]); setFmodel([]); setFpay([]); setText(''); }}>清空</button> : null}
+          <span className="grow" />
+          <Schemes table="orders" current={curFilter} onApply={applyScheme} />
+          <div className="seg"><button type="button" className={mode === 'orders' ? 'on' : ''} onClick={() => setMode('orders')}>按订单看</button><button type="button" className={mode === 'models' ? 'on' : ''} onClick={() => setMode('models')}>按机型看</button></div>
+        </div>
         <div className="row light-bar">
           {[['', '全部'], ['active', '进行中'], ['done', '已完成'], ['cancelled', '已取消']].map(([k, l]) => (
             <button type="button" key={k || 'all'} className={`chip ${light === k ? 'on' : ''}`} onClick={() => setLight(k)}>{k ? <Light v={k} /> : l} <b>{k ? counts[k] : (data || []).length}</b></button>))}
         </div>
-        <Grid id="orders" table="deals" columns={cols} rows={rows} onRowClick={(d) => go('deal/' + d.id)} empty={!data ? '加载中…' : light ? `${custom && period === 'custom' ? `${custom[0]} 至 ${custom[1]} ` : '这个时间段'}没有「${LIGHT_LABEL[light]}」的订单` : (data.length ? '没有符合条件的订单' : '这个时间段还没有订单')}
+        {mode === 'models' ? (
+          <>
+            <div className="bigsum">
+              <div><div className="k">总片数（已出库 − 已退货）</div><div className="v">{qty(byModel.reduce((a, r) => a + r.pcs, 0))} <small>片</small></div></div>
+              {price && <div><div className="k">总金额（按成交价）</div><div className="v">{money(byModel.reduce((a, r) => a + r.amount, 0))} <small>XOF</small></div></div>}
+              <div><div className="k">机型</div><div className="v">{byModel.length}</div></div>
+              <div><div className="k">订单</div><div className="v">{rows.length}</div></div>
+            </div>
+            <Grid id="orders-models" rows={byModel} rowKey={(r) => r.key} empty="这些条件下没有机型" columns={[
+              { key: 'model', label: '机型', w: 170, render: (r) => <b>{r.product_id ? <ModelLink id={r.product_id} model={r.model} /> : r.model}</b> },
+              { key: 'category', label: '种类', w: 110 },
+              { key: 'pcs', label: '出库片数', w: 100, type: 'number', value: (r) => r.pcs, render: (r) => <b>{qty(r.pcs)}</b> },
+              ...(price ? [{ key: 'amount', label: '金额 XOF', w: 130, type: 'money', value: (r) => r.amount, render: (r) => <b>{money(r.amount)}</b> }] : []),
+              { key: 'req', label: '客户要的', w: 100, type: 'number', value: (r) => r.req, render: (r) => <span className={r.req > r.pcs ? 'amber-t2' : ''}>{qty(r.req)}</span> },
+              { key: 'deal_n', label: '几张单', w: 80, type: 'number' },
+              { key: 'cust_n', label: '几个客户', w: 90, type: 'number' },
+            ]} foot={(rs) => ({ model: '合计', pcs: `${qty(rs.reduce((a, r) => a + r.pcs, 0))} 片`, ...(price ? { amount: money(rs.reduce((a, r) => a + r.amount, 0)) } : {}) })} />
+          </>
+        ) : null}
+        {mode === 'orders' && <Grid id="orders" table="deals" columns={cols} rows={rows} onRowClick={(d) => go('deal/' + d.id)} empty={!data ? '加载中…' : light ? `${custom && period === 'custom' ? `${custom[0]} 至 ${custom[1]} ` : '这个时间段'}没有「${LIGHT_LABEL[light]}」的订单` : (data.length ? '没有符合条件的订单' : '这个时间段还没有订单')}
           tools={(
             <span style={{ position: 'relative' }} ref={ref}>
               <button type="button" className={`btn sm ${active ? 'primary' : ''}`} onClick={() => setOpen(!open)}>⌕ 筛选{active ? ' · 已筛' : ''}</button>
@@ -96,7 +152,7 @@ export default function Orders() {
             </span>
           )}
           foot={(rows) => ({ biz_no: `合计 ${rows.length} 单`, qty: `${qty(rows.reduce((a, d) => a + Number(['quoted', 'hotline_ok'].includes(d.status) ? d.qty_req : d.qty_supply), 0))} 件`,
-            amount: price ? money(rows.reduce((a, d) => a + Number(d.amount), 0)) : '', due: price ? money(rows.reduce((a, d) => a + Math.max(0, Number(d.due)), 0)) : '' })} />
+            amount: price ? money(rows.reduce((a, d) => a + Number(d.amount), 0)) : '', due: price ? money(rows.reduce((a, d) => a + Math.max(0, Number(d.due)), 0)) : '' })} />}
       </div>}
     </>
   );

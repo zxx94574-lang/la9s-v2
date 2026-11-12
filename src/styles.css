@@ -890,3 +890,20 @@ header .info-tip { left: auto; right: 0; }
 .attday.green { background: #e7f5ec; color: #14532d; } .attday.amber { background: #fff4d6; color: #7a4b00; } .attday.red { background: #fdecea; color: #a11; } .attday.gray { background: #f1f3f7; color: #9aa4b5; }
 .attday.sel { border-color: var(--brand, #0447b0); } .attday.today .n { text-decoration: underline; }
 @media (max-width: 480px) { .attday { min-height: 50px; } .attday .t { font-size: 10px; } }
+/* 224: 总览 */
+.kpi.flat { display: block; width: 100%; text-align: left; border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 14px 18px; cursor: pointer; }
+.kpi.flat:hover { background: #f7f9fc; }
+.trend-bare { border-top: 1px solid var(--line-2); }
+.trend-bare .card-h { border-bottom: 0; padding-bottom: 0; } .trend-bare .card-h h2 { font-size: 13px; color: var(--muted); font-weight: 600; }
+.card.mini { cursor: pointer; display: flex; flex-direction: column; gap: 6px; min-height: 104px; } .card.mini:hover { background: #f7f9fc; }
+.mini-v { font-size: 17px; } .mini-v b { font-size: 24px; }
+.light-btn { border: 0; background: transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font: inherit; padding: 2px 4px; }
+.todo-sec .card-h h2 .pill { font-weight: 600; }
+/* 229: 筛选条 */
+.fbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line-2); }
+.fpick { position: relative; display: inline-block; }
+.fpick-menu { left: 0; top: 115%; width: 260px; padding: 8px; display: flex; flex-direction: column; gap: 6px; max-width: 86vw; }
+.fpick-list { max-height: 300px; overflow: auto; display: flex; flex-direction: column; }
+.fpick .mi { text-align: left; }
+.bigsum { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 18px; border-bottom: 1px solid var(--line-2); }
+.bigsum .v { font-size: 26px; font-weight: 800; } .bigsum .k { font-size: 12.5px; color: var(--muted); }

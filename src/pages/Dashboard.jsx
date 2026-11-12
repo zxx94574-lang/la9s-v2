@@ -7,7 +7,8 @@ import Grid from '../components/Grid.jsx';
 import { money, qty, dt, dDate, periodRange, PERIODS, today } from '../lib/format.js';
 import { SHIP_METHODS, PAY_METHODS, TIERS, STATUS, dealLight, stuckOf } from '../lib/domain.js';
 import { balanceWords } from '../lib/domain.js';
-import { todoFor, OverdueBar } from './Todo.jsx';
+import { todoFor, todoLevel, overdueOf } from './Todo.jsx';
+import { DEFAULT_SCHEDULE } from '../components/AttCalendar.jsx';
 import { LayoutGrid, setLayoutEdit, useLayoutEdit } from '../components/Layout.jsx';
 
 const N = (v) => Number(v || 0);
@@ -40,7 +41,19 @@ export default function Dashboard() {
     const [k] = await q(Q.dashboard, [org, from, to]);
     const [sales, wh, rc, bal, orders, [cards], cmp] = await Promise.all([q(Q.dashSales, [org, from, to]), q(Q.dashWarehouse, [org, from, to]),
       q(Q.receipts, [org, from, to]), q(Q.balances, [org]), q(Q.orders, [org, '2000-01-01', '2999-12-31']), q(Q.dashCards, [org, from, to, pf, pt]), q(Q.customerCompare, [org])]);
-    return { k, sales, wh, rc, bal, orders, cards, cmp };
+    const [emps, ins, [vc], [hc]] = await Promise.all([
+      q(`select id, short_name, work_schedule from app.employees where org_id = $1 and active and (joined_on is null or joined_on <= current_date)`, [org]),
+      q(`select distinct employee_id from app.attendance where org_id = $1 and kind = 'in' and (at at time zone 'Africa/Abidjan')::date = (now() at time zone 'Africa/Abidjan')::date`, [org]),
+      q(`select count(distinct customer_id) filter (where (at at time zone 'Africa/Abidjan')::date = (now() at time zone 'Africa/Abidjan')::date)::int as t,
+           count(distinct customer_id) filter (where (at at time zone 'Africa/Abidjan')::date = (now() at time zone 'Africa/Abidjan')::date - 1)::int as y,
+           count(*) filter (where at >= date_trunc('month', now()))::int as m from app.visits where org_id = $1`, [org]),
+      q(`select count(*)::int as total, count(*) filter (where result not in ('no_answer','busy'))::int as ok from app.hotline_calls
+         where org_id = $1 and channel = 'call' and (at at time zone 'Africa/Abidjan')::date = (now() at time zone 'Africa/Abidjan')::date`, [org])]);
+    const wd = new Date().getDay(); const due = emps.filter((e) => ({ ...DEFAULT_SCHEDULE, ...(e.work_schedule || {}) })[wd] !== 'off');
+    const inSet = new Set(ins.map((x) => x.employee_id));
+    const people = { off: due.length === 0, due, in: due.filter((e) => inSet.has(e.id)), missing: due.filter((e) => !inSet.has(e.id)).map((e) => e.short_name),
+      visit_today: vc?.t || 0, visit_yday: vc?.y || 0, visit_month: vc?.m || 0, call_total: hc?.total || 0, call_ok: hc?.ok || 0, call_fail: (hc?.total || 0) - (hc?.ok || 0) };
+    return { k, sales, wh, rc, bal, orders, cards, cmp, people };
   }, [org, from, to]);
 
   const k = data?.k; const c = data?.cards;
@@ -49,34 +62,49 @@ export default function Dashboard() {
   for (const d of (data?.orders || [])) { const cd = ymd(d.created_at); if (cd >= from && cd <= to) lightN[dealLight(d)] += 1; }
   const jumpCompare = () => document.getElementById('cust-compare')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const blocks = !data ? [] : [
-    { id: 'overdue', title: '超期未发货（常开）', span: 12, locked: true, render: () => <OverdueBar orders={data.orders} go={go} compact /> },
-    { id: 'kpis', title: '四个数：销售 / 收款 / 欠款 / 订单状态', span: 12, render: () => (
-      <div className="kpis k4">
-        <button type="button" className="kpi" onClick={() => go('orders')}>
-          <div className="t"><span>销售（出库金额）</span><span>↗</span></div>
+    // 224 (Frank 11-11): 总览每块只回答一个问题, 细节点进去看 —— ① 要处理的单 (原来的红条 + 订单状态 + 待办列表合一) ② 销售 ③ 钱 ④ 打卡 ⑤ 拜访 ⑥ 热线
+    { id: 'todo', title: '要处理的单', span: 12, render: () => <TodoBlock orders={data.orders} role={role} go={go} lightN={lightN} from={from} to={to} /> },
+    { id: 'sales', title: '销售', span: 6, render: () => (
+      <div className="card">
+        <button type="button" className="kpi flat" onClick={() => go('orders')}>
+          <div className="t"><span>销售（出库金额）· {periodLabel}</span><span>↗</span></div>
           <div className="v">{money(k.sales_amount)}<small>XOF</small></div>
           <div className="f"><span>出库 <b>{qty(k.sales_qty)}</b> 件 · <b>{k.order_count}</b> 单</span><Delta cur={c.sales} prev={c.sales_prev} money /></div>
         </button>
-        <button type="button" className="kpi" onClick={() => go('receipts')}>
-          <div className="t"><span>收款</span><span>↙</span></div>
-          <div className="v">{money(k.receipts_amount)}<small>XOF</small></div>
-          <div className="f"><span><b>{data.rc.length}</b> 笔</span><span>收款与冲账 →</span></div>
-        </button>
-        <button type="button" className="kpi" onClick={() => go('balances')}>
-          <div className="t"><span>客户欠款（全部历史）</span><span>!</span></div>
-          <div className="v">{money(k.debt_total)}<small>XOF</small></div>
-          <div className="f"><span><b>{k.debtor_count}</b> 位客户欠款</span><span>客户总账 →</span></div>
-        </button>
-        <div className="kpi">
-          <div className="t"><span>订单状态</span><Info>只数这个时间段里开的单。进行中 = 还没走完；已完成 = 已出库、已签收、已收清、没有没对完账的退货；已取消 = 作废。点颜色到订单总览看这些单。</Info></div>
-          <div className="lights">{['active', 'done', 'cancelled'].map((v) => (
-            <button type="button" key={v} onClick={() => { try { sessionStorage.setItem('la9s.orders.jump', JSON.stringify({ light: v, from, to })); } catch { /* */ } go('orders'); }}>
-              <Light v={v} /><b>{lightN[v]}</b></button>))}</div>
-          <div className="f"><span>共 <b>{lightN.active + lightN.done + lightN.cancelled}</b> 单</span><span>点颜色看单 →</span></div>
-        </div>
+        <Trend rows={data.sales} from={from} to={to} bare />
       </div>) },
-    { id: 'mine', title: '要你处理的', span: 6, render: () => <TodoStrip orders={data.orders} role={role} go={go} /> },
-    { id: 'trend', title: '销售趋势', span: 6, render: () => <Trend rows={data.sales} from={from} to={to} /> },
+    { id: 'money', title: '应收与收款', span: 6, render: () => (
+      <div className="card">
+        <button type="button" className="kpi flat" onClick={() => go('balances')}>
+          <div className="t"><span>应收账款（全部历史）</span><span>欠款明细 →</span></div>
+          <div className="v" style={{ color: N(k.debt_total) > 0 ? 'var(--red)' : undefined }}>{money(k.debt_total)}<small>XOF</small></div>
+          <div className="f"><span><b>{k.debtor_count}</b> 位客户欠款</span></div>
+        </button>
+        <button type="button" className="kpi flat" style={{ borderTop: '1px solid var(--line-2)' }} onClick={() => go('receipts')}>
+          <div className="t"><span>收款 · {periodLabel}</span><span>收款明细 →</span></div>
+          <div className="v">{money(k.receipts_amount)}<small>XOF</small></div>
+          <div className="f"><span><b>{data.rc.length}</b> 笔 · 来自 <b>{new Set(data.rc.filter((r) => !r.voided_at).map((r) => r.customer_id || r.customer_name)).size}</b> 位客户</span></div>
+        </button>
+      </div>) },
+    { id: 'att', title: '今天打卡', span: 4, render: () => (
+      <div className="card card-b mini" onClick={() => go('attendance')} role="button" tabIndex={0}>
+        <div className="pd-h">今天打卡</div>
+        {data.people.off ? <div className="muted">今天休息</div> : <>
+          <div className="mini-v"><b>{data.people.in.length}</b> 人已打卡 <span className="muted small">/ 应到 {data.people.due.length}</span></div>
+          {data.people.missing.length ? <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}><span className="small muted">没打卡：</span>{data.people.missing.map((n) => <span key={n} className="pill red">{n}</span>)}</div> : <span className="pill green">都到了</span>}</>}
+      </div>) },
+    { id: 'visit', title: '销售拜访', span: 4, render: () => (
+      <div className="card card-b mini" onClick={() => go('visits')} role="button" tabIndex={0}>
+        <div className="pd-h">销售拜访</div>
+        <div className="mini-v">今天 <b>{data.people.visit_today}</b> 家 <span className="muted">· 昨天 <b>{data.people.visit_yday}</b> 家</span></div>
+        <div className="small muted">本月合计 {data.people.visit_month} 家</div>
+      </div>) },
+    { id: 'hot', title: '热线电话', span: 4, render: () => (
+      <div className="card card-b mini" onClick={() => go('hotline')} role="button" tabIndex={0}>
+        <div className="pd-h">热线电话</div>
+        <div className="mini-v">今天打了 <b>{data.people.call_total}</b> 个</div>
+        <div className="row" style={{ gap: 6 }}><span className="pill green">拨通 {data.people.call_ok}</span><span className={`pill ${data.people.call_fail ? 'amber' : 'gray'}`}>没通 {data.people.call_fail}</span></div>
+      </div>) },
     { id: 'more', title: '更多（仓库 / 销售工作 / 热线 / 客户）', span: 12, render: () => (
       <details className="more-box"><summary>更多：仓库 · 销售工作 · 热线 · 客户对比</summary>
         <div className="more-grid">{more.map((m) => <React.Fragment key={m.id}>{m.render()}</React.Fragment>)}</div>
@@ -172,23 +200,32 @@ function CustomerCompare({ rows, go }) {
   );
 }
 
-function TodoStrip({ orders, role, go }) {
-  const all = orders.filter((d) => todoFor(role, d)); const list = all.slice(0, 8);
+// 224 ①: 要处理的单 —— 红条 + 订单状态 + 待办列表合成一块; 没有待办时缩成一行绿字
+function TodoBlock({ orders, role, go, lightN, from, to }) {
+  const all = orders.filter((d) => todoFor(role, d));
+  const lv = { red: [], amber: [], green: [] }; for (const d of all) lv[todoLevel(d)].push(d);
+  const list = [...lv.red, ...lv.amber, ...lv.green].slice(0, 6);
+  const jump = (v) => { try { sessionStorage.setItem('la9s.orders.jump', JSON.stringify({ light: v, from, to })); } catch { /* */ } go('orders'); };
   return (
-    <div className="card">
-      <div className="card-h"><h2>要你处理的 <span className="muted small">{all.length} 单</span></h2><button type="button" className="btn sm" onClick={() => go('todo')}>全部待办 →</button></div>
-      {list.length === 0 ? <div className="empty">当前岗位没有待办 ✓</div> : list.map((d) => (
-        <div key={d.id} className="row between" style={{ padding: '10px 18px', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }} onClick={() => go('deal/' + d.id)}>
-          <div><CustLink id={d.customer_id} name={d.customer_name} /> <span className="muted small">{d.city} · </span><DealLink id={d.id} no={d.biz_no} /></div>
-          <div className="row"><span className="small muted">卡在：{stuckOf(d)}</span><span className="muted">›</span></div>
-        </div>
-      ))}
+    <div className={`card todo-sec ${lv.red.length ? 'todo-red' : all.length ? 'todo-amber' : 'todo-green'}`}>
+      <div className="card-h" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <h2>要处理的单 <span className="pill red">紧急 {lv.red.length}</span><span className="pill amber">进行中 {lv.amber.length}</span><span className="pill green">不急 {lv.green.length}</span>
+          <Info>紧急 = 下单超过 24 小时没发货、客户今天要货、收货有差异、运费没付、中方标了紧急。右边三个数是这个时间段里开的单的状态，点了到订单总览看。</Info></h2>
+        <div className="row" style={{ gap: 6 }}>{['active', 'done', 'cancelled'].map((v) => <button type="button" key={v} className="light-btn" onClick={() => jump(v)}><Light v={v} /> <b>{lightN[v]}</b></button>)}
+          <button type="button" className="btn sm" onClick={() => go('todo')}>全部待办 →</button></div>
+      </div>
+      {all.length === 0 ? <div className="card-b"><span className="pill green">当前岗位没有要处理的单 ✓</span></div> : list.map((d) => { const o = overdueOf(d); const L = todoLevel(d); return (
+        <div key={d.id} className="row between todo-row" onClick={() => go('deal/' + d.id)}>
+          <div style={{ minWidth: 0 }}><span className={`pill ${L}`} style={{ marginRight: 6 }}>{{ red: '紧急', amber: '进行中', green: '不急' }[L]}</span><CustLink id={d.customer_id} name={d.customer_name} /> <span className="muted small">{d.city} · </span><DealLink id={d.id} no={d.biz_no} />{o && <span className="pill red" style={{ marginLeft: 6 }}>{o.label}没发货</span>}</div>
+          <div className="row" style={{ flexShrink: 0 }}><span className="small muted">卡在：{stuckOf(d)}</span><span className="muted">›</span></div>
+        </div>); })}
+      {all.length > list.length && <div className="card-b small muted" style={{ cursor: 'pointer' }} onClick={() => go('todo')}>还有 {all.length - list.length} 单，到「我的待办」看全部 →</div>}
     </div>
   );
 }
 
 // 销售趋势: 期内每天出库金额 (一张图, 11-09 看板重做)
-function Trend({ rows, from, to }) {
+function Trend({ rows, from, to, bare }) {
   const days = []; for (let d = from; d <= to && days.length < 400; d = shift(d, 1)) days.push(d);
   const by = {}; for (const r of rows) { const d = ymd(r.shipped_at); by[d] = (by[d] || 0) + N(r.amount); }
   const step = days.length > 62 ? 7 : 1;   // 超过两个月按周合并
@@ -196,7 +233,7 @@ function Trend({ rows, from, to }) {
   const max = Math.max(1, ...pts.map((p) => p.v)); const W = 600, H = 150, bw = W / Math.max(1, pts.length);
   const [hov, setHov] = useState(null);
   return (
-    <div className="card">
+    <div className={bare ? 'trend-bare' : 'card'}>
       <div className="card-h"><h2>销售趋势 <span className="muted small">每{step === 7 ? '周' : '天'}出库金额 XOF</span></h2>{hov && <span className="small"><b>{hov.d}</b>{step === 7 ? ' 起一周' : ''} · {money(hov.v)} XOF</span>}</div>
       <div className="card-b">
         {rows.length === 0 ? <div className="muted small">这个时间段还没有出库</div> : (

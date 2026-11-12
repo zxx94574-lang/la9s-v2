@@ -272,6 +272,13 @@ select r.id, r.rt_no, r.batch_no, r.status, r.amount, r.reason, r.reason_type, r
 from app.returns r join app.deals d on d.id = r.deal_id where d.customer_id = $1 order by r.requested_at desc`;
 
 // cancelled = 作废 list (待改 16)
+// 229: 订单行 (按机型看 / 按机型筛): 口径 = 已出库数量 − 已退货, 金额按成交价
+export const orderLines = `
+select l.deal_id, coalesce(p.model, l.req_model) as model, cat.name as category, p.code, p.id as product_id,
+  l.qty_req, l.qty_supply, l.qty_shipped, l.qty_returned, l.unit_price
+from app.deal_lines l join app.deals d on d.id = l.deal_id
+left join app.products p on p.id = l.product_id left join app.categories cat on cat.id = coalesce(p.category_id, l.req_category_id)
+where d.org_id = $1 and d.kind = 'normal' and d.created_at >= $2::date and d.created_at < ($3::date + 1)`;
 export const voidedDeals = `
 select d.id, d.biz_no, d.updated_at, c.name as customer_name, c.code as customer_code,
   (select e.detail->>'reason' from app.deal_events e where e.deal_id = d.id and e.action = 'cancelled' order by e.at desc limit 1) as reason
