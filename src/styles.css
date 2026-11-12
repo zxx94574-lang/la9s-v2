@@ -384,7 +384,7 @@ table.t td.fill-active { background: #e8f0ff; animation: fillGlow 1.6s ease-in-o
 .drawer-b { overflow: auto; padding: 14px; flex: 1; }
 
 /* workflow bar v2 (待改 13 / 44): fits one screen, circled numbers + connectors, short doc numbers */
-.flow2 { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px 12px 8px; margin-bottom: 12px; position: sticky; top: 0; z-index: 9; box-shadow: 0 4px 14px #0f2a520d; }
+.flow2 { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px 12px 8px; margin-bottom: 12px; position: sticky; top: 64px; z-index: 9; box-shadow: 0 4px 14px #0f2a520d; }
 .flow2-steps { display: flex; align-items: flex-start; gap: 0; }
 .flow2-line { flex: 1 1 8px; min-width: 6px; height: 2px; background: var(--line); margin-top: 17px; }
 .flow2-line.done { background: var(--brand); }
@@ -411,8 +411,11 @@ table.t td.fill-active { background: #e8f0ff; animation: fillGlow 1.6s ease-in-o
   .flow2-line { display: none; }
   .flow2-step { width: 20%; }
   .flow2-step .l { font-size: 11.5px; }
-  .flow2 { position: static; }
 }
+/* 268: 吸顶后缩成一行 */
+.flow2.stuck { padding: 6px 12px; border-radius: 12px; }
+.flow2.stuck .flow2-steps { display: none; }
+.flow2.stuck .flow2-now { border-top: 0; margin-top: 0; padding-top: 0; }
 
 /* receipts (待改 31–34, 38) */
 .dealchip { border: 1px solid var(--brand-line, #bcd0f0); background: #eef4ff; color: var(--brand); border-radius: 999px; padding: 2px 9px; font: 600 12px/1.5 ui-monospace, Menlo, monospace; cursor: pointer; margin: 1px 3px 1px 0; }
@@ -917,3 +920,23 @@ header .info-tip { left: auto; right: 0; }
 .bl-preview { overflow: auto; max-height: 68vh; background: #eef1f5; padding: 12px; border-radius: 8px; }
 .bl-preview .bl { margin: 0 auto; box-shadow: 0 1px 6px rgba(0,0,0,.15); min-height: 0; zoom: var(--blz, 1); }
 @media (max-width: 900px) { .bl-preview .bl { zoom: .42; } }
+/* 272 / 273 收货差异: 异常用黄 / 红, 认和不认分两块 */
+.btn.soft-amber { background: #fff4de; border-color: #f1d7a0; color: #8a5a00; }
+.btn.soft-amber:hover { background: #ffecc4; }
+.disc-choice { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; }
+.disc-box { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.disc-box-h { font-weight: 700; margin-bottom: 8px; }
+.disc-box.yes { background: #f6fbf7; } .disc-box.yes.on { border-color: #2e9e5b; }
+.disc-box.no { background: #fdf5f5; } .disc-box.no.on { border-color: #d64545; }
+.disc-box.no .disc-box-h { color: #b42318; } .disc-box.yes .disc-box-h { color: #1c7c45; }
+.disc-say { background: #fff8f0; border-color: #f1d7a0; }
+@media (max-width: 640px) { .disc-choice { grid-template-columns: 1fr; } }
+/* 275 (Frank 11-12): 卡片的状态块紧跟标题, 不放右上角; 稍大一点 */
+.card-h > h2 + .pill, .card-h > h2 + span.row { margin-right: auto; }
+.card-h > h2 + .pill, .card-h > h2 + span.row > .pill { font-size: 13.5px; padding: 4px 10px; font-weight: 650; }
+.disc-row:not(.open) { background: #fff8ea; }
+/* 264 感叹号标记 */
+.info-i.bang { font-weight: 800; cursor: help; margin-left: 4px; flex: none; }
+.info-i.bang.red { background: var(--red-bg); border-color: #f3c6c6; color: var(--red); }
+.info-i.bang.amber { background: #fff4de; border-color: #f1d7a0; color: #a8670a; }
+.price-low, .price-warn { background: none; padding: 0; }

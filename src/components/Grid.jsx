@@ -89,6 +89,7 @@ function passes(c, row, f) {
 //  · onChange 在「保存」时才调一次 (不是每敲一个字), 页面在 onChange 里直接写库 = 改一格存一格
 //  · ⌘C 复制选中那块 (制表符表格); ⌘V 只填进选中区域: 选一格 → 从这格铺整块, 选一片 → 只填这一片, 剪贴板不够就重复铺满
 //  · Delete 清空选中的可编辑格; 点行号选整行; onReorder(fromRow, toRow) 时左侧出现 ⋮⋮ 拖动手柄
+const LAST_COPY = { out: '', raw: '' };   // 最近一次从表格复制的内容: out = 带行号 (给 Excel), raw = 不带 (表格内粘贴)
 export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r.id, rowClass, onRowClick, onDelete, selectable, foot, tools, empty = '暂无数据', maxHeight, noTools,
   onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors }) {
   // ── 每张表的自定义列 (Frank 11-08): 传 table="xxx" 就自动长出「选项设置」里加的列, 值存 row_attrs ──
@@ -284,7 +285,11 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
       }
       lines.push(cells.join('\t'));
     }
-    if (!(await copyToClipboard(lines.join('\n')))) return -1;
+    // 263 (Frank 11-12): 只要复制就带行号 (贴到 Excel 第一列是序号); 表格里自己粘贴用不带行号的原块, 免得错一列
+    const raw = lines.join('\n');
+    const out = lines.map((ln, i) => (withHead && i === 0 ? '#' : String(range.r0 + i + (withHead ? 0 : 1))) + '\t' + ln).join('\n');
+    if (!(await copyToClipboard(out))) return -1;
+    LAST_COPY.out = out; LAST_COPY.raw = raw;
     return range.r1 - range.r0 + 1;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, vis, shown, editing]);
@@ -326,7 +331,8 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
   useEffect(() => {
     const p = (e) => {
       if (!sel || editing || !tableRef.current?.isConnected || e.target.closest?.('input,textarea,select')) return;
-      const text = e.clipboardData?.getData('text/plain'); if (!text) return;
+      let text = e.clipboardData?.getData('text/plain'); if (!text) return;
+      if (LAST_COPY.out && text.replace(/\r/g, '') === LAST_COPY.out) text = LAST_COPY.raw;
       const r = range.r0, c = range.c0;
       if (!shown[r] || !vis[c]) return;
       e.preventDefault();

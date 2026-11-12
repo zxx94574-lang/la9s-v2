@@ -6,7 +6,8 @@ import AttCalendar from '../components/AttCalendar.jsx';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, DatePicker, MonthPicker } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, DatePicker, MonthPicker, Drawer } from '../components/ui.jsx';
+import { staffOptions, optLabel } from '../lib/staffOptions.js';
 import { EmpLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import { dt, today, friendlyError } from '../lib/format.js';
@@ -119,7 +120,7 @@ export default function Attendance() {
           {/* 226: 我这个月的打卡日历, 点某一天看明细 / 申诉 */}
           <div className="card card-b" style={{ marginTop: 12 }}><div className="pd-h">我这个月的打卡</div><AttCalendar compact /></div>
         </div>)}
-      {tab === 'cal' && <div className="card card-b"><AttCalendar pick /></div>}
+      {tab === 'cal' && <EmpCalList />}
       {tab === 'day' && <div className="card"><Grid id="att-day" table="attendance" columns={dCols} rows={data.dayRows} empty="这一天没人打卡" tools={<DatePicker value={day} onChange={setDay} />} /></div>}
       {tab === 'month' && <div className="card"><Grid id="att-month" columns={mCols} rows={data.monthRows} tools={<MonthPicker value={month} onChange={setMonth} label="月份" />} /></div>}
       {tab === 'appeals' && <div className="card">
@@ -205,5 +206,31 @@ function AppealModal({ onClose }) {
         <div className="field req"><label>理由（写清楚，中方看了才好批）</label><textarea className="in" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例：早上先去 Diallo 店里送货，到市场晚了" /></div>
       </div>
     </Modal>
+  );
+}
+
+// 246 (Frank 11-12): 「按员工看日历」不一上来铺所有人 —— 先出一张可筛选的员工清单 (工号 / 全名 / 简称 / 部门 / 职位), 点谁看谁的月历
+function EmpCalList() {
+  const { org } = useApp();
+  const [open, setOpen] = useState(null);
+  const { data } = useData(async () => {
+    const [emps, opt] = await Promise.all([
+      q(`select id, emp_no, full_name, short_name, department, position from app.employees where org_id = $1 and active order by emp_no nulls last, short_name`, [org]),
+      q(`select value from app.org_settings where org_id = $1 and key = 'staff_options'`, [org])]);
+    return { emps, opts: staffOptions(opt[0]?.value) };
+  }, [org]);
+  if (!data) return <div className="empty">加载中…</div>;
+  return (
+    <div className="card">
+      <div className="card-h"><h2>按员工看日历</h2><span className="small muted">用表头的漏斗筛部门 / 职位，点行号旁的 ↗ 或名字看这个人的月历</span></div>
+      <Grid id="att-emps" rows={data.emps} empty="没有在职员工" onRowClick={(e) => setOpen(e)} columns={[
+        { key: 'emp_no', label: '工号', w: 90, render: (e) => <span className="mono">{e.emp_no || '—'}</span> },
+        { key: 'full_name', label: '全名', w: 220, render: (e) => <button type="button" className="linkbtn" onClick={(ev) => { ev.stopPropagation(); setOpen(e); }}>{e.full_name || e.short_name}</button> },
+        { key: 'short_name', label: '简称', w: 120 },
+        { key: 'department', label: '部门', w: 130, value: (e) => optLabel(data.opts.departments, e.department) },
+        { key: 'position', label: '职位', w: 150, value: (e) => optLabel(data.opts.positions, e.position) },
+      ]} />
+      {open && <Drawer title={`${open.emp_no ? open.emp_no + ' · ' : ''}${open.full_name || open.short_name} 的打卡日历`} onClose={() => setOpen(null)}><AttCalendar employeeId={open.id} /></Drawer>}
+    </div>
   );
 }

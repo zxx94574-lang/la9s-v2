@@ -173,7 +173,7 @@ export const EVENT_LABELS = {
   qty_changed: '解锁改数量', prepayment_applied: '预付自动抵扣', shipment_voided: '发货失败 · 撤销出库',
   step_reverted: '撤回到上一步', restored: '恢复作废单', written_off: '抹零',
   staged: '货已放到暂存位置', marked_urgent: '中方标为紧急', unmarked_urgent: '取消紧急', bad_debt_written_off: '坏账核销', receipt_reallocated: '改冲账',
-  receipt_discrepancy: '客户反馈收货有差异', discrepancy_decided: '中方处理收货差异', freight_paid: '付运费',
+  receipt_discrepancy: '客户反馈收货有差异', discrepancy_decided: '中方处理收货差异', discrepancy_corrected: '修正收货差异', freight_paid: '付运费',
 };
 
 // 订单三色灯 + 卡在哪一步 (Frank 11-09 19:10): 红 = 已取消, 黄 = 进行中, 绿 = 已完成 (全部出库 + 全部签收 + 收清 + 退货都对完账)

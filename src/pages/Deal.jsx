@@ -3,7 +3,8 @@
 // Going back = 「撤回到上一步」 with a reason (待改 14); cancelled deals can be restored (待改 16).
 import DebtBanner from '../components/DebtBanner.jsx';
 import { dealLight, stuckOf } from '../lib/domain.js';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+const N = (v) => Number(v) || 0;
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { TierPill, Light, useApp, useData, Pill, Modal, OptionNote } from '../components/ui.jsx';
@@ -13,7 +14,7 @@ import { t } from '../lib/i18n.js';
 import { CustomerDrawer } from './Customers.jsx';
 import Grid from '../components/Grid.jsx';
 import { IssueButton } from '../components/IssueReport.jsx';
-import { QuotePanel, ConfirmBlock, PickPanel, SoPanel, ConfirmPanel, ShipStepPanel, SignPanel, PayPanel, ReturnPanel } from './DealPanels.jsx';
+import { QuotePanel, ConfirmBlock, PickPanel, SoPanel, ConfirmPanel, ShipStepPanel, SignPanel, PayPanel, ReturnPanel, discLineText, DISC_WHERE } from './DealPanels.jsx';
 import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 
 const STEP_KEYS = STEPS.map((s) => s.key);
@@ -27,7 +28,7 @@ const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩';
 // 操作记录每一条属于流程条的哪一步 (点了就回到那一步)
 const EVENT_STEP = { quote_created: 'quote', deal_split: 'quote', split_created: 'quote', quote_edited: 'quote', hotline_confirmed: 'quote', hotline_busy: 'quote', quote_approved: 'quote', quote_rejected: 'quote', fx_set: 'quote', price_requested: 'quote',
   picking_started: 'pick', pick_submitted: 'pick', sales_order_created: 'so', price_set: 'so', customer_confirmed: 'so', lines_added: 'so', staged: 'ship', partial_reason: 'ship',
-  pick_reviewed: 'ship', bl_issued: 'ship', shipped: 'ship', shipment_voided: 'ship', customer_received: 'sign', balance_confirmed: 'sign', receipt_discrepancy: 'sign', discrepancy_decided: 'sign',
+  pick_reviewed: 'ship', bl_issued: 'ship', shipped: 'ship', shipment_voided: 'ship', customer_received: 'sign', balance_confirmed: 'sign', receipt_discrepancy: 'sign', discrepancy_decided: 'sign', discrepancy_corrected: 'sign',
   prepayment_applied: 'pay', written_off: 'pay', receipt_voided: 'pay', bad_debt_written_off: 'pay', return_requested: 'return', return_approved: 'return', return_reconciled: 'return' };
 export default function Deal({ id }) {
   const { org, role, toast, refresh, go: nav } = useApp();
@@ -55,6 +56,15 @@ export default function Deal({ id }) {
   // 下推成功 (状态变了) → 回到当前这一步, 不停在刚才点开看的那一步
   const status = data?.deal?.status;
   useEffect(() => { setView(null); }, [status]);
+  // 268 (Frank 11-12): 流程条吸顶, 往下滑后缩成一行 (只留「卡在哪 + 上报 / 撤回」), 回到顶部恢复完整; 高度用 margin 补回去, 页面不跳
+  const sentRef = useRef(null); const stepsRef = useRef(null);
+  const [stuck, setStuck] = useState(false); const [stepsH, setStepsH] = useState(0);
+  const hasDeal = !!data?.deal;
+  useEffect(() => {
+    const el = sentRef.current; if (!el || typeof IntersectionObserver === 'undefined') return undefined;
+    const io = new IntersectionObserver(([en]) => { if (!en.isIntersecting && stepsRef.current) setStepsH(stepsRef.current.offsetHeight || 0); setStuck(!en.isIntersecting); }, { threshold: 0, rootMargin: '-66px 0px 0px 0px' });   // 顶栏高 60: 流程条贴到顶栏下面才算吸顶
+    io.observe(el); return () => io.disconnect();
+  }, [hasDeal, id]);
 
   if (error) return <div className="card card-b">读取失败：{String(error.message || error)}</div>;
   if (!data) return <div className="empty">加载中…</div>;
@@ -73,6 +83,8 @@ export default function Deal({ id }) {
   if (defKey === 'pay' && !cancelled && live.length) defKey = 'sign';
   const curKey = view || defKey;
   const curIdx = STEP_KEYS.indexOf(curKey);
+  // 261 (Frank 11-12): 「上报问题」「撤回」只在看当前这一步时出现; 回看已完成的步骤是纯只读
+  const atNow = curKey === defKey || curIdx === current;
   const readOnly = curIdx >= 0 && curIdx <= reached && !['ship', 'sign', 'pay'].includes(curKey) && !(curKey === 'so' && ['ordered', 'confirmed', 'reviewed', 'partial'].includes(deal.status));
 
   const act = async (okMsg, sql, params, asRole = role) => {
@@ -92,8 +104,9 @@ export default function Deal({ id }) {
 
   return (
     <>
-      <div className="flow2">
-        <div className="flow2-steps">
+      <div ref={sentRef} style={{ height: 1, marginBottom: -1 }} />
+      <div className={`flow2 ${stuck ? 'stuck' : ''}`} style={stuck && stepsH ? { marginBottom: 12 + stepsH } : undefined}>
+        <div className="flow2-steps" ref={stepsRef}>
           {STEPS.map((s, i) => {
             const done = !cancelled && i <= reached;
             const now = !cancelled && i === current && !allDone;
@@ -107,7 +120,7 @@ export default function Deal({ id }) {
                   disabled={!reachable} onClick={() => setView(s.key)} title={doc ? `${s.label}：${doc}` : s.label}>
                   <span className="c">{done ? '✓' : i + 1}</span>
                   <span className="l">{t(s.label)}</span>
-                  <span className="d">{doc ? (isDocNo ? short(doc) : doc) : now ? '当前' : ''}</span>
+                  <span className="d">{curKey === s.key ? (doc ? (isDocNo ? short(doc) : doc) : now ? '当前' : '') : now ? '当前' : ''}</span>
                 </button>
               </React.Fragment>
             );
@@ -126,8 +139,10 @@ export default function Deal({ id }) {
           <span>卡在：<b>{stuckOf(deal)}</b>{!cancelled && dealLight(deal) !== 'done' && nextLabel && <span className="muted"> · 下一步：{nextLabel}</span>}</span>
           {(overdue || dueToday) && <span className={`pill ${overdue ? 'red' : 'amber'}`}>约定 {dDate(deal.planned_ship_date)} 发货{overdue ? ' · 已过期未出库' : ' · 今天该出库'}</span>}
           <span className="grow" />
-          {!cancelled && <IssueButton deal={deal} step={STEPS[Math.min(current, STEPS.length - 1)]?.key} />}
-          {REVERT_LABEL[deal.status] && can(role, 'revert') && <button type="button" className="btn sm soft-red" onClick={() => setRevert(true)}>↶ 撤回到上一步</button>}
+          {stuck && <button type="button" className="btn sm" title="回到顶部，展开全部步骤" onClick={() => sentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>正在看：{curKey === 'return' ? '退货' : STEPS[curIdx]?.label} · 全部步骤 ↑</button>}
+          {!atNow && !cancelled && curKey !== 'return' && <><span className="pill gray">回看已完成的步骤 · 只读</span><button type="button" className="btn sm" onClick={() => setView(null)}>回到当前步 →</button></>}
+          {atNow && !cancelled && <IssueButton deal={deal} step={STEPS[Math.min(current, STEPS.length - 1)]?.key} />}
+          {atNow && REVERT_LABEL[deal.status] && can(role, 'revert') && <button type="button" className="btn sm soft-red" onClick={() => setRevert(true)}>↶ 撤回到上一步</button>}
           {cancelled && can(role, 'restore') && <button type="button" className="btn sm primary" onClick={() => act('已恢复为报价，可以重新下推', `select app.restore_deal($1)`, [deal.id]).catch(() => {})}>↺ 恢复这张单</button>}
         </div>
       </div>
@@ -136,6 +151,9 @@ export default function Deal({ id }) {
       <div className="card dealbar">
         <span className="big mono">{deal.biz_no}</span>
         <Pill tone={STATUS[deal.status].tone}>{STATUS[deal.status].label}</Pill>{deal.kind !== 'normal' && <Pill tone="gray">{deal.kind}</Pill>}
+        {deal.status === 'confirmed' && deal.planned_ship_date && dDate(deal.planned_ship_date) > today() && (deal.staged_at
+          ? <span className="pill amber" title="到约定那天再复检打包">等待发货 · 约 {dDate(deal.planned_ship_date)} · 放在：{deal.staged_note || '（没写）'}</span>
+          : <span className="pill red">约 {dDate(deal.planned_ship_date)} 发货 · 货还没放到暂存位置</span>)}
         <span className="muted">·</span>
         <span style={{ fontWeight: 650 }}><CustLink id={deal.customer_id} name={deal.customer_name} /></span>
         <span className="muted small">{deal.customer_code} · {deal.city}</span><TierPill tier={deal.tier} />
@@ -207,6 +225,11 @@ export default function Deal({ id }) {
                 {e.action === 'price_set' && <span> · {money(e.detail.from)} → {money(e.detail.to)}</span>}
                 {e.action === 'pick_submitted' && Array.isArray(e.detail?.changes) && e.detail.changes.length > 0 && <span> · {e.detail.changes.length} 行实际供货和需求不一样</span>}
                 {(e.action === 'shipped' || e.action === 'shipment_voided') && <span> · {e.detail.out_no} · {money(e.detail.amount)}</span>}
+                {['receipt_discrepancy', 'discrepancy_corrected', 'discrepancy_decided'].includes(e.action) && <span>
+                  {Array.isArray(e.detail?.lines) && <> · {e.detail.lines.map(discLineText).join('；')}</>}
+                  {e.action === 'discrepancy_decided' && <> · 处理：{{ credit: N(e.detail.amount) < 0 ? '认，把之前扣的冲回' : '认，从客户账上扣掉', reship: '认，补发', reject: '不认' }[e.detail.decision]} · 责任：{e.detail.fault}{e.detail.goods_where ? ` · 货：${DISC_WHERE[e.detail.goods_where]}` : ''}</>}
+                  {N(e.detail?.amount) !== 0 && <> · {N(e.detail.amount) > 0 ? '金额' : '冲回'} {money(Math.abs(N(e.detail.amount)), deal.currency)} {deal.currency}</>}
+                  {e.detail?.late && <> · 超过 24 小时才反馈</>}</span>}
                 {(e.action === 'prepayment_applied' || e.action === 'written_off') && <span> · {money(e.detail.amount)}</span>}
                 <div className="when">{dt(e.at)}</div></li>
               );

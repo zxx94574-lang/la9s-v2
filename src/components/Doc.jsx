@@ -117,7 +117,7 @@ function BalanceSheet({ balance: b, deal }) {
           {w.amount > 0 && <div className="v">{money(w.amount, cur)} <small>{cur}</small></div>}
         </div>
         {has && <div className="bnote">以上总账已包含本单 {deal.biz_no}（{money(rec, cur)} {cur}）</div>}
-        {N(b.total_writeoff) > 0 && <div className="bnote">其中抹零 {money(b.total_writeoff, cur)} {cur}</div>}
+        {N(b.total_writeoff) > 0 && <div className="bnote">其中抹零 / 收货差异调整 {money(b.total_writeoff, cur)} {cur}</div>}
       </div>
       {open.length > 0 && (
         <div className="bsec">

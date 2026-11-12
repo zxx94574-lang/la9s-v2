@@ -77,7 +77,7 @@ export default function App() {
       .catch((e) => { console.error(e); setBoot({ ready: false, err: e.message || String(e) }); });
   }, []);
   useEffect(() => {
-    const f = () => { setRoute(parseHash()); setDrawer(false); window.scrollTo({ top: 0 }); };
+    const f = () => { setRoute(parseHash()); setDrawer(false); setArch(null); window.scrollTo({ top: 0 }); };   // 260: 从档案里跳去别的页 → 档案自己关掉
     window.addEventListener('hashchange', f); return () => window.removeEventListener('hashchange', f);
   }, []);
   useEffect(() => store.set('la9s.navgroups3', openGroups), [openGroups]);

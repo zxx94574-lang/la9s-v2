@@ -28,7 +28,7 @@ export function shipAlert(d) {
 export function nextAction(d, role) {
   // 236: 约定发货日没到 → 先放暂存位置, 不复检
   if (d.status === 'confirmed' && d.planned_ship_date && dDate(d.planned_ship_date) > today()) {
-    return d.staged_at ? { roles: ['manager'], what: `货已放暂存位置，约 ${dDate(d.planned_ship_date)} 发货，到那天再复检打包` } : { roles: ['manager', 'picker'], what: `约 ${dDate(d.planned_ship_date)} 发货：先把货放到暂存位置（不打包），拍照` };
+    return d.staged_at ? { roles: ['manager'], what: `等待发货 · 约 ${dDate(d.planned_ship_date)} · 货放在：${d.staged_note || '（没写）'}，到那天再复检打包` } : { roles: ['manager', 'picker'], what: `约 ${dDate(d.planned_ship_date)} 发货：先把货放到暂存位置（不打包），拍照` };
   }
   if (d.status === 'shipped' && Number(d.unsigned_n || 0) > 0) return { roles: ['hotline', 'manager'], what: `联系客户确认收货，${d.unsigned_n} 批待签收（传签收凭证）` };
   if (Number(d.freight_due_n || 0) > 0 && ['finance', 'admin'].includes(role)) return { roles: ['finance', 'admin'], what: `付 Yango 运费（${d.freight_due_n} 批，司机在等）：付完传支付截图，自动记流水` };

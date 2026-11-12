@@ -10,7 +10,7 @@ import { DocActions, DocSheet, BalanceCopy, BalancePreview } from '../components
 import { BlActions } from '../components/Bl.jsx';
 import { flagAnomaly } from '../components/IssueReport.jsx';
 import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus } from '../components/ReceiptForm.jsx';
-import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid} from '../components/ui.jsx';
+import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip } from '../components/ui.jsx';
 import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, PAY_METHODS, RETURN_REASONS, CONFIRM_METHODS, CHECK_RESULTS, priceLevel, getThresholds, balanceWords } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, pad, ymd } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
@@ -23,7 +23,6 @@ const Who = ({ e }) => (e ? <span className="muted">{e.short_name || '—'} · {
 // common read-only columns
 function baseCols({ price, cur, extra = [] }) {
   return [
-    { key: 'seq', label: '#', w: 34 },
     { key: 'code', label: '编码', w: 64, render: (l) => (l.code ? <span className="mono">{l.code}</span> : <Pill tone="amber">未建档</Pill>) },
     { key: 'category', label: '种类', w: 100 },
     { key: 'model', label: '型号', w: 100, render: (l) => <><ModelLink id={l.product_id} model={l.model} />{l.variant && <span className="muted small"> {l.variant}</span>}</> },
@@ -306,7 +305,7 @@ export function PickPanel({ deal, lines, employees, events, act, role }) {
 
 // ───────────────────────── ⑤ 主管复核（复核人 + 照片 + 复核数量 + 抽检）─────────────────────────
 export function ReviewPanel({ deal, lines, employees, events, act, role }) {
-  const { toast, org } = useApp();
+  const { toast, org, go: navTo } = useApp();
   const real = lines.filter((l) => l.product_id && N(l.qty_supply) > 0);
   const reviewing = deal.status === 'confirmed';
   // 236 (Frank 11-11): 约定发货日还没到 → 先不复检打包 (免得客户第二天加货白打包), 仓管把货放暂存位置; 到那天再从头检到尾
@@ -383,10 +382,10 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
             <div className="panel">
               <div className="hint">把这单的货集中放到暂存位置，<b>不要打包</b>。放好后拍一张照片，写一下放在哪。</div>
               <div className="fgrid">
-                <FRow label="放在哪"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={stageNote} onChange={(ev) => setStageNote(ev.target.value)} placeholder="例如 门口第二排架子" /></FRow>
+                <FRow label="放在哪" req><input className="in" style={{ width: '100%', maxWidth: 420 }} value={stageNote} onChange={(ev) => setStageNote(ev.target.value)} placeholder="例如 门口第二排架子（交接的人靠这句话找货）" /></FRow>
                 <FRow label="照片" req><PhotoInput value={stagePhoto} onChange={setStagePhoto} label="拍放好的那一堆货" /></FRow>
               </div>
-              <div className="actbar">{!stagePhoto && <span className="why">还差：照片</span>}<button type="button" className="btn primary" disabled={!stagePhoto} onClick={() => act('已记：货放在暂存位置，等发货那天复检', `select app.mark_staged($1,$2,$3)`, [deal.id, stagePhoto, stageNote || null]).catch(() => {})}>已放到暂存位置 ✓</button></div>
+              <div className="actbar">{(!stagePhoto || !stageNote.trim()) && <span className="why">还差：{[!stageNote.trim() && '放在哪', !stagePhoto && '照片'].filter(Boolean).join('、')}</span>}<button type="button" className="btn primary" disabled={!stagePhoto || !stageNote.trim()} onClick={() => act('已记：货放在暂存位置，等发货那天复检', `select app.mark_staged($1,$2,$3)`, [deal.id, stagePhoto, stageNote.trim()]).then(() => navTo('todo'), () => {})}>已放到暂存位置 ✓</button></div>
             </div>
           ) : <div className="hint">等仓管把货放到暂存位置。</div>}
           {can(role, 'review_pick') && <div className="row"><span className="small muted">客户改主意要提前发？</span><button type="button" className="btn sm" onClick={() => setEarly(true)}>现在就复检打包</button></div>}
@@ -426,24 +425,26 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
 // ───────────────────────── ⑥ 销售订单（定价 + 偏差预警 + 解锁改行）─────────────────────────
 // 价格低了 → 浅红小字块 (Frank 11-09 192b): 会亏 (只中方看) / 低于底价 (S 档) / 低于档位
 export const lowFlag = (l, role) => {
+  if (role !== 'admin') return null;   // 264: 员工什么标记都不出 (出了等于告诉他这个价低于成本 / 底价)
   if (!l.product_id || !(Number(l.unit_price) > 0)) return null;
   const px = Number(l.unit_price) * (Number(l.fx_rate) > 0 ? Number(l.fx_rate) : 1);
-  if (role === 'admin' && Number(l.cost_xof) > 0 && px < Number(l.cost_xof)) return '会亏';
+  if (Number(l.cost_xof) > 0 && px < Number(l.cost_xof)) return '会亏';
   if (Number(l.s_xof) > 0 && px < Number(l.s_xof)) return '低于底价';
   if (Number(l.tier_xof) > 0 && px < Number(l.tier_xof)) return '低于档位';
   return null;
 };
 // 208 三色: 会亏 = 红 (肯定有问题); 低于底价 / 低于档位 = 黄 (没亏, 要留意)
 export const flagTone = (fl) => (fl === '会亏' ? 'red' : 'amber');
-const LowTag = ({ l }) => { const { role } = useApp(); const fl = lowFlag(l, role); return fl ? <span className={`pill ${flagTone(fl)}`}>{fl}</span> : null; };
+const lowBang = (l, fl) => <Bang tone={flagTone(fl)}>{lowTip({ fl, px: Number(l.unit_price) * (Number(l.fx_rate) > 0 ? Number(l.fx_rate) : 1), cost: Number(l.cost_xof), s: Number(l.s_xof), tier: Number(l.tier_xof) }, (v) => `${money(v)} XOF`)}</Bang>;
+const LowTag = ({ l }) => { const { role } = useApp(); const fl = lowFlag(l, role); return fl ? lowBang(l, fl) : null; };
 const PriceTag = ({ l, cur }) => {
   const { role } = useApp();
   const { level, pct } = priceLevel(l.unit_price, l.tier_price);
   if (!l.product_id) return null;
   if (level === 4) return <Pill tone="red">单价 0</Pill>;
   const fl = lowFlag(l, role);
-  if (fl) return <span className={`pill ${flagTone(fl)}`} title={`本档 ${money(l.tier_xof)} · S 档 ${money(l.s_xof)} XOF${role === 'admin' && l.cost_xof ? ` · 成本 ${money(l.cost_xof)}` : ''}`}>{fl}</span>;
-  if (!level) return null;
+  if (fl) return lowBang(l, fl);
+  if (!level || role !== 'admin') return null;
   return <span className={`dev dev${level}`} title={`档位价 ${money(l.tier_price, cur)}`}>{pct < 0 ? '低' : '高'} {Math.abs(pct).toFixed(0)}%</span>;
 };
 export function SoPanel({ deal, lines, catalog, categories, act, role, events }) {
@@ -641,7 +642,7 @@ export function ConfirmPanel({ deal, lines, events, act, role }) {
     setErrs(true);
     if (!method || !proof) return;
     const later = shipDate > today();   // 236 (Frank 11-11): 约定发货日不是今天 → 不提前复检打包, 回待办; 仓管先把货放暂存位置
-    act(deal.reviewed_at ? '客户已重新确认，可以出库' : later ? `客户已确认，约 ${shipDate} 发货：先不打包，通知仓管把货放到暂存位置` : '客户已确认，请主管复检打包', `select app.customer_confirm($1,$2,$3,$4,$5)`, [deal.id, note || null, method, proof, shipDate]).then(() => { if (later && !deal.reviewed_at) nav2('todo'); }, () => {});
+    act(deal.reviewed_at ? '客户已重新确认，可以出库' : later ? `客户已确认，约 ${shipDate} 发货：先不打包，通知仓管把货放到暂存位置` : '客户已确认，请主管复检打包', `select app.customer_confirm($1,$2,$3,$4,$5)`, [deal.id, note || null, method, proof, shipDate]).then(() => { if (later && !deal.reviewed_at && !(can(role, 'review_pick') || role === 'picker')) nav2('todo'); }, () => {});
   };
   return (
     <div className="card">
@@ -880,6 +881,7 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
   const [wo, setWo] = useState(false);
   const [voidRc, setVoidRc] = useState(null);
   const [bad, setBad] = useState(false);
+  const [pick, setPick] = useState(new Set());
   if (!seesPrice(role)) return <div className="card card-b"><Blocked action="receipt" /></div>;
   const rec = N(deal.shipped_amount) - N(deal.returned_amount);
   return (
@@ -889,10 +891,11 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
           <div className="row">
             {can(role, 'write_off') && N(deal.due) > 0 && N(deal.due) <= (cur === 'XOF' ? 100 : 1) && <button type="button" className="btn" onClick={() => setWo(true)}>抹零 {money(deal.due, cur)}</button>}
             {role === 'admin' && N(deal.due) > (cur === 'XOF' ? 100 : 1) && <button type="button" className="btn soft-red" onClick={() => setBad(true)}>坏账核销</button>}
+            {can(role, 'receipt') && receipts.length > 0 && (() => { const r = receipts.find((x) => pick.has(x.rcv_no + x.at)); const one = pick.size === 1 && r; return <button type="button" className="btn soft-red" disabled={!one} title={one ? '' : '先在下面勾选一笔收款（一次只能撤一笔）'} onClick={() => setVoidRc({ id: r.receipt_id, rcv_no: r.rcv_no, amount: r.receipt_amount, currency: r.currency })}>↶ 撤销选中的收款</button>; })()}
           </div></div>
         <div className="card-b paygrid">
           <div><div className="k">本单应收</div><BigNum size={22}>{money(rec, cur)} <small>{cur}</small></BigNum><div className="small muted">出库 {money(deal.shipped_amount, cur)}{N(deal.returned_amount) > 0 && ` − 退货 ${money(deal.returned_amount, cur)}`}</div></div>
-          <div><div className="k">实收（冲到本单）</div><BigNum size={22}>{money(deal.allocated_amount, cur)} <small>{cur}</small></BigNum>{N(deal.writeoff_amount) > 0 && <div className="small muted">另抹零 {money(deal.writeoff_amount, cur)}</div>}</div>
+          <div><div className="k">实收（冲到本单）</div><BigNum size={22}>{money(deal.allocated_amount, cur)} <small>{cur}</small></BigNum>{N(deal.disc_credit) !== 0 && <div className="small muted">收货差异扣减 {money(deal.disc_credit, cur)}</div>}{N(deal.writeoff_amount) - N(deal.disc_credit) > 0 && <div className="small muted">另抹零 / 核销 {money(N(deal.writeoff_amount) - N(deal.disc_credit), cur)}</div>}</div>
           <div><div className="k">本单待付</div><BigNum size={26} style={{ color: N(deal.due) > 0 ? 'var(--red)' : 'var(--green)' }}>{N(deal.due) > 0 ? <>{money(deal.due, cur)} <small>{cur}</small></> : '已结清 ✓'}</BigNum></div>
         </div>
         {!shipments.some((s) => !s.voided_at) && <div className="card-b hint">还没出库：客户总账只在出库后增加。现在收的钱会记为预付，出库时自动抵扣。</div>}
@@ -901,15 +904,15 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
           { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <b className="mono">{r.rcv_no}</b> },
           { key: 'received_on', label: '收款日期', w: 100, render: (r) => dDate(r.received_on) },
           { key: 'method', label: '方式', w: 100, render: (r) => PAY_METHODS[r.method] },
+          { key: 'src', label: '来源', w: 130, sortable: false, render: (r) => (r.from_prepaid ? <span className="pill blue" title={`客户 ${dDate(r.received_on)} 付的钱，当时记成预付，出库时自动抵到这张单`}>预付抵扣</span> : <span className="muted small">这张单收的</span>) },
           { key: 'receipt_amount', label: '这笔收款', w: 130, render: (r) => `${money(r.receipt_amount, r.currency)} ${r.currency}` },
           { key: 'amount', label: `冲到本单 ${cur}`, w: 120, render: (r) => <b>{money(r.amount, cur)}</b> },
           // 217: 一单付几次, 每笔冲完还欠多少一行一行列清楚
           { key: 'left', label: '冲完还欠', w: 120, sortable: false, render: (r) => { const i = receipts.indexOf(r); const paid = receipts.slice(0, i + 1).reduce((a, x) => a + N(x.amount), 0); const left = rec - N(deal.writeoff_amount) - paid; return left > 0 ? money(left, cur) : <span className="green-t2">结清 ✓</span>; } },
-          { key: 'proof', label: '凭证', w: 80, sortable: false, filterable: false, render: (r) => (r.proof_path ? <Thumb src={r.proof_path} size={34} label={`${r.rcv_no} 收款凭证`} /> : <span className="pill red">缺凭证</span>) },
-          { key: 'vstate', label: '到账状态', w: 190, sortable: false, render: (r) => <RcvStatus r={r} onDone={refresh} /> },
-          ...(can(role, 'receipt') ? [{ key: 'undo', label: '', w: 90, sortable: false, filterable: false, render: (r) => <button type="button" className="btn sm soft-red" onClick={() => setVoidRc({ id: r.receipt_id, rcv_no: r.rcv_no, amount: r.receipt_amount, currency: r.currency })}>↶ 撤销</button> }] : []),
-        ]} rows={receipts} rowKey={(r) => r.rcv_no + r.at} />}
-        {voidRc && <VoidReceiptModal rc={voidRc} onClose={() => setVoidRc(null)} />}
+          { key: 'proof', label: '凭证', w: 80, sortable: false, filterable: false, render: (r) => (r.proof_path ? <Thumb src={r.proof_path} size={34} label={`${r.rcv_no} 收款凭证`} /> : r.from_prepaid ? <span className="pill gray" title="这是以前收的预付款，当时那笔收款没传凭证">原收款无凭证</span> : <span className="pill red">缺凭证</span>) },
+        ]} rows={receipts} rowKey={(r) => r.rcv_no + r.at} selectable={can(role, 'receipt') ? { selected: pick, onChange: setPick } : undefined} />}
+        {receipts.length > 0 && <div className="card-b hint" style={{ borderTop: '1px solid var(--line-2)' }}>钱到没到账不在这里确认：统一到「资金账户 → 待核对到账」核对，避免出错。</div>}
+        {voidRc && <VoidReceiptModal rc={voidRc} onClose={() => { setVoidRc(null); setPick(new Set()); }} />}
       </div>
       {can(role, 'receipt') && N(deal.due) > 0 && (
         <div className="card">
@@ -1247,55 +1250,77 @@ function BalanceConfirm({ deal, events, act, role, unsigned, others = [], openDi
 }
 const DISC_KIND = { short: '少了', over: '多了', wrong: '发错型号', damaged: '破损' };
 const DISC_DECISION = { credit: '认了，已从账上扣', reship: '认了，补发', reject: '不认' };
-const DISC_WHERE = { in_warehouse: '还在仓库（少发了）', lost: '丢了 / 找不到', with_customer: '在客户那里', unknown: '还没查清' };
-function DiscModal({ s, lines, act, onClose }) {
-  const mine = (s.lines || []).map((sl) => ({ ...sl, line: lines.find((l) => l.id === sl.deal_line_id) })).filter((x) => x.line);
+export const DISC_WHERE = { in_warehouse: '还在仓库（少发了）', lost: '丢了 / 找不到', with_customer: '在客户那里', unknown: '还没查清' };
+// 273 (Frank 11-12): 每个机型只有一个「客户最终收到几片」; 这批已经处理过差异的机型, 再报 = 在上次认定的数上修正 (只中方), 账只动差额
+export const discBase = (discs, lineId, shipped) => { const hit = [...(discs || [])].filter((d) => d.status === 'decided' && ['credit', 'reship'].includes(d.decision)).sort((x, y) => new Date(y.decided_at) - new Date(x.decided_at)).map((d) => d.lines.find((l) => l.deal_line_id === lineId)).find(Boolean); return hit ? N(hit.received) : N(shipped); };
+function DiscModal({ s, lines, act, onClose, discs = [], role }) {
+  const mine = (s.lines || []).map((sl) => ({ ...sl, line: lines.find((l) => l.id === sl.deal_line_id), base: discBase(discs, sl.deal_line_id, sl.qty) })).filter((x) => x.line);
+  const fixing = mine.some((x) => x.base !== N(x.qty));
   const [kind, setKind] = useState('short');
-  const [recv, setRecv] = useState({});
+  const [recv, setRecv] = useState(() => Object.fromEntries(mine.filter((x) => x.base !== N(x.qty)).map((x) => [x.deal_line_id, String(x.base)])));
   const [proof, setProof] = useState(''); const [note, setNote] = useState('');
-  const changed = mine.filter((x) => recv[x.deal_line_id] !== undefined && recv[x.deal_line_id] !== '' && (N(recv[x.deal_line_id]) !== N(x.qty) || ['wrong', 'damaged'].includes(kind)));
-  const ok = changed.length > 0 && proof;
-  const go = () => act('已记下收货差异，等中方处理', `select app.report_discrepancy($1,$2,$3,$4,$5)`, [s.id, kind, JSON.stringify(changed.map((x) => ({ deal_line_id: x.deal_line_id, received: N(recv[x.deal_line_id]) }))), proof, note || null]).then(onClose, () => {});
+  const changed = mine.filter((x) => recv[x.deal_line_id] !== undefined && recv[x.deal_line_id] !== '' && (N(recv[x.deal_line_id]) !== x.base || (x.base === N(x.qty) && ['wrong', 'damaged'].includes(kind))));
+  const fixHit = changed.some((x) => x.base !== N(x.qty));
+  const why = fixHit && role !== 'admin' ? '这个机型的差异已经处理过，要改只能中方来改' : !changed.length ? (fixing ? '把「客户最终收到」改成正确的数' : '填客户实际收到多少') : !proof ? '传客户给的凭证' : fixHit && !note.trim() ? '修正要写原因' : '';
+  const go = () => act(fixHit ? '已记下修正，等中方确认' : '已记下收货差异，等中方处理', `select app.report_discrepancy($1,$2,$3,$4,$5)`, [s.id, kind, JSON.stringify(changed.map((x) => ({ deal_line_id: x.deal_line_id, received: N(recv[x.deal_line_id]) }))), proof, note || null]).then(onClose, () => {});
   return (
-    <Modal title={`收货差异 · ${s.out_no}`} wide onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{!changed.length ? '填客户实际收到多少' : '传客户给的凭证'}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>报给中方</button></>}>
+    <Modal title={`${fixing ? '收货差异 · 修正' : '收货差异'} · ${s.out_no}`} wide onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{why && <span className="why">{why}</span>}<button type="button" className="btn primary" disabled={!!why} onClick={go}>{fixHit ? '提交修正' : '报给中方'}</button></>}>
       <div className="stack">
-        <div className="hint">原来的出库单不改。这里记下客户实际收到多少，<b>差一片也要中方处理</b>：查清是谁的问题、货在哪。处理完才能对账。</div>
+        <div className="hint">原来的出库单不改。这里记下客户<b>最终</b>实际收到多少，<b>差一片也要中方处理</b>。{fixing && <> 标黄的机型之前已经处理过：直接把数改成正确的，系统只补扣或冲回<b>差的那部分</b>，之前的记录都留着。</>}</div>
         <FRow label="类型" req><div className="chips">{Object.entries(DISC_KIND).map(([k, v]) => <button type="button" key={k} className={`chip ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>{v}</button>)}</div></FRow>
         <Grid id="disc-lines" noTools rows={mine} rowKey={(x) => x.deal_line_id} columns={[
-          { key: 'model', label: '型号', w: 160, render: (x) => <b>{x.line.model}</b> },
-          { key: 'category', label: '种类', w: 100, render: (x) => x.line.category },
+          { key: 'model', label: '型号', w: 150, render: (x) => <b>{x.line.model}</b> },
+          { key: 'category', label: '种类', w: 90, render: (x) => x.line.category },
           { key: 'qty', label: '出库数量', w: 90, render: (x) => qty(x.qty) },
-          { key: 'recv', label: '客户实收', w: 110, edit: (x) => ({ type: 'number', value: recv[x.deal_line_id] ?? '', onChange: (v) => setRecv((r) => ({ ...r, [x.deal_line_id]: String(v ?? '').replace(/\D/g, '') })) }) },
-          { key: 'diff', label: '差', w: 90, render: (x) => { const r = recv[x.deal_line_id]; if (r === undefined || r === '') return ''; const d = N(r) - N(x.qty); return d === 0 ? <span className="pill green">一样</span> : <span className="pill red">{d > 0 ? '多 ' : '少 '}{Math.abs(d)}</span>; } },
+          ...(fixing ? [{ key: 'base', label: '现在认定收到', w: 120, render: (x) => (x.base !== N(x.qty) ? <span className="pill amber">{qty(x.base)}（已处理过）</span> : qty(x.base)) }] : []),
+          { key: 'recv', label: fixing ? '客户最终收到' : '客户实收', w: 120, edit: (x) => ({ type: 'number', value: recv[x.deal_line_id] ?? '', onChange: (v) => setRecv((r) => ({ ...r, [x.deal_line_id]: String(v ?? '').replace(/\D/g, '') })) }) },
+          { key: 'diff', label: fixing ? '这次变化' : '差', w: 130, render: (x) => { const r = recv[x.deal_line_id]; if (r === undefined || r === '') return ''; const d = N(r) - x.base; if (d === 0) return <span className="pill gray">没变</span>; return x.base !== N(x.qty) ? <span className={`pill ${d < 0 ? 'red' : 'amber'}`}>{d < 0 ? `再少 ${-d} → 补扣` : `多回 ${d} → 冲回`}</span> : <span className="pill red">{d > 0 ? '多 ' : '少 '}{Math.abs(d)}</span>; } },
         ]} />
         <FRow label="客户凭证" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="开箱照片 / 视频截图 / 聊天截图" /></div></FRow>
-        <FRow label="说明"><input className="in" style={{ width: '100%', maxWidth: 460 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="客户怎么说的" /></FRow>
+        <FRow label={fixHit ? '修正原因' : '说明'} req={fixHit}><input className="in" style={{ width: '100%', maxWidth: 460 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder={fixHit ? '例如 客户重新数了 / 客户在另一个箱子里找到了' : '客户怎么说的'} /></FRow>
       </div>
     </Modal>
   );
 }
+// 一行差异怎么念: 第一次 = 发 11 收 10; 修正 = 认定收到 10 → 9
+export const discLineText = (l) => (l.base != null && N(l.base) !== N(l.shipped) ? `${l.model} 认定收到 ${l.base} → ${l.received}（发 ${l.shipped}）` : `${l.model} 发 ${l.shipped} 收 ${l.received}`);
+export const discMoneyText = (x, cur) => (N(x.amount) > 0 ? `${x.corrects ? '补扣' : '值'} ${money(x.amount, cur)} ${cur || ''}` : N(x.amount) < 0 ? `冲回 ${money(-N(x.amount), cur)} ${cur || ''}` : '');
+// 272 (Frank 11-12): 认 / 不认 分两块; 只要发错就记复检人 (默认带出这张单的复检人), 别的责任方要中方自己改
 function DiscDecide({ x, s, deal, act, onClose }) {
-  const [decision, setDecision] = useState(''); const [fault, setFault] = useState(''); const [where, setWhere] = useState(''); const [note, setNote] = useState('');
-  const ok = decision && fault.trim() && where && (decision !== 'reject' || note.trim());
+  const fix = !!x.corrects;
+  const reviewer = deal.reviewer_name || '';
+  const dflt = `复检没查出来${reviewer ? `（复检人 ${reviewer}）` : ''}`;
+  const [decision, setDecision] = useState(''); const [fault, setFault] = useState(dflt); const [where, setWhere] = useState(''); const [note, setNote] = useState('');
+  const other = fault.trim() && fault !== dflt;
+  const ok = decision && fault.trim() && where && (decision !== 'reject' || note.trim()) && (!other || decision === 'reject' || note.trim());
   const go = () => act('收货差异已处理', `select app.decide_discrepancy($1,$2,$3,$4,$5)`, [x.id, decision, fault, where, note || null]).then(onClose, () => {});
+  const Chip = ({ k, children }) => <button type="button" className={`chip ${decision === k ? 'on' : ''}`} onClick={() => setDecision(k)}>{children}</button>;
   return (
-    <Modal title={`处理收货差异 · ${s.out_no}`} wide onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">还差：{[!decision && '怎么处理', !fault.trim() && '谁的问题', !where && '货在哪', decision === 'reject' && !note.trim() && '不认的原因'].filter(Boolean).join('、')}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>确定</button></>}>
+    <Modal title={`处理收货差异${fix ? '（修正）' : ''} · ${s.out_no}`} wide onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">还差：{[!decision && '怎么处理', !fault.trim() && '谁的问题', !where && '货在哪', decision === 'reject' && !note.trim() && '不认的原因', other && decision !== 'reject' && !note.trim() && '不算复检人的理由'].filter(Boolean).join('、')}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>确定</button></>}>
       <div className="stack">
-        <div className="pd-sec"><div className="pd-h">客户说的 {x.late && <span className="pill amber">超过 24 小时才反馈，属于特批</span>}</div>
-          <div>{DISC_KIND[x.kind]}：{x.lines.map((l) => <span key={l.deal_line_id} className="pill red" style={{ marginRight: 6 }}>{l.model} 发 {l.shipped} 收 {l.received}</span>)} {N(x.amount) > 0 && <b>值 {money(x.amount, deal.currency)} {deal.currency}</b>}</div>
+        <div className="pd-sec disc-say"><div className="pd-h">{fix ? '这次修正' : '客户说的'} {x.late && <span className="pill amber">超过 24 小时才反馈，属于特批</span>}</div>
+          <div>{DISC_KIND[x.kind]}：{x.lines.map((l) => <span key={l.deal_line_id} className="pill red" style={{ marginRight: 6 }}>{discLineText(l)}</span>)} {N(x.amount) !== 0 && <b>{discMoneyText(x, deal.currency)}</b>}</div>
           {x.note && <div className="small muted">{x.note}</div>}</div>
         <div className="pd-sec"><div className="pd-h">对照片 <Info>左边是我们每一步拍的，右边是客户给的。先看照片再定。</Info></div>
           <div className="row" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             {[['初检', deal.pick_photo_path], ['复检打包', deal.review_photo_path], ['发货', s.proof_path], ['签收', s.signed_photo], ['客户凭证', x.proof]].map(([l, src]) => <div key={l} className="stack" style={{ gap: 4, alignItems: 'center' }}><span className="small muted">{l}</span>{src ? <Thumb src={src} size={84} label={l} /> : <span className="pill gray">没有</span>}</div>)}
           </div></div>
-        <FRow label="怎么处理" req><div className="chips">{Object.entries({ credit: '认：从客户账上扣掉', reship: '认：补发', reject: '不认' }).map(([k, v]) => <button type="button" key={k} className={`chip ${decision === k ? 'on' : ''}`} onClick={() => setDecision(k)}>{v}</button>)}</div></FRow>
-        <FRow label="谁的问题" req><div className="stack" style={{ gap: 6, flex: 1 }}><div className="chips">{['找货少数 / 拿错', '复检没查出来', '打包漏装', '运输途中丢 / 坏', '客户自己的问题', '还没查清'].map((v) => <button type="button" key={v} className={`chip ${fault === v ? 'on' : ''}`} onClick={() => setFault(v)}>{v}</button>)}</div>
-          <input className="in" style={{ width: '100%', maxWidth: 460 }} value={fault} onChange={(e) => setFault(e.target.value)} placeholder="写清楚是哪个环节、谁" /></div></FRow>
+        <div className="disc-choice">
+          <div className={`disc-box yes ${['credit', 'reship'].includes(decision) ? 'on' : ''}`}><div className="disc-box-h">认</div>
+            <div className="chips"><Chip k="credit">{N(x.amount) < 0 ? '认：把之前扣的冲回去' : '从客户账上扣掉'}</Chip>{!fix && <Chip k="reship">补发</Chip>}</div></div>
+          <div className={`disc-box no ${decision === 'reject' ? 'on' : ''}`}><div className="disc-box-h">不认</div>
+            <div className="chips"><Chip k="reject">不认</Chip></div></div>
+        </div>
+        <FRow label="谁的问题" req><div className="stack" style={{ gap: 6, flex: 1 }}>
+          <div className="chips"><button type="button" className={`chip ${fault === dflt ? 'on' : ''}`} onClick={() => setFault(dflt)}>{dflt}</button>
+            {['找货少数 / 拿错', '运输途中丢 / 坏', '客户自己的问题', '工厂原盒就少', '还没查清'].map((v) => <button type="button" key={v} className={`chip ${fault === v ? 'on' : ''}`} onClick={() => setFault(v)}>{v}</button>)}</div>
+          <input className="in" style={{ width: '100%', maxWidth: 460 }} value={fault} onChange={(e) => setFault(e.target.value)} placeholder="写清楚是哪个环节、谁" />
+          <div className="small muted">规矩：只要发错（少发 / 多发 / 发错型号），默认记复检人的责任。要算到别处，在下面「说明」里写清理由。</div></div></FRow>
         <FRow label="货现在在哪" req><div className="chips">{Object.entries(DISC_WHERE).map(([k, v]) => <button type="button" key={k} className={`chip ${where === k ? 'on' : ''}`} onClick={() => setWhere(k)}>{v}</button>)}</div></FRow>
-        {where === 'in_warehouse' && decision !== 'reject' && <div className="hint">选「还在仓库」：系统会把少发的数量加回库存。</div>}
-        <FRow label="说明" req={decision === 'reject'}><input className="in" style={{ width: '100%', maxWidth: 460 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder={decision === 'reject' ? '不认必须写原因' : '补充说明'} /></FRow>
+        {where === 'in_warehouse' && decision !== 'reject' && N(x.amount) > 0 && <div className="hint">选「还在仓库」：系统会把少发的数量加回库存。</div>}
+        <FRow label="说明" req={decision === 'reject' || (other && decision !== 'reject')}><input className="in" style={{ width: '100%', maxWidth: 460 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder={decision === 'reject' ? '不认必须写原因' : other ? '为什么不算复检人的责任' : '补充说明（会记进操作记录）'} /></FRow>
       </div>
     </Modal>
   );
@@ -1320,21 +1345,21 @@ function SignRow({ s, act, role, discs = [], lines = [], deal }) {
             <FRow label="签收时间" req><input className="in" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} style={{ width: 210 }} /></FRow>
             <FRow label="签收凭证" req><PhotoInput value={photo} onChange={setPhoto} invalid={errs && !photo} label="客户照片 / WhatsApp / 通话截图" /></FRow>
           </div>
-          <div className="actbar">{!photo && <span className="why">还差：签收凭证</span>}<button type="button" className="btn" onClick={() => go(true)}>收到了，但客户说数量 / 型号不对…</button><button type="button" className="btn primary" onClick={() => go(false)}>客户已签收（全部收到）→</button></div>
+          <div className="actbar">{!photo && <span className="why">还差：签收凭证</span>}<button type="button" className="btn soft-amber" onClick={() => go(true)}>⚠ 收到了，但客户说数量 / 型号不对…</button><button type="button" className="btn primary" onClick={() => go(false)}>客户已签收（全部收到）→</button></div>
         </>) : <Blocked action="mark_received" />)}
       {/* 240 (Frank 11-11): 客户说少了 / 发错了 → 记一张收货差异单, 差一片也必须中方处理; 原出库单不改 */}
       {discs.map((x) => (
         <div key={x.id} className={`disc-row ${x.status === 'open' ? 'open' : ''}`}>
-          <span className={`pill ${x.status === 'open' ? 'red' : x.decision === 'reject' ? 'gray' : 'green'}`}>{x.status === 'open' ? '收货差异 · 等中方处理' : `收货差异 · ${DISC_DECISION[x.decision]}`}</span>
-          <span className="small">{DISC_KIND[x.kind]}：{x.lines.map((l) => `${l.model} 发 ${l.shipped} 收 ${l.received}`).join('；')}{N(x.amount) > 0 && <> · <b>{money(x.amount, deal?.currency)}</b></>}</span>
+          <span className={`pill ${x.status === 'open' ? 'red' : x.decision === 'reject' ? 'gray' : 'amber'}`}>{x.corrects ? '修正 · ' : '收货差异 · '}{x.status === 'open' ? '等中方处理' : N(x.amount) < 0 && x.decision === 'credit' ? '认了，已冲回' : DISC_DECISION[x.decision]}</span>
+          <span className="small">{DISC_KIND[x.kind]}：{x.lines.map(discLineText).join('；')}{N(x.amount) !== 0 && <> · <b>{discMoneyText(x, deal?.currency)}</b></>}</span>
           {x.late && <span className="pill amber">超过 24 小时才反馈</span>}
           <Thumb src={x.proof} size={34} label="客户给的凭证" />
           {x.status === 'decided' && <span className="small muted">责任：{x.fault} · 货：{DISC_WHERE[x.goods_where]}{x.decide_note ? ` · ${x.decide_note}` : ''}</span>}
           {x.status === 'open' && role === 'admin' && <button type="button" className="btn sm primary" onClick={() => setDecide(x)}>处理</button>}
         </div>))}
       {s.customer_received_at && can(role, 'mark_received') && !discs.some((x) => x.status === 'open') && (
-        <div className="row" style={{ marginTop: 6 }}><button type="button" className="btn sm" onClick={() => setDisc(true)}>客户说收到的不对（少了 / 多了 / 发错 / 破损）</button>{hours > 24 && <span className="small muted">已过 24 小时，报上去要中方特批</span>}</div>)}
-      {disc && <DiscModal s={s} lines={lines} act={act} onClose={() => setDisc(false)} />}
+        <div className="row" style={{ marginTop: 6 }}><button type="button" className="btn sm soft-amber" onClick={() => setDisc(true)}>{discs.some((x) => x.status === 'decided' && x.decision !== 'reject') ? '⚠ 收到的数量还要再改（修正）' : '⚠ 客户说收到的不对（少了 / 多了 / 发错 / 破损）'}</button>{hours > 24 && <span className="small muted">已过 24 小时，报上去要中方特批</span>}</div>)}
+      {disc && <DiscModal s={s} lines={lines} act={act} discs={discs} role={role} onClose={() => setDisc(false)} />}
       {decide && <DiscDecide x={decide} s={s} deal={deal} act={act} onClose={() => setDecide(null)} />}
     </div>
   );

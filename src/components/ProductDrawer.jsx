@@ -4,7 +4,7 @@
 //   档案里直接改: 「✎ 修改」解锁一次 → 改几项 → 保存前列出 改前 → 改后 + 自检 (低于成本红 / 运费没填黄 / 档位倒挂黄 / 改动太大黄) → 确认后存 + 留记录, 自动锁回
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { TierPill, useApp, useData, Drawer, Pill, BigNum, DatePicker, Modal, Info } from './ui.jsx';
+import { TierPill, useApp, useData, Drawer, Pill, BigNum, DatePicker, Modal, Info, Bang } from './ui.jsx';
 import { TIERS, can } from '../lib/domain.js';
 import { money, qty, dDate, dt, friendlyError, today } from '../lib/format.js';
 
@@ -274,7 +274,7 @@ function CostBlocks({ p, ps, batches, tier, priceOf, lockedOf, ed, setEd, onChan
         <table className="t"><thead><tr>{TIER_ORDER.map((t) => <th key={t} style={{ textAlign: 'right' }}><TierPill tier={t} />{tier === t ? ' ←本单' : ''}</th>)}</tr></thead>
           <tbody><tr>{TIER_ORDER.map((t) => <td key={t} style={{ textAlign: 'right', fontWeight: tier === t ? 700 : 400, fontSize: 16 }}>
             {ed ? <input className="in sm" inputMode="decimal" style={{ width: 90, textAlign: 'right' }} value={ed.prices[t]} onChange={(e) => setEd({ ...ed, prices: { ...ed.prices, [t]: e.target.value.replace(/[^\d.]/g, '') } })} />
-              : priceOf(t) != null ? <>{lockedOf(t) && '🔒 '}{money(priceOf(t))}{worst != null && priceOf(t) < worst && <span className="pill red">会亏</span>}</> : <span className="muted">没定价</span>}</td>)}</tr></tbody></table>
+              : priceOf(t) != null ? <>{lockedOf(t) && '🔒 '}{money(priceOf(t))}{worst != null && priceOf(t) < worst && <Bang tone="red">{`低于最贵一批的到岸成本：成本 ${money(worst)}，这个价 ${money(priceOf(t))}，每片低 ${money(worst - priceOf(t))}`}</Bang>}</> : <span className="muted">没定价</span>}</td>)}</tr></tbody></table>
         <div className="small muted" style={{ marginTop: 4 }}>{p.cost_updated_at ? `成本更新 ${dDate(p.cost_updated_at)} · ` : ''}汇率 1 XOF = {rate} RMB · 1 USD = {money(usd)} XOF（在「物料与定价 → 汇率与取整」改）</div>
       </section>
 

@@ -89,9 +89,9 @@ export default function Orders() {
       <div className="pagehead">
         <div><div className="eyebrow">Commandes</div><h1>订单总览</h1><div className="sub">{from} — {to} · 一行一个业务号，点开看完整工作流</div></div>
         <div className="row">
+          {can(role, 'quote') || can(role, 'inquiry') ? <button type="button" className="btn primary lg" onClick={() => go('quote/new')}>＋ 新订单</button> : null}
           <div className="seg">{PERIODS.map(([k, l]) => <button type="button" key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
           {period === 'custom' && <DatePicker range value={custom} onChange={setCustom} align="right" />}
-          {can(role, 'quote') || can(role, 'inquiry') ? <button type="button" className="btn primary lg" onClick={() => go('quote/new')}>＋ 新订单</button> : null}
         </div>
       </div>
       <div className="tabs" style={{ marginBottom: 0 }}>

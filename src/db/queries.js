@@ -137,6 +137,7 @@ from app.returns r where r.deal_id = $1 order by r.requested_at`;
 
 export const dealReceipts = `
 select a.amount, a.at, r.id as receipt_id, r.id, r.rcv_no, r.received_on, r.method, r.amount as receipt_amount, r.currency, r.rate,
+  (a.at > r.created_at + interval '1 minute') as from_prepaid,
   r.verify_status, r.fee, r.fee_bearer, r.payer, r.collector_employee_id, r.handed_at, r.voided_at, r.proof_path, r.handed_proof, e.short_name as collector_name
 from app.receipt_allocations a join app.receipts r on r.id = a.receipt_id left join app.employees e on e.id = r.collector_employee_id
 where a.deal_id = $1 order by a.at`;

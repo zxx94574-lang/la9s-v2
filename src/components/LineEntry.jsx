@@ -10,7 +10,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Grid from './Grid.jsx';
 import ModelPicker, { avail, StockPill } from './ModelPicker.jsx';
-import { Modal, Shared, useApp, useHistory, UndoBar } from './ui.jsx';
+import { Modal, Shared, useApp, useHistory, UndoBar, Bang, lowTip } from './ui.jsx';
 import { money, qty } from '../lib/format.js';
 import { makeResolver, normModel, pasteRows, isQty } from '../lib/resolve.js';
 
@@ -332,7 +332,7 @@ export default function LineEntry({ id, catalog, categories, tier, lines, setLin
         render: (l) => cell(l, 'qty_req', <span className={showErrors && lineStatus(l) !== 'blank' && !(Number(l.qty_req) > 0) ? 'red-t' : ''}>{l.qty_req === '' ? '' : Number(l.qty_req) || 0}</span>) },
       ...(showPrice ? [
         { key: 'price', label: `单价 ${currency}`, w: 120, value: (l) => (l.product ? priceOf(l, tier, fx) : null),
-          render: (l) => (!l.product ? null : cell(l, 'price', (() => { const fl = canPrice ? priceFlag(l, tier, fx) : null; return fl ? <span className={fl === '会亏' ? 'price-low' : 'price-warn'} title={`成本 ${money(l.product.cost_xof || 0)} XOF · S 档 ${money(l.product.prices?.S || 0)} · 本档 ${money(l.product.prices?.[tier] || 0)}`}>{money(shownPrice(l, tier, fx), currency)} <span className={`pill ${fl === '会亏' ? 'red' : 'amber'}`}>{fl}</span>{Number(l.req_price) > 0 && <span className="pill amber">申请</span>}</span> : null; })() || (Number(l.req_price) > 0
+          render: (l) => (!l.product ? null : cell(l, 'price', (() => { const fl = canPrice ? priceFlag(l, tier, fx) : null; return fl ? <span className={fl === '会亏' ? 'price-low' : 'price-warn'}>{money(shownPrice(l, tier, fx), currency)} <Bang tone={fl === '会亏' ? 'red' : 'amber'}>{lowTip({ fl, px: (fx > 0 ? fx : 1) * (Number(l.req_price) > 0 ? Number(l.req_price) : Number(l.unit_price)), cost: Number(l.product.cost_xof || 0), s: Number(l.product.prices?.S || 0), tier: Number(l.product.prices?.[tier] || 0) }, (v) => `${money(v)} XOF`)}</Bang>{Number(l.req_price) > 0 && <span className="pill amber">申请</span>}</span> : null; })() || (Number(l.req_price) > 0
             ? <span className="amber-t2" title={`员工申请价，等中方审批（档位价 ${money(tierPrice(l, tier, fx), currency)}）`}>{money(l.req_price, currency)} <span className="pill amber">申请 · 待批</span></span>
             : <span className={Number(l.unit_price) > 0 ? 'amber-t2' : ''} title={Number(l.unit_price) > 0 ? `手改价（档位价 ${money(tierPrice(l, tier, fx), currency)}）` : priceEditable ? '点一下选中，直接打数字改价' : ''}>{money(priceOf(l, tier, fx), currency)}{Number(l.unit_price) > 0 ? <span className="pill amber" style={{ marginLeft: 4 }}>手改</span> : ''}</span>))),
           ...(priceEditable ? { type: 'number', fill: true } : {}) },
