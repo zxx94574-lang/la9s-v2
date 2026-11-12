@@ -50,3 +50,25 @@ test('运费: 我们出 → 财务付, 必须截图 → 自动记一笔本地物
   assert.equal(mv.kind, 'expense'); assert.equal(mv.category, '本地物流费'); assert.equal(Number(mv.amount), 2500);
   await rejects(t.as(U.finance, `select app.pay_ship_freight($1,$2,2500,'p.jpg')`, [sh, a]), /已经付过/);
 });
+
+test('0041 中方指令: 只中方下达; 本人收到 / 完成 (要结果, 要求拍照的必须照片); 中方确认才关; 退回重做; 定期任务不重复生成', async () => {
+  const t = await setup();
+  const emp = t.ids.sales; await t.db.query(`update app.members set employee_id = $1 where user_id = $2 and org_id = $3`, [emp, U.picker, t.ids.org]);
+  await rejects(t.as(U.manager, `select app.issue_directive($1,$2)`, [t.ids.org, JSON.stringify({ title: '盘点 A 架', assignee: emp })]), /PERMISSION/);
+  const id = await t.val(U.admin, `select app.issue_directive($1,$2)`, [t.ids.org, JSON.stringify({ title: '盘点 A 架', assignee: emp, urgent: true, require_photo: true })]);
+  await rejects(t.as(U.hotline, `select app.ack_directive($1)`, [id]), /不是给你的/);
+  await t.as(U.picker, `select app.ack_directive($1)`, [id]);
+  await rejects(t.as(U.picker, `select app.complete_directive($1,'','')`, [id]), /要填结果/);
+  await rejects(t.as(U.picker, `select app.complete_directive($1,'盘完了','')`, [id]), /要求拍照/);
+  await rejects(t.as(U.admin, `select app.confirm_directive($1,true)`, [id]), /还没点完成/);
+  await t.as(U.picker, `select app.complete_directive($1,'盘完了','a.jpg')`, [id]);
+  await rejects(t.as(U.admin, `select app.confirm_directive($1,false,'')`, [id]), /哪里不行/);
+  await t.as(U.admin, `select app.confirm_directive($1,false,'B 层没数')`, [id]);
+  assert.equal((await t.one(`select status from app.directives where id = $1`, [id])).status, 'acked');
+  await t.as(U.picker, `select app.complete_directive($1,'补数了','b.jpg')`, [id]);
+  await t.as(U.admin, `select app.confirm_directive($1,true)`, [id]);
+  assert.equal((await t.one(`select status from app.directives where id = $1`, [id])).status, 'closed');
+  await t.val(U.admin, `select app.issue_directive($1,$2)`, [t.ids.org, JSON.stringify({ title: '每月盘点', assignee: emp, repeat: 'monthly' })]);
+  assert.equal(Number(await t.val(U.picker, `select app.spawn_directives($1)`, [t.ids.org])), 1);
+  assert.equal(Number(await t.val(U.picker, `select app.spawn_directives($1)`, [t.ids.org])), 0);
+});

@@ -5,6 +5,7 @@ import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, Info } from '../components/ui.jsx';
 import { IssueList } from '../components/IssueReport.jsx';
 import TierCheck, { useTierCheck } from '../components/TierCheck.jsx';
+import DirectiveBoard from '../components/Directives.jsx';
 import { STATUS, ROLES } from '../lib/domain.js';
 import { money, dt, dDate, today, friendlyError } from '../lib/format.js';
 
@@ -144,6 +145,7 @@ export default function Todo() {
     <>
       <div className="pagehead"><div><div className="eyebrow">Mes tâches</div><h1 tabIndex={0}>我的待办</h1>
         <div className="sub">当前岗位：<b>{ROLES[role].label}</b>。下推一步，单子就自动出现在下一个人的待办里。</div></div></div>
+      <DirectiveBoard />
       {['admin', 'manager', 'sales_manager'].includes(role) && <IssueList />}
       {role === 'admin' && <TierCheck rows={tierRows} />}
       {['admin', 'manager', 'sales_manager', 'hotline', 'finance'].includes(role) && <OpenReturns />}

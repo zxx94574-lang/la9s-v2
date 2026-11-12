@@ -9,7 +9,7 @@ import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import ModelPicker from '../components/ModelPicker.jsx';
 import { can, seesPrice, PAY_METHODS } from '../lib/domain.js';
-import { money, dDate, dt, today, friendlyError } from '../lib/format.js';
+import { money, qty, dDate, dt, today, friendlyError } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
 
 const N = (v) => Number(v || 0);
@@ -47,9 +47,39 @@ function FobList() {
         <div className="sub">一客一单：申请 → 中方定价 → 采购 → 在途 → 到货 → 放货 → 出库 → 收齐结清。科特迪瓦仓库控货（到货进 FOB 仓），多哥等物流控货。常规 30% 订金、70% 尾款，放货由中方决定。</div></div>
         {can(role, 'fob_create') && <button type="button" className="btn primary" onClick={() => setNw(true)}>＋ 新 FOB 申请</button>}
       </div>
+      <FobBoard rows={data} price={price} go={go} />
       <div className="card"><Grid id="fob" table="fob_projects" columns={cols} rows={data} onRowClick={(f) => go('fob/' + f.id)} empty="还没有 FOB 项目" /></div>
       {nw && <NewFob onClose={() => setNw(false)} />}
     </>
+  );
+}
+
+// 224 ⑨ (Frank 11-11): FOB 看板 —— 顶上总计在途 (币种不同分开列, 不混加), 下面每个客户一张小卡片: 多少片在途、预计哪天到
+function FobBoard({ rows, price, go }) {
+  const live = rows.filter((f) => ['applied', 'purchasing', 'in_transit'].includes(f.status));
+  if (!live.length) return <div className="card card-b" style={{ marginBottom: 12 }}><span className="pill green">现在没有在途的 FOB 单</span></div>;
+  const byCur = {}; for (const f of live) { const c = byCur[f.currency] || (byCur[f.currency] = { n: 0, qty: 0, total: 0, due: 0 }); c.n += 1; c.qty += N(f.qty); c.total += N(f.total); c.due += Math.max(0, N(f.total) - N(f.paid)); }
+  const byCust = Object.values(live.reduce((m, f) => { const k = f.customer_id; (m[k] ||= { id: k, name: f.customer_name, code: f.customer_code, items: [] }).items.push(f); return m; }, {}));
+  const td = new Date().toISOString().slice(0, 10);
+  return (
+    <div className="stack" style={{ gap: 12, marginBottom: 12 }}>
+      <div className="card">
+        <div className="bigsum">
+          <div><div className="k">在途单数</div><div className="v">{live.length}</div></div>
+          <div><div className="k">在途片数</div><div className="v">{qty(live.reduce((a, f) => a + N(f.qty), 0))} <small>片</small></div></div>
+          {price && Object.entries(byCur).map(([cur, c]) => <div key={cur}><div className="k">在途金额 {cur}（{c.n} 单）</div><div className="v">{money(c.total, cur)} <small>{cur}</small></div>{c.due > 0 && <div className="small red-t2">还没收 {money(c.due, cur)}</div>}</div>)}
+        </div>
+      </div>
+      <div className="fob-cards">{byCust.map((c) => (
+        <div key={c.id} className="card card-b">
+          <div className="pd-h"><CustLink id={c.id} name={c.name} /> <span className="muted small mono">{c.code}</span> <span className="grow" /><b>{qty(c.items.reduce((a, f) => a + N(f.qty), 0))} 片在途</b></div>
+          {c.items.map((f) => (
+            <div key={f.id} className="row between" style={{ gap: 8, padding: '4px 0', cursor: 'pointer', flexWrap: 'wrap' }} onClick={() => go('fob/' + f.id)}>
+              <span><button type="button" className="linkbtn mono">{f.fob_no}</button> <Pill tone={tone(f.status)}>{ST[f.status]}</Pill> <span className="small">{qty(f.qty)} 片{price && N(f.total) > 0 ? ` · ${money(f.total, f.currency)} ${f.currency}` : ''}</span></span>
+              <span className="small">{f.eta ? <span className={`pill ${dDate(f.eta) < td ? 'red' : 'gray'}`}>预计 {dDate(f.eta)} 到{dDate(f.eta) < td ? '（已过）' : ''}</span> : <span className="pill amber">没填预计到货</span>}</span>
+            </div>))}
+        </div>))}</div>
+    </div>
   );
 }
 

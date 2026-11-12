@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { openDb, resetDemo, q, isPersistent, REAL, setCustomerSession, customerSession } from './db/client.js';
 import { CustomerLogin, GuestShop, MustChange } from './pages/Guest.jsx';
 import * as Q from './db/queries.js';
+import { DirectiveGate } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
 import { ExportPanel, DocSettings, PermPanel } from './components/SettingsPanels.jsx';
@@ -272,6 +273,7 @@ export default function App() {
             {/* Frank 11-11 (224 ⑤): 说明小字不占版面, 收进右上角 ⓘ; 只有「存不住数据」这种真问题才显示红条 */}
             {!isPersistent() && <div className="demo-banner"><span className="dot warn" /><span>浏览器禁止存储，关闭页面后数据会重置</span></div>}
             {view}
+            {org && !['boss', 'clerk'].includes(role) && <DirectiveGate />}
           </main>
         </div>
 
