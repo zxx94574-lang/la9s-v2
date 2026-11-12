@@ -173,7 +173,7 @@ export const EVENT_LABELS = {
   qty_changed: '解锁改数量', prepayment_applied: '预付自动抵扣', shipment_voided: '发货失败 · 撤销出库',
   step_reverted: '撤回到上一步', restored: '恢复作废单', written_off: '抹零',
   staged: '货已放到暂存位置', marked_urgent: '中方标为紧急', unmarked_urgent: '取消紧急', bad_debt_written_off: '坏账核销', receipt_reallocated: '改冲账',
-  receipt_discrepancy: '客户反馈收货有差异', discrepancy_decided: '中方处理收货差异',
+  receipt_discrepancy: '客户反馈收货有差异', discrepancy_decided: '中方处理收货差异', freight_paid: '付运费',
 };
 
 // 订单三色灯 + 卡在哪一步 (Frank 11-09 19:10): 红 = 已取消, 黄 = 进行中, 绿 = 已完成 (全部出库 + 全部签收 + 收清 + 退货都对完账)
@@ -181,7 +181,7 @@ export const LIGHT_LABEL = { done: '已完成', active: '进行中', cancelled: 
 export function dealLight(d) {
   if (!d) return 'active';
   if (d.status === 'cancelled') return 'cancelled';
-  if (d.status === 'shipped' && Number(d.unsigned_n || 0) === 0 && Number(d.due || 0) <= 0 && Number(d.open_returns_n || 0) === 0 && !d.balance_pending) return 'done';
+  if (d.status === 'shipped' && Number(d.unsigned_n || 0) === 0 && Number(d.due || 0) <= 0 && Number(d.open_returns_n || 0) === 0 && !d.balance_pending && !Number(d.open_disc_n || 0)) return 'done';
   return 'active';
 }
 export function stuckOf(d) {
@@ -202,6 +202,7 @@ export function stuckOf(d) {
   if (s === 'reviewed') return '④ 待出库';
   if (s === 'partial') return '④ 部分出库 · 还有货要发';
   if (Number(d.unsigned_n || 0) > 0) return '⑤ 等客户确认收货';
+  if (Number(d.open_disc_n || 0) > 0) return '⑤ 收货有差异，等中方处理';
   if (d.balance_pending) return '⑤ 待和客户对账';
   if (Number(d.due || 0) > 0) return '⑥ 等客户付款';
   if (Number(d.open_returns_n || 0) > 0) return '退货 · 还没对完账';

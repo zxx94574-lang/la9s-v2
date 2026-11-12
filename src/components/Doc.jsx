@@ -101,6 +101,7 @@ function BalanceSheet({ balance: b, deal }) {
           </div>
           <div className="bunit">{t('金额单位')} {cur}</div>
           {/* 242 (Frank 11-11): 从预付款里扣的要写清楚, 不然客户以为这次又付了一笔 */}
+          {N(deal.disc_credit) > 0 && <div className="bpre" style={{ background: '#fff4e0', color: '#7a4b00' }}>收货差异调整：已从本单扣除 <b>{money(deal.disc_credit, cur)} {cur}</b></div>}
           {pre > 0 && <div className="bpre">本单 <b>{money(pre, cur)}</b> 已从预付款扣除{N(deal.allocated_amount) - pre > 0 ? <>，本次另付 <b>{money(N(deal.allocated_amount) - pre, cur)}</b></> : ''}{w.label === '预付' && w.amount > 0 ? <> · 预付款还剩 <b>{money(w.amount, cur)} {cur}</b></> : ''}</div>}
         </div>
       )}

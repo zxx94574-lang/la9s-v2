@@ -67,7 +67,7 @@ export function ProspectModal({ onClose, onDone, kind = 'spare' }) {
   const save = async () => {
     try {
       const [{ id }] = await call(role, `select app.create_prospect($1,$2,$3,$4,$5) as id`, [org, f.name, f.phone || '', f.city,
-        JSON.stringify({ market: f.market || null, shop_type: f.shop_type || null, kind: f.kind, source: 'hotline' })]);
+        JSON.stringify({ market: f.market || null, shop_type: f.shop_type || null, shop_photo: f.shop_photo || null, kind: f.kind, source: 'hotline' })]);
       const [c] = await q(`select id, code, temp_code, name, city, phone, kind, tier, status from app.customers where id = $1`, [id]);
       toast(`已建潜客 ${c.temp_code} ${c.name}`); refresh(); onDone?.(c); onClose();
     } catch (e) { toast(friendlyError(e), 'err'); }
@@ -83,9 +83,10 @@ export function ProspectModal({ onClose, onDone, kind = 'spare' }) {
         <div className="field"><label>城市 / 区</label><input className="in" value={f.city} onChange={set('city')} placeholder="Adjamé / Yopougon …" /></div>
         <div className="field"><label>市场</label><input className="in" value={f.market} onChange={set('market')} placeholder="Roxy / Siporex …" /></div>
         <div className="field"><label>客户类型</label><div className="seg">{Object.entries(KIND).map(([v, l]) => <button type="button" key={v} className={f.kind === v ? 'on' : ''} onClick={() => set('kind')(v)}>{l}</button>)}</div></div>
-        <div className="field"><label>店铺类型（决定估价档位）</label><div className="chips">{[['WHOLESALE', '批发店 → Wholesale 档'], ['RETAIL', '零售店 → Retail 档'], ['REPAIR', '维修店 → Repair 档']].map(([v, l]) =>
+        <div className="field"><label>店铺类型（给中方参考）</label><div className="chips">{[['WHOLESALE', '批发店'], ['RETAIL', '零售店'], ['REPAIR', '维修店']].map(([v, l]) =>
           <button type="button" key={v} className={`chip ${f.shop_type === v ? 'on' : ''}`} onClick={() => set('shop_type')(f.shop_type === v ? '' : v)}>{l}</button>)}</div>
-          <span className="hint">选了店铺类型就能按对应档位报价；没选就是没档位，报价前要中方给。转正式编码、定正式档位还是在客户档案里。</span></div>
+          <span className="hint">档位只有中方能定。新客户先按最贵一档（Repair）报价，中方看提货量和店铺照片后定档。</span></div>
+        <div className="field"><label>店铺照片（中方定档位要看，有就传）</label><PhotoInput value={f.shop_photo || ''} onChange={set('shop_photo')} label="拍店面" /></div>
       </div>
     </Modal>
   );

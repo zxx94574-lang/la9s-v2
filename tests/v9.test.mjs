@@ -128,7 +128,8 @@ test('0024 上报问题: 任何成员可报 (文字必填), 进单据记录; 只
   await rejects(t.as(U.admin, `select app.close_issue($1)`, [id]), /BAD_STATE/);
   // 0 价拦截
   const prospect = await t.val(U.manager, `select app.create_prospect($1,'ZERO TEST','0700000000','Abobo')`, [t.ids.org]);
-  if (prospect) await rejects(t.as(U.manager, `select app.create_quote_checked($1,$2,'XOF',$3)`, [t.ids.org, prospect, JSON.stringify([{ product_id: t.ids.bg6mCover, qty_req: 1 }])]), /没定档位|no price tier/);
+  // 0039: 员工建的客户自动按最贵档 REPAIR, 所以能报价 (不再有「没档位」的客户)
+  if (prospect) assert.ok(await t.val(U.manager, `select app.create_quote_checked($1,$2,'XOF',$3)`, [t.ids.org, prospect, JSON.stringify([{ product_id: t.ids.bg6mCover, qty_req: 1 }])]));
   const noPrice = (await t.one(`select p.id from app.products p where p.org_id=$1 and not exists (select 1 from app.product_prices pp where pp.product_id=p.id) limit 1`, [t.ids.org]))?.id;
   if (noPrice) await rejects(t.as(U.manager, `select app.create_quote_checked($1,$2,'XOF',$3)`, [t.ids.org, t.ids.camaraAbobo, JSON.stringify([{ product_id: noPrice, qty_req: 1 }])]), /没有价格/);
   const catId = (await t.one(`select category_id from app.products where id=$1`, [t.ids.bg6mCover])).category_id;
@@ -173,9 +174,9 @@ test('0027 建单页: 潜客快速建档 (电话可空, 店铺类型给估价档
   const t = await setup();
   const pid = await t.val(U.hotline, `select app.create_prospect($1,'DRAMANE KOUMASSI','','Koumassi',$2)`, [t.ids.org, JSON.stringify({ shop_type: 'RETAIL', market: 'Koumassi' })]);
   const c = await t.one(`select tier, status, phone from app.customers where id=$1`, [pid]);
-  assert.equal(c.tier, 'RETAIL'); assert.equal(c.status, 'prospect'); assert.equal(c.phone, null);
+  assert.equal(c.tier, 'REPAIR'); assert.equal(c.status, 'prospect'); assert.equal(c.phone, null);   // 0039: 员工建的客户先按最贵档, 档位只中方定
   // 热线能给潜客改估价档位; 正式客户的档位只中方
-  await t.as(U.hotline, `select app.edit_customer_info($1,'{"tier":"WHOLESALE"}')`, [pid]);
+  await rejects(t.as(U.hotline, `select app.edit_customer_info($1,'{"tier":"WHOLESALE"}')`, [pid]), /PERMISSION_DENIED/);   // 0039: 潜客的档位热线也不能改了
   await rejects(t.as(U.hotline, `select app.edit_customer_info($1,'{"tier":"S"}')`, [t.ids.camaraAbobo]), /PERMISSION_DENIED/);
   const d1 = await t.val(U.hotline, `select app.create_quote_checked($1,$2,'XOF',$3)`, [t.ids.org, pid, JSON.stringify([{ product_id: t.ids.bg6mCover, qty_req: 2 }])]);
   assert.ok(d1);

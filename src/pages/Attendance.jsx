@@ -2,6 +2,7 @@
 // 手机打开 → 点「上班打卡 / 下班打卡」→ 浏览器给定位 → 系统找最近的工作地点, 记「在 / 不在」, 第一次上班卡超过上班时间算迟到.
 // 中方: 今天谁打了卡、在不在地方; 每月汇总 (出勤天数、迟到、不在地方); 维护工作地点 (仓库 / 办公室 / 各个市场, 可以站在那里点「用我现在的位置」).
 import React, { useState } from 'react';
+import AttCalendar from '../components/AttCalendar.jsx';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
@@ -15,6 +16,8 @@ const MapLink = ({ lat, lng }) => (lat == null ? null : <a href={mapUrl(lat, lng
 
 const KIND = { warehouse: '仓库', office: '办公室', market: '市场' };
 const hm = (v) => (v ? new Date(v).toTimeString().slice(0, 5) : '');
+// 这个月到今天 (或月底) 为止的工作日数: 周一到周六
+const workdaysSoFar = (month) => { const [y, m] = month.split('-').map(Number); const last = new Date(y, m, 0); const until = new Date() < last ? new Date() : last; let n = 0; for (let d = new Date(y, m - 1, 1); d <= until; d.setDate(d.getDate() + 1)) if (d.getDay() !== 0) n += 1; return n; };
 
 function locate() {
   return new Promise((res, rej) => {
@@ -79,7 +82,7 @@ export default function Attendance() {
   const decide = async (id, ok) => { try { await call(role, `select app.decide_appeal($1,$2)`, [id, ok]); toast(ok ? '已批准，那天算出勤' : '已记为不通过'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
   const mCols = [
     { key: 'short_name', label: '员工', w: 100, render: (e) => <b><EmpLink id={e.employee_id || e.id} name={e.short_name} /></b> }, { key: 'department', label: '部门', w: 80 },
-    { key: 'days', label: '出勤天数', w: 90, value: (e) => Number(e.days) }, { key: 'late', label: '迟到次数', w: 90, value: (e) => Number(e.late), render: (e) => (Number(e.late) ? <span className="amber-t2">{e.late}</span> : 0) },
+    { key: 'days', label: '出勤天数', w: 110, value: (e) => Number(e.days), render: (e) => { const due = workdaysSoFar(month); const n = Number(e.days); return <span className={`pill ${n >= due ? 'green' : n >= due - 2 ? 'amber' : 'red'}`} title={`到今天应到 ${due} 天`}>{n} / {due}</span>; } }, { key: 'late', label: '迟到次数', w: 90, value: (e) => Number(e.late), render: (e) => (Number(e.late) ? <span className="amber-t2">{e.late}</span> : 0) },
     { key: 'off_site', label: '不在地点次数', w: 110, value: (e) => Number(e.off_site), render: (e) => (Number(e.off_site) ? <span className="red-t2">{e.off_site}</span> : 0) },
   ];
   const sCols = [
@@ -94,7 +97,7 @@ export default function Attendance() {
     <>
       <div className="pagehead"><div><div className="eyebrow">Pointage</div><h1>上班打卡</h1>
         <div className="sub">用手机打卡，要允许定位，不用拍照。销售看是不是在市场；办公室和仓库员工看是不是在仓库地址。上班时间 {data.st?.start_time?.slice(0, 5) || '08:30'}，晚 {data.st?.grace_min ?? 10} 分钟以上算迟到。</div></div></div>
-      <div className="tabs" style={{ padding: 0 }}>{[['me', '我打卡'], ...(admin ? [['day', '今天'], ['month', '月汇总']] : []), ['appeals', admin ? `申诉${data.allAp.filter((a) => a.status === 'pending').length ? ` · ${data.allAp.filter((a) => a.status === 'pending').length} 待处理` : ''}` : '我的申诉'], ...(canName ? [['sites', `工作地点${unnamed.length ? ` · ${unnamed.length} 待起名` : ''}`]] : [])].map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
+      <div className="tabs" style={{ padding: 0 }}>{[['me', '我打卡'], ...(admin ? [['day', '今天'], ['month', '月汇总']] : []), ...(['admin', 'manager', 'sales_manager'].includes(role) ? [['cal', '按员工看日历']] : []), ['appeals', admin ? `申诉${data.allAp.filter((a) => a.status === 'pending').length ? ` · ${data.allAp.filter((a) => a.status === 'pending').length} 待处理` : ''}` : '我的申诉'], ...(canName ? [['sites', `工作地点${unnamed.length ? ` · ${unnamed.length} 待起名` : ''}`]] : [])].map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
       {tab === 'me' && (
         <div className="portal">
           <div className="card card-b stack" style={{ textAlign: 'center', gap: 14 }}>
@@ -113,7 +116,10 @@ export default function Attendance() {
                 <span className="grow" />{a.ok ? <Pill tone="green">在地点</Pill> : <Pill tone="red">不在地点</Pill>}{a.late && <Pill tone="amber">迟到</Pill>}</div>)}
             </div>
           </div>
+          {/* 226: 我这个月的打卡日历, 点某一天看明细 / 申诉 */}
+          <div className="card card-b" style={{ marginTop: 12 }}><div className="pd-h">我这个月的打卡</div><AttCalendar compact /></div>
         </div>)}
+      {tab === 'cal' && <div className="card card-b"><AttCalendar pick /></div>}
       {tab === 'day' && <div className="card"><Grid id="att-day" table="attendance" columns={dCols} rows={data.dayRows} empty="这一天没人打卡" tools={<DatePicker value={day} onChange={setDay} />} /></div>}
       {tab === 'month' && <div className="card"><Grid id="att-month" columns={mCols} rows={data.monthRows} tools={<MonthPicker value={month} onChange={setMonth} label="月份" />} /></div>}
       {tab === 'appeals' && <div className="card">

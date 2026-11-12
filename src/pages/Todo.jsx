@@ -4,6 +4,7 @@ import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, Info } from '../components/ui.jsx';
 import { IssueList } from '../components/IssueReport.jsx';
+import TierCheck, { useTierCheck } from '../components/TierCheck.jsx';
 import { STATUS, ROLES } from '../lib/domain.js';
 import { money, dt, dDate, today, friendlyError } from '../lib/format.js';
 
@@ -23,12 +24,14 @@ export function shipAlert(d) {
   const p = dDate(d.planned_ship_date), t = today();
   return p < t ? { tone: 'red', text: `约定 ${p} 发货，已过期未出库` } : p === t ? { tone: 'amber', text: '今天该出库' } : { tone: 'gray', text: `约定 ${p} 发货` };
 }
-export function nextAction(d) {
+export function nextAction(d, role) {
   // 236: 约定发货日没到 → 先放暂存位置, 不复检
   if (d.status === 'confirmed' && d.planned_ship_date && dDate(d.planned_ship_date) > today()) {
     return d.staged_at ? { roles: ['manager'], what: `货已放暂存位置，约 ${dDate(d.planned_ship_date)} 发货，到那天再复检打包` } : { roles: ['manager', 'picker'], what: `约 ${dDate(d.planned_ship_date)} 发货：先把货放到暂存位置（不打包），拍照` };
   }
   if (d.status === 'shipped' && Number(d.unsigned_n || 0) > 0) return { roles: ['hotline', 'manager'], what: `联系客户确认收货，${d.unsigned_n} 批待签收（传签收凭证）` };
+  if (Number(d.freight_due_n || 0) > 0 && ['finance', 'admin'].includes(role)) return { roles: ['finance', 'admin'], what: `付 Yango 运费（${d.freight_due_n} 批，司机在等）：付完传支付截图，自动记流水` };
+  if (d.status === 'shipped' && Number(d.open_disc_n || 0) > 0) return { roles: ['admin'], what: '客户反馈收货有差异（少了 / 发错）：查清是谁的问题、货在哪，定怎么处理' };
   if (d.status === 'shipped' && d.balance_pending) return { roles: ['hotline', 'finance'], what: '和客户对账：发 Balance，客户确认后传截图' };
   if (d.status === 'shipped' && Number(d.due) > 0) return { roles: ['finance'], what: `催收 / 登记收款，未付 ${money(d.due)}` };
   const a = shipAlert(d);
@@ -37,9 +40,9 @@ export function nextAction(d) {
   return NEXT[d.status] || null;
 }
 export function todoFor(role, d) {
-  const n = nextAction(d);
+  const n = nextAction(d, role);
   if (!n) return false;
-  return role === 'admin' ? !['shipped', 'cancelled'].includes(d.status) || Number(d.due) > 0 || Number(d.unsigned_n || 0) > 0 || !!d.balance_pending : n.roles.includes(role);
+  return role === 'admin' ? !['shipped', 'cancelled'].includes(d.status) || Number(d.due) > 0 || Number(d.unsigned_n || 0) > 0 || !!d.balance_pending || Number(d.open_disc_n || 0) > 0 || Number(d.freight_due_n || 0) > 0 : n.roles.includes(role);
 }
 
 // 超期未发货 (Frank 11-01: 没人跟进, 十几天后才发现没发货, 客户就不理我们了):
@@ -48,7 +51,7 @@ export function todoFor(role, d) {
 // 227: 一张单算哪一级 (系统自动分, 中方可手动提成紧急)
 export function todoLevel(d) {
   const td = today();
-  if (d.urgent) return 'red';
+  if (d.urgent || Number(d.open_disc_n || 0) > 0 || Number(d.freight_due_n || 0) > 0) return 'red';
   if (Number(d.busy_n) >= 3 && ['quoted', 'hotline_ok'].includes(d.status)) return 'green';     // 联系 3 次都忙 = 这单没那么重要
   if (d.want_on && dDate(d.want_on) > td && !['shipped', 'cancelled'].includes(d.status)) return 'green';   // 客户约了明天以后
   if (d.status === 'confirmed' && d.planned_ship_date && dDate(d.planned_ship_date) > td) return 'green';   // 约定发货日还没到
@@ -129,7 +132,8 @@ export default function Todo() {
   // 客户要货日期到了 (今天或已过) 的排最前 (Frank 11-07: 明天要的到明天自动前移)
   const td = today();
   const wantDue = (d) => d.want_on && dDate(d.want_on) <= td && !['shipped', 'cancelled'].includes(d.status);
-  const rank = (d) => (wantDue(d) ? -1 : nextAction(d)?.alert?.tone === 'red' ? 0 : nextAction(d)?.alert ? 1 : 2);
+  const rank = (d) => (wantDue(d) ? -1 : nextAction(d, role)?.alert?.tone === 'red' ? 0 : nextAction(d, role)?.alert ? 1 : 2);
+  const tierRows = useTierCheck();
   const list = (data || []).filter((d) => todoFor(role, d)).sort((a, b) => rank(a) - rank(b));
   // 227 (Frank 11-11): 待办分三个板块, 系统自动分 —— 红 紧急 / 黄 进行中 / 绿 不急; 中方可以手动把某张单提成紧急
   const groups = { red: [], amber: [], green: [] };
@@ -141,6 +145,7 @@ export default function Todo() {
       <div className="pagehead"><div><div className="eyebrow">Mes tâches</div><h1 tabIndex={0}>我的待办</h1>
         <div className="sub">当前岗位：<b>{ROLES[role].label}</b>。下推一步，单子就自动出现在下一个人的待办里。</div></div></div>
       {['admin', 'manager', 'sales_manager'].includes(role) && <IssueList />}
+      {role === 'admin' && <TierCheck rows={tierRows} />}
       {['admin', 'manager', 'sales_manager', 'hotline', 'finance'].includes(role) && <OpenReturns />}
       {extras.length > 0 && <div className="card" style={{ marginBottom: 12 }}>{extras.map(([to, text]) => (
         <div key={text} className="row between" style={{ padding: '12px 18px', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }} onClick={() => go(to)}><b>{text}</b><span className="muted">›</span></div>))}</div>}
@@ -149,7 +154,7 @@ export default function Todo() {
           <div key={k} className={`card todo-sec todo-${k}`} style={{ marginBottom: 12 }}>
             <div className="card-h"><h2><span className={`pill ${k}`}>{label}</span> {groups[k].length} 单 <Info>{tip}</Info></h2></div>
             {groups[k].length === 0 ? <div className="empty small" style={{ padding: 14 }}>没有</div> : groups[k].map((d) => {
-              const n = nextAction(d); const o = overdueOf(d);
+              const n = nextAction(d, role); const o = overdueOf(d);
               return (
                 <div key={d.id} className="row between todo-row" onClick={() => go('deal/' + d.id)}>
                   <div className="stack" style={{ gap: 3, minWidth: 0 }}>

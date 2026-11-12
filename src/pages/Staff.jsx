@@ -5,6 +5,7 @@
 import { normPhone, fmtPhone } from '../lib/phone.js';
 import { ConfirmEdit, HistoryBlock } from '../components/ProductDrawer.jsx';
 import React, { useMemo, useRef, useState } from 'react';
+import AttCalendar from '../components/AttCalendar.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop , PhoneInput, phoneValid} from '../components/ui.jsx';
@@ -398,6 +399,7 @@ function AttendanceDrawer({ line, month, draft, onClose, onApply }) {
     <Drawer title={`${line.snap_name} · ${month.slice(0, 4)} 年 ${Number(month.slice(5, 7))} 月打卡`} onClose={onClose}
       actions={draft && <button type="button" className="btn primary" onClick={onApply} title="把工资单里他的实到工作日改成打卡算出来的天数">用打卡天数更新工资（{sum.counted} 天）</button>}>
       <div className="stack" style={{ gap: 12 }}>
+        <AttCalendar employeeId={line.employee_id} month={month} compact />
         <div className="row" style={{ gap: 20, flexWrap: 'wrap' }}>
           <div><div className="small muted">到岗</div><b style={{ fontSize: 20 }}>{sum.counted}</b> <span className="small muted">天</span></div>
           <div><div className="small muted">其中迟到</div><b style={{ fontSize: 20 }}>{sum.late}</b></div>

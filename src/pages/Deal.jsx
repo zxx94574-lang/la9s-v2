@@ -48,7 +48,8 @@ export default function Deal({ id }) {
         (select count(*) from app.returns rx where rx.deal_id = d.id and (rx.status = 'requested' or (rx.status = 'approved' and rx.reconciled_at is null)))::int as open_returns_n
       from app.deals d where d.customer_id = $1 and d.id <> $2 and d.status <> 'cancelled' and d.kind = 'normal') x
       where unsigned_n > 0 or balance_pending or open_returns_n > 0 order by biz_no`, [deal.customer_id, id]);
-    return { deal, lines, events, shipments, returns, receipts, employees, catalog, categories, credit, others };
+    const discs = await q(`select * from app.receipt_discrepancies where deal_id = $1 order by reported_at`, [id]);
+    return { deal, lines, events, shipments, returns, receipts, employees, catalog, categories, credit, others, discs };
   }, [id]);
 
   // 下推成功 (状态变了) → 回到当前这一步, 不停在刚才点开看的那一步

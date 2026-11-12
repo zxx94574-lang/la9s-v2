@@ -4,12 +4,13 @@ import PeoplePick from '../components/PeoplePick.jsx';
 import { fmtPhone, telHref } from '../lib/phone.js';
 import React, { useMemo, useRef, useState } from 'react';
 import Grid from '../components/Grid.jsx';
-import { call } from '../db/client.js';
+import { call, q } from '../db/client.js';
 import LineEntry, { newKey, finalizeLines, tierPrice } from '../components/LineEntry.jsx';
 import { DocActions, DocSheet, BalanceCopy, BalancePreview } from '../components/Doc.jsx';
 import { BlActions } from '../components/Bl.jsx';
+import { flagAnomaly } from '../components/IssueReport.jsx';
 import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus } from '../components/ReceiptForm.jsx';
-import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid} from '../components/ui.jsx';
+import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid} from '../components/ui.jsx';
 import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, PAY_METHODS, RETURN_REASONS, CONFIRM_METHODS, CHECK_RESULTS, priceLevel, getThresholds, balanceWords } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, pad, ymd } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
@@ -682,7 +683,7 @@ export function ShipPanel(props) {
   );
 }
 function ShipForm({ deal, lines, shipments, act }) {
-  const { toast } = useApp();
+  const { toast, role, refresh } = useApp();
   const [date, setDate] = useState(today());
   const [time, setTime] = useState(nowTime());
   const [method, setMethod] = useState('');
@@ -693,6 +694,9 @@ function ShipForm({ deal, lines, shipments, act }) {
   const [askPartial, setAskPartial] = useState(false);
   const [items, setItems] = useState({});
   const [errs, setErrs] = useState(false);
+  // 232 (Frank 11-11): 运费谁出 —— S 档默认我们出; 阿比让以外默认我们出一段 (仓库 → Adjamé 交通站); 其他默认客户出; 仓库可以改
+  const [bearer, setBearer] = useState(() => (deal.tier === 'S' ? 'company' : deal.city && !/abidjan|cocody|adjam|yopougon|treichville|abobo|koumassi|marcory|plateau|port-bou|anyama|bingerville/i.test(deal.city) ? 'company_part' : 'customer'));
+  const [freight, setFreight] = useState('');
   const [summary, setSummary] = useState(null);
   const left = lines.filter((l) => N(l.qty_supply) > N(l.qty_shipped));
   const remain = (l) => N(l.qty_supply) - N(l.qty_shipped);
@@ -720,7 +724,9 @@ function ShipForm({ deal, lines, shipments, act }) {
   const submit = async () => {
     const at = new Date(`${date}T${time}:00`).toISOString();
     const payload = partial ? left.map((l) => ({ line_id: l.id, qty: now(l) })).filter((x) => x.qty > 0) : null;
-    await act('已出库，客户总账已更新', `select app.ship($1,$2,$3,$4,$5,$6,$7)`, [deal.id, at, method, phone.trim(), addr.trim(), proof, payload && JSON.stringify(payload)]).then(() => setSummary(null), () => {});
+    await act('已出库，客户总账已更新', `select app.ship($1,$2,$3,$4,$5,$6,$7)`, [deal.id, at, method, phone.trim(), addr.trim(), proof, payload && JSON.stringify(payload)])
+      .then(() => call(role, `select app.set_ship_freight((select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1), $2, $3)`, [deal.id, bearer, bearer === 'customer' ? null : N(freight) || null]).then(() => refresh(), () => {}))
+      .then(() => setSummary(null), () => {});
   };
   return (
     <div className="card">
@@ -739,6 +745,11 @@ function ShipForm({ deal, lines, shipments, act }) {
           <div className="field req grow"><label>收货地址 / 联系人</label>
             <input className={`in ${errs && !addr.trim() ? 'err-in' : ''}`} value={addr} onChange={(e) => setAddr(e.target.value)} placeholder="例如 Adjamé 市场 · 店主本人" /></div>
           <div className="field req"><label>发货凭证（Yango 截图 / 现场照片）</label><PhotoInput value={proof} onChange={setProof} label="司机 / 车辆截图" invalid={errs} /></div>
+        </div>
+        <div className="row" style={{ gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div className="field req"><label>运费谁出 <Info>S 档大客户：我们出。外区客户：我们只出仓库到 Adjamé 交通站这一段。客户自己叫车直送：客户出。选了我们出，财务和中方会马上收到一条紧急待办，付完传截图自动记流水。</Info></label>
+            <div className="chips">{[['customer', '客户出'], ['company', '我们出'], ['company_part', '我们出一段（到交通站）']].map(([k, l]) => <button type="button" key={k} className={`chip ${bearer === k ? 'on' : ''}`} onClick={() => setBearer(k)}>{l}</button>)}</div></div>
+          {bearer !== 'customer' && <div className="field" style={{ width: 200 }}><label>大概多少（Yango 上显示的）</label><input className="in" inputMode="numeric" value={freight} onChange={(e) => setFreight(e.target.value.replace(/\D/g, ''))} placeholder="XOF" /></div>}
         </div>
         <div className="hint">下一版：上传 Yango 截图后自动读出司机名字、电话、时间，人只核对（现在先手填）。</div>
       </div>
@@ -776,6 +787,34 @@ function ShipForm({ deal, lines, shipments, act }) {
   );
 }
 
+// 232: 这批运费谁出 / 付了没有; 财务或中方付完传截图 → 自动记一笔「本地物流费」支出, 截图挂在这批出库上
+const BEARER = { customer: '客户出', company: '我们出', company_part: '我们出一段' };
+function FreightCell({ s, role, act }) {
+  const [pay, setPay] = useState(false);
+  if (!s.freight_bearer) return <span className="muted small">没填</span>;
+  if (s.freight_bearer === 'customer') return <span className="pill gray">客户出</span>;
+  if (s.freight_paid_at) return <span className="row" style={{ gap: 6 }}><span className="pill green">{BEARER[s.freight_bearer]} · 已付 {money(s.freight_amount)}</span><Thumb src={s.freight_proof} size={30} label={`${s.out_no} 运费支付截图`} /></span>;
+  return (<span className="row" style={{ gap: 6 }}><span className="pill red">{BEARER[s.freight_bearer]} · 没付{s.freight_est ? ` 约 ${money(s.freight_est)}` : ''}</span>
+    {(can(role, 'receipt') || role === 'admin') && <button type="button" className="btn sm primary" onClick={() => setPay(true)}>付运费</button>}
+    {pay && <FreightModal s={s} act={act} onClose={() => setPay(false)} />}</span>);
+}
+function FreightModal({ s, act, onClose }) {
+  const { org } = useApp();
+  const { data: acc } = useData(() => q(`select id, name, currency from app.cash_accounts where org_id = $1 and active order by name`, [org]), [org]);
+  const [account, setAccount] = useState(''); const [amt, setAmt] = useState(s.freight_est ? String(N(s.freight_est)) : ''); const [proof, setProof] = useState('');
+  const ok = account && N(amt) > 0 && proof;
+  return (
+    <Modal title={`付运费 · ${s.out_no}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">还差：{[!account && '账户', !(N(amt) > 0) && '金额', !proof && '支付截图'].filter(Boolean).join('、')}</span>}
+      <button type="button" className="btn primary" disabled={!ok} onClick={() => act(`运费 ${money(amt)} 已付，已记一笔本地物流费支出`, `select app.pay_ship_freight($1,$2,$3,$4)`, [s.id, account, N(amt), proof]).then(onClose, () => {})}>已付，记账</button></>}>
+      <div className="stack">
+        {acc && !acc.length && <div className="pill red" style={{ whiteSpace: 'normal' }}>还没有资金账户：先到「资金账户 → 账户设置」建 Wave / 现金账户</div>}
+        <FRow label="从哪个账户付" req><select className="in" value={account} onChange={(e) => setAccount(e.target.value)}><option value="">选账户…</option>{(acc || []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></FRow>
+        <FRow label="实际金额" req><input className="in" inputMode="numeric" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">XOF{s.freight_est ? `（仓库填的大概 ${money(s.freight_est)}）` : ''}</span></FRow>
+        <FRow label="支付截图" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="Wave / Orange 支付截图" /></div></FRow>
+      </div>
+    </Modal>
+  );
+}
 function ShipmentsCard({ deal, lines, shipments, act, role }) {
   const [voiding, setVoiding] = useState(null);
   const [justVoided, setJustVoided] = useState(false);
@@ -790,6 +829,7 @@ function ShipmentsCard({ deal, lines, shipments, act, role }) {
     { key: 'qty', label: '件数', w: 60, render: (s) => qty(s.qty) },
     { key: 'amount', label: `金额 ${deal.currency}`, w: 110, render: (s) => (seesPrice(role) ? <b className={s.voided_at ? 'strike' : ''}>{money(s.amount, deal.currency)}</b> : '—') },
     { key: 'proof', label: '凭证', w: 70, sortable: false, filterable: false, render: (s) => <Thumb src={s.proof_path} size={34} label={`${s.out_no} 出库凭证`} group={group} /> },
+    { key: 'freight', label: '运费', w: 210, sortable: false, filterable: false, render: (s) => (s.voided_at ? null : <FreightCell s={s} role={role} act={act} />) },
     { key: 'docs', label: '发货文件', w: 420, sortable: false, filterable: false, render: (s) => (s.voided_at ? null : <BlActions shipment={s} deal={deal} lines={lines} />) },
     { key: 'recv', label: '签收 / 金蝶', w: 260, sortable: false, render: (s) => {
       if (s.voided_at) return <span className="pill gray" title={dt(s.voided_at)}>已撤销 · {s.void_reason}</span>;
@@ -1106,7 +1146,7 @@ function DocsBlock({ deal, lines, role }) {
 }
 
 // ───────────────────────── ⑤ 签收 · 对账 (Frank 11-09 第 18 条: 出库后不直接到收款; 客户签收 (时间 + 照片) + Balance 发群, 全部签收才到收款) ─────────────────────────
-export function SignPanel({ deal, shipments, events, act, role, others }) {
+export function SignPanel({ deal, shipments, events, act, role, others, discs = [], lines = [] }) {
   const live = shipments.filter((s) => !s.voided_at);
   const unsigned = live.filter((s) => !s.customer_received_at);
   return (
@@ -1117,17 +1157,17 @@ export function SignPanel({ deal, shipments, events, act, role, others }) {
         <div className="card-b two">
           <CustomerInfo deal={deal} />
           <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
-            {live.length === 0 ? <div className="card-b muted small">还没出库</div> : live.map((s) => <SignRow key={s.id} s={s} act={act} role={role} />)}
+            {live.length === 0 ? <div className="card-b muted small">还没出库</div> : live.map((s) => <SignRow key={s.id} s={s} act={act} role={role}  discs={discs.filter((x) => x.shipment_id === s.id)} lines={lines} deal={deal} />)}
           </div>
         </div>
       </div>
       {live.length > 0 && <BalancePreview customerId={deal.customer_id} currency={deal.currency} deal={deal} title={`② 和客户对账 · ${deal.customer_name}`} />}
-      {live.length > 0 && <BalanceConfirm deal={deal} events={events} act={act} role={role} unsigned={unsigned.length} others={(others || []).filter((o) => o.balance_pending)} />}
+      {live.length > 0 && <BalanceConfirm deal={deal} events={events} act={act} role={role} unsigned={unsigned.length} others={(others || []).filter((o) => o.balance_pending)} openDisc={discs.filter((x) => x.status === 'open').length} />}
     </>
   );
 }
 // ③ 客户确认对账 (Frank 11-11 16:34, 迁移 0036): 跟报价确认 / 退货对账一样 —— 客户信息 + 确认方式 + 确认截图; 之后又签收了新一批要重新对
-function BalanceConfirm({ deal, events, act, role, unsigned, others = [] }) {
+function BalanceConfirm({ deal, events, act, role, unsigned, others = [], openDisc = 0 }) {
   const [also, setAlso] = useState(() => new Set(others.map((o) => o.id)));   // 238: Balance 是按客户出的 → 一张截图可以同时勾掉这个客户所有待对账的单
   const [method, setMethod] = useState('');
   const [proof, setProof] = useState('');
@@ -1155,6 +1195,7 @@ function BalanceConfirm({ deal, events, act, role, unsigned, others = [] }) {
         <div className="card-b two">
           <CustomerInfo deal={deal} />
           {unsigned ? <div className="panel"><span className="why">还有 {unsigned} 批没签收，签收完再对账</span></div>
+            : openDisc ? <div className="panel"><span className="pill red">有 {openDisc} 张收货差异等中方处理，处理完才能对账</span></div>
             : can(role, 'balance_confirm') ? (
               <div className="panel">
                 {deal.balance_confirmed_at && <div className="pill amber" style={{ marginBottom: 8 }}>上次对账后又签收了新的一批，要重新对一次</div>}
@@ -1175,11 +1216,68 @@ function BalanceConfirm({ deal, events, act, role, unsigned, others = [] }) {
     </div>
   );
 }
-function SignRow({ s, act, role }) {
+const DISC_KIND = { short: '少了', over: '多了', wrong: '发错型号', damaged: '破损' };
+const DISC_DECISION = { credit: '认了，已从账上扣', reship: '认了，补发', reject: '不认' };
+const DISC_WHERE = { in_warehouse: '还在仓库（少发了）', lost: '丢了 / 找不到', with_customer: '在客户那里', unknown: '还没查清' };
+function DiscModal({ s, lines, act, onClose }) {
+  const mine = (s.lines || []).map((sl) => ({ ...sl, line: lines.find((l) => l.id === sl.deal_line_id) })).filter((x) => x.line);
+  const [kind, setKind] = useState('short');
+  const [recv, setRecv] = useState({});
+  const [proof, setProof] = useState(''); const [note, setNote] = useState('');
+  const changed = mine.filter((x) => recv[x.deal_line_id] !== undefined && recv[x.deal_line_id] !== '' && (N(recv[x.deal_line_id]) !== N(x.qty) || ['wrong', 'damaged'].includes(kind)));
+  const ok = changed.length > 0 && proof;
+  const go = () => act('已记下收货差异，等中方处理', `select app.report_discrepancy($1,$2,$3,$4,$5)`, [s.id, kind, JSON.stringify(changed.map((x) => ({ deal_line_id: x.deal_line_id, received: N(recv[x.deal_line_id]) }))), proof, note || null]).then(onClose, () => {});
+  return (
+    <Modal title={`收货差异 · ${s.out_no}`} wide onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{!changed.length ? '填客户实际收到多少' : '传客户给的凭证'}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>报给中方</button></>}>
+      <div className="stack">
+        <div className="hint">原来的出库单不改。这里记下客户实际收到多少，<b>差一片也要中方处理</b>：查清是谁的问题、货在哪。处理完才能对账。</div>
+        <FRow label="类型" req><div className="chips">{Object.entries(DISC_KIND).map(([k, v]) => <button type="button" key={k} className={`chip ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>{v}</button>)}</div></FRow>
+        <Grid id="disc-lines" noTools rows={mine} rowKey={(x) => x.deal_line_id} columns={[
+          { key: 'model', label: '型号', w: 160, render: (x) => <b>{x.line.model}</b> },
+          { key: 'category', label: '种类', w: 100, render: (x) => x.line.category },
+          { key: 'qty', label: '出库数量', w: 90, render: (x) => qty(x.qty) },
+          { key: 'recv', label: '客户实收', w: 110, edit: (x) => ({ type: 'number', value: recv[x.deal_line_id] ?? '', onChange: (v) => setRecv((r) => ({ ...r, [x.deal_line_id]: String(v ?? '').replace(/\D/g, '') })) }) },
+          { key: 'diff', label: '差', w: 90, render: (x) => { const r = recv[x.deal_line_id]; if (r === undefined || r === '') return ''; const d = N(r) - N(x.qty); return d === 0 ? <span className="pill green">一样</span> : <span className="pill red">{d > 0 ? '多 ' : '少 '}{Math.abs(d)}</span>; } },
+        ]} />
+        <FRow label="客户凭证" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="开箱照片 / 视频截图 / 聊天截图" /></div></FRow>
+        <FRow label="说明"><input className="in" style={{ width: '100%', maxWidth: 460 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="客户怎么说的" /></FRow>
+      </div>
+    </Modal>
+  );
+}
+function DiscDecide({ x, s, deal, act, onClose }) {
+  const [decision, setDecision] = useState(''); const [fault, setFault] = useState(''); const [where, setWhere] = useState(''); const [note, setNote] = useState('');
+  const ok = decision && fault.trim() && where && (decision !== 'reject' || note.trim());
+  const go = () => act('收货差异已处理', `select app.decide_discrepancy($1,$2,$3,$4,$5)`, [x.id, decision, fault, where, note || null]).then(onClose, () => {});
+  return (
+    <Modal title={`处理收货差异 · ${s.out_no}`} wide onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">还差：{[!decision && '怎么处理', !fault.trim() && '谁的问题', !where && '货在哪', decision === 'reject' && !note.trim() && '不认的原因'].filter(Boolean).join('、')}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>确定</button></>}>
+      <div className="stack">
+        <div className="pd-sec"><div className="pd-h">客户说的 {x.late && <span className="pill amber">超过 24 小时才反馈，属于特批</span>}</div>
+          <div>{DISC_KIND[x.kind]}：{x.lines.map((l) => <span key={l.deal_line_id} className="pill red" style={{ marginRight: 6 }}>{l.model} 发 {l.shipped} 收 {l.received}</span>)} {N(x.amount) > 0 && <b>值 {money(x.amount, deal.currency)} {deal.currency}</b>}</div>
+          {x.note && <div className="small muted">{x.note}</div>}</div>
+        <div className="pd-sec"><div className="pd-h">对照片 <Info>左边是我们每一步拍的，右边是客户给的。先看照片再定。</Info></div>
+          <div className="row" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            {[['初检', deal.pick_photo_path], ['复检打包', deal.review_photo_path], ['发货', s.proof_path], ['签收', s.signed_photo], ['客户凭证', x.proof]].map(([l, src]) => <div key={l} className="stack" style={{ gap: 4, alignItems: 'center' }}><span className="small muted">{l}</span>{src ? <Thumb src={src} size={84} label={l} /> : <span className="pill gray">没有</span>}</div>)}
+          </div></div>
+        <FRow label="怎么处理" req><div className="chips">{Object.entries({ credit: '认：从客户账上扣掉', reship: '认：补发', reject: '不认' }).map(([k, v]) => <button type="button" key={k} className={`chip ${decision === k ? 'on' : ''}`} onClick={() => setDecision(k)}>{v}</button>)}</div></FRow>
+        <FRow label="谁的问题" req><div className="stack" style={{ gap: 6, flex: 1 }}><div className="chips">{['找货少数 / 拿错', '复检没查出来', '打包漏装', '运输途中丢 / 坏', '客户自己的问题', '还没查清'].map((v) => <button type="button" key={v} className={`chip ${fault === v ? 'on' : ''}`} onClick={() => setFault(v)}>{v}</button>)}</div>
+          <input className="in" style={{ width: '100%', maxWidth: 460 }} value={fault} onChange={(e) => setFault(e.target.value)} placeholder="写清楚是哪个环节、谁" /></div></FRow>
+        <FRow label="货现在在哪" req><div className="chips">{Object.entries(DISC_WHERE).map(([k, v]) => <button type="button" key={k} className={`chip ${where === k ? 'on' : ''}`} onClick={() => setWhere(k)}>{v}</button>)}</div></FRow>
+        {where === 'in_warehouse' && decision !== 'reject' && <div className="hint">选「还在仓库」：系统会把少发的数量加回库存。</div>}
+        <FRow label="说明" req={decision === 'reject'}><input className="in" style={{ width: '100%', maxWidth: 460 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder={decision === 'reject' ? '不认必须写原因' : '补充说明'} /></FRow>
+      </div>
+    </Modal>
+  );
+}
+function SignRow({ s, act, role, discs = [], lines = [], deal }) {
+  const [disc, setDisc] = useState(false); const [decide, setDecide] = useState(null);
   const [photo, setPhoto] = useState('');
   const [at, setAt] = useState(() => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); });
   const [errs, setErrs] = useState(false);
-  const go = () => { setErrs(true); if (!photo && !s.signed_photo) return; act(`${s.out_no} 已签收`, `select app.sign_receipt($1,$2,$3)`, [s.id, photo || null, new Date(at).toISOString()]).catch(() => {}); };
+  const go = (withDisc) => { setErrs(true); if (!photo && !s.signed_photo) return; act(`${s.out_no} 已签收`, `select app.sign_receipt($1,$2,$3)`, [s.id, photo || null, new Date(at).toISOString()]).then(() => { if (withDisc === true) setDisc(true); }, () => {}); };
+  const hours = s.customer_received_at ? (Date.now() - new Date(s.customer_received_at).getTime()) / 36e5 : 0;
   return (
     <div className="signrow">
       <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
@@ -1193,8 +1291,22 @@ function SignRow({ s, act, role }) {
             <FRow label="签收时间" req><input className="in" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} style={{ width: 210 }} /></FRow>
             <FRow label="签收凭证" req><PhotoInput value={photo} onChange={setPhoto} invalid={errs && !photo} label="客户照片 / WhatsApp / 通话截图" /></FRow>
           </div>
-          <div className="actbar">{!photo && <span className="why">还差：签收凭证</span>}<button type="button" className="btn primary" onClick={go}>客户已签收 →</button></div>
+          <div className="actbar">{!photo && <span className="why">还差：签收凭证</span>}<button type="button" className="btn" onClick={() => go(true)}>收到了，但客户说数量 / 型号不对…</button><button type="button" className="btn primary" onClick={() => go(false)}>客户已签收（全部收到）→</button></div>
         </>) : <Blocked action="mark_received" />)}
+      {/* 240 (Frank 11-11): 客户说少了 / 发错了 → 记一张收货差异单, 差一片也必须中方处理; 原出库单不改 */}
+      {discs.map((x) => (
+        <div key={x.id} className={`disc-row ${x.status === 'open' ? 'open' : ''}`}>
+          <span className={`pill ${x.status === 'open' ? 'red' : x.decision === 'reject' ? 'gray' : 'green'}`}>{x.status === 'open' ? '收货差异 · 等中方处理' : `收货差异 · ${DISC_DECISION[x.decision]}`}</span>
+          <span className="small">{DISC_KIND[x.kind]}：{x.lines.map((l) => `${l.model} 发 ${l.shipped} 收 ${l.received}`).join('；')}{N(x.amount) > 0 && <> · <b>{money(x.amount, deal?.currency)}</b></>}</span>
+          {x.late && <span className="pill amber">超过 24 小时才反馈</span>}
+          <Thumb src={x.proof} size={34} label="客户给的凭证" />
+          {x.status === 'decided' && <span className="small muted">责任：{x.fault} · 货：{DISC_WHERE[x.goods_where]}{x.decide_note ? ` · ${x.decide_note}` : ''}</span>}
+          {x.status === 'open' && role === 'admin' && <button type="button" className="btn sm primary" onClick={() => setDecide(x)}>处理</button>}
+        </div>))}
+      {s.customer_received_at && can(role, 'mark_received') && !discs.some((x) => x.status === 'open') && (
+        <div className="row" style={{ marginTop: 6 }}><button type="button" className="btn sm" onClick={() => setDisc(true)}>客户说收到的不对（少了 / 多了 / 发错 / 破损）</button>{hours > 24 && <span className="small muted">已过 24 小时，报上去要中方特批</span>}</div>)}
+      {disc && <DiscModal s={s} lines={lines} act={act} onClose={() => setDisc(false)} />}
+      {decide && <DiscDecide x={decide} s={s} deal={deal} act={act} onClose={() => setDecide(null)} />}
     </div>
   );
 }

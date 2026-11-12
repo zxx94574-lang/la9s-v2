@@ -51,6 +51,9 @@ select d.id, d.biz_no, d.quote_no, d.pick_no, d.so_no, d.kind, d.status, d.curre
   (select count(*) from app.shipments sx where sx.deal_id = d.id and sx.voided_at is null and sx.customer_received_at is null)::int as unsigned_n,
   (select count(*) from app.returns rx where rx.deal_id = d.id and (rx.status = 'requested' or (rx.status = 'approved' and rx.reconciled_at is null)))::int as open_returns_n,
   app.balance_pending(d.id) as balance_pending,
+  (select count(*) from app.shipments sf where sf.deal_id = d.id and sf.voided_at is null and sf.freight_bearer in ('company','company_part') and sf.freight_paid_at is null)::int as freight_due_n,
+  (select count(*) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.status = 'open')::int as open_disc_n,
+  (select coalesce(sum(rd.amount), 0) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.decision = 'credit') as disc_credit,
   (select short_name from app.employees oe where oe.id = d.owner_employee_id) as owner_name
 from app.deals d
 join app.customers c on c.id = d.customer_id
@@ -64,6 +67,9 @@ select d.*, c.code as customer_code, c.name as customer_name, c.city, c.tier, c.
   (select count(*) from app.shipments sx where sx.deal_id = d.id and sx.voided_at is null)::int as live_shipments_n,
   (select count(*) from app.returns rx where rx.deal_id = d.id and (rx.status = 'requested' or (rx.status = 'approved' and rx.reconciled_at is null)))::int as open_returns_n,
   app.balance_pending(d.id) as balance_pending,
+  (select count(*) from app.shipments sf where sf.deal_id = d.id and sf.voided_at is null and sf.freight_bearer in ('company','company_part') and sf.freight_paid_at is null)::int as freight_due_n,
+  (select count(*) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.status = 'open')::int as open_disc_n,
+  (select coalesce(sum(rd.amount), 0) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.decision = 'credit') as disc_credit,
   pe.short_name as picker_name, oe.short_name as owner_name, re.short_name as reviewer_name,
   (select count(*) from app.pick_checks pc join app.deal_lines pl on pl.id = pc.deal_line_id join app.deals pd on pd.id = pl.deal_id
      where pd.picker_employee_id = d.picker_employee_id and pc.result <> 'ok' and pc.at > now() - interval '30 days') as picker_errors,
