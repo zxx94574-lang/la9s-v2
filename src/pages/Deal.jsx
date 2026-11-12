@@ -14,7 +14,7 @@ import { CustomerDrawer } from './Customers.jsx';
 import Grid from '../components/Grid.jsx';
 import { IssueButton } from '../components/IssueReport.jsx';
 import { QuotePanel, ConfirmBlock, PickPanel, SoPanel, ConfirmPanel, ShipStepPanel, SignPanel, PayPanel, ReturnPanel } from './DealPanels.jsx';
-import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
+import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 
 const STEP_KEYS = STEPS.map((s) => s.key);
 const REVERT_LABEL = {
@@ -25,8 +25,8 @@ const short = (no) => (no ? '…' + String(no).slice(-4) : '');
 const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩';
 
 // 操作记录每一条属于流程条的哪一步 (点了就回到那一步)
-const EVENT_STEP = { quote_created: 'quote', quote_edited: 'quote', hotline_confirmed: 'quote', hotline_busy: 'quote', quote_approved: 'quote', quote_rejected: 'quote', fx_set: 'quote', price_requested: 'quote',
-  picking_started: 'pick', pick_submitted: 'pick', sales_order_created: 'so', price_set: 'so', customer_confirmed: 'so', lines_added: 'so', staged: 'ship',
+const EVENT_STEP = { quote_created: 'quote', deal_split: 'quote', split_created: 'quote', quote_edited: 'quote', hotline_confirmed: 'quote', hotline_busy: 'quote', quote_approved: 'quote', quote_rejected: 'quote', fx_set: 'quote', price_requested: 'quote',
+  picking_started: 'pick', pick_submitted: 'pick', sales_order_created: 'so', price_set: 'so', customer_confirmed: 'so', lines_added: 'so', staged: 'ship', partial_reason: 'ship',
   pick_reviewed: 'ship', bl_issued: 'ship', shipped: 'ship', shipment_voided: 'ship', customer_received: 'sign', balance_confirmed: 'sign', receipt_discrepancy: 'sign', discrepancy_decided: 'sign',
   prepayment_applied: 'pay', written_off: 'pay', receipt_voided: 'pay', bad_debt_written_off: 'pay', return_requested: 'return', return_approved: 'return', return_reconciled: 'return' };
 export default function Deal({ id }) {
@@ -153,6 +153,11 @@ export default function Deal({ id }) {
         </div>)}
       {custOpen && <CustomerDrawer id={deal.customer_id} onClose={() => setCustOpen(false)} />}
       {!cancelled && seesPrice(role) && !['shipped'].includes(deal.status) && <DebtBanner customerId={deal.customer_id} deal={deal} />}
+      {(deal.split_from || deal.split_children?.length > 0) && (
+        <div className="card card-b other-pending"><span className="pill blue">拆单</span>
+          {deal.split_from && <span>这张单是从 <DealLink id={deal.split_from} no={deal.split_from_no} /> 拆出来的{deal.want_on ? `，约定 ${dDate(deal.want_on)} 发` : ''}；价格锁在拆单时的价。</span>}
+          {(deal.split_children || []).map((c) => <span key={c.id}>以后再发的那部分在 <DealLink id={c.id} no={c.biz_no} />{c.want_on ? `（${dDate(c.want_on)} 发，${STATUS[c.status]?.label || c.status}）` : ''}</span>)}
+        </div>)}
       {data.others?.length > 0 && (
         <div className="card card-b other-pending">
           <b>{deal.customer_name} 还有：</b>

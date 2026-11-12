@@ -16,6 +16,7 @@ export const ITEMS = {
   todo: ['◉', '我的待办', 'work', []],
   sop: ['▣', '培训与 SOP', 'work', []],
   attendance: ['⏱', '上班打卡', 'work', STAFF],
+  kpi: ['⏲', '时效与准确率', 'work', ['admin']],
   // 11-09 Frank 第 8 条: 「新建询单 / 报价」「销售询单」不再是独立页; 建单 = 订单总览「＋ 新订单」, 询单审批 = 订单总览页签
   orders: ['≡', '订单总览', 'sales', []],
   fob: ['◷', 'FOB 项目', 'sales', ['admin', 'manager', 'hotline', 'sales', 'finance']],

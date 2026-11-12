@@ -5,7 +5,7 @@ import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { q, call, callValue, REAL } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, PhotoInput, Thumb } from './ui.jsx';
+import { useApp, useData, Pill, PhotoInput, Thumb, Modal } from './ui.jsx';
 import { friendlyError } from '../lib/format.js';
 import { saveFile } from '../lib/saveFile.js';
 
@@ -58,6 +58,7 @@ export function BlActions({ shipment, deal, lines, compact, pending }) {
   const ref = useRef();
   const fileRef = useRef();
   const [printing, setPrinting] = useState(false);
+  const [preview, setPreview] = useState(false);
   const [sign, setSign] = useState('');
   const [signing, setSigning] = useState(false);
   const { data } = useData(async () => {
@@ -116,6 +117,11 @@ export function BlActions({ shipment, deal, lines, compact, pending }) {
   return (
     <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
       {big && !shipment.bl_printed_at && <Pill tone="amber" title={`金额 ≥ ${Number(data.suggest.amount).toLocaleString()} 或件数 ≥ ${data.suggest.qty}：建议打印发货文件随货走`}>大单 · 建议打印</Pill>}
+      <button type="button" className={`btn ${pending ? '' : 'sm'}`} onClick={() => setPreview(true)} title="先看一眼 BL 打出来长什么样（看到的就是打出来的）">👁 预览 BL</button>
+      {preview && <Modal wide title={`BL 预览${shipment.bl_no ? ' · ' + shipment.bl_no : '（编号在点打印时才生成）'}`} onClose={() => setPreview(false)}
+        footer={<><span className="hint">打印时出两张一样的：一张仓库留底，一张客户签字。</span><span className="grow" /><button type="button" className="btn" onClick={() => setPreview(false)}>关闭</button><button type="button" className="btn primary" onClick={() => { setPreview(false); printBl(); }}>🖨 打印 BL ×2</button></>}>
+        <div className="bl-preview"><BlSheet shipment={shipment} deal={deal} lines={lines} header={data.header} logo={data.logo} /></div>
+      </Modal>}
       <button type="button" className={`btn ${pending ? '' : 'sm'} ${pending || (big && !shipment.bl_printed_at) ? 'primary' : ''}`} onClick={printBl} title="打印两张：一张仓库备案，一张客户签字">🖨 BL ×2{shipment.bl_no ? '' : '（生成编号）'}</button>
       <button type="button" className={`btn ${pending ? '' : 'sm'}`} onClick={printCustoms} title={data.customs ? `${data.customs.name} · ${Math.round(data.customs.bytes / 1024)} KB` : REAL ? 'QUITTANCE（随版本自带）' : '还没上传：点一下选 PDF 上传'}>🖨 海关文件{data.customs || REAL ? '' : '（未上传，点击上传）'}</button>
       <input ref={fileRef} type="file" accept="application/pdf,.pdf" style={{ display: 'none' }} onChange={(e) => { uploadCustoms(e.target.files?.[0]); e.target.value = ''; }} />

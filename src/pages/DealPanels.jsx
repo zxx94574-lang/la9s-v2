@@ -150,8 +150,9 @@ export function CustomerInfo({ deal }) {
     </div>);
 }
 
-export function ConfirmBlock({ deal, events, act, role }) {
+export function ConfirmBlock({ deal, events, act, role, lines }) {
   const { go: nav } = useApp();
+  const [split, setSplit] = useState(false);
   const [method, setMethod] = useState('');
   const [when, setWhen] = useState('');          // today / tomorrow / date
   const [date, setDate] = useState('');
@@ -174,7 +175,9 @@ export function ConfirmBlock({ deal, events, act, role }) {
         </div>
         {deal.status === 'hotline_ok' && (
           <div className="actionbar"><span className="hint">客户已确认，还没下推找货。{deal.want_on ? `客户要货日期 ${dDate(deal.want_on)}，到那天待办会自动前移。` : ''}</span>
+            {canPush && (lines || []).length > 1 && <button type="button" className="btn" onClick={() => setSplit(true)}>拆单：一部分以后再发</button>}
             {canPush ? <button type="button" className="btn primary lg" onClick={() => act('已下推找货，库存已预占', `select app.start_picking($1)`, [deal.id]).catch(() => {})}>下推找货 · 初检 →</button> : <Blocked action="start_picking" />}</div>)}
+        {split && <SplitModal deal={deal} lines={lines} act={act} onClose={() => setSplit(false)} />}
       </div>
     );
   }
@@ -691,6 +694,7 @@ function ShipForm({ deal, lines, shipments, act }) {
   const [addr, setAddr] = useState('');
   const [proof, setProof] = useState('');
   const [partial, setPartial] = useState(false);
+  const [preason, setPreason] = useState('');
   const [askPartial, setAskPartial] = useState(false);
   const [items, setItems] = useState({});
   const [errs, setErrs] = useState(false);
@@ -714,7 +718,7 @@ function ShipForm({ deal, lines, shipments, act }) {
   const thisTime = left.reduce((a, l) => a + now(l), 0);
   const check = () => {
     setErrs(true);
-    const miss = [!date && '日期', !time && '时间', !method && '发货方式', !phone.trim() && '电话', phone.trim() && !phoneValid(phone) && '电话位数不对', !addr.trim() && '收货地址 / 联系人', !proof && '发货凭证截图'].filter(Boolean);
+    const miss = [!date && '日期', !time && '时间', !method && '发货方式', !phone.trim() && '电话', phone.trim() && !phoneValid(phone) && '电话位数不对', !addr.trim() && '收货地址 / 联系人', !proof && '发货凭证截图', partial && !preason.trim() && '只发一部分的原因'].filter(Boolean);
     if (miss.length) return toast(`出库必填：${miss.join('、')}`, 'err');
     if (left.some((l) => now(l) > remain(l))) return toast('本次出库超过剩余数量', 'err');
     if (!(thisTime > 0)) return toast('本次出库数量为 0', 'err');
@@ -726,6 +730,7 @@ function ShipForm({ deal, lines, shipments, act }) {
     const payload = partial ? left.map((l) => ({ line_id: l.id, qty: now(l) })).filter((x) => x.qty > 0) : null;
     await act('已出库，客户总账已更新', `select app.ship($1,$2,$3,$4,$5,$6,$7)`, [deal.id, at, method, phone.trim(), addr.trim(), proof, payload && JSON.stringify(payload)])
       .then(() => call(role, `select app.set_ship_freight((select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1), $2, $3)`, [deal.id, bearer, bearer === 'customer' ? null : N(freight) || null]).then(() => refresh(), () => {}))
+      .then(() => (partial && preason.trim() ? call(role, `select app.set_partial_reason((select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1), $2)`, [deal.id, preason.trim()]).then(() => refresh(), () => {}) : null))
       .then(() => setSummary(null), () => {});
   };
   return (
@@ -761,6 +766,9 @@ function ShipForm({ deal, lines, shipments, act }) {
             <button type="button" className={partial ? 'on' : ''} onClick={() => !partial && setAskPartial(true)}>只发一部分（分批）</button>
           </div>
           {partial && <span className="small">「本次出库」列可改；不发的行填 0，下一批会自动回到剩余数量</span>}
+          {partial && <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}><b className="small">为什么只发一部分 <span style={{ color: 'var(--red)' }}>*</span></b>
+            {['车装不下', '货还没齐', '客户只要先拿一部分', '客户钱没到齐'].map((r) => <button type="button" key={r} className={`chip ${preason === r ? 'on' : ''} ${errs && !preason.trim() ? 'err' : ''}`} onClick={() => setPreason(r)}>{r}</button>)}
+            <input className={`in ${errs && !preason.trim() ? 'err-in' : ''}`} style={{ width: 200 }} value={preason} onChange={(e) => setPreason(e.target.value)} placeholder="或者自己写" /></span>}
         </div>
       </div>
       <Grid id="deal-ship" table="deal_lines" columns={cols} rows={left} foot={(rows) => ({ code: '合计', model: `${rows.length} 个型号`, ship_now: `${qty(rows.reduce((a, l) => a + now(l), 0))} 件` })} />
@@ -917,6 +925,27 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
   );
 }
 // 219: 坏账核销 (只中方): 欠款确认收不回来 → 写原因 + 凭证, 冲掉应收但永不删除, 客户流水和坏账记录里都看得到
+// 238 (Frank 11-11 23:08): 事先就知道要分开发的 → 勾出「以后再发」的型号拆成另一张单, 各有各的销售单、各自签收; 价格锁在拆单这一刻
+function SplitModal({ deal, lines, act, onClose }) {
+  const [sel, setSel] = useState([]); const [date, setDate] = useState(''); const [note, setNote] = useState('');
+  const tog = (id) => setSel((x) => (x.includes(id) ? x.filter((y) => y !== id) : [...x, id]));
+  const why = !sel.length ? '勾选以后再发的型号' : sel.length >= lines.length ? '原单至少留一行' : !date ? '选以后哪天发' : '';
+  return (
+    <Modal wide title={`拆单：${deal.biz_no}`} onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{why && <span className="why">{why}</span>}
+        <button type="button" className="btn primary" disabled={!!why} onClick={() => act(`已拆出 ${sel.length} 个型号成新单，这张单留下 ${lines.length - sel.length} 个`, `select app.split_deal($1,$2::uuid[],$3,$4)`, [deal.id, `{${sel.join(',')}}`, date, note.trim() || null]).then(onClose).catch(() => {})}>拆成两张单</button></>}>
+      <div className="stack" style={{ minHeight: 440 }}>
+        <div className="hint">勾上的型号搬到一张新单（新单号），到你选的那天再下推找货；没勾的留在这张单，现在就可以下推。两张单各出各的销售单、各自签收，对账可以一次确认。拆出去的型号价格锁在现在这个价，以后只有中方能改。</div>
+        <FRow label="以后哪天发" req><DatePicker value={date || null} onChange={setDate} label={date ? '' : '选日期'} /></FRow>
+        <div className="split-list">{lines.map((l) => (
+          <label key={l.id} className={`split-row ${sel.includes(l.id) ? 'on' : ''}`}><input type="checkbox" checked={sel.includes(l.id)} onChange={() => tog(l.id)} />
+            <span className="grow"><b>{l.model || l.req_model}</b> <span className="muted small">{l.category || ''}</span></span>
+            <span>{qty(l.qty_req)} 片</span><span className={`pill ${sel.includes(l.id) ? 'amber' : 'gray'}`}>{sel.includes(l.id) ? '以后再发' : '这次发'}</span></label>))}</div>
+        <FRow label="备注"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如 等下周到货 / 客户分两次付款" /></FRow>
+      </div>
+    </Modal>
+  );
+}
 function BadDebtModal({ deal, act, onClose }) {
   const [amt, setAmt] = useState(String(N(deal.due)));
   const [reason, setReason] = useState('');

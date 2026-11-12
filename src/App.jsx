@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { openDb, resetDemo, q, isPersistent, REAL, setCustomerSession, customerSession } from './db/client.js';
 import { CustomerLogin, GuestShop, MustChange } from './pages/Guest.jsx';
 import * as Q from './db/queries.js';
+import Kpi from './pages/Kpi.jsx';
 import { DirectiveGate } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
@@ -170,6 +171,7 @@ export default function App() {
     case 'inquiry': view = <Inquiry />; break;
     case 'purchase': view = <Purchase />; break;
     case 'attendance': view = <Attendance />; break;
+    case 'kpi': view = <Kpi />; break;
     case 'staff': view = <Staff />; break;
     case 'sop': view = <Sop />; break;
     case 'kingdee': view = <Kingdee />; break;
