@@ -8,7 +8,7 @@ import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { BalanceCopy } from '../components/Doc.jsx';
-import ReceiptForm, { DealDrawer, DealChip, BalanceLine, VoidReceiptModal, RcvStatus, rcvState, ReallocModal } from '../components/ReceiptForm.jsx';
+import ReceiptForm, { DealDrawer, DealChip, BalanceLine, VoidReceiptModal, RcvStatus, rcvState, ReallocModal, verifyRcvAction } from '../components/ReceiptForm.jsx';
 import { can, PAY_METHODS } from '../lib/domain.js';
 import { money, dDate, friendlyError, periodRange } from '../lib/format.js';
 
@@ -57,12 +57,8 @@ export default function Receipts({ preset }) {
     { key: 'status', label: '冲账情况', w: 300, value: sentence, render: (r) => (
       <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
         <span style={{ whiteSpace: 'normal' }}>{sentence(r)}</span>
-        {!r.voided_at && can(role, 'receipt') && (r.allocations.length > 0 || N(r.unallocated) > 0) && <button type="button" className="btn sm" onClick={() => setRealloc(r)}>改冲账</button>}
-        {N(r.unallocated) > 0 && can(role, 'receipt') && <button type="button" className="btn sm" onClick={async () => {
-          try { await call(role, `select app.apply_unallocated($1,'oldest','[]')`, [r.id]); toast('预付已冲到最老的未付单'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); }
-        }}>把预付冲到订单</button>}
       </span>) },
-    ...(can(role, 'receipt') ? [{ key: 'undo', label: '', w: 90, sortable: false, filterable: false, render: (r) => (r.voided_at ? <Pill tone="gray">已撤销</Pill> : <button type="button" className="btn sm soft-red" onClick={() => setVoidRc(r)}>↶ 撤销</button>) }] : []),
+    { key: 'undo', label: '撤销', w: 70, sortable: false, filterable: false, render: (r) => (r.voided_at ? <Pill tone="gray">已撤销</Pill> : '') },
     { key: 'proof', label: '凭证', w: 80, sortable: false, filterable: false, render: (r) => (r.proof_path ? <Thumb src={r.proof_path} size={30} label={`${r.rcv_no} 收款凭证`} /> : r.voided_at ? null : <span className="pill red">缺凭证</span>) },
   ];
   const settledCols = [
@@ -111,7 +107,9 @@ export default function Receipts({ preset }) {
 
       <div className="card">
         <div className="card-h"><h2>收款记录（每一笔进账）{customer && <span className="muted small"> · 只看这个客户</span>}</h2><span className="hint">单号可点开查看；「冲账情况」写清这笔钱去了哪</span></div>
-        <Grid id="rcv-list2" table="receipts" columns={listCols} rows={mine} empty="本年还没有收款"
+        <Grid id="rcv-list2" table="receipts" columns={listCols} rows={mine} rowActions={can(role, 'receipt') ? [verifyRcvAction(role, toast, refresh), { label: '改冲账', tone: '', when: (r) => !r.voided_at && (r.allocations.length > 0 || N(r.unallocated) > 0), run: (r) => setRealloc(r) },
+            { label: '把预付冲到订单', tone: '', when: (r) => !r.voided_at && N(r.unallocated) > 0, run: async (r) => { try { await call(role, `select app.apply_unallocated($1,'oldest','[]')`, [r.id]); toast('预付已冲到最老的未付单'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } } },
+            { label: '↶ 撤销这笔收款', tone: 'soft-red', when: (r) => !r.voided_at, run: (r) => setVoidRc(r) }] : undefined} empty="本年还没有收款"
           foot={(rows) => ({ rcv_no: `合计 ${rows.filter((r) => !r.voided_at).length} 笔`, converted: `${money(rows.filter((r) => !r.voided_at && r.account_currency === 'XOF').reduce((a, r) => a + N(r.converted), 0))} XOF` })} />
       </div>
       {drawer && <DealDrawer id={drawer} onClose={() => setDrawer(null)} />}

@@ -254,15 +254,14 @@ export function VoidReceiptModal({ rc, onClose }) {
 // 收款三段状态 (Frank 11-11 219): 员工代收·在途 (黄) → 待核对到账 (黄) → 已到账 (绿); 撤销的灰
 export const rcvState = (r) => (r.voided_at ? ['gray', '已撤销'] : r.collector_employee_id && !r.handed_at ? ['amber', `员工代收 · 在途${r.collector_name ? `（${r.collector_name}）` : ''}`]
   : r.verify_status === 'verified' ? ['green', '已到账'] : ['amber', '待核对到账']);
-export function RcvStatus({ r, onDone }) {
-  const { role, toast } = useApp();
+// 「确认到账」不放格子里 (Frank 11-12): 表格上方的行操作, 选中那一笔才出
+export const canVerifyRcv = (r) => !r.voided_at && r.verify_status !== 'verified' && !(r.collector_employee_id && !r.handed_at);
+export const verifyRcvAction = (role, toast, onDone) => ({ label: '确认到账（核对过钱确实到了）', when: canVerifyRcv, run: async (r) => { try { await call(role, `select app.verify_receipt($1)`, [r.id]); toast(`${r.rcv_no} 已确认到账`); onDone?.(); } catch (e) { toast(friendlyError(e), 'err'); } } });
+export function RcvStatus({ r }) {
   const [tone, label] = rcvState(r);
-  const can2 = can(role, 'receipt') && !r.voided_at;
-  const verify = async () => { try { await call(role, `select app.verify_receipt($1)`, [r.id]); toast(`${r.rcv_no} 已确认到账`); onDone?.(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
     <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
       <span className={`pill ${tone}`}>{label}</span>
-      {can2 && r.verify_status !== 'verified' && !(r.collector_employee_id && !r.handed_at) && <button type="button" className="btn sm" onClick={verify} title="核对过 Wave / 银行 / 现金，钱确实到了">确认到账</button>}
       {N(r.fee) > 0 && <span className="small muted">手续费 {money(r.fee, r.currency)}（{r.fee_bearer === 'company' ? '我方出' : '客户出'}）</span>}
       {r.payer && <span className="small muted">付款人 {r.payer}</span>}
     </span>

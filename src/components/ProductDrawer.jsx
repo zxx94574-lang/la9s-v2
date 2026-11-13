@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import { TierPill, useApp, useData, Drawer, Pill, BigNum, DatePicker, Modal, Info, Bang } from './ui.jsx';
 import { TIERS, can } from '../lib/domain.js';
+import Grid from './Grid.jsx';
 import { money, qty, dDate, dt, friendlyError, today } from '../lib/format.js';
 
 const N = (v) => Number(v || 0);
@@ -162,14 +163,18 @@ export default function ProductDrawer({ product, tier, onClose }) {
         {/* ⑥ 库存 */}
         <section className="pd-sec">
           <div className="pd-h">⑥ 库存 <span className="muted small">LA / 9S 可售 <b>{qty(avail)}</b></span></div>
-          <table className="t"><thead><tr><th>仓库</th><th>库位</th><th style={{ textAlign: 'right' }}>实存</th><th style={{ textAlign: 'right' }}>预占</th><th style={{ textAlign: 'right' }}>可售</th></tr></thead>
-            <tbody>{stock.length === 0 ? <tr><td colSpan={5} className="muted">没有库存记录</td></tr> : stock.map((s, i) => <tr key={i}><td>{s.warehouse}</td><td className="mono">{s.bin || ''}</td><td style={{ textAlign: 'right' }}>{qty(s.on_hand)}</td><td style={{ textAlign: 'right' }}>{qty(s.reserved)}</td><td style={{ textAlign: 'right' }}><b>{qty(N(s.on_hand) - N(s.reserved))}</b></td></tr>)}</tbody></table>
+          <Grid id="pd-stock" compactTools rows={stock} rowKey={(x) => x.warehouse + (x.bin || '')} empty="没有库存记录" columns={[
+            { key: 'warehouse', label: '仓库', w: 100 }, { key: 'bin', label: '库位', w: 90, render: (x) => <span className="mono">{x.bin || ''}</span> },
+            { key: 'on_hand', label: '实存', w: 90, type: 'number', render: (x) => qty(x.on_hand) }, { key: 'reserved', label: '预占', w: 90, type: 'number', render: (x) => qty(x.reserved) },
+            { key: 'avail', label: '可售', w: 90, type: 'number', value: (x) => N(x.on_hand) - N(x.reserved), render: (x) => <b>{qty(N(x.on_hand) - N(x.reserved))}</b> }]} />
         </section>
         {seeAll && data?.recent?.length > 0 && (
           <section className="pd-sec">
             <div className="pd-h">最近成交（出库）</div>
-            <table className="t"><thead><tr><th>日期</th><th>客户</th><th>档</th><th style={{ textAlign: 'right' }}>数量</th><th style={{ textAlign: 'right' }}>单价</th></tr></thead>
-              <tbody>{data.recent.map((r, i) => <tr key={i}><td>{dDate(r.created_at)}</td><td>{r.customer}</td><td><TierPill tier={r.tier} /></td><td style={{ textAlign: 'right' }}>{qty(r.qty_supply)}</td><td style={{ textAlign: 'right' }}>{money(r.unit_price)}</td></tr>)}</tbody></table>
+            <Grid id="pd-recent" compactTools rows={data.recent} rowKey={(x) => String(x.created_at) + x.customer + x.qty_supply} columns={[
+              { key: 'created_at', label: '日期', w: 110, value: (x) => dDate(x.created_at) }, { key: 'customer', label: '客户', w: 170 },
+              { key: 'tier', label: '档', w: 110, value: (x) => TIERS[x.tier] || '', render: (x) => <TierPill tier={x.tier} /> },
+              { key: 'qty_supply', label: '数量', w: 90, type: 'number', render: (x) => qty(x.qty_supply) }, { key: 'unit_price', label: '单价', w: 100, type: 'number', render: (x) => money(x.unit_price) }]} />
           </section>
         )}
         {seeAll && data && <HistoryBlock hist={data.hist} />}
@@ -229,6 +234,7 @@ function CostBlocks({ p, ps, batches, tier, priceOf, lockedOf, ed, setEd, onChan
   const floor = priceOf('S');
   const floorLoss = floor != null && worst != null && floor < worst;
   const [adding, setAdding] = useState(null);
+  const [bsel, setBsel] = useState(new Set());
   const numIn = (k, w = 90) => <input className="in sm" inputMode="decimal" style={{ width: w }} value={ed[k]} onChange={(e) => setEd({ ...ed, [k]: e.target.value.replace(/[^\d.]/g, '') })} />;
 
   return (
@@ -282,27 +288,22 @@ function CostBlocks({ p, ps, batches, tier, priceOf, lockedOf, ed, setEd, onChan
       <section className="pd-sec">
         <div className="pd-h row between"><span>⑤ 采购批次 <Info>每批单价按最新汇率折成西法（金蝶采购单是美元）；每片运费 = 这批总运费 ÷ 总片数，向上进 50</Info></span>
           {role === 'admin' && !adding && <button type="button" className="btn sm" onClick={() => setAdding({ po_no: '', ordered_on: today(), qty: '', currency: 'CNY', unit_price: '', freight_total: '', freight_pieces: '' })}>＋ 加一批</button>}</div>
-        <div className="tscroll">
-        <table className="t"><thead><tr><th>采购单号</th><th>日期</th><th style={{ textAlign: 'right' }}>数量</th><th style={{ textAlign: 'right' }}>采购单价</th><th style={{ textAlign: 'right' }}>折合 XOF</th><th style={{ textAlign: 'right' }}>每片运费</th><th style={{ textAlign: 'right' }}>到岸</th><th style={{ textAlign: 'right' }}>比当前成本</th>{role === 'admin' && <th />}</tr></thead>
-          <tbody>
-            {batches.length === 0 && !adding && <tr><td colSpan={9} className="muted">还没有批次。点「＋ 加一批」，或在「数据导入 → 采购批次」导金蝶采购订单。</td></tr>}
-            {batches.map((b) => { const L = cm.bLanded(b); const d = landed != null ? L - landed : null; const fr = cm.bFreight(b); return (
-              <tr key={b.id} className={maxB && b.id === maxB.id && batches.length > 1 ? 'pd-max' : ''}>
-                <td className="mono">{b.po_no || '—'}{b.source === 'kingdee' && <span className="muted small"> 金蝶</span>}</td><td>{dDate(b.ordered_on) || '—'}</td>
-                <td style={{ textAlign: 'right' }}>{qty(b.qty)}</td>
-                <td style={{ textAlign: 'right' }}>{b.currency === 'USD' ? '$' : b.currency === 'CNY' ? '¥' : ''}{+N(b.unit_price).toFixed(b.currency === 'USD' ? 4 : 2)}</td>
-                <td style={{ textAlign: 'right' }}>{money(Math.round(cm.toXof(b)))}</td>
-                <td style={{ textAlign: 'right' }} title={fr.how === 'batch' ? `${money(b.freight_total)} ÷ ${qty(b.freight_pieces)} 片 = ${money(N(b.freight_total) / N(b.freight_pieces))} → 进到 ${money(fr.v)}` : ''}>
-                  {fr.how === 'none' ? <span className="pill amber">没填</span> : <>{money(fr.v)}{fr.how === 'default' && <span className="small muted"> 默认</span>}</>}</td>
-                <td style={{ textAlign: 'right' }}><b>{money(L)}</b><div className="small muted">实际 {money(Math.round(cm.bRaw(b)))}</div>{maxB && b.id === maxB.id && batches.length > 1 && <span className="small red-t2"> 最贵</span>}</td>
-                <td style={{ textAlign: 'right' }} className={d > 0 ? 'red-t2' : d < 0 ? 'green-t2' : ''}>{d == null ? '—' : d === 0 ? '持平' : `${d > 0 ? '+' : ''}${money(d)}`}</td>
-                {role === 'admin' && <td><span className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
-                  <button type="button" className="btn sm ghost" title="填这批的总运费和总片数" onClick={() => setAdding({ ...b, id: b.id, freight_total: b.freight_total ?? '', freight_pieces: b.freight_pieces ?? '', unit_price: String(b.unit_price), qty: String(b.qty) })}>运费</button>
-                  <button type="button" className="btn sm ghost" title="删掉这批" onClick={async () => { try { await call(role, `select app.delete_product_batch($1)`, [b.id]); toast('已删掉这批'); onChanged(); } catch (e) { toast(friendlyError(e), 'err'); } }}>删</button></span></td>}
-              </tr>); })}
-            {adding && <BatchForm p={p} f={adding} setF={setAdding} role={role} toast={toast} onDone={() => { setAdding(null); onChanged(); }} />}
-          </tbody></table>
-        </div>
+        {adding && <div className="tscroll"><table className="t"><tbody><BatchForm p={p} f={adding} setF={setAdding} role={role} toast={toast} onDone={() => { setAdding(null); onChanged(); }} /></tbody></table></div>}
+        {role === 'admin' && batches.length > 0 && <div className="row" style={{ gap: 6, margin: '6px 0' }}>
+          <button type="button" className="btn sm" disabled={bsel.size !== 1} title={bsel.size === 1 ? '' : '先勾选一批'} onClick={() => { const b = batches.find((x) => bsel.has(x.id)); setAdding({ ...b, id: b.id, freight_total: b.freight_total ?? '', freight_pieces: b.freight_pieces ?? '', unit_price: String(b.unit_price), qty: String(b.qty) }); }}>填这批的运费</button>
+          <button type="button" className="btn sm soft-red" disabled={bsel.size !== 1} title={bsel.size === 1 ? '' : '先勾选一批'} onClick={async () => { const b = batches.find((x) => bsel.has(x.id)); try { await call(role, `select app.delete_product_batch($1)`, [b.id]); toast('已删掉这批'); setBsel(new Set()); onChanged(); } catch (e) { toast(friendlyError(e), 'err'); } }}>删掉这批</button>
+          <span className="small muted">默认按日期，最新的在最上面</span></div>}
+        <Grid id="pd-batches" compactTools rows={[...batches].sort((a, b) => String(dDate(b.ordered_on) || '').localeCompare(String(dDate(a.ordered_on) || '')))} empty="还没有批次。点「＋ 加一批」，或在「数据导入 → 采购批次」导金蝶采购订单。"
+          selectable={role === 'admin' ? { selected: bsel, onChange: setBsel } : undefined} rowClass={(b) => (maxB && b.id === maxB.id && batches.length > 1 ? 'pd-max' : '')} columns={[
+            { key: 'po_no', label: '采购单号', w: 170, value: (b) => b.po_no || '', render: (b) => <span className="mono">{b.po_no || '—'}{b.source === 'kingdee' && <span className="muted small"> 金蝶</span>}</span> },
+            { key: 'ordered_on', label: '日期', w: 110, value: (b) => dDate(b.ordered_on) || '' },
+            { key: 'qty', label: '数量', w: 90, type: 'number', render: (b) => qty(b.qty) },
+            { key: 'unit_price', label: '采购单价', w: 110, value: (b) => N(b.unit_price), type: 'number', render: (b) => <>{b.currency === 'USD' ? '$' : b.currency === 'CNY' ? '¥' : ''}{+N(b.unit_price).toFixed(b.currency === 'USD' ? 4 : 2)}</> },
+            { key: 'xof', label: '折合 XOF', w: 100, type: 'number', value: (b) => Math.round(cm.toXof(b)), render: (b) => money(Math.round(cm.toXof(b))) },
+            { key: 'freight', label: '每片运费', w: 110, type: 'number', value: (b) => cm.bFreight(b).v, render: (b) => { const fr = cm.bFreight(b); return fr.how === 'none' ? <span className="pill amber">没填</span> : <span title={fr.how === 'batch' ? `${money(b.freight_total)} ÷ ${qty(b.freight_pieces)} 片 → 进到 ${money(fr.v)}` : ''}>{money(fr.v)}{fr.how === 'default' && <span className="small muted"> 默认</span>}</span>; } },
+            { key: 'landed', label: '到岸', w: 130, type: 'number', value: (b) => cm.bLanded(b), render: (b) => <><b>{money(cm.bLanded(b))}</b> <span className="small muted">实际 {money(Math.round(cm.bRaw(b)))}</span>{maxB && b.id === maxB.id && batches.length > 1 && <span className="small red-t2"> 最贵</span>}</> },
+            { key: 'delta', label: '比当前成本', w: 110, type: 'number', value: (b) => (landed != null ? cm.bLanded(b) - landed : null), render: (b) => { const d = landed != null ? cm.bLanded(b) - landed : null; return <span className={d > 0 ? 'red-t2' : d < 0 ? 'green-t2' : ''}>{d == null ? '—' : d === 0 ? '持平' : `${d > 0 ? '+' : ''}${money(d)}`}</span>; } },
+          ]} />
       </section>
     </>
   );

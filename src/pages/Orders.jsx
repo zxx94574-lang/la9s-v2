@@ -4,7 +4,7 @@ import * as Q from '../db/queries.js';
 import { TierPill, Light, useApp, useData, Pill, DatePicker, useOutside } from '../components/ui.jsx';
 import { call } from '../db/client.js';
 import { friendlyError, dDate, today } from '../lib/format.js';
-import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
+import { ModelLink, CustLink, EmpLink, DealLink, setPeekHighlight } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import { MultiPick, Schemes } from '../components/FilterBar.jsx';
 import Inquiry from './Inquiry.jsx';
@@ -13,6 +13,7 @@ import { money, qty, dt, periodRange, PERIODS } from '../lib/format.js';
 
 const GROUPS = [['', '全部状态'], ['open', '进行中'], ['quoted,hotline_ok', '只报价'], ['picking,picked', '找货中'], ['ordered', '待客户确认'], ['confirmed,reviewed', '待复检 / 待出库'], ['partial,shipped', '已出库'], ['unpaid', '已出库未收清'], ['cancelled', '已作废']];
 
+const PAY_LABEL = { paid: '已付清', partial: '付了一部分', unpaid: '没付', none: '还没出库' };
 export default function Orders() {
   const { org, go, role } = useApp();
   // 看板上点某个颜色跳过来: 带时间段 + 灯色 (一次性)
@@ -27,19 +28,20 @@ export default function Orders() {
   const [light, setLight] = useState(jump?.light || '');   // 三色灯筛选
   const ref = useOutside(open, () => setOpen(false));
   const [tab, setTab] = useState('all');
-  const { data } = useData(() => q(Q.orders, [org, from, to]), [org, from, to]);
+  const { data } = useData(async () => { await call(role, `select app.void_stale_drafts($1)`, [org]).catch(() => {}); return q(Q.orders, [org, from, to]); }, [org, from, to]);   // 259: 放太久的草稿顺手作废
   // 229 (Frank 11-11): 筛选条 —— 客户 / 档位 / 机型 / 付款, 可叠加; 「按机型看」给出片数和金额; 可存成筛选方案
   const olinesRaw = useData(() => q(Q.orderLines, [org, from, to]), [org, from, to]).data;
   const olines = useMemo(() => olinesRaw || [], [olinesRaw]);
   const [fcust, setFcust] = useState([]); const [ftier, setFtier] = useState([]); const [fmodel, setFmodel] = useState([]); const [fpay, setFpay] = useState([]);
   const [mode, setMode] = useState('orders');
+  const [gridShown, setGridShown] = useState(null);   // 表格里筛出来的行 + 机型条件 → 「按机型看」跟着同一套筛选
   const curFilter = { period, custom: period === 'custom' ? custom : null, light, fcust, ftier, fmodel, fpay, mode, text };
   const applyScheme = (f) => { if (f.period) setPeriod(f.period); if (f.period === 'custom' && f.custom) setCustom(f.custom); setLight(f.light || ''); setFcust(f.fcust || []); setFtier(f.ftier || []); setFmodel(f.fmodel || []); setFpay(f.fpay || []); setMode(f.mode || 'orders'); setText(f.text || ''); setTier(''); setGrp(''); };
   const payOf = (d) => (!(Number(d.shipped_amount) > 0) ? 'none' : Number(d.due) <= 0 ? 'paid' : Number(d.allocated_amount) > 0 ? 'partial' : 'unpaid');
   const voided = useData(() => q(Q.voidedDeals, [org]), [org]).data || [];
   const modelDeals = useMemo(() => new Set(olines.filter((l) => fmodel.includes(l.model)).map((l) => l.deal_id)), [olines, fmodel]);
   const rows = useMemo(() => (data || []).filter((d) => {
-    if (light) { if (dealLight(d) !== light) return false; } else if (d.status === 'cancelled' && grp !== 'cancelled') return false;   // 作废的单默认在「已作废」页签; 选了红灯就显示
+    if (light === 'draft') { if (!(d.status === 'quoted' && d.tier_pending)) return false; } else if (light) { if (dealLight(d) !== light) return false; } else if (d.status === 'cancelled' && grp !== 'cancelled') return false;   // 作废的单默认在「已作废」页签; 选了红灯就显示
     if (tier && d.tier !== tier) return false;
     if (fcust.length && !fcust.includes(d.customer_id)) return false;
     if (ftier.length && !ftier.includes(d.tier)) return false;
@@ -52,17 +54,21 @@ export default function Orders() {
     return true;
   }), [data, text, tier, grp, light, fcust, ftier, fpay, fmodel, modelDeals]);
   const price = seesPrice(role);
+  const catsOf = useMemo(() => { const m = new Map(); for (const l of olines) { if (!l.category) continue; const set = m.get(l.deal_id) || new Set(); set.add(l.category); m.set(l.deal_id, set); } return new Map([...m].map(([k, v]) => [k, [...v].join(' / ')])); }, [olines]);
   const cols = [
     { key: 'biz_no', label: '订单号', w: 150, render: (d) => <b><DealLink id={d.id} no={d.biz_no} /></b> },
     { key: 'created_at', label: '创建时间', w: 130, render: (d) => dt(d.created_at) },
     { key: 'customer_code', label: '客户编码', w: 70 },
     { key: 'customer_name', label: '客户', w: 160, render: (d) => <><CustLink id={d.customer_id} name={d.customer_name} /> <span className="muted small">{d.city}</span></> },
+    { key: 'city', label: '城市', w: 100, hidden: true },
     { key: 'tier', label: '档位', w: 100, value: (d) => TIERS[d.tier], render: (d) => <TierPill tier={d.tier} /> },
     { key: 'light', label: '订单状态', w: 96, value: (d) => LIGHT_LABEL[dealLight(d)], render: (d) => <Light v={dealLight(d)} /> },
     { key: 'stuck', label: '卡在哪一步', w: 170, value: (d) => stuckOf(d), render: (d) => <span className="small">{stuckOf(d)}</span> },
-    { key: 'status', label: '单据阶段', w: 150, value: (d) => STATUS[d.status].label, render: (d) => <><Pill tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Pill>{d.approval === 'pending' && d.status === 'quoted' && <Pill tone="amber">等审批</Pill>}{d.approval === 'rejected' && <Pill tone="red">没批</Pill>}
+    { key: 'status', label: '单据阶段', w: 150, value: (d) => STATUS[d.status].label, render: (d) => <>{d.status === 'quoted' && d.tier_pending ? <Pill tone="amber">草稿 · 等定档</Pill> : <Pill tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Pill>}{d.approval === 'pending' && d.status === 'quoted' && <Pill tone="amber">等审批</Pill>}{d.approval === 'rejected' && <Pill tone="red">没批</Pill>}
       {d.planned_ship_date && ['confirmed', 'reviewed', 'partial'].includes(d.status) && dDate(d.planned_ship_date) <= today() && <Pill tone={dDate(d.planned_ship_date) < today() ? 'red' : 'amber'}>{dDate(d.planned_ship_date) < today() ? '过期未出库' : '今天该出库'}</Pill>}</> },
-    { key: 'models', label: '机型', w: 220, render: (d) => <span className="small" title={d.models || ''}>{d.models || ''}</span> },
+    { key: 'cats', label: '种类', w: 130, value: (d) => catsOf.get(d.id) || '', render: (d) => <span className="small">{catsOf.get(d.id) || ''}</span> },
+    { key: 'models', label: '机型', w: 220, value: (d) => d.models || '', render: (d) => <span className="small" title={d.models || ''}>{d.models || ''}</span> },
+    { key: 'pay', label: '付款', w: 100, value: (d) => PAY_LABEL[payOf(d)], render: (d) => { const k = payOf(d); return k === 'none' ? <span className="muted small">还没出库</span> : <Pill tone={k === 'paid' ? 'green' : k === 'partial' ? 'amber' : 'red'}>{PAY_LABEL[k]}</Pill>; } },
     { key: 'line_count', label: '型号数', w: 60 },
     { key: 'qty', label: '件数', w: 70, render: (d) => qty(['quoted', 'hotline_ok'].includes(d.status) ? d.qty_req : d.qty_supply) },
     ...(price ? [
@@ -76,14 +82,15 @@ export default function Orders() {
   const modelOpts = useMemo(() => [...new Set(olines.map((l) => l.model).filter(Boolean))].sort().map((m) => [m, m]), [olines]);
   // 按机型看: 筛出来的这些单里, 每个机型卖了多少片、多少钱 (已出库 − 已退货, 按成交价)
   const byModel = useMemo(() => {
-    const ok = new Map(rows.map((d) => [d.id, d])); const m = new Map();
-    for (const l of olines) { const d = ok.get(l.deal_id); if (!d || !l.model) continue; if (fmodel.length && !fmodel.includes(l.model)) continue;
+    const base = gridShown?.rows || rows; const fm = gridShown?.models || [];
+    const ok = new Map(base.map((d) => [d.id, d])); const m = new Map();
+    for (const l of olines) { const d = ok.get(l.deal_id); if (!d || !l.model) continue; if (fm.length && !fm.includes(String(l.model).toUpperCase())) continue;
       const pcs = Number(l.qty_shipped) - Number(l.qty_returned); const k = l.model + '|' + (l.category || '');
       const r = m.get(k) || { key: k, model: l.model, category: l.category, product_id: l.product_id, pcs: 0, amount: 0, req: 0, deals: new Set(), custs: new Set() };
       r.pcs += pcs; r.amount += pcs * Number(l.unit_price || 0); r.req += Number(l.qty_req); r.deals.add(l.deal_id); r.custs.add(d.customer_id); m.set(k, r); }
     return [...m.values()].map((r) => ({ ...r, deal_n: r.deals.size, cust_n: r.custs.size })).sort((a, b) => b.pcs - a.pcs);
-  }, [rows, olines, fmodel]);
-  const counts = useMemo(() => { const c = { done: 0, active: 0, cancelled: 0 }; for (const d of data || []) c[dealLight(d)] += 1; return c; }, [data]);
+  }, [rows, olines, gridShown]);
+  const counts = useMemo(() => { const c = { done: 0, active: 0, cancelled: 0, draft: 0 }; for (const d of data || []) { c[dealLight(d)] += 1; if (d.status === 'quoted' && d.tier_pending) c.draft += 1; } return c; }, [data]);
   return (
     <>
       <div className="pagehead">
@@ -102,19 +109,13 @@ export default function Orders() {
       </div>
       {tab === 'ship' ? <ShipmentsList from={from} to={to} /> : tab === 'void' ? <VoidedList rows={voided} /> : tab === 'inq' ? <Inquiry embedded /> : <div className="card">
         <div className="fbar">
-          <MultiPick label="客户" options={custOpts} value={fcust} onChange={setFcust} />
-          <MultiPick label="档位" options={Object.entries(TIERS)} value={ftier} onChange={setFtier} />
-          <MultiPick label="机型" options={modelOpts} value={fmodel} onChange={setFmodel} />
-          <MultiPick label="付款" options={[['paid', '已付清'], ['partial', '付了一部分'], ['unpaid', '没付'], ['none', '还没出库']]} value={fpay} onChange={setFpay} />
-          <input className="in sm" style={{ width: 170 }} value={text} onChange={(e) => setText(e.target.value)} placeholder="⌕ 单号 / 城市" />
-          {anyF ? <button type="button" className="btn sm" onClick={() => { setFcust([]); setFtier([]); setFmodel([]); setFpay([]); setText(''); }}>清空</button> : null}
+          <span className="small muted">筛选、搜索、筛选方案都在下面表格左上角（⏷ 筛选）。</span>
           <span className="grow" />
-          <Schemes table="orders" current={curFilter} onApply={applyScheme} />
           <div className="seg"><button type="button" className={mode === 'orders' ? 'on' : ''} onClick={() => setMode('orders')}>按订单看</button><button type="button" className={mode === 'models' ? 'on' : ''} onClick={() => setMode('models')}>按机型看</button></div>
         </div>
         <div className="row light-bar">
-          {[['', '全部'], ['active', '进行中'], ['done', '已完成'], ['cancelled', '已取消']].map(([k, l]) => (
-            <button type="button" key={k || 'all'} className={`chip ${light === k ? 'on' : ''}`} onClick={() => setLight(k)}>{k ? <Light v={k} /> : l} <b>{k ? counts[k] : (data || []).length}</b></button>))}
+          {[['', '全部'], ['active', '进行中'], ['draft', '草稿'], ['done', '已完成'], ['cancelled', '已取消']].map(([k, l]) => (
+            <button type="button" key={k || 'all'} className={`chip ${light === k ? 'on' : ''}`} onClick={() => setLight(k)}>{k === 'draft' ? <span className="pill amber">草稿</span> : k ? <Light v={k} /> : l} <b>{k ? counts[k] : (data || []).length}</b></button>))}
         </div>
         {mode === 'models' ? (
           <>
@@ -135,22 +136,7 @@ export default function Orders() {
             ]} foot={(rs) => ({ model: '合计', pcs: `${qty(rs.reduce((a, r) => a + r.pcs, 0))} 片`, ...(price ? { amount: money(rs.reduce((a, r) => a + r.amount, 0)) } : {}) })} />
           </>
         ) : null}
-        {mode === 'orders' && <Grid id="orders" table="deals" columns={cols} rows={rows} onRowClick={(d) => go('deal/' + d.id)} empty={!data ? '加载中…' : light ? `${custom && period === 'custom' ? `${custom[0]} 至 ${custom[1]} ` : '这个时间段'}没有「${LIGHT_LABEL[light]}」的订单` : (data.length ? '没有符合条件的订单' : '这个时间段还没有订单')}
-          tools={(
-            <span style={{ position: 'relative' }} ref={ref}>
-              <button type="button" className={`btn sm ${active ? 'primary' : ''}`} onClick={() => setOpen(!open)}>⌕ 筛选{active ? ' · 已筛' : ''}</button>
-              {open && (
-                <div className="menu" style={{ left: 0, top: '115%', width: 300, padding: 12 }}>
-                  <div className="stack">
-                    <div className="field"><label>搜索：客户名 / 编码 / 城市 / 单号</label><input className="in" autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="例如 CAMARA（两个城市会都列出来）" /></div>
-                    <div className="field"><label>状态</label><select className="in" value={grp} onChange={(e) => setGrp(e.target.value)}>{GROUPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
-                    <div className="field"><label>客户档位</label><select className="in" value={tier} onChange={(e) => setTier(e.target.value)}><option value="">全部档位</option>{Object.entries(TIERS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
-                    <button type="button" className="btn sm" onClick={() => { setText(''); setTier(''); setGrp(''); }}>清除筛选</button>
-                  </div>
-                </div>
-              )}
-            </span>
-          )}
+        {mode === 'orders' && <Grid id="orders" table="deals" columns={cols} rows={rows} onShown={(rs, conds, qq) => { const ms = conds.filter((c) => c.key === 'models').flatMap((c) => (c.op === 'in' ? c.vals || [] : c.op === 'contains' ? [c.a] : [])).map((v) => String(v || '').toUpperCase()).filter(Boolean); setPeekHighlight([...ms, qq]); setGridShown({ rows: rs, models: (conds.find((c) => c.key === 'models' && c.op === 'in')?.vals || []).map((v) => String(v).toUpperCase()) }); }} onRowClick={(d) => go('deal/' + d.id)} empty={!data ? '加载中…' : light ? `${custom && period === 'custom' ? `${custom[0]} 至 ${custom[1]} ` : '这个时间段'}没有「${LIGHT_LABEL[light]}」的订单` : (data.length ? '没有符合条件的订单' : '这个时间段还没有订单')}
           foot={(rows) => ({ biz_no: `合计 ${rows.length} 单`, qty: `${qty(rows.reduce((a, d) => a + Number(['quoted', 'hotline_ok'].includes(d.status) ? d.qty_req : d.qty_supply), 0))} 件`,
             amount: price ? money(rows.reduce((a, d) => a + Number(d.amount), 0)) : '', due: price ? money(rows.reduce((a, d) => a + Math.max(0, Number(d.due)), 0)) : '' })} />}
       </div>}
@@ -163,15 +149,12 @@ function VoidedList({ rows }) {
   const { role, toast, refresh, go } = useApp();
   return (
     <div className="card">
-      <Grid id="orders-void" table="deals" rows={rows} onRowClick={(d) => go('deal/' + d.id)} empty="没有作废的订单" columns={[
+      <Grid id="orders-void" table="deals" rows={rows} onRowClick={(d) => go('deal/' + d.id)} empty="没有作废的订单"
+        rowActions={can(role, 'restore') ? [{ label: '↺ 恢复这张单', tone: '', run: async (d) => { try { await call(role, `select app.restore_deal($1)`, [d.id]); toast(`${d.biz_no} 已恢复为报价`); refresh(); } catch (er) { toast(friendlyError(er), 'err'); } } }] : undefined} columns={[
         { key: 'biz_no', label: '订单号', w: 150, render: (d) => <b><DealLink id={d.id} no={d.biz_no} /></b> },
         { key: 'customer_name', label: '客户', w: 160 },
         { key: 'updated_at', label: '作废时间', w: 130, render: (d) => dt(d.updated_at) },
         { key: 'reason', label: '原因', w: 160 },
-        { key: 'act', label: '', w: 120, sortable: false, filterable: false, render: (d) => (can(role, 'restore') ? <button type="button" className="btn sm" onClick={async (e) => {
-          e.stopPropagation();
-          try { await call(role, `select app.restore_deal($1)`, [d.id]); toast(`${d.biz_no} 已恢复为报价`); refresh(); } catch (er) { toast(friendlyError(er), 'err'); }
-        }}>↺ 恢复</button> : '') },
       ]} />
       <div className="card-b hint">作废的单不删除：恢复后回到「已报价」，需要重新下推找货单（重新预占库存）。</div>
     </div>

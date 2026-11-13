@@ -54,6 +54,9 @@ select d.id, d.biz_no, d.quote_no, d.pick_no, d.so_no, d.kind, d.status, d.curre
   app.balance_pending(d.id) as balance_pending,
   (select count(*) from app.shipments sf where sf.deal_id = d.id and sf.voided_at is null and sf.freight_bearer in ('company','company_part') and sf.freight_paid_at is null)::int as freight_due_n,
   (select count(*) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.status = 'open')::int as open_disc_n,
+  (c.tier_confirmed_at is null) as tier_pending, c.tier_requested_at,
+  (select max(e.at) from app.deal_events e where e.deal_id = d.id and e.action = 'sales_order_created') as so_sent_at,
+  (select count(*) from app.deal_lines hl join app.stock_holds h on h.stock_item_id = hl.stock_item_id and h.status = 'active' and h.whole where hl.deal_id = d.id)::int as frozen_n,
   (select coalesce(sum(rd.amount), 0) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.decision = 'credit') as disc_credit,
   (select short_name from app.employees oe where oe.id = d.owner_employee_id) as owner_name
 from app.deals d
@@ -63,7 +66,7 @@ where d.org_id = $1 and d.created_at >= $2::date and d.created_at < $3::date + 1
 order by d.created_at desc`;
 
 export const dealById = `
-select d.*, c.code as customer_code, c.name as customer_name, c.city, c.tier, c.phone as customer_phone, c.contact_name as customer_contact, c.status as customer_status, c.temp_code,
+select d.*, c.code as customer_code, c.name as customer_name, c.city, c.tier, c.tier_request_note, c.phone as customer_phone, c.contact_name as customer_contact, c.status as customer_status, c.temp_code,
   (select count(*) from app.shipments sx where sx.deal_id = d.id and sx.voided_at is null and sx.customer_received_at is null)::int as unsigned_n,
   (select count(*) from app.shipments sx where sx.deal_id = d.id and sx.voided_at is null)::int as live_shipments_n,
   (select count(*) from app.returns rx where rx.deal_id = d.id and (rx.status = 'requested' or (rx.status = 'approved' and rx.reconciled_at is null)))::int as open_returns_n,
@@ -72,6 +75,9 @@ select d.*, c.code as customer_code, c.name as customer_name, c.city, c.tier, c.
   app.balance_pending(d.id) as balance_pending,
   (select count(*) from app.shipments sf where sf.deal_id = d.id and sf.voided_at is null and sf.freight_bearer in ('company','company_part') and sf.freight_paid_at is null)::int as freight_due_n,
   (select count(*) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.status = 'open')::int as open_disc_n,
+  (c.tier_confirmed_at is null) as tier_pending, c.tier_requested_at,
+  (select max(e.at) from app.deal_events e where e.deal_id = d.id and e.action = 'sales_order_created') as so_sent_at,
+  (select count(*) from app.deal_lines hl join app.stock_holds h on h.stock_item_id = hl.stock_item_id and h.status = 'active' and h.whole where hl.deal_id = d.id)::int as frozen_n,
   (select coalesce(sum(rd.amount), 0) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.decision = 'credit') as disc_credit,
   pe.short_name as picker_name, oe.short_name as owner_name, re.short_name as reviewer_name,
   (select count(*) from app.pick_checks pc join app.deal_lines pl on pl.id = pc.deal_line_id join app.deals pd on pd.id = pl.deal_id
@@ -681,3 +687,13 @@ export const issuesOfDeal = `select i.*, (select e.short_name from app.members m
 
 // 11-09: 没走完的退货 (待办用)
 export const openReturns = `select * from app.v_open_returns where org_id = $1 order by requested_at`;
+
+// 254 订单预览 (小眼睛): 一张单的头 + 每行要多少 / 给多少 / 单价
+export const dealPeek = `
+select d.id, d.biz_no, d.status, d.currency, d.created_at, d.planned_ship_date, c.name as customer_name, c.city, c.tier,
+  (select coalesce(json_agg(json_build_object('model', coalesce(p.model, l.req_model), 'category', coalesce(cat.name, rc.name), 'code', p.code,
+     'qty_req', l.qty_req, 'qty_supply', l.qty_supply, 'qty_shipped', l.qty_shipped, 'unit_price', l.unit_price) order by l.seq), '[]'::json)
+   from app.deal_lines l left join app.products p on p.id = l.product_id
+   left join app.categories cat on cat.id = p.category_id left join app.categories rc on rc.id = l.req_category_id
+   where l.deal_id = d.id) as lines
+from app.deals d join app.customers c on c.id = d.customer_id where d.id = $1`;

@@ -7,7 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 const N = (v) => Number(v) || 0;
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { TierPill, Light, useApp, useData, Pill, Modal, OptionNote } from '../components/ui.jsx';
+import { TierPill, Light, useApp, useData, Pill, Modal, OptionNote, Info } from '../components/ui.jsx';
 import { STATUS, STEPS, LAST_STEP, reachedStep, EVENT_LABELS, ROLES, CONFIRM_METHODS, NOTE_OPTIONS, TIERS, can, seesPrice } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, friendlyError } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
@@ -150,7 +150,8 @@ export default function Deal({ id }) {
       {/* 订单信息窄条 (11-09 196): 一行放完, 不占大块 */}
       <div className="card dealbar">
         <span className="big mono">{deal.biz_no}</span>
-        <Pill tone={STATUS[deal.status].tone}>{STATUS[deal.status].label}</Pill>{deal.kind !== 'normal' && <Pill tone="gray">{deal.kind}</Pill>}
+        {deal.status === 'quoted' && deal.tier_pending ? <Pill tone="amber">草稿 · 等中方定档位</Pill> : <Pill tone={STATUS[deal.status].tone}>{STATUS[deal.status].label}</Pill>}{deal.kind !== 'normal' && <Pill tone="gray">{deal.kind}</Pill>}
+        <Info>订单号 {deal.biz_no}：{deal.biz_no.startsWith('BIZ-') ? '旧格式（年月 + 当月流水）。' : 'CI = 科特，中间 6 位 = 年月日，最后 = 当天第几单。'}同一张订单下面的单据都跟着这个号：-Q 报价单（Quotation）、-P 找货单（Picking）、-O 销售订单（Order）、-S1 / -S2 第 1 / 2 批出库（Shipment）。</Info>
         {deal.status === 'confirmed' && deal.planned_ship_date && dDate(deal.planned_ship_date) > today() && (deal.staged_at
           ? <span className="pill amber" title="到约定那天再复检打包">等待发货 · 约 {dDate(deal.planned_ship_date)} · 放在：{deal.staged_note || '（没写）'}</span>
           : <span className="pill red">约 {dDate(deal.planned_ship_date)} 发货 · 货还没放到暂存位置</span>)}

@@ -5,7 +5,7 @@ import { q, call } from '../db/client.js';
 import { useApp, useData, Modal, PhotoInput, DatePicker, FRow, Info, Thumb } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { CustLink } from '../components/Archives.jsx';
-import { RcvStatus } from '../components/ReceiptForm.jsx';
+import { RcvStatus, verifyRcvAction } from '../components/ReceiptForm.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { can } from '../lib/domain.js';
 import { money, dDate, dt, today, friendlyError, ymd } from '../lib/format.js';
@@ -85,11 +85,11 @@ export function ControlPanels({ tab, ctl, acc, classes }) {
 }
 
 function VerifyPanel({ ctl }) {
-  const { refresh } = useApp();
+  const { refresh, role, toast } = useApp();
   return (
     <div className="card-b stack">
       <div className="hint">登记了、还没核对的收款：去 Wave / 银行 / 现金核对，钱确实到了就点「确认到账」；导入流水时金额对上的会自动确认。登记的人不能自己确认（中方除外）。</div>
-      <Grid id="cash-verify" rows={ctl.pendingRcv} empty="没有待核对的收款 ✓" columns={[
+      <Grid id="cash-verify" rows={ctl.pendingRcv} rowActions={can(role, 'receipt') ? [verifyRcvAction(role, toast, refresh)] : undefined} empty="没有待核对的收款 ✓" columns={[
         { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <b className="mono">{r.rcv_no}</b> },
         { key: 'received_on', label: '日期', w: 100, render: (r) => dDate(r.received_on) },
         { key: 'days', label: '几天了', w: 70, render: (r) => <span className={r.days > 3 ? 'red-t2' : ''}>{r.days} 天</span> },
@@ -110,14 +110,13 @@ function StaffHeld({ ctl, acc }) {
     <div className="card-b stack">
       <div className="hint">客户把现金给了员工：客户账已经冲掉，钱算员工欠公司。员工存进 Wave 转给公司（或当面交现金）后点「已交」，钱才进公司账户。</div>
       {byEmp.length > 0 && <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>{byEmp.map((e) => <span key={e.name} className={`pill ${e.max > 3 ? 'red' : 'amber'}`}>{e.name}：{e.n} 笔 · 共 {money(e.total)} · 最久 {e.max} 天</span>)}</div>}
-      <Grid id="cash-held" rows={ctl.held} rowKey={(r) => r.receipt_id} empty="没有员工代收没交的 ✓" columns={[
+      <Grid id="cash-held" rows={ctl.held} rowKey={(r) => r.receipt_id} rowActions={[{ label: '这笔已交给公司', run: (r) => setHand(r) }]} empty="没有员工代收没交的 ✓" columns={[
         { key: 'employee_name', label: '员工', w: 100 },
         { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <b className="mono">{r.rcv_no}</b> },
         { key: 'received_on', label: '收到日期', w: 100, render: (r) => dDate(r.received_on) },
         { key: 'days', label: '压了几天', w: 80, render: (r) => <span className={r.days > 3 ? 'red-t2' : ''}>{r.days} 天</span> },
         { key: 'customer_name', label: '客户', w: 150, render: (r) => <CustLink id={r.customer_id} name={r.customer_name} /> },
         { key: 'landed', label: '金额', w: 120, render: (r) => <b>{money(r.landed ?? r.amount, r.currency)} {r.currency}</b> },
-        { key: 'act', label: '', w: 90, sortable: false, render: (r) => <button type="button" className="btn sm primary" onClick={() => setHand(r)}>已交</button> },
       ]} />
       {hand && <HandModal r={hand} acc={acc} onClose={() => setHand(null)} />}
     </div>
@@ -146,12 +145,11 @@ function ChecksPanel({ ctl }) {
   return (
     <div className="card-b stack">
       <div className="hint">每个账户把系统余额和实际余额（Wave / 银行 App 里的余额、现金实点）对一遍，差额写原因；现金盘点要拍照。记录永久保留。</div>
-      <Grid id="cash-checks" rows={ctl.checks} rowKey={(a) => a.account_id} columns={[
+      <Grid id="cash-checks" rows={ctl.checks} rowKey={(a) => a.account_id} rowActions={[{ label: '记对账', run: (a) => setRec({ a, kind: 'recon' }) }, { label: '记盘点', tone: '', when: (a) => a.kind === 'cash', run: (a) => setRec({ a, kind: 'count' }) }]} columns={[
         { key: 'name', label: '账户', w: 130, render: (a) => <b>{a.name}</b> },
         { key: 'balance', label: '系统余额', w: 130, render: (a) => money(a.balance, a.currency) },
         { key: 'last_recon', label: '上次对账', w: 200, sortable: false, render: (a) => (a.last_recon ? <>{dDate(a.last_recon.on_date)} {N(a.last_recon.diff) === 0 ? <span className="pill green">对上</span> : <span className="pill amber">差 {money(a.last_recon.diff)}</span>}</> : <span className="pill amber">还没对过</span>) },
         { key: 'last_count', label: '上次盘点', w: 200, sortable: false, render: (a) => (a.kind !== 'cash' ? <span className="muted small">不是现金账户</span> : a.last_count ? <>{dDate(a.last_count.on_date)} {N(a.last_count.diff) === 0 ? <span className="pill green">对上</span> : <span className="pill amber">差 {money(a.last_count.diff)}</span>}</> : <span className="pill amber">还没盘过</span>) },
-        { key: 'act', label: '', w: 170, sortable: false, render: (a) => <span className="row" style={{ gap: 4 }}><button type="button" className="btn sm" onClick={() => setRec({ a, kind: 'recon' })}>记对账</button>{a.kind === 'cash' && <button type="button" className="btn sm" onClick={() => setRec({ a, kind: 'count' })}>记盘点</button>}</span> },
       ]} />
       <div className="pd-h">历史记录</div>
       <Grid id="cash-check-hist" rows={hist || []} empty="还没有记录" columns={[
@@ -198,13 +196,12 @@ function TransitPanel({ ctl, acc }) {
   return (
     <div className="card-b stack">
       <div className="row between"><div className="hint">账户之间转钱：转出那边马上减，转入这边「到了」才加；中间这段叫在途。</div><button type="button" className="btn" onClick={() => setNw(true)}>＋ 账户互转</button></div>
-      <Grid id="cash-transit" rows={ctl.transit} empty="没有在途的转账 ✓" columns={[
+      <Grid id="cash-transit" rows={ctl.transit} rowActions={[{ label: '这笔钱到了', run: (m) => arrived(m) }]} empty="没有在途的转账 ✓" columns={[
         { key: 'on_date', label: '转出日期', w: 100, render: (m) => dDate(m.on_date) },
         { key: 'days', label: '几天了', w: 70, render: (m) => <span className={m.days > 2 ? 'red-t2' : ''}>{m.days} 天</span> },
         { key: 'account', label: '转入账户', w: 130 },
         { key: 'amount', label: '金额', w: 120, render: (m) => <b>{money(m.amount, m.currency)}</b> },
         { key: 'note', label: '说明', w: 220 },
-        { key: 'act', label: '', w: 90, sortable: false, render: (m) => <button type="button" className="btn sm primary" onClick={() => arrived(m)}>到了</button> },
       ]} />
       {nw && <TransferModal acc={acc} onClose={() => setNw(false)} />}
     </div>

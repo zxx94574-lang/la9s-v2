@@ -6,11 +6,14 @@ import Grid from '../components/Grid.jsx';
 import { qty } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
 
+import { HoldsCard, FreezeModal } from '../components/Batch2.jsx';
 export default function Stock() {
   const { org } = useApp();
   const { data } = useData(() => q(Q.stock, [org]), [org]);
   const [wh, setWh] = useState('local');
   const [text, setText] = useState('');
+  const [pick, setPick] = useState(new Set()); const [freeze, setFreeze] = useState(null);
+  const { role } = useApp();
   const rows = useMemo(() => (data || []).filter((r) => (wh === 'all' || (wh === 'local' ? r.warehouse_kind === 'local' : r.warehouse_kind !== 'local'))
     && (!text || [r.code, r.model, r.category, r.bin, ...(r.shared_models || [])].some((x) => String(x || '').toUpperCase().includes(text.toUpperCase())))), [data, wh, text]);
   const s = (f) => rows.reduce((a, r) => a + Number(r[f]), 0);
@@ -34,8 +37,11 @@ export default function Stock() {
           <input className="in" style={{ width: 220 }} placeholder="⌕ 型号 / 编码 / 库位 / 通用型号" value={text} onChange={(e) => setText(e.target.value)} />
         </div>
       </div>
+      <HoldsCard />
       <div className="card">
-        <Grid id="stock" table="stock_items" columns={cols} rows={rows} rowKey={(r) => r.stock_item_id} rowClass={(r) => (Number(r.qty_available) <= 0 ? 'warn' : '')}
+        {['admin', 'manager'].includes(role) && <div className="card-h"><h2>库存</h2><button type="button" className="btn sm soft-red" disabled={pick.size !== 1} title={pick.size === 1 ? '' : '先在下面勾选一行'} onClick={() => setFreeze(rows.find((r) => pick.has(r.stock_item_id)))}>⏸ 暂停出库（问题库存）</button></div>}
+        {freeze && <FreezeModal row={freeze} onClose={() => { setFreeze(null); setPick(new Set()); }} />}
+        <Grid id="stock" table="stock_items" columns={cols} rows={rows} rowKey={(r) => r.stock_item_id} selectable={['admin', 'manager'].includes(role) ? { selected: pick, onChange: setPick } : undefined} rowClass={(r) => (Number(r.qty_available) <= 0 ? 'warn' : '')}
           foot={{ warehouse: `${rows.length} 行`, qty_on_hand: qty(s('qty_on_hand')), qty_reserved: qty(s('qty_reserved')), qty_available: qty(s('qty_available')) }} />
       </div>
     </>

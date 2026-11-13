@@ -242,8 +242,12 @@ function Payroll({ staff, opts }) {
   const [attOf, setAttOf] = useState(null);         // 点打卡情况 → 该员工本月打卡明细
   const [ack, setAck] = useState(false);
   const { data } = useData(async () => {
-    const [months, head, lines] = await Promise.all([q(Q.payrollMonths, [org]), q(Q.payrollHeader, [org, month + '-01']), q(Q.payroll, [org, month + '-01'])]);
-    return { months, head: head[0] || null, lines };
+    const [months, head, lines, comm, rate] = await Promise.all([q(Q.payrollMonths, [org]), q(Q.payrollHeader, [org, month + '-01']), q(Q.payroll, [org, month + '-01']),
+      q(`select employee_id, count(*) filter (where not voided)::int as ok_n, coalesce(sum(pieces) filter (where not voided), 0)::int as ok_pcs, count(*) filter (where voided)::int as void_n, coalesce(sum(pieces) filter (where voided), 0)::int as void_pcs
+         from app.v_wh_commission where org_id = $1 and month = $2 group by employee_id`, [org, month]).catch(() => []),
+      q(`select value from app.org_settings where org_id = $1 and key = 'wh_commission'`, [org]).catch(() => [])]);
+    // 仓库提成 (Frank 11-12): 正确出货每片 N XOF (设置里可调, 默认 5); 出错被记责任的那张单整单提成取消
+    return { months, head: head[0] || null, lines, comm: Object.fromEntries(comm.map((c) => [c.employee_id, c])), rate: Number(rate[0]?.value?.per_piece ?? 5) };
   }, [org, month]);
   const byEmp = useMemo(() => Object.fromEntries(staff.map((e) => [e.id, e])), [staff]);
   if (!data) return <div className="empty">加载中…</div>;
@@ -270,6 +274,9 @@ function Payroll({ staff, opts }) {
     { key: 'base', label: '预计基本工资', w: 120, type: 'money', value: fixe, render: (l) => money(fixe(l)) },
     { key: 'allowance', label: '补贴', w: 90, type: 'money', value: (l) => N(l.allowance), edit: editNum('allowance'), render: (l) => money(l.allowance) },
     { key: 'incentive', label: '个人奖金', w: 120, type: 'money', value: (l) => N(l.incentive), edit: editNum('incentive'), render: withDev('incentive', 'incentive_auto', money) },
+    { key: 'wh_comm', label: '仓库提成（算好的）', w: 170, type: 'money', value: (l) => (data.comm[l.employee_id] ? data.comm[l.employee_id].ok_pcs * data.rate : 0),
+      render: (l) => { const c = data.comm[l.employee_id]; if (!c) return ''; const amt = c.ok_pcs * data.rate; const inB = N(l.incentive) >= amt && amt > 0;
+        return <span title={`正确出货 ${c.ok_n} 张单 ${c.ok_pcs} 片 × ${data.rate} XOF = ${amt}；出错取消 ${c.void_n} 张单 ${c.void_pcs} 片。这个数不会自动进实发：填进「个人奖金」才算。`}><b>{money(amt)}</b> <span className="small muted">{c.ok_pcs} 片 × {data.rate}{c.void_n > 0 ? ` · 取消 ${c.void_n} 单` : ''}</span>{amt > 0 && <span className={`pill ${inB ? 'green' : 'amber'}`} style={{ marginLeft: 4 }}>{inB ? '已含在个人奖金' : '还没填进个人奖金'}</span>}</span>; } },
     { key: 'prime_team', label: '团队奖金', w: 90, type: 'money', value: (l) => N(l.prime_team), edit: editNum('prime_team'), render: (l) => money(l.prime_team) },
     { key: 'cnps', label: '社保（公司交）', w: 110, type: 'money', value: (l) => N(l.cnps), edit: editNum('cnps'), render: (l) => money(l.cnps) },
     { key: 'deduction', label: '扣款', w: 90, type: 'money', value: (l) => N(l.deduction), edit: editNum('deduction'), render: (l) => money(l.deduction) },

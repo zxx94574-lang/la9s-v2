@@ -118,16 +118,23 @@ function CategoryManager({ onClose }) {
     <Modal wide title="种类管理（只中方）" onClose={onClose} footer={<button type="button" className="btn" onClick={onClose}>关闭</button>}>
       <div className="stack">
         <div className="hint">种类跟着物料表走：导入物料时出现新种类会自动加上；一个种类下面没有物料了，就不会出现在选货的种类条里。名字写错了在这里改；两个种类其实是一样的就「合并到」另一个（物料和补录需求一起搬过去）；空种类可以删。</div>
-        <table className="t"><thead><tr><th>种类</th><th style={{ textAlign: 'right' }}>物料数</th><th>合并到</th><th /></tr></thead>
-          <tbody>{(data || []).map((c) => (
-            <tr key={c.id} className={c.n === 0 ? 'muted' : ''}>
-              <td><input className="in sm" defaultValue={c.name} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== c.name) run(`已改名：${c.name} → ${v}`, `select app.rename_category($1,$2)`, [c.id, v]); }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} style={{ maxWidth: 200 }} />{c.n === 0 && <span className="small muted"> 空（选货里不显示）</span>}</td>
-              <td style={{ textAlign: 'right' }}>{c.n}</td>
-              <td><select className="in sm" value="" onChange={(e) => { const to = (data || []).find((x) => x.id === e.target.value); if (to) run(`已把「${c.name}」并到「${to.name}」`, `select app.merge_category($1,$2)`, [c.id, to.id]); }} style={{ maxWidth: 180 }}>
-                <option value="">合并到…</option>{(data || []).filter((x) => x.id !== c.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></td>
-              <td>{c.n === 0 && c.used === 0 && <button type="button" className="btn sm soft-red" onClick={() => run(`已删掉空种类「${c.name}」`, `select app.delete_category($1)`, [c.id])}>删</button>}</td>
-            </tr>))}</tbody></table>
+        <CatGrid data={data || []} run={run} />
       </div>
     </Modal>
   );
+}
+
+// 265: 种类汇总也用统一表格 —— 名字格子里直接改, 「合并到」是下拉, 删空种类 = 勾选后点上面的按钮
+function CatGrid({ data, run }) {
+  const [sel, setSel] = useState(new Set());
+  const one = sel.size === 1 ? data.find((c) => sel.has(c.id)) : null;
+  const canDel = one && Number(one.n) === 0 && Number(one.used) === 0;
+  return (<>
+    <div className="row" style={{ gap: 8 }}><button type="button" className="btn sm soft-red" disabled={!canDel} title={canDel ? '' : '勾选一个没有物料、也没被用过的空种类'} onClick={() => { run(`已删掉空种类「${one.name}」`, `select app.delete_category($1)`, [one.id]); setSel(new Set()); }}>删掉选中的空种类</button></div>
+    <Grid id="cat-admin" rows={data} empty="还没有种类" selectable={{ selected: sel, onChange: setSel }} rowClass={(c) => (Number(c.n) === 0 ? 'muted' : '')} columns={[
+      { key: 'name', label: '种类', w: 220, edit: (c) => ({ type: 'text', value: c.name, onChange: (v) => { const t = String(v || '').trim(); if (t && t !== c.name) run(`已改名：${c.name} → ${t}`, `select app.rename_category($1,$2)`, [c.id, t]); } }) },
+      { key: 'n', label: '物料数', w: 90, type: 'number' },
+      { key: 'merge', label: '合并到', w: 200, sortable: false, filterable: false, edit: (c) => ({ type: 'select', value: '', options: [['', '合并到…'], ...data.filter((x) => x.id !== c.id).map((x) => [x.id, x.name])], onChange: (v) => { const to = data.find((x) => x.id === v); if (to) run(`已把「${c.name}」并到「${to.name}」`, `select app.merge_category($1,$2)`, [c.id, to.id]); } }) },
+    ]} />
+  </>);
 }

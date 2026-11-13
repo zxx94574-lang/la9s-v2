@@ -17,7 +17,7 @@ export function useTierCheck() {
   const { data } = useData(async () => {
     if (role !== 'admin') return [];
     const [rows, [set]] = await Promise.all([
-      q(`select c.id, c.name, c.code, c.temp_code, c.city, c.status, c.tier, c.shop_type, c.shop_photo, c.created_at, c.tier_confirmed_at, c.tier_confirmed_by, c.tier_review_on, c.tier_note,
+      q(`select c.id, c.name, c.code, c.temp_code, c.city, c.status, c.tier, c.shop_type, c.shop_photo, c.created_at, c.tier_confirmed_at, c.tier_confirmed_by, c.tier_review_on, c.tier_note, c.tier_requested_at, c.tier_request_note, c.tier_request_deal, (select biz_no from app.deals rd where rd.id = c.tier_request_deal) as request_biz,
            v.pcs_90, v.pcs_all, v.first_ship_at, exists (select 1 from app.deals d where d.customer_id = c.id and d.status <> 'cancelled') as has_deal
          from app.customers c join app.v_customer_volume v on v.customer_id = c.id where c.org_id = $1 and c.status <> 'inactive' and coalesce(c.kind, 'spare') <> 'recycle'`, [org]).catch(() => []),
       q(`select value from app.org_settings where org_id = $1 and key = 'tier_ranges'`, [org]).catch(() => []),
@@ -28,7 +28,7 @@ export function useTierCheck() {
       const monthly = Math.round(Number(c.pcs_90) / Math.max(1, Math.min(3, days / 30)));
       const base = { ...c, monthly, sug: suggest(monthly, R) };
       // 没定过档的: 只提醒最近 30 天新建的、或者已经有单的 (老的潜客名单不刷屏)
-      if (!c.tier_confirmed_at) { if (c.has_deal || (Date.now() - new Date(c.created_at).getTime()) / 864e5 <= 30) out.push({ ...base, why: 'new', text: '新客户，等中方定档位（现在按最贵档报价）' }); }
+      if (!c.tier_confirmed_at) { if (c.tier_requested_at) out.push({ ...base, why: 'new', text: `申请定级${c.request_biz ? `（订单 ${c.request_biz} 等着发给客户）` : ''}${c.tier_request_note ? '：' + c.tier_request_note : ''} · 现在按最贵档 Repair 报价` }); continue; }
       else if (c.tier_review_on && dDate(c.tier_review_on) <= td) out.push({ ...base, why: 'review', text: `试用期到了：月均提货 ${qty(monthly)} 片` });
       else if (!c.tier_confirmed_by && !c.tier_review_on && c.tier && days >= 30 && !fits(c.tier, monthly, R)) {
         out.push({ ...base, why: 'mismatch', text: `月均提货 ${qty(monthly)} 片，${monthly < R[c.tier][0] ? '低于' : '高于'}「${TIERS[c.tier]}」的参考线` });

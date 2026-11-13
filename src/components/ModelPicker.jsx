@@ -50,11 +50,11 @@ export default function ModelPicker({ catalog, categories, tier, onPick, onUnpic
                 <button type="button" className="btn sm primary" onClick={() => setOpen(false)}>完成</button></div>
               {list.length === 0 && <div className="empty">没有匹配的物料。客户要的型号我们没建档？用右边「＋ 补录需求」记下来。</div>}
               {list.map((p, i) => (
-                <button type="button" key={p.id} className={`${i === focus ? 'focus' : ''} ${picked?.has(p.id) ? 'picked' : ''}`} onMouseEnter={() => setFocus(i)} onClick={() => pick(p)}>
-                  <span className="muted mono">{picked?.has(p.id) ? '✓ ' : ''}{p.code}</span>
-                  <span>{p.category}</span>
-                  <span><span className="m">{p.model}</span>{p.variant && <span className="pill blue" style={{ marginLeft: 4 }}>{p.variant}</span>} <span className="muted small">{p.shared_models.slice(0, 3).join(' / ')}{p.shared_models.length > 3 ? ' …' : ''}</span></span>
-                  <span className="small mono"><StockPill n={avail(p)} />{showPrice && tier ? <span className="muted"> · {money(p.prices[tier])} XOF</span> : ''}</span>
+                <button type="button" key={p.id} className={`pk-row ${i === focus ? 'focus' : ''} ${picked?.has(p.id) ? 'picked' : ''}`} onMouseEnter={() => setFocus(i)} onClick={() => pick(p)}>
+                  <span className="pk-a"><span className="mono">{picked?.has(p.id) ? '✓ ' : ''}{p.code}</span><span className="muted small">{p.category}</span></span>
+                  <span className="pk-b"><span><span className="m">{p.model}</span>{p.variant && list.some((x) => x.id !== p.id && x.model === p.model && x.category === p.category) && <span className="pill blue" style={{ marginLeft: 6 }}>{p.variant}</span>}</span>
+                    <span className="muted small pk-shared" title={p.shared_models.join(' / ')}>{p.shared_models.length ? p.shared_models.join(' / ') : '—'}</span></span>
+                  <span className="pk-c"><StockPill n={avail(p)} />{showPrice && (tier ? <span className="small muted">{money(p.prices[tier])} XOF</span> : <span className="small muted">先选客户</span>)}</span>
                 </button>
               ))}
             </div>

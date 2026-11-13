@@ -27,7 +27,7 @@ test('撤回下推：找货单撤回释放预占；一步一步往回；已出�
   assert.equal(await t.val(U.manager, `select app.revert_step($1,'价格重谈')`, [d2]), 'picked');
   await t.as(U.manager, `select app.create_sales_order($1)`, [d2]);
   await t.as(U.hotline, `select app.customer_confirm($1,null,'whatsapp','p.jpg')`, [d2]);
-  await t.as(U.manager, `select app.review_pick($1,$2,'pack.jpg')`, [d2, t.ids.picker]);
+  await t.as(U.manager, `select app.review_pick($1,$2,'pack.jpg')`, [d2, t.ids.reviewer]);
   await t.shipAll(d2);
   await rejects(t.as(U.manager, `select app.revert_step($1,'x')`, [d2]), /BAD_STATE/);
 });
@@ -39,20 +39,20 @@ test('新顺序：初拣直接出销售订单；客户确认后才复检打包�
   await t.as(U.picker, `select app.submit_pick($1,$2,'p.jpg','[]')`, [d, t.ids.picker]);
   const [l] = await t.lines(d);
   assert.equal(l.qty_picked, 100);
-  await rejects(t.as(U.manager, `select app.review_pick($1,$2,'r.jpg')`, [d, t.ids.picker]), /BAD_STATE/);   // 还没客户确认
+  await rejects(t.as(U.manager, `select app.review_pick($1,$2,'r.jpg')`, [d, t.ids.reviewer]), /BAD_STATE/);   // 还没客户确认
   await t.as(U.manager, `select app.create_sales_order($1)`, [d]);
   await rejects(t.shipAll(d), /BAD_STATE/);
   await t.as(U.hotline, `select app.customer_confirm($1,null,'whatsapp','ok.jpg')`, [d]);
   assert.equal(await t.status(d), 'confirmed');
   await rejects(t.shipAll(d), /BAD_STATE/);                                                                 // 没复检不能出库
-  await rejects(t.as(U.picker, `select app.review_pick($1,$2,'r.jpg')`, [d, t.ids.picker]), /PERMISSION_DENIED/);   // 只有主管
+  await rejects(t.as(U.picker, `select app.review_pick($1,$2,'r.jpg')`, [d, t.ids.reviewer]), /PERMISSION_DENIED/);   // 只有主管
   await rejects(t.as(U.manager, `select app.review_pick($1,null,'r.jpg')`, [d]), /复核人必选/);
-  await rejects(t.as(U.manager, `select app.review_pick($1,$2,'')`, [d, t.ids.picker]), /打包照片必传/);
-  await rejects(t.as(U.manager, `select app.review_pick($1,$2,'r.jpg','[]',$3)`, [d, t.ids.picker,
+  await rejects(t.as(U.manager, `select app.review_pick($1,$2,'')`, [d, t.ids.reviewer]), /打包照片必传/);
+  await rejects(t.as(U.manager, `select app.review_pick($1,$2,'r.jpg','[]',$3)`, [d, t.ids.reviewer,
     JSON.stringify([{ line_id: l.id, result: 'qty_wrong' }])]), /抽检有问题/);
-  await rejects(t.as(U.manager, `select app.review_pick($1,$2,'r.jpg',$3)`, [d, t.ids.picker,
+  await rejects(t.as(U.manager, `select app.review_pick($1,$2,'r.jpg',$3)`, [d, t.ids.reviewer,
     JSON.stringify([{ line_id: l.id, qty: 95 }])]), /必须填原因/);
-  assert.equal(await t.val(U.manager, `select app.review_pick($1,$2,'r.jpg',$3,$4)`, [d, t.ids.picker,
+  assert.equal(await t.val(U.manager, `select app.review_pick($1,$2,'r.jpg',$3,$4)`, [d, t.ids.reviewer,
     JSON.stringify([{ line_id: l.id, qty: 95, reason: '少一盒' }]), JSON.stringify([{ line_id: l.id, result: 'qty_wrong' }])]), 'ordered');
   assert.equal((await t.stockOf(t.ids.stLA_cover)).qty_reserved, 95);
   const [l2] = await t.lines(d);
@@ -89,7 +89,7 @@ test('解锁改数量：要原因；同步预占；加量后要重新确认并�
   assert.equal((await t.stockOf(t.ids.stLA_cover)).qty_reserved, 20);
   await t.as(U.hotline, `select app.customer_confirm($1,null,'whatsapp','p.jpg')`, [d]);
   assert.equal(await t.status(d), 'confirmed', '加了货要重新复检');
-  await t.as(U.manager, `select app.review_pick($1,$2,'pack2.jpg')`, [d, t.ids.picker]);
+  await t.as(U.manager, `select app.review_pick($1,$2,'pack2.jpg')`, [d, t.ids.reviewer]);
   await t.shipAll(d, [{ line_id: l.id, qty: 8 }]);
   await rejects(t.as(U.manager, `select app.change_line_qty($1,5,'客户不要了')`, [l.id]), /不能少于已出库/);
   await t.as(U.manager, `select app.change_line_qty($1,8,'客户不要了')`, [l.id]);

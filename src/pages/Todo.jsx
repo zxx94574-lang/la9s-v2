@@ -25,7 +25,13 @@ export function shipAlert(d) {
   const p = dDate(d.planned_ship_date), t = today();
   return p < t ? { tone: 'red', text: `约定 ${p} 发货，已过期未出库` } : p === t ? { tone: 'amber', text: '今天该出库' } : { tone: 'gray', text: `约定 ${p} 发货` };
 }
+import { HoldsCard, VolumeShift } from '../components/Batch2.jsx';
 export function nextAction(d, role) {
+  // 251: 新客户档位没定 → 这张报价是草稿; 申请了就卡在中方
+  if (d.status === 'quoted' && d.tier_pending) return d.tier_requested_at ? { roles: ['admin'], what: '给这个新客户定档位（员工已申请，报价等着发给客户）' } : { roles: ['hotline', 'manager', 'sales', 'sales_manager'], what: '草稿：客户档位没定，点进去「申请定级」，中方定了再发给客户' };
+  if (quoteLate(d)) return { roles: ['hotline', 'manager', 'sales_manager', 'admin'], what: `报价建好已经 ${Math.round((Date.now() - new Date(d.created_at).getTime()) / 6e4)} 分钟，热线还没点开（规定 5 分钟内）：马上联系客户确认` };
+  if (Number(d.frozen_n || 0) > 0 && !['shipped', 'cancelled'].includes(d.status)) return { roles: ['admin', 'manager'], what: `这单有 ${d.frozen_n} 个型号被暂停出库（问题库存），解冻前不能发` };
+  if (d.status === 'ordered' && d.so_sent_at && Date.now() - new Date(d.so_sent_at).getTime() > 864e5) return { roles: ['hotline', 'manager', 'admin'], what: `销售单发出超过 1 天客户没回：必须联系上，要 / 不要都要有结果（不要就作废并写原因）` };
   // 236: 约定发货日没到 → 先放暂存位置, 不复检
   if (d.status === 'confirmed' && d.planned_ship_date && dDate(d.planned_ship_date) > today()) {
     return d.staged_at ? { roles: ['manager'], what: `等待发货 · 约 ${dDate(d.planned_ship_date)} · 货放在：${d.staged_note || '（没写）'}，到那天再复检打包` } : { roles: ['manager', 'picker'], what: `约 ${dDate(d.planned_ship_date)} 发货：先把货放到暂存位置（不打包），拍照` };
@@ -50,9 +56,15 @@ export function todoFor(role, d) {
 // 下单 (建报价) 以后还没出库完的单, 按时长分级: 超过 24 小时黄、48 小时红、72 小时深红置顶闪.
 // 规则先这样定, 阈值以后可以调. 报价没成交的单也算 —— 要么推进, 要么作废, 不能放着.
 // 227: 一张单算哪一级 (系统自动分, 中方可手动提成紧急)
+// 报价建好 → 热线最多 5 分钟要点开 (Frank 11-12, 和指令同一个分钟数; 页面不知道设置时按 5)
+export const quoteLate = (d, minutes = 5) => d.status === 'quoted' && !d.tier_pending && d.approval !== 'pending' && !d.hotline_opened_at && !Number(d.busy_n || 0) && d.created_at && Date.now() - new Date(d.created_at).getTime() > minutes * 6e4;
 export function todoLevel(d) {
   const td = today();
   if (d.urgent || Number(d.open_disc_n || 0) > 0 || Number(d.freight_due_n || 0) > 0) return 'red';
+  // 11-12 Frank: 但凡卡单的一律紧急 —— 等中方审批 / 等中方定档位 / 货被冻结 / 销售单发出超过 1 天客户没回
+  if (d.approval === 'pending' || (d.status === 'quoted' && d.tier_pending && d.tier_requested_at) || Number(d.frozen_n || 0) > 0) return 'red';
+  if (d.status === 'ordered' && d.so_sent_at && Date.now() - new Date(d.so_sent_at).getTime() > 864e5) return 'red';
+  if (quoteLate(d)) return 'red';   // 报价建好超过 5 分钟热线还没点开
   if (Number(d.busy_n) >= 3 && ['quoted', 'hotline_ok'].includes(d.status)) return 'green';     // 联系 3 次都忙 = 这单没那么重要
   if (d.want_on && dDate(d.want_on) > td && !['shipped', 'cancelled'].includes(d.status)) return 'green';   // 客户约了明天以后
   if (d.status === 'confirmed' && d.planned_ship_date && dDate(d.planned_ship_date) > td) return 'green';   // 约定发货日还没到
@@ -147,7 +159,9 @@ export default function Todo() {
         <div className="sub">当前岗位：<b>{ROLES[role].label}</b>。下推一步，单子就自动出现在下一个人的待办里。</div></div></div>
       <DirectiveBoard />
       {['admin', 'manager', 'sales_manager'].includes(role) && <IssueList />}
+      {['admin', 'manager'].includes(role) && <HoldsCard compact />}
       {role === 'admin' && <TierCheck rows={tierRows} />}
+      {role === 'admin' && <VolumeShift />}
       {['admin', 'manager', 'sales_manager', 'hotline', 'finance'].includes(role) && <OpenReturns />}
       {extras.length > 0 && <div className="card" style={{ marginBottom: 12 }}>{extras.map(([to, text]) => (
         <div key={text} className="row between" style={{ padding: '12px 18px', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }} onClick={() => go(to)}><b>{text}</b><span className="muted">›</span></div>))}</div>}

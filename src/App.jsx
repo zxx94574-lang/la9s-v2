@@ -6,7 +6,7 @@ import Kpi from './pages/Kpi.jsx';
 import { DirectiveGate } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
-import { ExportPanel, DocSettings, PermPanel } from './components/SettingsPanels.jsx';
+import { ExportPanel, DocSettings, PermPanel, RulesPanel } from './components/SettingsPanels.jsx';
 import { ROLES, can, getThresholds, setThresholds, DEFAULT_THRESHOLDS, setPermOverride } from './lib/domain.js';
 import { t, getLang, setLang as setLangStore, LANGS } from './lib/i18n.js';
 import Dashboard from './pages/Dashboard.jsx';
@@ -76,10 +76,33 @@ export default function App() {
     openDb((msg) => setBoot((b) => ({ ...b, msg }))).then(({ org }) => { setOrg(org); setBoot({ ready: true }); })
       .catch((e) => { console.error(e); setBoot({ ready: false, err: e.message || String(e) }); });
   }, []);
+  // 返回 / 前进 (Frank 11-12 260–262): 自己记一条「去过哪」的线, 每一站记 网址 + 滚到哪 + 当时开着哪张档案.
+  // 返回 = 回到上一站, 档案和位置原样摆回去; 前进 = 回到刚才那一站. 浏览器 / 手机自带的返回键走同一套.
+  const hist = useRef({ list: [{ hash: location.hash, y: 0, arch: null }], i: 0 });
+  const archRef = useRef(null); const navIntent = useRef(0);
+  const [navPos, setNavPos] = useState({ back: false, fwd: false });
   useEffect(() => {
-    const f = () => { setRoute(parseHash()); setDrawer(false); setArch(null); window.scrollTo({ top: 0 }); };   // 260: 从档案里跳去别的页 → 档案自己关掉
-    window.addEventListener('hashchange', f); return () => window.removeEventListener('hashchange', f);
+    const f = () => {
+      const h = hist.current; const cur = h.list[h.i]; const to = location.hash;
+      if (cur.hash === to) return;
+      cur.arch = archRef.current;   // 离开这一站时开着的档案 (y 由 scroll 监听随时记)
+      let restore = null;
+      const want = navIntent.current; navIntent.current = 0;   // 按的是我们的 返回 / 前进, 还是普通点链接 (浏览器自带的返回键当作返回)
+      if (want !== 1 && h.i > 0 && h.list[h.i - 1].hash === to) { h.i -= 1; restore = h.list[h.i]; }
+      else if (want === 1 && h.i < h.list.length - 1 && h.list[h.i + 1].hash === to) { h.i += 1; restore = h.list[h.i]; }
+      else { h.list = h.list.slice(0, h.i + 1).slice(-60); h.list.push({ hash: to, y: 0, arch: null }); h.i = h.list.length - 1; }
+      setNavPos({ back: h.i > 0, fwd: h.i < h.list.length - 1 });
+      setRoute(parseHash()); setDrawer(false);
+      setArch(restore?.arch || null);   // 260: 从档案里跳去别的页 → 档案自己关掉; 返回时再摆出来
+      const y = restore?.y || 0; window.scrollTo({ top: y });
+      if (y > 0) { let n = 0; const t = setInterval(() => { n += 1; if (Math.abs(window.scrollY - y) < 4 || n > 25 || hist.current.list[hist.current.i] !== restore) return clearInterval(t); window.scrollTo({ top: y }); }, 120); }   // 页面数据还没出来时够不着, 多试几下
+    };
+    let st; const sc = () => { clearTimeout(st); st = setTimeout(() => { const h = hist.current; if (h.list[h.i].hash === location.hash) h.list[h.i].y = window.scrollY; }, 120); };
+    window.addEventListener('hashchange', f); window.addEventListener('scroll', sc, { passive: true });
+    return () => { window.removeEventListener('hashchange', f); window.removeEventListener('scroll', sc); };
   }, []);
+  const navBack = useCallback(() => { const h = hist.current; if (h.i > 0) { navIntent.current = -1; location.hash = h.list[h.i - 1].hash || '#/'; } }, []);
+  const navFwd = useCallback(() => { const h = hist.current; if (h.i < h.list.length - 1) { navIntent.current = 1; location.hash = h.list[h.i + 1].hash || '#/'; } }, []);
   useEffect(() => store.set('la9s.navgroups3', openGroups), [openGroups]);
   useEffect(() => { if (org) q(`select value from app.org_settings where org_id = $1 and key = 'nav'`, [org]).then((r) => setNavCfg(r[0]?.value || null)); }, [org, tick]);
   // 权限配置 (11-09): 开局和每次 refresh 读一遍, can() 立即按新配置走
@@ -137,6 +160,7 @@ export default function App() {
   const changeLang = (l) => { setLangStore(l); setLangState(l); setAskLang(null); toast(t('语言') + ' · ' + LANGS.find((x) => x[0] === l)[1]); };
   const [arch, setArch] = useState(null);   // 点名字出档案 (全站一个宿主)
   const openArchive = useCallback((a) => setArch(a), []);
+  useEffect(() => { archRef.current = arch; }, [arch]);
   const ctx = useMemo(() => ({ org, role, go, refresh, tick, toast, lang, setRole, openArchive }), [org, role, go, refresh, tick, toast, lang, setRole, openArchive]);
 
   if (!boot.ready) {
@@ -235,6 +259,10 @@ export default function App() {
               <button type="button" className="btn ghost show-m" style={{ padding: 6 }} onClick={() => setDrawer(true)} aria-label="菜单">☰</button>
               <img className="mlogo" src="./la9s-logo.png" alt="LA&9S" onClick={() => go('dashboard')} />
               <span className="brand">LA&9S<small>{portal ? 'Commande client · 客户下单' : '科特迪瓦 · 中方管理'}</small></span>
+              {!portal && <span className="navhist">
+                <button type="button" className="btn sm" disabled={!navPos.back} onClick={navBack} title="回到上一页（档案、滚到哪都照原样）">← 返回</button>
+                <button type="button" className="btn sm" disabled={!navPos.fwd} onClick={navFwd} title="回到刚才那一页">前进 →</button>
+              </span>}
             </div>
             <div className="top-actions">
               <span style={{ position: 'relative' }} ref={langRef} className="lang-switch">
@@ -276,6 +304,7 @@ export default function App() {
             {!isPersistent() && <div className="demo-banner"><span className="dot warn" /><span>浏览器禁止存储，关闭页面后数据会重置</span></div>}
             {view}
             {org && !['boss', 'clerk'].includes(role) && <DirectiveGate />}
+            <FlowPrompt role={role} />
           </main>
         </div>
 
@@ -304,6 +333,7 @@ export default function App() {
             </div>
             {role === 'admin' && <LayoutSwitch onDone={() => setSettings(false)} />}
             <Thresholds role={role} toast={toast} />
+            <RulesPanel />
             <PermPanel />
             <ExportPanel />
             <DocSettings />
@@ -369,5 +399,19 @@ function LayoutSwitch({ onDone }) {
         <span className="hint">调板块顺序、宽度（12 列对齐）、显示 / 隐藏、间距；每页单独保存，全员一致，定下来点「锁定为正式版」。颜色固定品牌蓝。现在接入：经营总览、新建询单 / 报价，其他页面陆续接。</span>
       </div>
     </div>
+  );
+}
+
+// 270 (Frank 11-12): 系统自动生成了一条流水 → 中方 / 财务问一句「要不要立即查看」; 本地员工只看到一句提示
+function FlowPrompt({ role }) {
+  const [msg, setMsg] = useState(null);
+  useEffect(() => { const f = (e) => setMsg(e.detail); window.addEventListener('la9s:flow', f); return () => window.removeEventListener('la9s:flow', f); }, []);
+  useEffect(() => { if (msg && !['admin', 'finance'].includes(role)) { const t = setTimeout(() => setMsg(null), 4000); return () => clearTimeout(t); } return undefined; }, [msg, role]);
+  if (!msg) return null;
+  if (!['admin', 'finance'].includes(role)) return <div className="toast ok" style={{ position: 'fixed', left: '50%', bottom: 86, transform: 'translateX(-50%)', zIndex: 80 }}>{msg.text}</div>;
+  return (
+    <Modal title="已生成流水" onClose={() => setMsg(null)} footer={<><button type="button" className="btn" onClick={() => setMsg(null)}>不用，留在这里</button><span className="grow" /><button type="button" className="btn primary" onClick={() => { setMsg(null); window.location.hash = '#/' + msg.to; }}>立即查看 →</button></>}>
+      <div>{msg.text}。是否立即查看？</div>
+    </Modal>
   );
 }

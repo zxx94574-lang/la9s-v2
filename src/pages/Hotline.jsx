@@ -14,6 +14,7 @@ import { dDate, dt, today, periodRange } from '../lib/format.js';
 const SLEEP_DAYS = 14;
 const daysSince = (v) => (v ? Math.floor((Date.now() - new Date(v).getTime()) / 864e5) : null);
 
+import { CallLists } from '../components/Batch2.jsx';
 export default function Hotline() {
   const { org, role } = useApp();
   const [tab, setTab] = useState('queue');
@@ -48,7 +49,6 @@ export default function Hotline() {
     { key: 'phone', label: '电话', w: 140, render: (c) => (c.phone ? <a href={telHref(c.phone)} onClick={(e) => e.stopPropagation()}>{fmtPhone(c.phone)}</a> : '—') },
     { key: 'why', label: '为什么要打', w: 200, render: (c) => (c.rank === 0 ? <Pill tone="red">{c.why}</Pill> : <span className="muted">{c.why}</span>) },
     { key: 'kind', label: '类型', w: 90, value: (c) => (c.status === 'prospect' ? '潜客' : KIND[c.kind]), render: (c) => (c.status === 'prospect' ? <Pill tone="amber">潜客</Pill> : KIND[c.kind]) },
-    { key: 'act', label: '', w: 90, render: (c) => can(role, 'prospect') && <button type="button" className="btn sm primary" onClick={(e) => { e.stopPropagation(); setCallFor(c); }}>☎ 记结果</button> },
   ];
   const lCols = [
     { key: 'at', label: '时间', w: 130, value: (r) => r.at, render: (r) => dt(r.at) },
@@ -71,11 +71,12 @@ export default function Hotline() {
         <div className="tabs">
           <button type="button" className={tab === 'queue' ? 'on' : ''} onClick={() => setTab('queue')}>今天要打 <span className="queue-n">{queue.length}</span></button>
           <button type="button" className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')}>回访记录</button>
+          <button type="button" className={tab === 'lists' ? 'on' : ''} onClick={() => setTab('lists')}>打电话名单</button>
           <span className="grow" />
           <span className="small muted" style={{ alignSelf: 'center' }}>今天已打 <b>{todayCalls.length}</b>{todayCalls.length > 0 && <>：下单 {byResult.order}，要报价 {byResult.quote}，没接 {byResult.no_answer}</>}</span>
         </div>
-        {tab === 'queue' ? (<>
-          <Grid id="hotline-queue" table="deals" columns={qCols} rows={queue} onRowClick={(c) => setOpen(c.id)} empty="今天没有要打的 👍"
+        {tab === 'lists' ? <div className="card-b"><CallLists /></div> : tab === 'queue' ? (<>
+          <Grid id="hotline-queue" table="deals" columns={qCols} rows={queue} onRowClick={(c) => setOpen(c.id)} rowActions={can(role, 'prospect') ? [{ label: '☎ 记这通电话的结果', run: (c) => setCallFor(c) }] : undefined} empty="今天没有要打的 👍"
             tools={<div className="seg">{[['spare', '备件'], ['recycle', '回收']].map(([v, l]) => <button type="button" key={v} className={line === v ? 'on' : ''} onClick={() => setLine(v)}>{l}</button>)}</div>} />
         </>) : (<>
           <Grid id="hotline-log" table="hotline_calls" columns={lCols} rows={data.calls} onRowClick={(r) => setOpen(r.customer_id)} empty="这段时间没有回访记录"

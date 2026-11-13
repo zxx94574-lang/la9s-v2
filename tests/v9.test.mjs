@@ -196,7 +196,7 @@ test('0028 发货文件 + 签收: 复检后提前出 BL 编号, 出库时落到�
   const t = await setup();
   const d = await t.toConfirmed(t.ids.camaraAbobo, [{ product_id: t.ids.bg6mCover, qty_req: 4 }], { review: false });
   await rejects(t.as(U.manager, `select app.issue_bl_pending($1)`, [d]), /BAD_STATE/);
-  await t.as(U.manager, `select app.review_pick($1,$2,'photo://pack.jpg')`, [d, t.ids.picker]);
+  await t.as(U.manager, `select app.review_pick($1,$2,'photo://pack.jpg')`, [d, t.ids.reviewer]);
   const no = await t.val(U.manager, `select app.issue_bl_pending($1)`, [d]);
   assert.match(no, /^BL-\d{8}-CAM-\d{3}$/);
   assert.equal(await t.val(U.manager, `select app.issue_bl_pending($1)`, [d]), no, '再点不换号');

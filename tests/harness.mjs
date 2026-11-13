@@ -35,6 +35,7 @@ export async function setup() {
   ids.org = (await one(`insert into app.orgs (kind,name,country,base_currency,doc_prefix) values ('hq','LA&9S CI','CI','XOF','CI') returning id`)).id;
   ids.otherOrg = (await one(`insert into app.orgs (kind,name,country,base_currency,doc_prefix) values ('hq','Other','CI','XOF','XX') returning id`)).id;
   ids.picker = (await one(`insert into app.employees (org_id, short_name) values ($1,'Abowa') returning id`, [ids.org])).id;
+  ids.reviewer = (await one(`insert into app.employees (org_id, short_name) values ($1,'Grace') returning id`, [ids.org])).id;   // 0044: 找货人和复核人不能同一个人
   ids.sales = (await one(`insert into app.employees (org_id, short_name) values ($1,'Koffi') returning id`, [ids.org])).id;
   for (const [u, roles] of [[U.admin, '{admin}'], [U.manager, '{manager}'], [U.picker, '{picker}'], [U.hotline, '{hotline}'], [U.finance, '{finance}']]) {
     await db.query(`insert into app.members (user_id, org_id, roles) values ($1,$2,$3)`, [u, ids.org, roles]);
@@ -90,7 +91,7 @@ export async function setup() {
     await as(U.picker, `select app.submit_pick($1,$2,'photo://pick.jpg','[]')`, [deal, ids.picker]);
     await as(U.manager, `select app.create_sales_order($1,$2)`, [deal, manualConfirm]);
     await as(U.hotline, `select app.customer_confirm($1,null,'whatsapp','proof://ok.jpg')`, [deal]);
-    if (review) await as(U.manager, `select app.review_pick($1,$2,'photo://pack.jpg')`, [deal, ids.picker]);
+    if (review) await as(U.manager, `select app.review_pick($1,$2,'photo://pack.jpg')`, [deal, ids.reviewer]);
     return deal;
   };
   const shipAll = (deal, items = null, at = '2026-10-27T10:00:00Z') =>

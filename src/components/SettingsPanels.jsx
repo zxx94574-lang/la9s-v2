@@ -118,3 +118,32 @@ export function PermPanel() {
     </div>
   );
 }
+
+// 11-12 Frank: 凡是涨跌 / 时限 / 单价这类线, 都放在这里随时调 (改了立即生效)
+const RULES = [
+  ['directive_rules', 'ack_minutes', '指令：下达后几分钟内必须点「收到」', 5, '分钟'],
+  ['wh_commission', 'per_piece', '仓库提成：正确出货每片多少', 5, 'XOF'],
+  ['volume_shift', 'pct', '客户提货量月对比：涨跌超过多少算变化大', 50, '%'],
+  ['draft_rules', 'days', '草稿（等定档的报价）几天没人动自动作废', 7, '天'],
+  ['discrepancy_window', 'hours', '收货差异：签收后多少小时内反馈算正常', 24, '小时'],
+];
+export function RulesPanel() {
+  const { org, role, toast, refresh } = useApp();
+  const { data } = useData(() => q(`select key, value from app.org_settings where org_id = $1 and key = any($2)`, [org, [...new Set(RULES.map((r) => r[0])), 'freight_rules']]), [org]);
+  const [draft, setDraft] = useState({});
+  if (!data) return null;
+  const cur = (k, f, d) => draft[k + f] ?? String(data.find((x) => x.key === k)?.value?.[f] ?? d);
+  const save = async (k, f, v) => { try { const old = data.find((x) => x.key === k)?.value || {}; await call(role, `select app.set_org_setting($1,$2,$3)`, [org, k, JSON.stringify({ ...old, [f]: f === 'account' ? v : Number(v) })]); toast('已保存，立即生效'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (
+    <div className="card" style={{ marginBottom: 12 }}>
+      <div className="card-h"><h2>规则参数</h2><span className="small muted">这些线随时可以调，改完立即生效</span></div>
+      <div className="card-b stack" style={{ gap: 8 }}>
+        {RULES.map(([k, f, label, d, unit]) => (
+          <div key={k + f} className="row" style={{ gap: 10, flexWrap: 'wrap' }}><span style={{ minWidth: 300, flex: '1 1 300px' }}>{label}</span>
+            <input className="in" style={{ width: 90 }} inputMode="numeric" value={cur(k, f, d)} onChange={(e) => setDraft({ ...draft, [k + f]: e.target.value.replace(/[^\d.]/g, '') })} onBlur={(e) => { if (draft[k + f] != null && Number(e.target.value) > 0) save(k, f, e.target.value); }} /><span className="small muted" style={{ width: 40 }}>{unit}</span></div>))}
+        <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}><span style={{ minWidth: 300, flex: '1 1 300px' }}>我们出的运费记在哪个账户</span>
+          <input className="in" style={{ width: 140 }} value={cur('freight_rules', 'account', 'Wave-XOF')} onChange={(e) => setDraft({ ...draft, freight_rulesaccount: e.target.value })} onBlur={(e) => { if (draft.freight_rulesaccount != null && e.target.value.trim()) save('freight_rules', 'account', e.target.value.trim()); }} /><span className="small muted">账户名要和「资金账户」里的一样</span></div>
+      </div>
+    </div>
+  );
+}

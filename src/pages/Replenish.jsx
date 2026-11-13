@@ -65,7 +65,6 @@ export default function Replenish() {
     { key: 'lines', label: '货', w: 280, value: (p) => p.lines.map((l) => l.model).join(' '),
       render: (p) => <span className="small">{p.lines.slice(0, 4).map((l) => `${l.model}${l.category ? ' ' + l.category : ''} ×${l.qty - l.received}`).join('，')}{p.lines.length > 4 ? ` 等 ${p.lines.length} 行` : ''}</span> },
     { key: 'remaining', label: '在途件数', w: 90, value: (p) => N(p.remaining) },
-    { key: 'act', label: '', w: 100, render: (p) => can(role, 'receive_po') && <button type="button" className="btn sm primary" onClick={(e) => { e.stopPropagation(); setRecv(p); }}>到货入库</button> },
   ];
   return (
     <>
@@ -85,7 +84,7 @@ export default function Replenish() {
               <select className="in" value={cat} onChange={(e) => setCat(e.target.value)} style={{ maxWidth: 150 }}><option value="">全部种类</option>{cats.map((c) => <option key={c}>{c}</option>)}</select></>}
             foot={(rs) => ({ code: `${rs.length} 个`, suggest: qty(rs.reduce((a, r) => a + N(r.suggest), 0)), short_qty: qty(rs.reduce((a, r) => a + N(r.short_qty), 0)), in_transit: qty(rs.reduce((a, r) => a + N(r.in_transit), 0)) })} />
         </>}
-        {tab === 'po' && <Grid id="pos" table="purchase_orders" columns={poCols} rows={data.pos} empty="没有在途的采购单（金蝶采购订单导入后显示在这里）" />}
+        {tab === 'po' && <Grid id="pos" table="purchase_orders" columns={poCols} rows={data.pos} rowActions={can(role, 'receive_po') ? [{ label: '到货入库', run: (po) => setRecv(po) }] : undefined} empty="没有在途的采购单（金蝶采购订单导入后显示在这里）" />}
         {tab === 'nocode' && <><div className="card-b hint" style={{ paddingTop: 0 }}>近 90 天客户要了、但我们没有编码的型号。要不要建编码进货由中方定。</div>
           <Grid id="nocode" columns={ncCols} rows={data.nocode} rowKey={(r) => r.category + r.model} empty="没有" /></>}
       </div>

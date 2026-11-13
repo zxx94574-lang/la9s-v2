@@ -2,7 +2,7 @@
 // a read-only record once it has been pushed (待改 13). Every button calls exactly one SQL business function.
 import PeoplePick from '../components/PeoplePick.jsx';
 import { fmtPhone, telHref } from '../lib/phone.js';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Grid from '../components/Grid.jsx';
 import { call, q } from '../db/client.js';
 import LineEntry, { newKey, finalizeLines, tierPrice } from '../components/LineEntry.jsx';
@@ -11,10 +11,11 @@ import { BlActions } from '../components/Bl.jsx';
 import { flagAnomaly } from '../components/IssueReport.jsx';
 import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus } from '../components/ReceiptForm.jsx';
 import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip } from '../components/ui.jsx';
-import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, PAY_METHODS, RETURN_REASONS, CONFIRM_METHODS, CHECK_RESULTS, priceLevel, getThresholds, balanceWords } from '../lib/domain.js';
+import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, PAY_METHODS, RETURN_REASONS, CONFIRM_METHODS, CHECK_RESULTS, priceLevel, getThresholds, balanceWords, TIERS } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, pad, ymd } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
 
+import { PriceAdjust } from '../components/Batch2.jsx';
 const N = (v) => Number(v || 0);
 const Blocked = ({ action }) => <span className="lock">当前岗位不能操作，需要：{whoCan(action)}</span>;
 const evOf = (events, action) => [...events].reverse().find((e) => e.action === action);
@@ -180,6 +181,7 @@ export function ConfirmBlock({ deal, events, act, role, lines }) {
       </div>
     );
   }
+  if (deal.status === 'quoted' && deal.tier_pending) return <TierGate deal={deal} info={info} act={act} role={role} />;
   if (deal.approval === 'pending') return <div className="card"><div className="card-h"><h2>联系客户确认</h2></div><div className="card-b two">{info}<div className="panel"><span className="why">等中方审批（上面黄条），批了才能确认、下推找货</span></div></div></div>;
   const wantOn = when === 'today' ? today() : when === 'tomorrow' ? ymd(new Date(Date.now() + 864e5)) : when === 'date' ? date : null;
   const go = async () => {
@@ -404,7 +406,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
         <div className="card-b" style={{ borderTop: '1px solid var(--line-2)' }}>
           {can(role, 'review_pick') ? (
             <div className="row" style={{ gap: 18, alignItems: 'flex-end' }}>
-              <PeoplePick step="review" label="复核人" employees={employees} value={reviewer} onChange={setReviewer} errs={errs} />
+              <PeoplePick step="review" label={<>复核人 <Info>找货人和复核人不能是同一个人：发错货要过两个人的手。只有一个仓管在岗时，由中方来复检。</Info></>} employees={role === 'admin' ? employees : employees.filter((e) => e.id !== deal.picker_employee_id)} value={reviewer} onChange={setReviewer} errs={errs} />
               <div className="field req"><label>打包照片（打包好的货）</label><PhotoInput value={photo} onChange={setPhoto} invalid={errs} label="拍打包照片" onDup={setDup} /></div>
               <span className="grow" />
               <button type="button" className="btn primary lg" onClick={submit}>复检打包完成 →</button>
@@ -700,7 +702,7 @@ function ShipForm({ deal, lines, shipments, act }) {
   const [items, setItems] = useState({});
   const [errs, setErrs] = useState(false);
   // 232 (Frank 11-11): 运费谁出 —— S 档默认我们出; 阿比让以外默认我们出一段 (仓库 → Adjamé 交通站); 其他默认客户出; 仓库可以改
-  const [bearer, setBearer] = useState(() => (deal.tier === 'S' ? 'company' : deal.city && !/abidjan|cocody|adjam|yopougon|treichville|abobo|koumassi|marcory|plateau|port-bou|anyama|bingerville/i.test(deal.city) ? 'company_part' : 'customer'));
+  const [bearer, setBearer] = useState('customer');   // 270 (Frank 11-12): 默认客户出
   const [freight, setFreight] = useState('');
   const [summary, setSummary] = useState(null);
   const left = lines.filter((l) => N(l.qty_supply) > N(l.qty_shipped));
@@ -719,7 +721,7 @@ function ShipForm({ deal, lines, shipments, act }) {
   const thisTime = left.reduce((a, l) => a + now(l), 0);
   const check = () => {
     setErrs(true);
-    const miss = [!date && '日期', !time && '时间', !method && '发货方式', !phone.trim() && '电话', phone.trim() && !phoneValid(phone) && '电话位数不对', !addr.trim() && '收货地址 / 联系人', !proof && '发货凭证截图', partial && !preason.trim() && '只发一部分的原因'].filter(Boolean);
+    const miss = [!date && '日期', !time && '时间', !method && '发货方式', !phone.trim() && '电话', phone.trim() && !phoneValid(phone) && '电话位数不对', !addr.trim() && '收货地址 / 联系人', !proof && '发货凭证截图', partial && !preason.trim() && '只发一部分的原因', bearer !== 'customer' && !(N(freight) > 0) && '实际付了多少运费'].filter(Boolean);
     if (miss.length) return toast(`出库必填：${miss.join('、')}`, 'err');
     if (left.some((l) => now(l) > remain(l))) return toast('本次出库超过剩余数量', 'err');
     if (!(thisTime > 0)) return toast('本次出库数量为 0', 'err');
@@ -730,7 +732,8 @@ function ShipForm({ deal, lines, shipments, act }) {
     const at = new Date(`${date}T${time}:00`).toISOString();
     const payload = partial ? left.map((l) => ({ line_id: l.id, qty: now(l) })).filter((x) => x.qty > 0) : null;
     await act('已出库，客户总账已更新', `select app.ship($1,$2,$3,$4,$5,$6,$7)`, [deal.id, at, method, phone.trim(), addr.trim(), proof, payload && JSON.stringify(payload)])
-      .then(() => call(role, `select app.set_ship_freight((select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1), $2, $3)`, [deal.id, bearer, bearer === 'customer' ? null : N(freight) || null]).then(() => refresh(), () => {}))
+      .then(() => call(role, `select app.record_ship_freight((select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1), $2, $3, $4) as mv`, [deal.id, bearer, bearer === 'customer' ? null : N(freight), proof])
+        .then((r) => { if (bearer !== 'customer' && r?.[0]?.mv) window.dispatchEvent(new CustomEvent('la9s:flow', { detail: { text: `运费 ${money(N(freight))} XOF 已记一笔支出流水（本地物流费 · Wave-XOF）`, to: 'cash' } })); refresh(); }, (e) => toast('运费没记上：' + (e?.message || e), 'err')))
       .then(() => (partial && preason.trim() ? call(role, `select app.set_partial_reason((select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1), $2)`, [deal.id, preason.trim()]).then(() => refresh(), () => {}) : null))
       .then(() => setSummary(null), () => {});
   };
@@ -753,9 +756,9 @@ function ShipForm({ deal, lines, shipments, act }) {
           <div className="field req"><label>发货凭证（Yango 截图 / 现场照片）</label><PhotoInput value={proof} onChange={setProof} label="司机 / 车辆截图" invalid={errs} /></div>
         </div>
         <div className="row" style={{ gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div className="field req"><label>运费谁出 <Info>S 档大客户：我们出。外区客户：我们只出仓库到 Adjamé 交通站这一段。客户自己叫车直送：客户出。选了我们出，财务和中方会马上收到一条紧急待办，付完传截图自动记流水。</Info></label>
+          <div className="field req"><label>运费谁出 <Info>默认客户出。S 档大客户：我们出。外区客户：我们只出仓库到 Adjamé 交通站这一段。选了我们出：填实际付的钱（照 Yango 截图上的价格），出库时自动记一笔支出流水（本地物流费，Wave-XOF 账户）。只进我们自己的流水，不动客户的账。</Info></label>
             <div className="chips">{[['customer', '客户出'], ['company', '我们出'], ['company_part', '我们出一段（到交通站）']].map(([k, l]) => <button type="button" key={k} className={`chip ${bearer === k ? 'on' : ''}`} onClick={() => setBearer(k)}>{l}</button>)}</div></div>
-          {bearer !== 'customer' && <div className="field" style={{ width: 200 }}><label>大概多少（Yango 上显示的）</label><input className="in" inputMode="numeric" value={freight} onChange={(e) => setFreight(e.target.value.replace(/\D/g, ''))} placeholder="XOF" /></div>}
+          {bearer !== 'customer' && <div className="field req" style={{ width: 220 }}><label>实际付了多少（照截图上的价格）</label><input className={`in ${errs && !(N(freight) > 0) ? 'err-in' : ''}`} inputMode="numeric" value={freight} onChange={(e) => setFreight(e.target.value.replace(/\D/g, ''))} placeholder="XOF" /></div>}
         </div>
         <div className="hint">下一版：上传 Yango 截图后自动读出司机名字、电话、时间，人只核对（现在先手填）。</div>
       </div>
@@ -913,6 +916,7 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
         ]} rows={receipts} rowKey={(r) => r.rcv_no + r.at} selectable={can(role, 'receipt') ? { selected: pick, onChange: setPick } : undefined} />}
         {receipts.length > 0 && <div className="card-b hint" style={{ borderTop: '1px solid var(--line-2)' }}>钱到没到账不在这里确认：统一到「资金账户 → 待核对到账」核对，避免出错。</div>}
         {voidRc && <VoidReceiptModal rc={voidRc} onClose={() => { setVoidRc(null); setPick(new Set()); }} />}
+        <PriceAdjust deal={deal} />
       </div>
       {can(role, 'receipt') && N(deal.due) > 0 && (
         <div className="card">
@@ -947,6 +951,45 @@ function SplitModal({ deal, lines, act, onClose }) {
         <FRow label="备注"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如 等下周到货 / 客户分两次付款" /></FRow>
       </div>
     </Modal>
+  );
+}
+// 251 / 259 (Frank 11-12): 客户档位中方还没确认 → 报价按最贵档 (Repair) 先存成草稿, 不能发给客户;
+// 员工点「申请定级」→ 中方待办紧急段; 中方在这里直接定档 → 报价自动按新档位重算, 才能联系客户确认
+function TierGate({ deal, info, act, role }) {
+  const { org } = useApp();
+  const [tier, setTier] = useState(''); const [note, setNote] = useState(''); const [code, setCode] = useState('');
+  const asked = !!deal.tier_requested_at;
+  const prospect = deal.customer_status !== 'active';
+  const nextNo = useData(() => (prospect && role === 'admin' ? q(`select coalesce(max(substring(code from '[0-9]+')::int), 0) + 1 as n from app.customers where org_id = $1 and code ~ '^CI[0-9]+$'`, [org]) : Promise.resolve([])), [org, prospect, role]).data;
+  useEffect(() => { if (!code && nextNo?.[0]?.n) setCode('CI' + String(nextNo[0].n).padStart(4, '0')); }, [nextNo]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const setIt = async () => {
+    try {
+      if (prospect) await act('已转成正式客户', `select app.activate_customer($1,$2,$3,null)`, [deal.customer_id, code.trim().toUpperCase(), tier]);
+      await act('档位已定，报价已按新档位重算', `select app.confirm_customer_tier($1,$2,'confirm',null,$3)`, [deal.customer_id, tier, note || null]);
+      if (deal.approval === 'pending') await act('新客户这张单也一并批了', `select app.approve_quote($1,true,$2)`, [deal.id, '新客户，已定档位']);
+    } catch { /* act 已经提示 */ }
+  };
+  return (
+    <div className="card">
+      <div className="card-h"><h2>联系客户确认</h2><span className="pill amber">草稿 · 等中方定档位</span></div>
+      <div className="card-b two">{info}
+        <div className="panel stack">
+          <div className="hint">这个客户的档位中方还没确认，报价现在按<b>最贵档（Repair）</b>显示，<b>先不要发给客户</b>。中方定了档位，价格会自动重算，才能联系客户确认。超过 7 天没人动的草稿会自动作废（可恢复）。</div>
+          {role === 'admin' ? (<>
+            <FRow label="定档位" req><div className="chips">{Object.entries(TIERS).map(([k, v]) => <button type="button" key={k} className={`chip ${tier === k ? 'on' : ''}`} onClick={() => setTier(k)}>{v}</button>)}</div></FRow>
+            <FRow label="备注"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如 看了店铺照片，按零售店" /></FRow>
+            {deal.tier_request_note && <div className="small muted">员工说：{deal.tier_request_note}</div>}
+            {prospect && <FRow label="客户编码" req><input className="in" style={{ width: 140 }} value={code} onChange={(e) => setCode(e.target.value)} /><span className="small muted">潜客定档 = 转成正式客户，系统给了下一个号，可改（和金蝶 / 飞书一致）</span></FRow>}
+            <div className="actbar">{(!tier || (prospect && !code.trim())) && <span className="why">{!tier ? '选一个档位' : '填客户编码'}</span>}<button type="button" className="btn primary" disabled={!tier || (prospect && !code.trim())} onClick={setIt}>确认档位 ✓</button></div>
+          </>) : asked ? (
+            <div><span className="pill amber">已申请定级 · {dt(deal.tier_requested_at)}</span> <span className="small muted">中方的待办紧急段已经有这一条，定了你的待办会收到。</span></div>
+          ) : (<>
+            <FRow label="给中方的话"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如 客户在 Adjamé 有两个档口，量不小" /></FRow>
+            <div className="actbar"><button type="button" className="btn primary" onClick={() => act('已申请定级，中方会在待办里看到', `select app.request_tier($1,$2,$3)`, [deal.customer_id, deal.id, note || null]).catch(() => {})}>申请定级 →</button></div>
+          </>)}
+        </div>
+      </div>
+    </div>
   );
 }
 function BadDebtModal({ deal, act, onClose }) {

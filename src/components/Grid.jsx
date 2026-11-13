@@ -62,6 +62,13 @@ function passes(c, row, f) {
   const empty = raw === null || raw === undefined || raw === '';
   if (f.op === 'empty') return empty;
   if (f.op === 'not_empty') return !empty;
+  if (f.op === 'in' || f.op === 'not_in') {   // 253: 多选值; 一格里有几个值 (BF7 / BG6M) 时, 中一个就算
+    const mine = splitVals(raw).map((x) => x.toUpperCase()); const want = (f.vals || []).map((x) => String(x).toUpperCase());
+    if (!want.length) return true;
+    const hit = mine.some((x) => want.includes(x)) || want.includes(String(raw ?? '').trim().toUpperCase());
+    return f.op === 'in' ? hit : !hit;
+  }
+  if (f.op === 'contains' || f.op === 'not_contains') { const q0 = String(f.a ?? '').toUpperCase(); if (!q0) return true; const h = String(raw ?? '').toUpperCase().includes(q0); return f.op === 'contains' ? h : !h; }
   if (isNumCol(c)) {
     const v = Number(raw), a = Number(String(f.a).replace(',', '.')), b = Number(String(f.b ?? '').replace(',', '.'));
     if (f.a === '' || f.a === undefined || Number.isNaN(a)) return true;
@@ -89,9 +96,10 @@ function passes(c, row, f) {
 //  · onChange 在「保存」时才调一次 (不是每敲一个字), 页面在 onChange 里直接写库 = 改一格存一格
 //  · ⌘C 复制选中那块 (制表符表格); ⌘V 只填进选中区域: 选一格 → 从这格铺整块, 选一片 → 只填这一片, 剪贴板不够就重复铺满
 //  · Delete 清空选中的可编辑格; 点行号选整行; onReorder(fromRow, toRow) 时左侧出现 ⋮⋮ 拖动手柄
+import { FilterPanel, Schemes, newCond, condReady, splitVals } from './GridFilter.jsx';
 const LAST_COPY = { out: '', raw: '' };   // 最近一次从表格复制的内容: out = 带行号 (给 Excel), raw = 不带 (表格内粘贴)
 export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r.id, rowClass, onRowClick, onDelete, selectable, foot, tools, empty = '暂无数据', maxHeight, noTools,
-  onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors }) {
+  onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors, onShown, compactTools, rowActions }) {
   // ── 每张表的自定义列 (Frank 11-08): 传 table="xxx" 就自动长出「选项设置」里加的列, 值存 row_attrs ──
   const app = useApp() || {};
   const [tbl, setTbl] = useState({ opts: null, attrs: {} });
@@ -129,9 +137,18 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
 
   // ── sort + filter ──
   const [sort, setSort] = useState(null); // {key, dir}
-  const [filters, setFilters] = useState({}); // key -> {op, a, b}
+  // 253 (Frank 11-12): 飞书式筛选 —— 条件数组 + 符合所有 / 任一 + 全表搜索; 只影响自己: 存在本机这个岗位下 (关掉标签页就清)
+  const gfKey = `la9s.gf.${app.role || 'x'}.${id || 'grid'}`;
+  const [gf, setGf] = useState(() => { try { return JSON.parse(sessionStorage.getItem(gfKey) || 'null') || { conds: [], any: false, q: '' }; } catch { return { conds: [], any: false, q: '' }; } });
+  useEffect(() => { try { sessionStorage.setItem(gfKey, JSON.stringify(gf)); } catch { /* 无痕模式存不了就算了 */ } }, [gf, gfKey]);
+  const filters = gf.conds; const setFilters = (v) => setGf((g) => ({ ...g, conds: typeof v === 'function' ? v(g.conds) : Array.isArray(v) ? v : [] }));
+  const liveConds = filters.filter((f) => condReady(f) && byKey[f.key]);
   const shown = useMemo(() => {
-    let out = rows.filter((r) => Object.entries(filters).every(([k, f]) => !byKey[k] || passes(byKey[k], r, f)));
+    const live = filters.filter((f) => condReady(f) && byKey[f.key]);
+    const words = String(gf.q || '').trim().toUpperCase().split(/\s+/).filter(Boolean);
+    const cols = Object.values(byKey).filter((c) => c.label);
+    let out = rows.filter((r) => (!live.length || (gf.any ? live.some((f) => passes(byKey[f.key], r, f)) : live.every((f) => passes(byKey[f.key], r, f))))
+      && (!words.length || words.every((w) => cols.some((c) => String(cellValue(c, r) ?? '').toUpperCase().includes(w)))));
     if (sort && byKey[sort.key]) {
       const c = byKey[sort.key];
       const num = isNumCol(c);
@@ -152,7 +169,15 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
     }
     return out;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, filters, sort, byKey, layout.rowOrder]);
+  }, [rows, gf, sort, byKey, layout.rowOrder]);
+  // 只在「筛出来的行」或条件真的变了才通知页面 (按内容比, 不按引用: 页面每次渲染给新数组也不会转圈)
+  const shownSig = useRef('');
+  useEffect(() => {
+    if (!onShown) return;
+    const sig = shown.map(rowKey).join('|') + '§' + JSON.stringify(liveConds);
+    if (sig === shownSig.current) return;
+    shownSig.current = sig; onShown(shown, liveConds, gf.q || '');
+  }, [shown, gf]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [dragRow, setDragRow] = useState(null);   // {from, over}
   const startRowDrag = (e, from) => {
     let state = { from, over: from }; setDragRow(state);
@@ -167,7 +192,13 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
     setLayout((l) => ({ ...l, rowOrder: keys })); setSort(null);
     if (navigator.vibrate) navigator.vibrate(8);
   };
-  const nFilters = Object.keys(filters).length;
+  const nFilters = liveConds.length + (String(gf.q || '').trim() ? 1 : 0);
+  const [toolsOpen, setToolsOpen] = useState(false);   // 265: 档案里的小表, 工具栏收成一个小图标
+  const [panel, setPanel] = useState(null);   // 筛选面板的位置
+  const panelBtn = useRef(null);
+  const openPanel = (preset) => { const r = panelBtn.current?.getBoundingClientRect(); const left = r ? Math.max(8, Math.min(r.left, window.innerWidth - 640)) : 16; const top = r ? r.bottom + 6 : 120; if (preset) setFilters((cs) => (cs.some((c) => c.key === preset.key) ? cs : [...cs.filter(condReady), newCond(preset.key, isNumCol(preset))])); else if (!filters.length) setFilters([newCond()]); setPanel({ left, top }); };
+  const optionsOf = (c) => { const set = new Set(); for (const r of rows) for (const v of splitVals(cellValue(c, r))) set.add(v); return [...set].sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true })); };
+  const filterCols = vis.concat(layout.order.filter((k) => layout.hidden.includes(k) && byKey[k]).map((k) => byKey[k])).filter((c) => c.label && c.filterable !== false);
   const toggleSort = (k) => setSort((s) => (!s || s.key !== k ? { key: k, dir: 'asc' } : s.dir === 'asc' ? { key: k, dir: 'desc' } : null));
 
   const editFor = (r, ci) => vis[ci]?.edit?.(shown[r], r);
@@ -438,6 +469,9 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
 
   const allSel = selectable && shown.length > 0 && shown.every((r) => selectable.selected.has(rowKey(r)));
   // 删行 (Frank 11-09): 不再有行尾小叉; 勾选的行优先, 否则是点行号 / 拖出来的选区覆盖的行
+  // 行操作 (Frank 11-12 「操作按钮不放格子里」): 页面给 rowActions=[{label, tone, when(row), run(row)}], 点中一行 (或只勾一行) → 表格上方出这一行能做的按钮
+  const actRow = !rowActions?.length ? null : selectable?.selected?.size === 1 ? shown.find((r) => selectable.selected.has(rowKey(r))) : (range && range.r0 === range.r1 ? shown[range.r0] : null);
+  const actList = actRow ? rowActions.filter((a) => !a.when || a.when(actRow)) : [];
   const delRows = useMemo(() => {
     if (!onDelete) return [];
     if (selectable?.selected?.size) return shown.filter((r) => selectable.selected.has(rowKey(r)));
@@ -472,16 +506,36 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
   return (
     <div id={gid} className="grid" onKeyDown={onKeyDown} onPaste={onPaste}>
       <style>{dragCss}</style>
+      {panel && <FilterPanel at={panel} cols={filterCols} isNum={isNumCol} optionsOf={optionsOf} conds={filters} setConds={setFilters} any={gf.any} setAny={(v) => setGf((g) => ({ ...g, any: v }))} onClose={() => setPanel(null)} />}
       {optOpen && <TableOptionsModal table={table} opts={tbl.opts} builtin={baseColumns.filter((c) => c.label).map((c) => c.label)} onClose={() => setOptOpen(false)} onSaved={() => { setOptOpen(false); setTblTick((x) => x + 1); }} />}
       {noTools && onDelete && delRows.length > 0 && (
         <div className="grid-tools" style={{ justifyContent: 'flex-end' }}>
           <button type="button" className="btn sm danger" onClick={() => { const rs = delRows; setSel(null); if (selectable?.onChange) selectable.onChange(new Set()); onDelete(rs[0], shown.indexOf(rs[0]), rs); }}>🗑 删 {delRows.length} 行</button>
         </div>)}
-      {!noTools && (
+      {noTools && rowActions?.length > 0 && (
+        <div className="grid-tools">{actRow ? (
+          <span className="row-acts"><span className="small">第 {shown.indexOf(actRow) + 1} 行：</span>
+            {actList.map((a) => <button type="button" key={a.label} className={`btn sm ${a.tone || 'primary'}`} onClick={() => a.run(actRow)}>{a.label}</button>)}
+            {!actList.length && <span className="small muted">这一行现在没有要做的</span>}</span>
+        ) : <span className="small muted row-acts-hint">点中一行 → 这里出现能做的操作（{rowActions.map((a) => a.label).join(' / ')}）</span>}</div>)}
+      {!noTools && compactTools && !toolsOpen && (
+        <div className="grid-tools mini"><span className="grow" />{nFilters > 0 && <span className="pill blue">筛出 {shown.length}/{rows.length} 行</span>}<button type="button" className="btn sm ghost" title="筛选 / 搜索 / 显示哪些列" onClick={() => setToolsOpen(true)}>⏷ ☷</button></div>)}
+      {!noTools && (!compactTools || toolsOpen) && (
         <div className="grid-tools">
           {tools}
-          {nFilters > 0 && <span className="pill blue">已筛选 {shown.length}/{rows.length} 行</span>}
-          {(nFilters > 0 || sort) && <button type="button" className="btn sm primary" onClick={() => { setFilters({}); setSort(null); }} title="清掉所有筛选和排序，回到最初的样子">↺ 取消筛选 / 排序</button>}
+          <button type="button" ref={panelBtn} className={`btn sm gf-keep ${liveConds.length ? 'primary' : ''}`} onClick={() => (panel ? setPanel(null) : openPanel())} title="筛选：可以叠加多个条件">⏷ 筛选{liveConds.length ? ` ${liveConds.length}` : ''}</button>
+          {liveConds.map((f) => <span key={f.id} className="pill blue gf-chip gf-keep" onClick={() => openPanel()} title="点开修改">{byKey[f.key].label}{f.op === 'in' ? '：' : f.op === 'not_in' ? ' 不是：' : f.op === 'empty' ? ' 为空' : f.op === 'not_empty' ? ' 不为空' : f.op === 'contains' ? ' 包含 ' : f.op === 'not_contains' ? ' 不包含 ' : { eq: ' = ', ne: ' ≠ ', gt: ' > ', lt: ' < ', between: ' 介于 ' }[f.op] || ' '}{['in', 'not_in'].includes(f.op) ? ((f.vals || []).length > 2 ? `${f.vals.length} 个` : (f.vals || []).join('、')) : ['empty', 'not_empty'].includes(f.op) ? '' : f.op === 'between' ? `${f.a}–${f.b}` : f.a}
+            <button type="button" className="x-mini" title="去掉这个条件" onClick={(e) => { e.stopPropagation(); setFilters((cs) => cs.filter((c) => c.id !== f.id)); }}>×</button></span>)}
+          <input className="in sm gf-search" placeholder="⌕ 搜这张表（单号、名字、机型…）" value={gf.q || ''} onChange={(e) => setGf((g) => ({ ...g, q: e.target.value }))} />
+          <Schemes id={id || 'grid'} current={gf} onApply={(s2) => setGf({ conds: (s2.conds || []).map((c) => ({ ...c })), any: !!s2.any, q: s2.q || '' })} />
+          {nFilters > 0 && <span className="pill blue">筛出 {shown.length}/{rows.length} 行</span>}
+          {(nFilters > 0 || sort) && <button type="button" className="btn sm" onClick={() => { setGf({ conds: [], any: false, q: '' }); setSort(null); }} title="清掉所有筛选和排序，回到最初的样子">↺ 清空</button>}
+
+          {rowActions?.length > 0 && (actRow ? (
+            <span className="row-acts"><span className="small">第 {shown.indexOf(actRow) + 1} 行：</span>
+              {actList.map((a) => <button type="button" key={a.label} className={`btn sm ${a.tone || 'primary'}`} onClick={() => a.run(actRow)}>{a.label}</button>)}
+              {!actList.length && <span className="small muted">这一行现在没有要做的</span>}</span>
+          ) : <span className="small muted row-acts-hint">点中一行 → 这里出现能做的操作（{rowActions.map((a) => a.label).join(' / ')}）</span>)}
           <span className="grow" />
           {msg && <span className="pill green">{msg}</span>}
           {fillTargets.length > 1 && (
@@ -518,7 +572,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
               <th className="rowhead" style={{ width: selectable ? 64 : 40 }}>{selectable ? <label className="selall" title="全选 / 全不选"><input type="checkbox" checked={allSel} onChange={() => selectable.onChange(allSel ? new Set() : new Set(shown.map(rowKey)))} />全选</label> : <span className="muted">#</span>}</th>
               {vis.map((c) => {
                 const fill = isFill(c);
-                const f = filters[c.key];
+                const f = liveConds.some((x) => x.key === c.key);
                 return (
                   <th key={c.key} data-ck={c.key} style={{ ...widthStyle(c), textAlign: alignOf(c) }}
                     className={`${fill ? 'fill-col' : ''} ${activeCol === c.key ? 'fill-active' : ''}`}>
@@ -528,10 +582,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
                       <span className="th-label" onClick={() => c.sortable !== false && toggleSort(c.key)} title="点击排序">{c.label}</span>
                       {c.sortable !== false && <span className={`sort ${sort?.key === c.key ? 'on' : ''}`} onClick={() => toggleSort(c.key)}>{sort?.key === c.key ? (sort.dir === 'asc' ? '▲' : '▼') : '⇅'}</span>}
                       {c.filterable !== false && (
-                        <span style={{ position: 'relative' }} ref={fpop === c.key ? fRef : null}>
-                          <button type="button" className={`funnel ${f ? 'on' : ''}`} title="筛选" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setFpopAt({ left: Math.min(r.left - 8, window.innerWidth - 236), top: r.bottom + 6 }); setFpop(fpop === c.key ? null : c.key); }}>⏷</button>
-                          {fpop === c.key && createPortal(<FilterPop col={c} at={fpopAt} value={f} onChange={(v) => setFilters((all) => { const n = { ...all }; if (v) n[c.key] = v; else delete n[c.key]; return n; })} onClose={() => setFpop(null)} />, document.body)}
-                        </span>
+                        <button type="button" className={`funnel gf-keep ${f ? 'on' : ''}`} title="按这一列筛选" onClick={(e) => { e.stopPropagation(); openPanel(c); }}>⏷</button>
                       )}
                     </span>
                     <span className="resizer" onPointerDown={(e) => startResize(e, c.key)} onDoubleClick={(e) => autoFit(e, c.key)} title="拖动调宽，双击自适应" />
@@ -541,7 +592,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td colSpan={vis.length + 3} className="empty"><span className="sticky-left">{rows.length ? <>筛选以后没有符合条件的行 <button type="button" className="btn sm" onClick={() => setFilters({})}>清除筛选</button></> : empty}</span></td></tr>}
+            {shown.length === 0 && <tr><td colSpan={vis.length + 3} className="empty"><span className="sticky-left">{rows.length ? <>筛选以后没有符合条件的行 <button type="button" className="btn sm" onClick={() => setGf({ conds: [], any: false, q: '' })}>清除筛选</button></> : empty}</span></td></tr>}
             {shown.map((row, r) => {
               const k = rowKey(row);
               return (
