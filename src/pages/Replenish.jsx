@@ -4,7 +4,8 @@
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, PhotoInput } from '../components/ui.jsx';
+import { PoLink } from './Po.jsx';
 import Grid from '../components/Grid.jsx';
 import { can } from '../lib/domain.js';
 import { qty, dDate, friendlyError } from '../lib/format.js';
@@ -15,7 +16,7 @@ export const PURPOSE = { local: ['本地备货', 'blue'], fob: ['FOB 客户货',
 const FILTERS = [['need', '要补货'], ['short', '欠客户的'], ['out', '断货'], ['aged', '积压（库龄 180+）'], ['all', '全部']];
 
 export default function Replenish() {
-  const { org, role } = useApp();
+  const { org, role, openArchive } = useApp();
   const [tab, setTab] = useState('board');
   const [f, setF] = useState('need');
   const [cat, setCat] = useState('');
@@ -53,7 +54,7 @@ export default function Replenish() {
     { key: 'last_at', label: '最近一次', w: 110, render: (r) => dDate(r.last_at) },
   ];
   const poCols = [
-    { key: 'po_no', label: '采购单号', w: 120, render: (p) => <span className="mono">{p.po_no}</span> },
+    { key: 'po_no', label: '采购单号', w: 150, render: (p) => <PoLink id={p.id} no={p.po_no} /> },
     { key: 'purpose', label: '用途（按备注识别）', w: 170, value: (p) => PURPOSE[p.purpose || 'unknown'][0],
       render: (p) => <span title={p.remark || '没有备注'}><Pill tone={PURPOSE[p.purpose || 'unknown'][1]}>{PURPOSE[p.purpose || 'unknown'][0]}</Pill>{p.fob_customer_codes?.length ? <span className="mono small"> {p.fob_customer_codes.join(',')}</span> : ''}</span> },
     { key: 'boxes', label: '箱 / 件', w: 100, value: (p) => [p.boxes && `${p.boxes} 箱`, p.pcs && `${p.pcs} 件`].filter(Boolean).join(' · ') },
@@ -84,7 +85,7 @@ export default function Replenish() {
               <select className="in" value={cat} onChange={(e) => setCat(e.target.value)} style={{ maxWidth: 150 }}><option value="">全部种类</option>{cats.map((c) => <option key={c}>{c}</option>)}</select></>}
             foot={(rs) => ({ code: `${rs.length} 个`, suggest: qty(rs.reduce((a, r) => a + N(r.suggest), 0)), short_qty: qty(rs.reduce((a, r) => a + N(r.short_qty), 0)), in_transit: qty(rs.reduce((a, r) => a + N(r.in_transit), 0)) })} />
         </>}
-        {tab === 'po' && <Grid id="pos" table="purchase_orders" columns={poCols} rows={data.pos} rowActions={can(role, 'receive_po') ? [{ label: '到货入库', run: (po) => setRecv(po) }] : undefined} empty="没有在途的采购单（金蝶采购订单导入后显示在这里）" />}
+        {tab === 'po' && <Grid id="pos" table="purchase_orders" columns={poCols} rows={data.pos} rowActions={[{ label: '打开采购单（到货入库在里面）', run: (po) => openArchive({ kind: 'po', id: po.id }) }]} empty="没有在途的采购单（国内建单 / 导入箱单 / 金蝶采购订单导入后显示在这里）" />}
         {tab === 'nocode' && <><div className="card-b hint" style={{ paddingTop: 0 }}>近 90 天客户要了、但我们没有编码的型号。要不要建编码进货由中方定。</div>
           <Grid id="nocode" columns={ncCols} rows={data.nocode} rowKey={(r) => r.category + r.model} empty="没有" /></>}
       </div>
@@ -96,8 +97,9 @@ export default function Replenish() {
 
 // 到货入库 (分开收): 每行「本地数」进 LA / 9S, 「FOB 数」进 FOB 仓; 按采购备注已经预分好, 混装的单在这里人工分.
 // 收完生成一张收货单, 金蝶那边按它录采购入库 (FOB 部分入 CI LA FOB Material WH).
-function ReceiveModal({ po, onClose }) {
+export function ReceiveModal({ po, onClose }) {
   const { role, toast, refresh } = useApp();
+  const [photo, setPhoto] = useState('');
   const open = po.lines.filter((l) => l.qty > l.received);
   const [v, setV] = useState(() => Object.fromEntries(open.map((l) => {
     const left = l.qty - l.received, fob = Math.min(Math.max(N(l.fob_qty) - 0, 0), left);
@@ -108,16 +110,17 @@ function ReceiveModal({ po, onClose }) {
     try {
       const rows = open.filter((l) => l.product_id && N(v[l.id].local) + N(v[l.id].fob) > 0)
         .map((l) => ({ line_id: l.id, local_qty: N(v[l.id].local), fob_qty: N(v[l.id].fob), warehouse: v[l.id].wh, fob_customer: v[l.id].cust }));
-      await call(role, `select app.receive_po_split($1,$2)`, [po.id, JSON.stringify(rows)]);
+      await call(role, `select app.receive_po_split($1,$2,$3)`, [po.id, JSON.stringify(rows), photo]);
       toast(`已入库：本地 ${rows.reduce((a, r) => a + r.local_qty, 0)} 件，FOB ${rows.reduce((a, r) => a + r.fob_qty, 0)} 件。金蝶入库在「金蝶同步 → 采购入库」`); refresh(); onClose();
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
   const mixed = po.purpose === 'mixed' || po.purpose === 'unknown' || !po.purpose;
   return (
     <Modal wide title={`到货入库 · ${po.po_no}`} onClose={onClose} footer={<><span className="small muted">没编码的行先让中方建编码</span><span className="grow" />
-      <button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" onClick={go}>入库</button></>}>
+      <button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!photo} onClick={go}>入库</button></>}>
       <div className="stack">
         <div className={`banner ${mixed ? 'warn' : 'info'}`}>{mixed ? `${po.purpose === 'mixed' ? 'FOB 和本地混装' : '国内备注认不出用途'}${po.fob_customer_codes?.length ? `（FOB 客户 ${po.fob_customer_codes.join(',')}）` : ''}：每行填本地多少、FOB 多少。` : `${PURPOSE[po.purpose][0]}${po.fob_customer_codes?.length ? `（${po.fob_customer_codes.join(',')}）` : ''}：已经按国内备注预分好了，核对实际到的数就行。`}<div className="small" style={{ fontWeight: 400 }}>国内备注：{po.remark || '没有'}</div></div>
+        <div className="field req"><label>到货照片（箱子 / 入仓单，必传）</label><PhotoInput value={photo} onChange={setPhoto} label="到货照片" /></div>
         <Grid id="po-receive" noTools rows={open} columns={[
           { key: 'model', label: '型号', w: 150, value: (l) => l.model, render: (l) => <><ModelLink id={l.product_id} model={l.model} />{!l.product_id && <Pill tone="amber">没编码</Pill>}</> },
           { key: 'category', label: '种类', w: 110, value: (l) => l.category },

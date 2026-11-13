@@ -8,6 +8,7 @@ import { money, qty } from '../lib/format.js';
 import ProductDrawer from './ProductDrawer.jsx';
 import { CustomerDrawer } from '../pages/Customers.jsx';
 import { EmpModal } from '../pages/Staff.jsx';
+import { PoDrawer } from '../pages/Po.jsx';
 import { staffOptions } from '../lib/staffOptions.js';
 
 const stop = (fn) => (e) => { e.stopPropagation(); e.preventDefault(); fn(); };
@@ -32,20 +33,26 @@ export function EmpLink({ id, name, children }) {
 // 订单总览里正在搜 / 筛的机型, 在预览里用蓝圈圈出来 (PEEK_HL 由表格的筛选告诉这里).
 let PEEK_HL = [];
 export const setPeekHighlight = (words) => { PEEK_HL = (words || []).map((w) => String(w || '').trim().toUpperCase()).filter(Boolean); };
+// 同一时间只开一个预览 (Frank 11-13: 移开就关, 不许叠一堆)
+let PEEK_CLOSE = null;
 function DealPeek({ id }) {
   const { role } = useApp();
   const [at, setAt] = useState(null); const [d, setD] = useState(null); const btn = useRef(); const timer = useRef(); const pinned = useRef(false);
+  const shut = useRef(); shut.current = () => { clearTimeout(timer.current); pinned.current = false; setAt(null); };
+  useEffect(() => () => { clearTimeout(timer.current); if (PEEK_CLOSE === shut) PEEK_CLOSE = null; }, []);
   const open = () => {
+    if (!btn.current) return;
+    if (PEEK_CLOSE && PEEK_CLOSE !== shut) PEEK_CLOSE.current();
+    PEEK_CLOSE = shut;
     const r = btn.current.getBoundingClientRect(); const w = Math.min(460, window.innerWidth - 16);
     const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)); const below = window.innerHeight - r.bottom > 260 || r.top < 260;
     setAt({ left, w, ...(below ? { top: r.bottom + 6, maxH: window.innerHeight - r.bottom - 16 } : { bottom: window.innerHeight - r.top + 6, maxH: r.top - 16 }) });
     if (!d) q(Q.dealPeek, [id]).then((x) => setD(x[0] || { lines: [] })).catch(() => setD({ lines: [] }));
   };
-  const close = () => { pinned.current = false; setAt(null); };
   useEffect(() => {
     if (!at) return undefined;
-    const off = (e) => { if (!e.target.closest?.('.peek') && e.target !== btn.current) close(); };
-    const sc = (e) => { if (!e.target.closest?.('.peek')) close(); };
+    const off = (e) => { if (!e.target.closest?.('.peek') && e.target !== btn.current) shut.current(); };
+    const sc = (e) => { if (!e.target.closest?.('.peek')) shut.current(); };
     document.addEventListener('mousedown', off); window.addEventListener('scroll', sc, true);
     return () => { document.removeEventListener('mousedown', off); window.removeEventListener('scroll', sc, true); };
   }, [at]);
@@ -54,13 +61,13 @@ function DealPeek({ id }) {
   const hit = (l) => PEEK_HL.some((w) => String(l.model || '').toUpperCase().includes(w) || String(l.code || '').toUpperCase() === w);
   return (
     <>
-      <button type="button" ref={btn} className="peek-eye" title="预览这张单（不用点进去）" aria-label="预览这张单"
-        onMouseEnter={() => { clearTimeout(timer.current); timer.current = setTimeout(open, 250); }}
-        onMouseLeave={() => { clearTimeout(timer.current); if (!pinned.current) timer.current = setTimeout(() => setAt(null), 200); }}
-        onClick={stop(() => { clearTimeout(timer.current); if (at && pinned.current) close(); else { pinned.current = true; open(); } })}>👁</button>
+      <button type="button" ref={btn} className="peek-eye" aria-label="看这张单的明细"
+        onMouseEnter={() => { clearTimeout(timer.current); timer.current = setTimeout(open, 120); }}
+        onMouseLeave={() => { clearTimeout(timer.current); timer.current = setTimeout(() => shut.current(), 150); }}
+        onClick={stop(() => { clearTimeout(timer.current); if (at) shut.current(); else open(); })}>☰</button>
       {at && (
         <div className="peek" style={{ left: at.left, width: at.w, top: at.top, bottom: at.bottom, maxHeight: Math.max(180, at.maxH) }} onClick={(e) => e.stopPropagation()}
-          onMouseEnter={() => clearTimeout(timer.current)} onMouseLeave={() => { if (!pinned.current) setAt(null); }}>
+          onMouseEnter={() => clearTimeout(timer.current)} onMouseLeave={() => shut.current()}>
           {!d ? <div className="muted small" style={{ padding: 10 }}>加载中…</div> : (
             <>
               <div className="peek-h"><b className="mono">{d.biz_no}</b>{d.status && <Pill tone={STATUS[d.status]?.tone}>{STATUS[d.status]?.label}</Pill>}{d.odd_price && <Pill tone="amber">异价单</Pill>}<span className="grow" />
@@ -105,5 +112,6 @@ export function ArchiveHost({ arch, onClose }) {
   if (arch.kind === 'product') return <ProductDrawer product={arch.product} tier={arch.tier} onClose={onClose} />;
   if (arch.kind === 'customer') return <CustomerDrawer id={arch.id} onClose={onClose} />;
   if (arch.kind === 'employee') return <EmpArchive id={arch.id} onClose={onClose} />;
+  if (arch.kind === 'po') return <PoDrawer id={arch.id} onClose={onClose} />;
   return null;
 }

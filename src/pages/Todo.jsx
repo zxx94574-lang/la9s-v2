@@ -1,3 +1,4 @@
+import { PurchaseTodo } from './Po.jsx';
 import { DealLink, CustLink } from '../components/Archives.jsx';
 import React from 'react';
 import { q, call } from '../db/client.js';
@@ -165,6 +166,7 @@ export default function Todo() {
       <DirectiveBoard />
       {['admin', 'manager', 'sales_manager'].includes(role) && <IssueList />}
       <ChangeNotices />
+      {['admin', 'manager', 'cn_support'].includes(role) && <PurchaseTodo />}
       {['admin', 'manager'].includes(role) && <HoldsCard compact />}
       {role === 'admin' && <TierCheck rows={tierRows} />}
       {role === 'admin' && <VolumeShift />}

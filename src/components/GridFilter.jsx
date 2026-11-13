@@ -20,7 +20,8 @@ function usePop(open, onClose) {
   return ref;
 }
 // 多选值: 搜索框冻结在最上面
-export function ValuePick({ options, value = [], onChange, placeholder = '选值' }) {
+export function ValuePick({ options, value = [], onChange, placeholder = '选值', tagOf }) {
+  const tag = (v) => { const tn = tagOf?.(v); return tn ? <span className={`pill ${tn}`}>{v}</span> : <span>{v}</span>; };
   const [open, setOpen] = useState(false); const [t, setT] = useState(''); const [at, setAt] = useState(null); const btn = useRef();
   const ref = usePop(open, () => setOpen(false));
   const list = useMemo(() => { const u = t.trim().toUpperCase(); return options.filter((o) => !u || o.toUpperCase().includes(u)); }, [options, t]);
@@ -28,12 +29,12 @@ export function ValuePick({ options, value = [], onChange, placeholder = '选值
   const show = () => { const r = btn.current.getBoundingClientRect(); const w = Math.max(240, r.width); setAt({ left: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)), top: Math.min(r.bottom + 4, window.innerHeight - 340), width: w }); setOpen(true); };
   return (<>
     <button type="button" ref={btn} className={`gf-val ${value.length ? 'on' : ''}`} onClick={() => (open ? setOpen(false) : show())} title={value.join('、')}>
-      {value.length === 0 ? <span className="muted">{placeholder}</span> : value.length <= 2 ? value.map((v) => <span key={v} className="pill blue">{v}</span>) : <><span className="pill blue">{value[0]}</span><span className="pill blue">等 {value.length} 个</span></>}<span className="gf-caret">▾</span></button>
+      {value.length === 0 ? <span className="muted">{placeholder}</span> : value.length <= 2 ? value.map((v) => <span key={v} className={`pill ${tagOf?.(v) || 'blue'}`}>{v}</span>) : <><span className="pill blue">{value[0]}</span><span className="pill blue">等 {value.length} 个</span></>}<span className="gf-caret">▾</span></button>
     {open && at && createPortal(
       <div className="menu gf-pick gf-keep" ref={ref} style={{ position: 'fixed', left: at.left, top: at.top, width: at.width, zIndex: 420 }}>
         <div className="gf-pick-search"><input className="in sm" autoFocus placeholder="⌕ 搜索" value={t} onChange={(e) => setT(e.target.value)} />
           <span className="small muted">{value.length ? `已选 ${value.length}` : `${list.length} 项`}</span>{value.length > 0 && <button type="button" className="btn sm ghost" onClick={() => onChange([])}>清空</button>}</div>
-        <div className="gf-pick-list">{list.slice(0, 300).map((v) => <button type="button" key={v} className={`mi ${value.includes(v) ? 'focus' : ''}`} onClick={() => tog(v)}><span className="gf-check">{value.includes(v) ? '✓' : ''}</span><span>{v}</span></button>)}
+        <div className="gf-pick-list">{list.slice(0, 300).map((v) => <button type="button" key={v} className={`mi ${value.includes(v) ? 'focus' : ''}`} onClick={() => tog(v)}><span className="gf-check">{value.includes(v) ? '✓' : ''}</span>{tag(v)}</button>)}
           {!list.length && <div className="hint" style={{ padding: 8 }}>没有匹配的</div>}{list.length > 300 && <div className="hint" style={{ padding: 8 }}>还有 {list.length - 300} 项，再输几个字缩小范围</div>}</div>
       </div>, document.body)}
   </>);
@@ -52,7 +53,7 @@ export function FilterPanel({ at, cols, isNum, optionsOf, conds, setConds, any, 
           <select className="in sm gf-col" value={f.key} onChange={(e) => { const nc = colOf(e.target.value); const n = nc && isNum(nc); upd(f.id, { key: e.target.value, op: n ? 'gt' : 'in', a: '', b: '', vals: [] }); }}>
             <option value="">选字段…</option>{cols.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}</select>
           <select className="in sm gf-op" value={f.op} disabled={!c} onChange={(e) => upd(f.id, { op: e.target.value })}>{ops.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
-          <span className="gf-value">{!c || NO_VAL.includes(f.op) ? null : ['in', 'not_in'].includes(f.op) ? <ValuePick options={optionsOf(c)} value={f.vals || []} onChange={(v) => upd(f.id, { vals: v })} />
+          <span className="gf-value">{!c || NO_VAL.includes(f.op) ? null : ['in', 'not_in'].includes(f.op) ? <ValuePick options={optionsOf(c)} tagOf={c.tagOf} value={f.vals || []} onChange={(v) => upd(f.id, { vals: v })} />
             : <><input className="in sm" value={f.a ?? ''} inputMode={num ? 'decimal' : undefined} placeholder={f.op === 'between' ? '从' : '输入'} onChange={(e) => upd(f.id, { a: e.target.value })} />{f.op === 'between' && <input className="in sm" value={f.b ?? ''} inputMode="decimal" placeholder="到" onChange={(e) => upd(f.id, { b: e.target.value })} />}</>}</span>
           <button type="button" className="gf-x" title="删掉这一行条件" onClick={() => setConds(conds.filter((x) => x.id !== f.id))}>✕</button>
         </div>); })}</div>

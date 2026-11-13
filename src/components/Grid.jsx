@@ -98,6 +98,27 @@ function passes(c, row, f) {
 //  · Delete 清空选中的可编辑格; 点行号选整行; onReorder(fromRow, toRow) 时左侧出现 ⋮⋮ 拖动手柄
 import { FilterPanel, Schemes, newCond, condReady, splitVals } from './GridFilter.jsx';
 const LAST_COPY = { out: '', raw: '' };   // 最近一次从表格复制的内容: out = 带行号 (给 Excel), raw = 不带 (表格内粘贴)
+
+// 拖列 / 拖行时鼠标靠近边缘自动滚 (Frank 11-13 295): 横向滚表格, 纵向滚表格自己 (有限高时) 再滚页面
+function edgeScroller(box) {
+  let raf = 0, vx = 0, vy = 0;
+  const tick = () => {
+    if (vx && box) box.scrollLeft += vx;
+    if (vy) { if (box && box.scrollHeight > box.clientHeight + 2) box.scrollTop += vy; else window.scrollBy(0, vy); }
+    raf = vx || vy ? requestAnimationFrame(tick) : 0;
+  };
+  return {
+    update(ev, { x = true, y = true } = {}) {
+      const r = box?.getBoundingClientRect(); const E = 48, sp = (d) => Math.ceil((E - d) / 4) + 2;
+      vx = x && r ? (ev.clientX < r.left + E ? -sp(ev.clientX - r.left) : ev.clientX > r.right - E ? sp(r.right - ev.clientX) : 0) : 0;
+      const top = Math.max(0, r?.top ?? 0), bot = Math.min(window.innerHeight, r?.bottom ?? window.innerHeight);
+      vy = y ? (ev.clientY < top + E ? -sp(ev.clientY - top) : ev.clientY > bot - E ? sp(bot - ev.clientY) : 0) : 0;
+      if ((vx || vy) && !raf) raf = requestAnimationFrame(tick);
+    },
+    stop() { vx = vy = 0; if (raf) cancelAnimationFrame(raf); raf = 0; },
+  };
+}
+
 export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r.id, rowClass, onRowClick, onDelete, selectable, foot, tools, empty = '暂无数据', maxHeight, noTools,
   onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors, onShown, compactTools, rowActions }) {
   // ── 每张表的自定义列 (Frank 11-08): 传 table="xxx" 就自动长出「选项设置」里加的列, 值存 row_attrs ──
@@ -181,8 +202,9 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
   const [dragRow, setDragRow] = useState(null);   // {from, over}
   const startRowDrag = (e, from) => {
     let state = { from, over: from }; setDragRow(state);
-    const move = (ev) => { const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('tr[data-row]'); if (el) { const over = +el.dataset.row; if (over !== state.over) { state = { ...state, over }; setDragRow(state); } } };
-    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); setDragRow(null); moveRow(state.from, state.over); };
+    const es = edgeScroller(tableRef.current?.parentElement);
+    const move = (ev) => { es.update(ev, { x: false }); const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('tr[data-row]'); if (el) { const over = +el.dataset.row; if (over !== state.over) { state = { ...state, over }; setDragRow(state); } } };
+    const up = () => { es.stop(); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); setDragRow(null); moveRow(state.from, state.over); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
   const moveRow = (from, to) => {
@@ -397,8 +419,13 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
     const x0 = e.clientX;
     let state = { key, from, to: from, dx: 0, widths, lefts };
     setDrag(state);
-    const move = (ev) => {
-      const dx = ev.clientX - x0;
+    const box = tableRef.current.parentElement, sl0 = box.scrollLeft;
+    const es = edgeScroller(box); let last = null;
+    const onScroll = () => last && move(last, true);
+    box.addEventListener('scroll', onScroll);
+    function move(ev, fromScroll) {
+      if (!fromScroll) { es.update(ev, { y: false }); last = { clientX: ev.clientX, clientY: ev.clientY }; }
+      const dx = ev.clientX - x0 + (box.scrollLeft - sl0);
       const center = lefts[from] + widths[from] / 2 + dx;
       const mid = (i) => lefts[i] + widths[i] / 2;
       let to = from;
@@ -406,8 +433,9 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
       for (let i = from - 1; i >= 0; i--) if (center < mid(i)) to = i;
       state = { ...state, dx, to };
       setDrag(state);
-    };
+    }
     const up = () => {
+      es.stop(); box.removeEventListener('scroll', onScroll);
       window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
       if (state.to !== state.from) {
         const keys = vis.map((c) => c.key);
@@ -562,7 +590,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
               </div>
             )}
           </span>
-          {table && app.role === 'admin' && <button type="button" className="btn sm" title="给这张表加自己的列（单选 / 文本 / 日期 / 数字）和选项" onClick={() => setOptOpen(true)}>⚙ 选项设置</button>}
+          {table && app.role === 'admin' && <button type="button" className="gear-btn" title="这张表的选项设置：加自己的列（单选 / 文本 / 日期 / 数字）、改选项和颜色" aria-label="选项设置" onClick={() => setOptOpen(true)}>⚙</button>}
         </div>
       )}
       <div className="tw" ref={twRef} style={maxHeight ? { maxHeight } : null}>

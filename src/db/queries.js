@@ -537,8 +537,9 @@ select d.id, d.biz_no, d.created_at, d.status, d.approval, d.approval_reasons, d
 from app.deals d join app.customers c on c.id = d.customer_id
 where d.org_id = $1 and d.created_by = $2 and d.kind = 'normal' order by d.created_at desc limit 200`;
 export const purchaseRequests = `
-select r.*, f.fob_no, (select coalesce(jsonb_agg(jsonb_build_object('item', l.item, 'spec', l.spec, 'qty', l.qty, 'product_id', l.product_id) order by l.item), '[]') from app.purchase_request_lines l where l.request_id = r.id) as lines,
-  (select coalesce(sum(qty), 0) from app.purchase_request_lines l where l.request_id = r.id) as qty
+select r.*, f.fob_no, (select coalesce(jsonb_agg(jsonb_build_object('item', l.item, 'spec', l.spec, 'qty', l.qty, 'product_id', l.product_id, 'code', p.code) order by l.item), '[]') from app.purchase_request_lines l left join app.products p on p.id = l.product_id where l.request_id = r.id) as lines,
+  (select coalesce(sum(qty), 0) from app.purchase_request_lines l where l.request_id = r.id) as qty,
+  (select o.id from app.purchase_orders o where o.request_id = r.id order by o.created_at desc limit 1) as po_id
 from app.purchase_requests r left join app.fob_projects f on f.id = r.fob_project_id
 where r.org_id = $1 order by (r.status in ('received','cancelled')), coalesce(r.eta, r.planned_ship, r.need_by) nulls last, r.created_at desc`;
 export const poDetail = `

@@ -1,8 +1,9 @@
 import DebtBanner from '../components/DebtBanner.jsx';
 import React, { useEffect, useState } from 'react';
-import { q, callValue } from '../db/client.js';
+import { q, call, callValue } from '../db/client.js';
+import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, DatePicker, Modal, SortList , RateInput} from '../components/ui.jsx';
+import { useApp, useData, DatePicker, Modal, SortList, RateInput, Info, PageGear } from '../components/ui.jsx';
 import ProductDrawer from '../components/ProductDrawer.jsx';
 import { CustomerDrawer } from './Customers.jsx';
 import { STEPS } from '../lib/domain.js';
@@ -12,9 +13,10 @@ import { can, whoCan, seesPriceList } from '../lib/domain.js';
 import { LayoutGrid, setLayoutEdit, useLayoutEdit } from '../components/Layout.jsx';
 import { money, qty, today, friendlyError } from '../lib/format.js';
 
-const DRAFT = 'la9s.draft.quote';
-const load = () => { try { return JSON.parse(localStorage.getItem(DRAFT)); } catch { return null; } };
-const save = (d) => { try { d ? localStorage.setItem(DRAFT, JSON.stringify(d)) : localStorage.removeItem(DRAFT); } catch { /* */ } };
+// 草稿 (Frank 11-13 294): 选了客户、填够 N 行 (规则参数 draft_rules.min_lines, 默认 5) 才自动存进系统; 一人一个客户只有一张;
+// 订单总览「草稿」里能看到、点开接着做; 保存报价 = 草稿删掉, 单子进「进行中」; N 天没动自动删 (draft_rules.days).
+export const OPEN_DRAFT = 'la9s.quote.openDraft';
+const takeOpenDraft = () => { try { const v = sessionStorage.getItem(OPEN_DRAFT); sessionStorage.removeItem(OPEN_DRAFT); return v; } catch { return null; } };
 
 export default function QuoteNew() {
   const { org, role, go, toast, refresh } = useApp();
@@ -39,18 +41,36 @@ export default function QuoteNew() {
   const [note, setNote] = useState('');
   const [errs, setErrs] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [restore, setRestore] = useState(() => { const d = load(); return d && d.lines?.length ? d : null; });
+  const [restore, setRestore] = useState(null);        // 选了客户后发现有自己的草稿 → 问恢复不恢复
+  const [draftId, setDraftId] = useState(null);
+  const [openId] = useState(takeOpenDraft);              // 从订单总览「草稿」点进来的
   const [cellErrs, setCellErrs] = useState(null);     // {rowKey: {col: msg}} → 表格里红框 (Frank 11-09 第 4 条)
   const [prodOpen, setProdOpen] = useState(null);
   const [custOpen, setCustOpen] = useState(false);
   const [catOrderOpen, setCatOrderOpen] = useState(false);
 
-  // autosave every change; restored on purpose, not silently
+  const realLines = lines.filter((l) => l.product || l.model);
+  // 从「草稿」点进来: 直接摆回去
   useEffect(() => {
-    if (restore) return;
-    if (!customer && !lines.length) return;
-    save({ at: new Date().toISOString(), date, customer, currency, note, lines: lines.map((l) => ({ ...l, product: l.product?.id || null })) });   // 空白 / 待选的行也存
-  }, [date, customer, currency, note, lines, restore]);
+    if (!openId || !data) return;
+    q(`select * from app.quote_drafts where id = $1`, [openId]).then(([d]) => { if (d) applyDraft(d); });
+  }, [openId, !!data]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // 选了客户: 看看自己有没有这个客户的草稿
+  useEffect(() => {
+    if (!customer || draftId || openId) return;
+    let alive = true;
+    q(`select * from app.quote_drafts where org_id = $1 and customer_id = $2 and user_id = $3`, [org, customer, USERS[role]]).then(([d]) => { if (alive) setRestore(d || null); });
+    return () => { alive = false; };
+  }, [customer, org, role, draftId, openId]);
+  // 够行数就自动存 (停手 1.5 秒后)
+  useEffect(() => {
+    if (!customer || restore || realLines.length < 1) return;
+    const h = setTimeout(() => {
+      call(role, `select app.save_quote_draft($1,$2,$3) as id`, [org, customer, JSON.stringify({ date, currency, fxIn, note, lines: lines.map((l) => ({ ...l, product: l.product?.id || null })) })])
+        .then((r) => { if (r?.[0]?.id) setDraftId(r[0].id); }).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(h);
+  }, [date, customer, currency, fxIn, note, lines, restore, org, role, realLines.length]);
 
   if (!data) return <div className="empty">加载中…</div>;
   const cust = data.customers.find((c) => c.id === customer);
@@ -60,12 +80,13 @@ export default function QuoteNew() {
   // 员工看不到价格清单, 但能看本单档位价 + 申请改价 (Frank 11-09: 他们也可以改, 要审批)
   const showPrice = seesPriceList(role) || (priceMode === 'request' && can(role, 'see_tier_price'));
 
-  const doRestore = () => {
+  function applyDraft(d) {
     const byId = Object.fromEntries(data.catalog.map((p) => [p.id, p]));
-    setDate(restore.date || today()); setCustomer(restore.customer || ''); setCurrency(restore.currency || 'XOF'); setNote(restore.note || '');
-    setLines(restore.lines.map((l) => ({ ...l, product: l.product ? byId[l.product] : null })).filter((l) => l.product || l.model || l.code_in));
-    setRestore(null); toast('已恢复草稿');
-  };
+    const v = d.data || {};
+    setCustomer(d.customer_id); setDate(v.date || today()); setCurrency(v.currency || 'XOF'); setFxIn(v.fxIn || ''); setNote(v.note || '');
+    setLines((v.lines || []).map((l) => ({ ...l, product: l.product ? byId[l.product] : null })).filter((l) => l.product || l.model || l.code_in));
+    setDraftId(d.id); setRestore(null); toast('已打开草稿，接着做');
+  }
 
   const submit = async () => {
     setErrs(true);
@@ -91,7 +112,8 @@ export default function QuoteNew() {
         ? { product_id: l.product.id, qty_req: Number(l.qty_req), stock_item_id: l.stock_item_id || null, note: l.note || null, ...(Number(l.unit_price) > 0 ? { unit_price: Number(l.unit_price) } : {}), ...(Number(l.req_price) > 0 ? { requested_price: Number(l.req_price) } : {}) }
         : { req_category_id: l.category_id, req_model: l.model, qty_req: Number(l.qty_req), note: l.note || null }));
       const id = await callValue(role, `select app.create_quote_fx($1,$2,$3,$4,$5,$6)`, [org, customer, currency, JSON.stringify(payload), note || null, fx]);
-      save(null); refresh(); setPriceOk(false);
+      if (draftId) await call(role, `select app.delete_quote_draft($1)`, [draftId]).catch(() => {});
+      refresh(); setPriceOk(false);
       toast(fin.lines.some((l) => Number(l.req_price) > 0) ? '报价单已保存；有申请改价的行，已送中方审批，批了才能往下推' : '报价单已保存，下面接着联系客户确认');
       go('deal/' + id);
     } catch (e) {
@@ -155,10 +177,9 @@ export default function QuoteNew() {
             </React.Fragment>))}
         </div>
         <div className="flow2-now">
-          <span>新订单 · <b>第 1 步 报价</b>：选客户、选货{canPrice ? '、给价' : ''} → 保存 → 下面接着联系客户确认。报价不预占库存，确认下推找货时才预占。草稿自动保存在本浏览器。</span>
+          <span>新订单 · <b>第 1 步 报价</b> <Info>选客户、选货{canPrice ? '、给价' : ''} → 保存 → 下面接着联系客户确认。报价不预占库存，确认下推找货时才预占。选了客户、填够 5 行会自动存草稿（订单总览 →「草稿」里找得到，7 天没动自动删）。</Info>{draftId && <span className="small muted"> · 草稿已自动保存</span>}</span>
           <span className="grow" />
-          {role === 'admin' && <button type="button" className="btn sm" onClick={() => setCatOrderOpen(true)} title="种类条的顺序，所有人同款">⚙ 种类顺序</button>}
-          {role === 'admin' && <button type="button" className={`btn sm ${edit ? 'primary' : ''}`} onClick={() => setLayoutEdit(!edit)}>⚙ 调整版面</button>}
+          {role === 'admin' && <PageGear items={[['种类顺序（所有人同款）', () => setCatOrderOpen(true)], [edit ? '退出调整版面' : '调整版面', () => setLayoutEdit(!edit)]]} />}
         </div>
       </div>
       {prodOpen && <ProductDrawer product={prodOpen} tier={tier} onClose={() => setProdOpen(null)} />}
@@ -167,9 +188,9 @@ export default function QuoteNew() {
 
       {restore && (
         <div className="card card-b row between" style={{ background: 'var(--amber-bg)', borderColor: '#f3d9a8' }}>
-          <span>发现上次没完成的报价草稿（{restore.lines.length} 行，{restore.at?.slice(0, 16).replace('T', ' ')}）</span>
-          <span className="row"><button type="button" className="btn primary sm" onClick={doRestore}>恢复草稿</button>
-            <button type="button" className="btn sm" onClick={() => { save(null); setRestore(null); }}>丢弃</button></span>
+          <span>这个客户有你上次没做完的报价草稿（{restore.n_lines} 行，{String(restore.updated_at || '').slice(0, 16).replace('T', ' ')}）</span>
+          <span className="row"><button type="button" className="btn primary sm" onClick={() => applyDraft(restore)}>接着做</button>
+            <button type="button" className="btn sm" onClick={async () => { await call(role, `select app.delete_quote_draft($1)`, [restore.id]).catch(() => {}); setRestore(null); }}>丢弃，重新开始</button></span>
         </div>
       )}
       <LayoutGrid page="quote" blocks={blocks} defaultGap={10} />

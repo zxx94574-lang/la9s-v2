@@ -4,6 +4,7 @@
 //   档案里直接改: 「✎ 修改」解锁一次 → 改几项 → 保存前列出 改前 → 改后 + 自检 (低于成本红 / 运费没填黄 / 档位倒挂黄 / 改动太大黄) → 确认后存 + 留记录, 自动锁回
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
+import { PoLink } from '../pages/Po.jsx';
 import { TierPill, useApp, useData, Drawer, Pill, BigNum, DatePicker, Modal, Info, Bang } from './ui.jsx';
 import { TIERS, can } from '../lib/domain.js';
 import Grid from './Grid.jsx';
@@ -56,7 +57,7 @@ export default function ProductDrawer({ product, tier, onClose }) {
   const [tick, setTick] = useState(0);
   const { data } = useData(async () => {
     if (!product?.id) return null;
-    const [[p], recent, batches, [ps], cats, hist] = await Promise.all([
+    const [[p], recent, batches, [ps], cats, hist, transit] = await Promise.all([
       q(`select p.*, c.name as category,
            coalesce((select jsonb_object_agg(pp.tier, jsonb_build_object('price', pp.price, 'locked', pp.locked)) from app.product_prices pp where pp.product_id = p.id and pp.currency = 'XOF'), '{}') as prices,
            coalesce((select jsonb_agg(jsonb_build_object('warehouse', w.code, 'bin', s.bin, 'on_hand', s.qty_on_hand, 'reserved', s.qty_reserved) order by w.code)
@@ -69,8 +70,9 @@ export default function ProductDrawer({ product, tier, onClose }) {
       seeAll ? q(`select * from app.price_settings where org_id = $1`, [org]) : [null],
       role === 'admin' ? q(`select id, name from app.categories where org_id = $1 order by sort_order nulls last, name`, [org]).catch(() => q(`select id, name from app.categories where org_id = $1 order by name`, [org])) : [],
       seeAll ? call(role, `select * from app.archive_history($1,'product',$2)`, [org, product.id]).catch(() => []) : [],
+      q(`select * from app.v_in_transit where product_id = $1 and remaining > 0 order by eta nulls last`, [product.id]).catch(() => []),
     ]);
-    return { p, recent, batches, cats, hist, ps: ps || { rmb_per_xof: 0.0107, xof_per_usd: 600, round_to: 100 } };
+    return { p, recent, batches, cats, hist, transit, ps: ps || { rmb_per_xof: 0.0107, xof_per_usd: 600, round_to: 100 } };
   }, [product?.id, org, tick]);
   const [ed, setEd] = useState(null);       // 解锁后的草稿
   const [confirm, setConfirm] = useState(null);
@@ -167,6 +169,14 @@ export default function ProductDrawer({ product, tier, onClose }) {
             { key: 'warehouse', label: '仓库', w: 100 }, { key: 'bin', label: '库位', w: 90, render: (x) => <span className="mono">{x.bin || ''}</span> },
             { key: 'on_hand', label: '实存', w: 90, type: 'number', render: (x) => qty(x.on_hand) }, { key: 'reserved', label: '预占', w: 90, type: 'number', render: (x) => qty(x.reserved) },
             { key: 'avail', label: '可售', w: 90, type: 'number', value: (x) => N(x.on_hand) - N(x.reserved), render: (x) => <b>{qty(N(x.on_hand) - N(x.reserved))}</b> }]} />
+          {data?.transit?.length > 0 && <>
+            <div className="pd-h" style={{ marginTop: 10 }}>在途 <span className="muted small">本地 <b>{qty(data.transit.reduce((a, t) => a + N(t.remaining) - N(t.fob_remaining), 0))}</b> · FOB <b>{qty(data.transit.reduce((a, t) => a + N(t.fob_remaining), 0))}</b>（FOB 的到了也不进本地可售）</span></div>
+            <Grid id="pd-transit" noTools rows={data.transit} rowKey={(t) => t.po_id} columns={[
+              { key: 'po_no', label: '采购单', w: 170, render: (t) => <PoLink id={t.po_id} no={t.po_no} /> },
+              { key: 'purpose', label: '用途', w: 80, value: (t) => (t.purpose === 'fob' ? 'FOB' : '本地') },
+              { key: 'remaining', label: '在途', w: 80, type: 'number', render: (t) => <b>{qty(t.remaining)}</b> },
+              { key: 'eta', label: '预计到', w: 100, render: (t) => dDate(t.eta) }]} />
+          </>}
         </section>
         {seeAll && data?.recent?.length > 0 && (
           <section className="pd-sec">

@@ -12,6 +12,8 @@ import { AccountPanel, ACC } from '../components/Account.jsx';
 import { can, seesPrice, TIERS } from '../lib/domain.js';
 import { money, dDate, dt, today, friendlyError } from '../lib/format.js';
 import { SUPPLY, customerOptions, optLabel, selOpts } from '../lib/customerOptions.js';
+import { optTag } from '../lib/tableOptions.js';
+import { OptionRows } from '../components/TableOptions.jsx';
 
 // 页签 (Frank 11-08): 全部 / 本地备货客户 / FOB / 潜客回收 / 欠款预警 / 今天跟进 / 按销售员 (+ 中方的「选项设置」)
 const TABS = [['all', '全部'], ['local', '本地备货客户'], ['fob', 'FOB'], ['prospect', '潜客回收'], ['warn', '欠款预警'], ['follow', '今天跟进'], ['byowner', '按销售员'], ['opts', '选项设置']];
@@ -61,10 +63,10 @@ export default function Customers() {
     { key: 'supply', label: '供货方式', w: 90, value: (c) => SUPPLY[c.supply] || SUPPLY.local,
       edit: (c) => (canEdit ? { type: 'select', value: c.supply || 'local', options: Object.entries(SUPPLY), onChange: (v, m) => saveCell(c, 'supply', v, m) } : null),
       render: (c) => (c.supply === 'fob' ? <Pill tone="blue">FOB</Pill> : SUPPLY.local) },
-    { key: 'city', label: '城市', w: 100, value: (c) => optLabel(O.cities, c.city), edit: sel('city', O.cities) },
-    { key: 'market', label: '市场', w: 100, hidden: true, value: (c) => optLabel(O.markets, c.market), edit: sel('market', O.markets) },
-    { key: 'shop_type', label: '店铺类型', w: 100, value: (c) => optLabel(O.shop_types, c.shop_type), edit: sel('shop_type', O.shop_types) },
-    { key: 'follow_status', label: '跟进状态', w: 100, value: (c) => optLabel(O.follow_statuses, c.follow_status), edit: sel('follow_status', O.follow_statuses) },
+    { key: 'city', label: '城市', w: 100, value: (c) => optLabel(O.cities, c.city), ...optTag(O.cities, (c) => c.city), edit: sel('city', O.cities) },
+    { key: 'market', label: '市场', w: 100, hidden: true, value: (c) => optLabel(O.markets, c.market), ...optTag(O.markets, (c) => c.market), edit: sel('market', O.markets) },
+    { key: 'shop_type', label: '店铺类型', w: 100, value: (c) => optLabel(O.shop_types, c.shop_type), ...optTag(O.shop_types, (c) => c.shop_type), edit: sel('shop_type', O.shop_types) },
+    { key: 'follow_status', label: '跟进状态', w: 100, value: (c) => optLabel(O.follow_statuses, c.follow_status), ...optTag(O.follow_statuses, (c) => c.follow_status), edit: sel('follow_status', O.follow_statuses) },
     { key: 'contact_name', label: '负责人', w: 110, value: (c) => c.contact_name || '', edit: txt('contact_name') },
     { key: 'phone', label: '电话', w: 150, value: (c) => c.phone || '', render: (c) => fmtPhone(c.phone), edit: (c) => (canEdit ? { type: 'text', value: c.phone || '', onChange: (v, m) => { const n = normPhone(v); if (!n.valid) return toast(`电话位数不对：${v}（+${n.cc} 要 ${n.need} 位）`, 'err'); saveCell(c, 'phone', n.formatted, m); } } : null) },
     { key: 'address', label: '地址', w: 160, hidden: true, value: (c) => c.address || '', edit: txt('address') },
@@ -288,25 +290,16 @@ function CustomerOptionsEditor({ opts }) {
   const upd = (path, v) => setO((x) => { const y = structuredClone(x); let t = y; for (let i = 0; i < path.length - 1; i++) t = t[path[i]]; t[path[path.length - 1]] = v; return y; });
   const save = async (v) => {
     try {
-      const clean = v && { ...v, cities: v.cities.filter((x) => x.v), markets: v.markets.filter((x) => x.v), shop_types: v.shop_types.filter((x) => x.v), follow_statuses: v.follow_statuses.filter((x) => x.v),
+      const clean = v && { ...v, cities: v.cities.filter((x) => x.v), markets: v.markets.filter((x) => x.v), shop_types: v.shop_types.filter((x) => x.v), follow_statuses: v.follow_statuses.filter((x) => x.v),   // 颜色 c 跟着存
         custom: undefined };
       await call(role, `select app.set_org_setting($1,'customer_options',$2)`, [org, clean ? JSON.stringify(clean) : null]); toast(clean ? '选项已保存，客户表已更新' : '已恢复默认'); refresh();
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
-  const items = (list, get, setPath) => (
-    <div className="stack" style={{ gap: 6 }}>
-      {list.map((x, i) => (
-        <div key={i} className="row" style={{ gap: 6 }}>
-          <input className="in mono" style={{ maxWidth: 180 }} value={x.v} placeholder="代码" onChange={(e) => upd([...setPath, i, 'v'], ['cities', 'markets'].includes(setPath[0]) ? e.target.value : e.target.value.toUpperCase())} title="代码（存进数据库、导出用）" />
-          <input className="in" style={{ maxWidth: 180 }} value={x.l} placeholder="显示名" onChange={(e) => upd([...setPath, i, 'l'], e.target.value)} />
-          <button type="button" className="btn sm ghost" onClick={() => upd(setPath, list.filter((_, j) => j !== i))}>×</button>
-        </div>))}
-      <div><button type="button" className="btn sm" onClick={() => upd(setPath, [...list, { v: '', l: '' }])}>＋ 加一项</button></div>
-    </div>);
+  const items = (list, get, setPath) => <OptionRows items={list} upper={!['cities', 'markets'].includes(setPath[0])} onChange={(v) => upd(setPath, v)} />;
   const block = (key, title) => <div className="stack" style={{ gap: 6 }}><b>{title}</b>{items(o[key], null, [key])}</div>;
   return (
     <div className="stack" style={{ padding: 14, gap: 18 }}>
-      <div className="hint">左边代码（英文大写，存数据库 / 导出用），右边显示名。保存后客户表对应列的下拉就是这些项，表头漏斗按它们筛。供货方式只有「本地备货 / FOB」两种，不在这里改。要**自己加列**（例「种类」「来源」）：回到客户表，右上角「⚙ 选项设置」——每张表都有。</div>
+      <div className="hint">左边代码（英文大写，存数据库 / 导出用），右边显示名。保存后客户表对应列的下拉就是这些项，表头漏斗按它们筛。供货方式只有「本地备货 / FOB」两种，不在这里改。要**自己加列**（例「种类」「来源」）：回到客户表，表格右上角的小 ⚙——每张表都有。</div>
       <div className="grid2">{block('cities', '城市')}{block('markets', '市场')}{block('shop_types', '店铺类型')}{block('follow_statuses', '跟进状态')}</div>
       <div className="row"><button type="button" className="btn" onClick={() => save(null)}>恢复默认</button><span className="grow" />
         <button type="button" className="btn primary" onClick={() => save(o)}>保存选项</button></div>

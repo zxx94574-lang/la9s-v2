@@ -9,6 +9,7 @@ export const ROLES = {
   sales_manager: { label: '销售主管', desc: '销售员能做的都能做（询单、拜访、回访、FOB 申请）；价格和钱的审批还是中方' },
   finance: { label: '财务', desc: '收款登记、Balance；公户到账与支出登记' },
   boss: { label: '客户老板', desc: '演示：客户 SOUMAHORO 的老板，用手机下单、看订单进度和对账、管自己的门店；看不到底价' },
+  cn_support: { label: '中国支持', desc: '国内工厂 / 9S 商务 / 采购：看本地的物料申请和库存、建采购单、上传箱单、补到货信息；看不到售价和客户' },
   clerk: { label: '门店店员', desc: '演示：SOUMAHORO 的门店 ADJAMÉ 2，向自己老板下单' },
 };
 
@@ -44,7 +45,9 @@ const P = {
   receive_po: ['manager'],      // 采购到货入库              // 数据导入：只中方
   inquiry: ['sales', 'hotline', 'manager'],
   purchase_request: ['manager', 'finance', 'hotline', 'sales', 'picker'],
-  purchase_advance: ['manager', 'finance'],
+  purchase_advance: ['manager', 'finance', 'cn_support'],
+  po_edit: ['manager', 'cn_support'],          // 11-13: 建 / 改采购单、导入箱单、对上编码 (国内为主)
+  po_gap: [],                                  // 11-13: 关差额 (少到): 只中方
   fob_create: ['hotline', 'sales', 'manager'],
   fob_advance: ['manager'],
   fob_pay: ['finance'],
@@ -70,7 +73,7 @@ export const PERM_DEFAULTS = P;
 // 只做显示的岗位名 (回收线以后上, 先占岗位, 没有菜单; 不在右上角切换里)
 export const ROLE_LABELS = { ...Object.fromEntries(Object.entries(ROLES).map(([k, v]) => [k, v.label])), recycle_manager: '回收主管', recycler: '回收员', recycle_wh_manager: '回收仓库主管' };
 export const whoCan = (action) => ['中方', ...rolesFor(action).map((r) => ROLES[r]?.label || ROLE_LABELS[r] || r)].join(' / ');
-export const seesPrice = (role) => !['picker', 'boss', 'clerk'].includes(role);
+export const seesPrice = (role) => !['picker', 'boss', 'clerk', 'cn_support'].includes(role);
 // Frank 10-31: 员工看不到整张价格清单 (只有中方); 一张单批了 (自动通过或中方批) 以后, 员工才看得到这张单的价格, 发给客户
 export const seesPriceList = (role) => role === 'admin';
 export const dealPriceVisible = (role, deal) => seesPrice(role) && (role === 'admin' || ['auto', 'approved'].includes(deal?.approval));

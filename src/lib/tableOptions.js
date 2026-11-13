@@ -11,6 +11,14 @@ export const optLabel = (list, v) => (v == null || v === '' ? '' : (list || []).
 export const selOpts = (list, cur) => [['', '—'], ...(list || []).map((o) => [o.v, o.l]), ...(cur && !(list || []).some((o) => o.v === cur) ? [[cur, cur]] : [])];
 export const newKey = () => `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 
+// 单选列上色 (Frank 11-13 296/297): 颜色只包住文字 (浅底小标, 同状态); 没设颜色 = 普通文字; 筛选面板里的值也是同色小标
+export function optTag(items, get) {
+  const byV = Object.fromEntries((items || []).map((x) => [x.v, x])), byL = Object.fromEntries((items || []).map((x) => [x.l || x.v, x]));
+  return {
+    render: (row) => { const v = get(row); if (v == null || v === '') return ''; const it = byV[v]; return it?.c ? React.createElement('span', { className: `pill ${it.c}` }, it.l || v) : (it?.l || v); },
+    tagOf: (label) => byL[label]?.c || '',
+  };
+}
 export async function loadTableOptions(org, table) {
   const [r] = await q(`select value from app.org_settings where org_id = $1 and key = $2`, [org, `table_options:${table}`]);
   const v = r?.value || {};
@@ -32,9 +40,7 @@ export function customColumns(opts, { attrsOf, canEdit, onSave }) {
   return (opts?.custom || []).map((cu) => {
     const get = (row) => attrsOf(row)?.[cu.key];
     const col = { key: `x_${cu.key}`, label: cu.label, w: cu.type === 'number' ? 100 : 120, custom: true, value: (row) => (cu.type === 'select' ? optLabel(cu.items, get(row)) : get(row) ?? '') };
-    if (cu.type === 'select' && (cu.items || []).some((it) => it.c)) {
-      col.render = (row) => { const v = get(row); if (v == null || v === '') return ''; const it = (cu.items || []).find((x) => x.v === v); return it?.c ? React.createElement('span', { className: `pill ${it.c}` }, it.l || v) : (it?.l || v); };
-    }
+    if (cu.type === 'select' && (cu.items || []).some((it) => it.c)) Object.assign(col, optTag(cu.items, get));
     if (cu.type === 'number') { col.value = (row) => (get(row) == null || get(row) === '' ? null : Number(get(row))); col.render = (row) => (get(row) == null || get(row) === '' ? '' : Number(get(row)).toLocaleString('en-US')); }
     if (canEdit) col.edit = (row) => ({
       type: cu.type === 'select' ? 'select' : cu.type, value: get(row) ?? '',

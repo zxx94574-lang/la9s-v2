@@ -4,6 +4,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { applyMigrations, seedDemo, USERS } from './bootstrap.js';
 import { seedReal } from './realSeed.js';
+import { SOP_DEFAULTS } from './sopDefaults.js';
 
 // 真实数据版 (VITE_REAL=1): 同一套规则, 开局导入金蝶 / 飞书快照 (real-data.json, 不进代码仓库), 和演示版的浏览器数据完全分开
 export const REAL = import.meta.env.VITE_REAL === '1';
@@ -130,6 +131,20 @@ async function applyPacks(onProgress) {
     if (has) continue;
     const e = (await db.query(`insert into app.employees (org_id, short_name, department, position) values ($1,$2,'系统','岗位账号') returning id`, [org, `${r}（岗位账号）`])).rows[0].id;
     await db.query(`insert into app.members (user_id, org_id, employee_id, roles) values ($1,$2,$3,$4)`, [uid, org, e, `{${r}}`]);
+  }
+  // 新加的 SOP (sopDefaults 里带 add 标记的): 老的真实库按标记补一次, 已有同名的不碰 (中方可能改过)
+  const adds = [...new Set(SOP_DEFAULTS.filter((s) => s.add).map((s) => s.add))];
+  for (const tag of adds) {
+    const k = `sop:${tag}`;
+    if ((await db.query(`select 1 from public.demo_meta where k = $1`, [k])).rows.length) continue;
+    await db.query(`select set_config('request.jwt.claim.sub', $1, false)`, [USERS.admin]);
+    try {
+      for (const s of SOP_DEFAULTS.filter((x) => x.add === tag)) {
+        if ((await db.query(`select 1 from app.sop_docs where org_id = $1 and title = $2`, [org, s.title])).rows.length) continue;
+        await db.query(`select app.upsert_sop($1,null,$2,$3,$4,null)`, [org, s.dept, s.title, JSON.stringify(s.steps)]);
+      }
+    } finally { await db.query(`select set_config('request.jwt.claim.sub', '', false)`); }
+    await db.query(`insert into public.demo_meta values ($1,'1') on conflict (k) do nothing`, [k]);
   }
   for (const [name, url, fn] of PACKS) {
     let pack = null;

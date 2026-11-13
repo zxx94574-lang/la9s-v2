@@ -621,3 +621,19 @@ export function RateInput({ a, b = 'XOF', value, onChange, placeholder, invalid,
     </span>
   );
 }
+
+// 页面设置 (Frank 11-13 293): 每页标题旁一个小 ⚙, 收这页自己的设置 (种类顺序 / 调整版面 / 选项设置…); 右上角的 ⚙ 只放系统级的
+export function PageGear({ items, title = '这一页的设置' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useOutside(open, () => setOpen(false));
+  const list = (items || []).filter(Boolean);
+  if (!list.length) return null;
+  return (
+    <span ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
+      <button type="button" className="gear-btn" title={title} aria-label={title} onClick={() => setOpen((o) => !o)}>⚙</button>
+      {open && <div className="menu" style={{ right: 0, top: '100%', marginTop: 4, minWidth: 200 }}>
+        {list.map(([label, run]) => <button type="button" key={label} className="mi" onClick={() => { setOpen(false); run(); }}>{label}</button>)}
+      </div>}
+    </span>
+  );
+}

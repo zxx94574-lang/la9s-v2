@@ -8,8 +8,8 @@ import { useApp, useData, Pill, Modal } from '../components/ui.jsx';
 import { ITEMS } from '../components/Nav.jsx';
 import { dt, friendlyError } from '../lib/format.js';
 
-const DEPTS = ['全员', '热线', '仓库', '主管', '财务', '销售'];
-const MINE = { hotline: ['热线'], picker: ['仓库'], manager: ['仓库', '主管'], finance: ['财务'], sales: ['销售'] };
+const DEPTS = ['全员', '热线', '仓库', '主管', '财务', '销售', '国内采购', '中方'];
+const MINE = { hotline: ['热线'], picker: ['仓库'], manager: ['仓库', '主管'], finance: ['财务'], sales: ['销售'], cn_support: ['国内采购'], admin: [] };
 
 export default function Sop() {
   const { org, role, toast, refresh, go } = useApp();

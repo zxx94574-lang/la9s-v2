@@ -72,15 +72,16 @@ test('申请定级: 档位没确认的客户报价是草稿, 不能确认; 中�
   await t.as(U.hotline, `select app.quote_confirm($1,'ok','whatsapp',null,null,false)`, [d]);
 });
 
-test('草稿超过 7 天没人动 → 自动作废', async () => {
+// 11-13 (Frank 294) 规则改了: 等定档的报价算「进行中」(红, 等中方定档), 不再自动作废; 7 天自动删的是 quote_drafts 里的草稿 (见 v19)
+test('等定档的报价放 9 天也不自动作废 (不算草稿)', async () => {
   const t = await setup();
   const c = await t.val(U.hotline, `select app.create_prospect($1,'OLD DRAFT','0700000001','Abidjan','{}')`, [t.ids.org]);
   const d = await t.val(U.hotline, `select app.create_quote_checked($1,$2,'XOF',$3)`, [t.ids.org, c, JSON.stringify([{ product_id: t.ids.bg6mCover, qty_req: 1 }])]);
   assert.equal(Number(await t.val(U.hotline, `select app.void_stale_drafts($1)`, [t.ids.org])), 0);
   await t.db.query(`update app.deals set created_at = now() - interval '9 days' where id = $1`, [d]);
   await t.db.query(`update app.deal_events set at = now() - interval '9 days' where deal_id = $1`, [d]);
-  assert.equal(Number(await t.val(U.hotline, `select app.void_stale_drafts($1)`, [t.ids.org])), 1);
-  assert.equal(await t.val(U.admin, `select status from app.deals where id = $1`, [d]), 'cancelled');
+  assert.equal(Number(await t.val(U.hotline, `select app.void_stale_drafts($1)`, [t.ids.org])), 0);
+  assert.equal(await t.val(U.admin, `select status from app.deals where id = $1`, [d]), 'quoted');
 });
 
 test('找货人和复核人不能同一人 (中方除外); 发错记复检人 → 这张单提成取消', async () => {

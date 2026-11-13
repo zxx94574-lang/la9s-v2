@@ -12,6 +12,7 @@ export const USERS = {
   sales_manager: '00000000-0000-0000-0000-000000000011', // 销售主管
   boss: '00000000-0000-0000-0000-0000000000b1',    // 客户老板 (客户下单端)
   clerk: '00000000-0000-0000-0000-0000000000c1',   // 门店店员
+  cn_support: '00000000-0000-0000-0000-0000000000c9',   // 中国支持 (国内工厂 / 商务 / 采购)
 };
 
 export const AUTH_STUB = `
@@ -96,10 +97,11 @@ export async function seedDemo(db) {
     mariam: await emp('Mariam', 'MARIAM DEMO', 'DIRECTION', 'ACCOUNTANT', 'finance', { joined: '2025-11-01', phone: '0700000005' }),
     koffi: await emp('Koffi', 'KOFFI DEMO', 'SPARE PARTS', 'SALES STAFF', 'sales', { joined: '2026-02-01', phone: '0700000006', channel: 'WHOLESALE' }),
     kouame: await emp('Kouamé', 'KOUAME DEMO', 'SPARE PARTS', 'SALES MANAGER', 'sales_manager', { joined: '2025-07-01', phone: '0700000007' }),
+    cn: await emp('国内采购（演示）', 'CN SUPPORT DEMO', 'CHINA', 'PURCHASING', 'cn_support'),
   };
   await db.query(`update app.employees set emp_no = case id when $1 then 'S01' when $2 then 'S00' end where id in ($1,$2)`, [E.koffi, E.kouame]);
   for (const [u, roles, e] of [[USERS.admin, '{admin}', E.frank], [USERS.manager, '{manager}', E.abowa], [USERS.picker, '{picker}', E.yao],
-    [USERS.hotline, '{hotline}', E.awa], [USERS.finance, '{finance}', E.mariam], [USERS.sales, '{sales}', E.koffi], [USERS.sales_manager, '{sales_manager}', E.kouame]]) {
+    [USERS.hotline, '{hotline}', E.awa], [USERS.finance, '{finance}', E.mariam], [USERS.sales, '{sales}', E.koffi], [USERS.sales_manager, '{sales_manager}', E.kouame], [USERS.cn_support, '{cn_support}', E.cn]]) {
     await db.query(`insert into app.members (user_id, org_id, employee_id, roles) values ($1,$2,$3,$4)`, [u, org, e, roles]);
   }
 
@@ -325,6 +327,11 @@ export async function seedDemo(db) {
     JSON.stringify([{ product_id: P['1001'], qty: 300 }, { product_id: P['1021'], qty: 200 }])]);
   await as(USERS.manager, `select app.advance_purchase_request($1,'ordered','{"po_no":"DEMO-CG-0103"}')`, [pr2]);
   await as(USERS.manager, `select app.advance_purchase_request($1,'shipped',$2)`, [pr2, JSON.stringify({ container: 'DEMO-柜 MSKU0000001', tracking: 'DEMO-入仓号 CG000001', eta: dd(-3) })]);
+  // 0046 演示 (虚构): 国内导入一份箱单 → 在途 2 箱已知 + 1 种写法没对上编码
+  await as(USERS.cn_support, `select app.import_packing_list($1,$2)`, [org, JSON.stringify({ batch_name: 'DEMO-20261101-总成海运-1', inbound_no: 'CG0000099A', date: dd(20), purpose: 'local',
+    lines: [{ descr: 'DEMO 1001 LCD COMP', code: '1001', qty: 720, unit_price: 31 }, { descr: 'DEMO X6871 LCD COMP', qty: 100, unit_price: 33 }],
+    boxes: [{ box_no: 1, descr: 'DEMO 1001 LCD COMP', qty: 360 }, { box_no: 2, descr: 'DEMO 1001 LCD COMP', qty: 260 }, { box_no: 2, descr: 'DEMO X6871 LCD COMP', qty: 100 }, { box_no: 3, descr: 'DEMO 1001 LCD COMP', qty: 100 }] })]);
+  await db.query(`update app.purchase_orders set eta = current_date + 2 where org_id = $1 and batch_name = 'DEMO-20261101-总成海运-1'`, [org]);
   await as(USERS.admin, `select app.set_po_remark($1,'DEMO-CG-0101',$2,$3)`, [org, '科特9S-LA；LA9S-1020-20261001-总成海运-1；12boxes 350pcs（演示）', JSON.stringify({ purpose: 'local', fob_customers: [], boxes: 12, pcs: 350 })]);
   await as(USERS.admin, `select app.set_po_remark($1,'DEMO-CG-0102',$2,$3)`, [org, '科特9S-LA；LA9S-1025-20261010-DIALLO FOB-1；20261012-总成空运-1；FOB和本地备货混装（演示）', JSON.stringify({ purpose: 'mixed', fob_customers: ['C007'], boxes: 4, pcs: 100 })]);
   for (const [name, kind, lat, lng, r] of [['LA 仓（演示）', 'warehouse', 5.3340, -4.0270, 150], ['Adjamé Roxy 市场（演示）', 'market', 5.3600, -4.0280, 300], ['Yopougon Siporex 市场（演示）', 'market', 5.3400, -4.0750, 300]]) {

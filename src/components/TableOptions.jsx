@@ -9,7 +9,6 @@ export default function TableOptionsModal({ table, opts, builtin = [], onClose, 
   const [custom, setCustom] = useState(() => structuredClone(opts?.custom || []));
   const [busy, setBusy] = useState(false);
   const upd = (i, patch) => setCustom((cs) => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
-  const updItem = (i, k, patch) => upd(i, { items: custom[i].items.map((it, m) => (m === k ? { ...it, ...patch } : it)) });
   const save = async () => {
     setBusy(true);
     try { await saveTableOptions(role, org, table, { custom }); toast('已保存，表里已经多出这些列'); onSaved?.(); }
@@ -28,23 +27,39 @@ export default function TableOptionsModal({ table, opts, builtin = [], onClose, 
               <div className="row" style={{ gap: 4 }}>{CUSTOM_TYPES.map(([v, l]) => <button type="button" key={v} className={`chip ${(c.type || 'select') === v ? 'on' : ''}`} onClick={() => upd(i, { type: v })}>{l}</button>)}</div>
               <span className="grow" /><button type="button" className="btn sm ghost" onClick={() => setCustom(custom.filter((_, j) => j !== i))}>× 删这列</button>
             </div>
-            {(c.type || 'select') === 'select' && (
-              <div className="stack" style={{ gap: 6 }}>
-                {(c.items || []).map((it, k) => (
-                  <div key={k} className="row" style={{ gap: 6 }}>
-                    <input className="in mono" style={{ maxWidth: 160 }} value={it.v} placeholder="代码" onChange={(e) => updItem(i, k, { v: e.target.value.toUpperCase() })} title="代码（存进数据库 / 导出用）" />
-                    <input className="in" style={{ maxWidth: 200 }} value={it.l} placeholder="显示名" onChange={(e) => updItem(i, k, { l: e.target.value })} />
-                    {/* 选项颜色 (Frank 11-09: 手加的单选也要红黄绿灯) */}
-                    <span className="row" style={{ gap: 3 }} title="颜色">{OPT_TONES.map(([tn, nm]) => <button type="button" key={tn || 'none'} className={`tone-dot ${tn || 'none'} ${(it.c || '') === tn ? 'on' : ''}`} title={nm} onClick={() => updItem(i, k, { c: tn })} />)}</span>
-                    {it.l || it.v ? <span className={`pill ${it.c || 'gray'}`}>{it.l || it.v}</span> : null}
-                    <button type="button" className="btn sm ghost" onClick={() => upd(i, { items: c.items.filter((_, m) => m !== k) })}>×</button>
-                  </div>))}
-                <div><button type="button" className="btn sm" onClick={() => upd(i, { items: [...(c.items || []), { v: '', l: '' }] })}>＋ 加一个选项</button></div>
-              </div>)}
+            {(c.type || 'select') === 'select' && <OptionRows items={c.items || []} onChange={(items) => upd(i, { items })} upper />}
           </div>))}
         <div><button type="button" className="btn sm primary" onClick={() => setCustom([...custom, { key: newKey(), label: '', type: 'select', items: [{ v: '', l: '' }] }])}>＋ 加一列</button></div>
         {custom.length === 0 && <div className="small muted">还没有自己加的列。点「＋ 加一列」，起个名、选类型，单选就把选项填上。</div>}
       </div>
     </Modal>
+  );
+}
+
+// 选项一行一个 (Frank 11-13 297): 代码 | 显示名 | 颜色 | ×; 系统不预设颜色; 可以勾几行一起设颜色 / 一键清掉全部颜色
+export function OptionRows({ items, onChange, upper = false }) {
+  const [sel, setSel] = useState(new Set());
+  const set = (k, patch) => onChange(items.map((it, m) => (m === k ? { ...it, ...patch } : it)));
+  const tog = (k) => setSel((s0) => { const s1 = new Set(s0); s1.has(k) ? s1.delete(k) : s1.add(k); return s1; });
+  const paint = (tn) => { onChange(items.map((it, m) => (sel.has(m) ? { ...it, c: tn } : it))); };
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div className="opt-row opt-head small muted"><span /><span>代码</span><span>显示名</span><span>颜色</span><span /></div>
+      {items.map((it, k) => (
+        <div key={k} className="opt-row">
+          <input type="checkbox" checked={sel.has(k)} onChange={() => tog(k)} title="勾几行，一起设颜色" />
+          <input className="in mono" value={it.v} placeholder="代码" onChange={(e) => set(k, { v: upper ? e.target.value.toUpperCase() : e.target.value })} title="代码（存进数据库 / 导出用）" />
+          <input className="in" value={it.l} placeholder="显示名" onChange={(e) => set(k, { l: e.target.value })} />
+          <span className="row" style={{ gap: 3, flexWrap: 'nowrap' }}>{OPT_TONES.map(([tn, nm]) => <button type="button" key={tn || 'none'} className={`tone-dot ${tn || 'none'} ${(it.c || '') === tn ? 'on' : ''}`} title={nm} onClick={() => set(k, { c: tn })} />)}
+            {(it.l || it.v) ? <span className={it.c ? `pill ${it.c}` : 'small'} style={{ marginLeft: 4 }}>{it.l || it.v}</span> : null}</span>
+          <button type="button" className="btn sm ghost" title="删掉这个选项" onClick={() => { onChange(items.filter((_, m) => m !== k)); setSel(new Set()); }}>×</button>
+        </div>))}
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <button type="button" className="btn sm" onClick={() => onChange([...items, { v: '', l: '' }])}>＋ 加一个选项</button>
+        <span className="grow" />
+        {sel.size > 0 && <span className="row small" style={{ gap: 4 }}>选中的 {sel.size} 个设成：{OPT_TONES.map(([tn, nm]) => <button type="button" key={tn || 'none'} className={`tone-dot ${tn || 'none'}`} title={nm} onClick={() => paint(tn)} />)}</span>}
+        {items.some((it) => it.c) && <button type="button" className="btn sm ghost" onClick={() => onChange(items.map((it) => ({ ...it, c: '' })))}>清掉全部颜色</button>}
+      </div>
+    </div>
   );
 }

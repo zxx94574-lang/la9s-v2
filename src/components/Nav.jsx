@@ -12,7 +12,7 @@ const STAFF = ['admin', 'manager', 'sales_manager', 'hotline', 'picker', 'financ
 
 // route → [图标, 默认名字, 默认分组, 默认能看的岗位 (空 = 全员)]
 export const ITEMS = {
-  dashboard: ['◫', '经营总览', 'work', []],
+  dashboard: ['◫', '经营总览', 'work', ['admin', 'manager', 'sales_manager', 'hotline', 'picker', 'finance', 'sales']],
   todo: ['◉', '我的待办', 'work', []],
   sop: ['▣', '培训与 SOP', 'work', []],
   attendance: ['⏱', '上班打卡', 'work', STAFF],
@@ -29,9 +29,10 @@ export const ITEMS = {
   cash: ['⇄', '资金账户', 'fin', ['admin', 'finance', 'hotline', 'manager', 'sales']],
   kingdee: ['⇆', '金蝶同步', 'fin', ['admin', 'finance', 'manager']],
   stock: ['▦', '库存（实存/预占/可售）', 'wh', []],
+  po: ['⇵', '采购单与到货', 'wh', ['admin', 'manager', 'cn_support', 'finance', 'picker']],
   replenish: ['⇡', '备货看板', 'wh', ['admin', 'manager', 'picker']],
-  unmet: ['◇', '未满足需求', 'wh', []],
-  purchase: ['⇣', '采购与物资申请', 'wh', STAFF],
+  unmet: ['◇', '未满足需求', 'wh', ['admin', 'manager', 'sales_manager', 'hotline', 'picker', 'finance', 'sales']],
+  purchase: ['⇣', '采购与物资申请', 'wh', [...STAFF, 'cn_support']],
   pricing: ['¥', '物料与定价', 'cn', ['admin']],
   materials: ['✎', '物料名称管理（中方）', 'cn', ['admin']],
   staff: ['♙', '员工与工资', 'cn', ['admin', 'sales_manager']],
@@ -68,6 +69,8 @@ export function visibleTo(route, role, cfg) {
   const portal = route.startsWith('p/');
   if (['boss', 'clerk'].includes(role)) return portal && (!roles.length || roles.includes(role));
   if (portal) return false;
+  // 中国支持: 只看明确给了它的页面 + 待办 / SOP / 库存 (看不到订单、客户、钱)
+  if (role === 'cn_support') return roles.includes('cn_support') || ['todo', 'sop', 'stock'].includes(route);
   return !roles.length || hasAny(role, roles);
 }
 
@@ -102,7 +105,7 @@ export function NavEditor({ cfg, onClose }) {
             </div>
             <SortList items={g.items} keyOf={(r) => r} gap={4} onChange={(n) => mut((y) => { y.groups[gi].items = n; })} render={(r) => { const ii = g.items.indexOf(r);
               const roles = d.roles[r] || ITEMS[r][3]; const hid = d.hidden.includes(r); const portal = r.startsWith('p/');
-              const opts = portal ? ['boss', 'clerk'] : STAFF.filter((x) => x !== 'admin');
+              const opts = portal ? ['boss', 'clerk'] : [...STAFF.filter((x) => x !== 'admin'), 'cn_support'];
               return (
                 <div key={r} className={`navedit-item ${hid ? 'hid' : ''}`}>
                   <span className="ico">{ITEMS[r][0]}</span>

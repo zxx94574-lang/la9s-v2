@@ -5,11 +5,12 @@
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, DatePicker } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, DatePicker, Info } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import ModelPicker from '../components/ModelPicker.jsx';
 import { SimpleForm } from './Fob.jsx';
 import { can } from '../lib/domain.js';
+import { PoForm, PoLink, fromRequest } from './Po.jsx';
 import { dDate, today, friendlyError } from '../lib/format.js';
 
 export const PR_KIND = { stock: ['本地备货', 'blue'], fob: ['FOB 客户货', 'amber'], supplies: ['物资', 'gray'] };
@@ -30,6 +31,7 @@ export default function Purchase() {
   const [f, setF] = useState('open');
   const [edit, setEdit] = useState(null);
   const [adv, setAdv] = useState(null);
+  const [po, setPo] = useState(null);
   const { data } = useData(() => q(Q.purchaseRequests, [org]), [org]);
   if (!data) return <div className="empty">加载中…</div>;
   const rows = data.filter((r) => (f === 'open' ? !['received', 'cancelled'].includes(r.status) : f === 'all' ? true : r.kind === f));
@@ -44,23 +46,25 @@ export default function Purchase() {
     { key: 'planned_ship', label: '计划发货', w: 100, render: (r) => dDate(r.planned_ship) },
     { key: 'eta', label: '预计到货', w: 140, value: (r) => r.eta || '', render: (r) => <>{dDate(r.eta)} {etaPill(r)}</> },
     { key: 'status', label: '进度', w: 100, value: (r) => PR_ST[r.status], render: (r) => <Pill tone={r.status === 'received' ? 'green' : r.status === 'cancelled' ? 'gray' : 'blue'}>{PR_ST[r.status]}</Pill> },
-    { key: 'po_no', label: '金蝶采购单 / 柜号', w: 150, value: (r) => [r.po_no, r.container, r.tracking].filter(Boolean).join(' · ') },
-    { key: 'act', label: '', w: 160, render: (r) => <span className="row" style={{ gap: 4 }} onClick={(e) => e.stopPropagation()}>
-      {next[r.status] && can(role, 'purchase_advance') && <button type="button" className="btn sm primary" onClick={() => setAdv({ r, to: next[r.status][0], label: next[r.status][1] })}>{next[r.status][1]} →</button>}
-      {['submitted', 'ordered'].includes(r.status) && can(role, 'purchase_advance') && <button type="button" className="btn sm" onClick={() => act('已取消', `select app.advance_purchase_request($1,'cancelled','{}')`, [r.id])}>取消</button>}</span> },
+    { key: 'po_no', label: '采购单 / 柜号', w: 170, value: (r) => [r.po_no, r.container, r.tracking].filter(Boolean).join(' · '), render: (r) => <>{r.po_id ? <PoLink id={r.po_id} no={r.po_no} /> : r.po_no}{[r.container, r.tracking].filter(Boolean).map((x) => <span key={x} className="small muted"> · {x}</span>)}</> },
   ];
   return (
     <>
-      <div className="pagehead"><div><div className="eyebrow">Demandes d’achat</div><h1>采购与物资申请</h1>
-        <div className="sub">货和物资（工服、工具、办公用品）都在这里申请。每张写清楚用途：本地备货 / FOB 客户货 / 物资；填期望发货和预计到货，快到或者过期没到会提醒。请国内录金蝶采购订单时在备注写上申请单号（PR-…）。</div></div>
+      <div className="pagehead"><div><div className="eyebrow">Demandes d’achat</div><h1>采购与物资申请 <Info>本地要货、要物资（工服、工具、办公用品）都在这里申请，写清楚用途：本地备货 / FOB 客户货 / 物资。国内看到申请 → 选中那一行点「建采购单」，申请自动变成「国内已下单」，货就进了「采购单与到货」算在途。物资不建采购单，直接推进度。</Info></h1></div>
         {can(role, 'purchase_request') && <button type="button" className="btn primary" onClick={() => setEdit({})}>＋ 新申请</button>}
       </div>
       <div className="card">
-        <Grid id="purchase-req" table="purchase_requests" columns={cols} rows={rows} onRowClick={(r) => ['draft', 'submitted'].includes(r.status) && setEdit(r)} empty="没有申请"
+        <Grid id="purchase-req" table="purchase_requests" columns={cols} rows={rows}
+          rowActions={[
+            { label: '建采购单', tone: 'primary', when: (r) => r.status === 'submitted' && r.kind !== 'supplies' && can(role, 'po_edit'), run: (r) => setPo(fromRequest(r, r.lines)) },
+            ...Object.entries(next).map(([st, [to, label]]) => ({ label: `${label} →`, when: (r) => r.status === st && can(role, 'purchase_advance') && !(st === 'submitted' && r.kind !== 'supplies'), run: (r) => setAdv({ r, to, label }) })),
+            { label: '取消', when: (r) => ['submitted', 'ordered'].includes(r.status) && can(role, 'purchase_advance'), tone: 'ghost', run: (r) => act('已取消', `select app.advance_purchase_request($1,'cancelled','{}')`, [r.id]) },
+          ]} onRowClick={(r) => ['draft', 'submitted'].includes(r.status) && setEdit(r)} empty="没有申请"
           tools={<div className="chips">{[['open', '进行中'], ['stock', '本地备货'], ['fob', 'FOB'], ['supplies', '物资'], ['all', '全部']].map(([k, l]) =>
             <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l}</button>)}</div>} />
       </div>
       {edit && <EditPR r={edit} onClose={() => setEdit(null)} />}
+      {po && <PoForm init={po} onClose={() => setPo(null)} />}
       {adv && <SimpleForm title={`${adv.r.req_no} · ${adv.label}`} onClose={() => setAdv(null)}
         fields={adv.to === 'ordered' ? [['po_no', '金蝶采购订单号', true], ['planned_ship', '计划发货日', false, 'date']]
           : adv.to === 'shipped' ? [['logistics', '物流公司'], ['tracking', '物流单号 / 入仓号'], ['container', '柜号 / 分柜说明'], ['eta', '预计到货', true, 'date']] : []}
