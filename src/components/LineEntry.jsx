@@ -308,7 +308,7 @@ export default function LineEntry({ id, catalog, categories, tier, lines, setLin
       { key: 'category', label: '种类', w: 110, value: (l) => (l.product ? l.product.category : catName(l.category_id)),
         render: (l) => (l.product ? l.product.category : cell(l, 'category', catName(l.category_id))) },
       { key: 'model', label: '型号', w: 130, value: (l) => (l.product ? l.product.model : l.model || ''), render: (l) => {
-        if (l.product) return <><b style={{ fontSize: 14 }} className={openP ? 'linkbtn' : ''} title={openP ? '点开看物料档案（通用性 / 价格 / 库存）' : undefined} onClick={openP ? (e) => { e.stopPropagation(); openP(l.product); } : undefined}>{l.product.model}</b>{l.product.variant && <span className="muted small"> {l.product.variant}</span>}</>;
+        if (l.product) return <><b style={{ fontSize: 14 }} className={openP ? 'linkbtn' : ''} title={openP ? '点开看物料档案（通用性 / 价格 / 库存）' : undefined} onClick={openP ? (e) => { e.stopPropagation(); openP(l.product); } : undefined}>{l.product.model}</b></>;
         return cell(l, 'model', <b style={{ fontSize: 14 }}>{l.model || ''}</b>);
       } },
       { key: 'shared', label: '通用性', w: 150, value: (l) => (l.product ? (l.product.shared_models || []).join(' / ') : ''), render: (l) => {
@@ -335,10 +335,10 @@ export default function LineEntry({ id, catalog, categories, tier, lines, setLin
           render: (l) => (!l.product ? null : cell(l, 'price', (() => { const fl = canPrice ? priceFlag(l, tier, fx) : null; return fl ? <span className={fl === '会亏' ? 'price-low' : 'price-warn'}>{money(shownPrice(l, tier, fx), currency)} <Bang tone={fl === '会亏' ? 'red' : 'amber'}>{lowTip({ fl, px: (fx > 0 ? fx : 1) * (Number(l.req_price) > 0 ? Number(l.req_price) : Number(l.unit_price)), cost: Number(l.product.cost_xof || 0), s: Number(l.product.prices?.S || 0), tier: Number(l.product.prices?.[tier] || 0) }, (v) => `${money(v)} XOF`)}</Bang>{Number(l.req_price) > 0 && <span className="pill amber">申请</span>}</span> : null; })() || (Number(l.req_price) > 0
             ? <span className="amber-t2" title={`员工申请价，等中方审批（档位价 ${money(tierPrice(l, tier, fx), currency)}）`}>{money(l.req_price, currency)} <span className="pill amber">申请 · 待批</span></span>
             : <span className={Number(l.unit_price) > 0 ? 'amber-t2' : ''} title={Number(l.unit_price) > 0 ? `手改价（档位价 ${money(tierPrice(l, tier, fx), currency)}）` : priceEditable ? '点一下选中，直接打数字改价' : ''}>{money(priceOf(l, tier, fx), currency)}{Number(l.unit_price) > 0 ? <span className="pill amber" style={{ marginLeft: 4 }}>手改</span> : ''}</span>))),
-          ...(priceEditable ? { type: 'number', fill: true } : {}) },
-        { key: 'total', label: '总价', w: 100, value: (l) => (l.product ? (Number(l.qty_req) || 0) * shownPrice(l, tier, fx) : null), render: (l) => (l.product ? <b>{money((Number(l.qty_req) || 0) * shownPrice(l, tier, fx), currency)}</b> : null) },
+          tint: true, ...(priceEditable ? { type: 'number', fill: true } : {}) },   // 282: 需求数量 / 单价 / 总价 三列一个颜色
+        { key: 'total', label: '总价', w: 100, tint: true, value: (l) => (l.product ? (Number(l.qty_req) || 0) * shownPrice(l, tier, fx) : null), render: (l) => (l.product ? <b>{money((Number(l.qty_req) || 0) * shownPrice(l, tier, fx), currency)}</b> : null) },
       ] : []),
-      { key: 'note', label: '备注', w: 140, fill: true, value: (l) => l.note || '', render: (l) => cell(l, 'note', l.note || '') },
+      { key: 'note', label: '备注', w: 140, plain: true, value: (l) => l.note || '', render: (l) => cell(l, 'note', l.note || '') },
     ];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, tier, showErrors, showPrice, categories, catalog, editing, canPrice, priceMode, onProductOpen, fx, currency]);
@@ -460,7 +460,7 @@ export function PickList({ catalog, categories, picked, onClose, onAdd, stockLab
             columns={[
               { key: 'code', label: '编码', w: 90, mono: true, value: (p) => p.code },
               { key: 'category', label: '种类', w: 110, value: (p) => p.category },
-              { key: 'model', label: '机型', w: 140, value: (p) => p.model, render: (p) => <><b>{p.model}</b>{p.variant && <span className="muted small"> {p.variant}</span>}</> },
+              { key: 'model', label: '机型', w: 140, value: (p) => p.model, render: (p) => <><b>{p.model}</b></> },
               { key: 'shared', label: '通用性', w: 160, value: (p) => (p.shared_models || []).join(' / '), render: (p) => <Shared list={p.shared_models} /> },
               { key: 'avail', label: stockLabel || '可售', w: 80, align: 'center', value: (p) => (p.band ? { ok: '有货', low: '有货', none: '可预订' }[p.band] : avail(p)),
                 render: (p) => (p.band ? <span className={`pill ${{ ok: 'green', low: 'green', none: 'amber' }[p.band]}`}>{{ ok: '有货', low: '有货', none: '可预订' }[p.band]}</span> : <StockPill n={avail(p)} />) },

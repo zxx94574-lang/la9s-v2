@@ -13,19 +13,23 @@ export const GS_DEFAULT = {
   name: 'G&S ENT.', tagline: 'Votre partenaire de confiance',
   footer: 'G&S ENT SARL  •  Capital : 1 000 000 FCFA  •  RCCM : CI-ABJ-03-2023-B13-08899\nCocody Bonoumin, Abidjan  •  05 02 44 50 77  •  info@gohentreprises.com',
 };
+// 289 (Frank 11-13): BL 上不出中文. Type 列用「单据名称」(设置 → 发货文件里可改, 一行一个「种类=名称」); 样本里屏幕写的是 LCD.
+export const BL_TYPES_DEFAULT = { 屏幕: 'LCD', 显示屏: 'LCD', 电池: 'BATTERIE', 电池盖: 'CACHE ARRIERE', 小板: 'CARTE DE CHARGE', FPC: 'NAPPE', 指纹: 'EMPREINTE', 主板: 'CARTE MERE', 无线耳机: 'ECOUTEURS', 小件辅料: 'ACCESSOIRES', 商务配件: 'ACCESSOIRES', 备件: 'PIECES', 电子料: 'COMPOSANTS', 物资: 'FOURNITURES' };
+const asciiOnly = (v) => String(v || '').replace(/[^\x20-\x7E\u00C0-\u017F]/g, '').trim();
+export const blType = (cat, types) => ({ ...BL_TYPES_DEFAULT, ...(types || {}) })[cat] || asciiOnly(cat);
 export const BL_SUGGEST_DEFAULT = { amount: 1000000, qty: 500 };
 
 const fmtQty = (n) => Number(n || 0).toLocaleString('fr-FR').replace(/ | /g, ' ');
 const fmtDate = (v) => { const d = new Date(v); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; };
 
-export function blRows(shipment, lines) {
+export function blRows(shipment, lines, types) {
   const by = Object.fromEntries(lines.map((l) => [l.id, l]));
   return (shipment.lines || []).map((x) => ({ ...x, l: by[x.deal_line_id] })).filter((x) => x.l && x.qty > 0)
-    .map((x, i) => ({ n: String(i + 1).padStart(2, '0'), type: x.l.category || '', model: [x.l.model, x.l.variant].filter(Boolean).join(' '), qty: x.qty }));
+    .map((x, i) => ({ n: String(i + 1).padStart(2, '0'), type: blType(x.l.category, types), model: asciiOnly(x.l.model) || x.l.model || '', qty: x.qty }));
 }
 
 export function BlSheet({ shipment, deal, lines, header = GS_DEFAULT, logo }) {
-  const rows = blRows(shipment, lines);
+  const rows = blRows(shipment, lines, header.types);
   const total = rows.reduce((a, r) => a + Number(r.qty), 0);
   const city = deal.city || '';
   return (
@@ -119,7 +123,7 @@ export function BlActions({ shipment, deal, lines, compact, pending }) {
       {big && !shipment.bl_printed_at && <Pill tone="amber" title={`金额 ≥ ${Number(data.suggest.amount).toLocaleString()} 或件数 ≥ ${data.suggest.qty}：建议打印发货文件随货走`}>大单 · 建议打印</Pill>}
       <button type="button" className={`btn ${pending ? '' : 'sm'}`} onClick={() => setPreview(true)} title="先看一眼 BL 打出来长什么样（看到的就是打出来的）">👁 预览 BL</button>
       {preview && <Modal wide title={`BL 预览${shipment.bl_no ? ' · ' + shipment.bl_no : '（编号在点打印时才生成）'}`} onClose={() => setPreview(false)}
-        footer={<><span className="hint">打印时出两张一样的：一张仓库留底，一张客户签字。</span><span className="grow" /><button type="button" className="btn" onClick={() => setPreview(false)}>关闭</button><button type="button" className="btn primary" onClick={() => { setPreview(false); printBl(); }}>🖨 打印 BL ×2</button></>}>
+        footer={<><span className="grow" /><button type="button" className="btn" onClick={() => setPreview(false)}>关闭</button><button type="button" className="btn primary" onClick={() => { setPreview(false); printBl(); }}>🖨 打印 BL ×2</button></>}>
         <div className="bl-preview"><BlSheet shipment={shipment} deal={deal} lines={lines} header={data.header} logo={data.logo} /></div>
       </Modal>}
       <button type="button" className={`btn ${pending ? '' : 'sm'} ${pending || (big && !shipment.bl_printed_at) ? 'primary' : ''}`} onClick={printBl} title="打印两张：一张仓库备案，一张客户签字">🖨 BL ×2{shipment.bl_no ? '' : '（生成编号）'}</button>

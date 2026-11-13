@@ -63,7 +63,7 @@ function DealPeek({ id }) {
           onMouseEnter={() => clearTimeout(timer.current)} onMouseLeave={() => { if (!pinned.current) setAt(null); }}>
           {!d ? <div className="muted small" style={{ padding: 10 }}>加载中…</div> : (
             <>
-              <div className="peek-h"><b className="mono">{d.biz_no}</b>{d.status && <Pill tone={STATUS[d.status]?.tone}>{STATUS[d.status]?.label}</Pill>}<span className="grow" />
+              <div className="peek-h"><b className="mono">{d.biz_no}</b>{d.status && <Pill tone={STATUS[d.status]?.tone}>{STATUS[d.status]?.label}</Pill>}{d.odd_price && <Pill tone="amber">异价单</Pill>}<span className="grow" />
                 <span className="small">{d.customer_name}{d.city ? ' · ' + d.city : ''}</span>{d.tier && <TierPill tier={d.tier} />}</div>
               <table className="peek-t">
                 <thead><tr><th>#</th><th>种类</th><th>机型</th><th className="r">要</th>{!early && <th className="r">给</th>}{price && <th className="r">单价</th>}{price && <th className="r">金额</th>}</tr></thead>
@@ -71,7 +71,7 @@ function DealPeek({ id }) {
                   <tr key={i}><td className="muted">{i + 1}</td><td className="small">{l.category || ''}</td>
                     <td><span className={hit(l) ? 'peek-hit' : ''}><b>{l.model}</b></span></td>
                     <td className="r">{qty(l.qty_req)}</td>{!early && <td className="r">{Number(l.qty_supply) < Number(l.qty_req) ? <b style={{ color: 'var(--red)' }}>{qty(l.qty_supply)}</b> : qty(l.qty_supply)}</td>}
-                    {price && <td className="r">{money(l.unit_price)}</td>}{price && <td className="r">{money(n * Number(l.unit_price))}</td>}</tr>); })}
+                    {price && <td className="r">{l.odd ? <b style={{ color: '#b26a00' }} title="偏离档位价">{money(l.unit_price)}</b> : money(l.unit_price)}</td>}{price && <td className="r">{money(n * Number(l.unit_price))}</td>}</tr>); })}
                   {!d.lines.length && <tr><td colSpan={7} className="muted">这张单没有行</td></tr>}</tbody>
                 <tfoot><tr><td colSpan={3}><b>合计 {d.lines.length} 行</b></td><td className="r"><b>{qty(d.lines.reduce((a, l) => a + Number(l.qty_req), 0))}</b></td>
                   {!early && <td className="r"><b>{qty(d.lines.reduce((a, l) => a + Number(l.qty_supply), 0))}</b></td>}

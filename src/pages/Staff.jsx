@@ -254,7 +254,7 @@ function Payroll({ staff, opts }) {
   const h = data.head; const draft = h && h.status !== 'paid'; const admin = role === 'admin';
   const run = async (msg, sql, p) => { try { await call(role, sql, p); toast(msg); refresh(); return true; } catch (e) { toast(friendlyError(e), 'err'); return false; } };
   const fixe = (l) => Math.round(Math.min(N(l.contract_salary), N(l.contract_salary) / (h?.days_base || 25) * N(l.days_worked)));
-  const net = (l) => fixe(l) + N(l.allowance) + N(l.incentive) + N(l.prime_team) - N(l.deduction);
+  const net = (l) => fixe(l) + N(l.allowance) + N(l.incentive) + N(l.prime_team) + N(l.wh_comm) - N(l.deduction);
   const cost = (l) => net(l) + N(l.cnps);
   const saveLine = async (emp, patch, meta) => { try { await call(role, `select app.payroll_set_line($1,$2,$3,$4)`, [org, month + '-01', emp, JSON.stringify(patch)]); if (!meta?.batch || meta.last) { toast(meta?.batch ? `已保存 ${meta.total} 格` : '已保存'); refresh(); } } catch (e) { toast(friendlyError(e), 'err'); } };
   const editNum = (k) => (l) => (draft ? { type: 'number', value: String(N(l[k])), onChange: (v, m) => saveLine(l.employee_id, { [k]: v.replace(/[^\d.]/g, '') || '0' }, m) } : null);
@@ -274,9 +274,12 @@ function Payroll({ staff, opts }) {
     { key: 'base', label: '预计基本工资', w: 120, type: 'money', value: fixe, render: (l) => money(fixe(l)) },
     { key: 'allowance', label: '补贴', w: 90, type: 'money', value: (l) => N(l.allowance), edit: editNum('allowance'), render: (l) => money(l.allowance) },
     { key: 'incentive', label: '个人奖金', w: 120, type: 'money', value: (l) => N(l.incentive), edit: editNum('incentive'), render: withDev('incentive', 'incentive_auto', money) },
-    { key: 'wh_comm', label: '仓库提成（算好的）', w: 170, type: 'money', value: (l) => (data.comm[l.employee_id] ? data.comm[l.employee_id].ok_pcs * data.rate : 0),
-      render: (l) => { const c = data.comm[l.employee_id]; if (!c) return ''; const amt = c.ok_pcs * data.rate; const inB = N(l.incentive) >= amt && amt > 0;
-        return <span title={`正确出货 ${c.ok_n} 张单 ${c.ok_pcs} 片 × ${data.rate} XOF = ${amt}；出错取消 ${c.void_n} 张单 ${c.void_pcs} 片。这个数不会自动进实发：填进「个人奖金」才算。`}><b>{money(amt)}</b> <span className="small muted">{c.ok_pcs} 片 × {data.rate}{c.void_n > 0 ? ` · 取消 ${c.void_n} 单` : ''}</span>{amt > 0 && <span className={`pill ${inB ? 'green' : 'amber'}`} style={{ marginLeft: 4 }}>{inB ? '已含在个人奖金' : '还没填进个人奖金'}</span>}</span>; } },
+    // 277 (Frank 11-13): 仓库提成 = 自动算 (依据) + 可手改; 进实发和公司成本; 手改和自动差超过 10% 标出来. 明细看「时效与准确率」.
+    { key: 'wh_comm', label: '仓库提成', w: 150, type: 'money', value: (l) => N(l.wh_comm),
+      edit: (l) => (draft ? { type: 'number', value: String(N(l.wh_comm)), onChange: (v) => run('已保存', `select app.payroll_set_wh_comm($1,$2,$3,$4)`, [org, month + '-01', l.employee_id, Number(String(v).replace(/[^\d.]/g, '') || 0)]) } : null),
+      render: (l) => { const c = data.comm[l.employee_id]; const a = dev(l.wh_comm, l.wh_comm_auto);
+        return <span className="row" style={{ gap: 6, justifyContent: 'flex-end' }} title={c ? `自动算：正确出货 ${c.ok_n} 张单 ${c.ok_pcs} 片 × ${data.rate} XOF；出错取消 ${c.void_n} 张单 ${c.void_pcs} 片。自动数只是依据，核对「时效与准确率」后可以手改。` : '这个月没有他复检 / 找货的出库'}>
+          {N(l.wh_comm) || l.wh_comm_auto != null ? money(l.wh_comm) : ''}{c && <span className="small muted">{c.ok_pcs} 片</span>}{a != null && <Pill tone="amber">自动 {money(a)}</Pill>}</span>; } },
     { key: 'prime_team', label: '团队奖金', w: 90, type: 'money', value: (l) => N(l.prime_team), edit: editNum('prime_team'), render: (l) => money(l.prime_team) },
     { key: 'cnps', label: '社保（公司交）', w: 110, type: 'money', value: (l) => N(l.cnps), edit: editNum('cnps'), render: (l) => money(l.cnps) },
     { key: 'deduction', label: '扣款', w: 90, type: 'money', value: (l) => N(l.deduction), edit: editNum('deduction'), render: (l) => money(l.deduction) },
@@ -343,6 +346,7 @@ function Payroll({ staff, opts }) {
             tools={<>
               <select className="in" style={{ maxWidth: 160 }} value={dept} onChange={(e) => setDept(e.target.value)}><option value="">全部部门</option>{opts.departments.map((d) => <option key={d.v} value={d.v}>{d.l}</option>)}</select>
               {draft && selRows.length > 0 && <button type="button" className="btn sm" onClick={dropSel}>从本月去掉 {new Set(selRows.map((l) => l.employee_id)).size} 人</button>}
+              {draft && <button type="button" className="btn sm" title={`按这个月的出库记录重算仓库提成（正确出货每片 ${data.rate} XOF，出错的单取消）；手改过的不覆盖`} onClick={() => run('仓库提成已按出库记录重算（手改过的没动）', `select app.payroll_wh_comm($1,$2)`, [org, month + '-01'])}>重算仓库提成</button>}
               {draft && <button type="button" className="btn sm" onClick={() => run('已把新入职的人加进来（已有的行不动）', `select app.payroll_open($1,$2)`, [org, month + '-01'])}>加入新员工</button>}
               {draft && (selRows.length > 0
                 ? <button type="button" className="btn sm" title="只重算选中的人，按打卡天数覆盖" onClick={() => run(`已按打卡重算选中的 ${new Set(selRows.map((l) => l.employee_id)).size} 人`, `select app.payroll_refresh_auto($1,$2,$3)`, [org, month + '-01', [...new Set(selRows.map((l) => l.employee_id))]])}>按打卡重算（选中 {new Set(selRows.map((l) => l.employee_id)).size} 人）</button>

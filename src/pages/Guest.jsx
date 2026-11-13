@@ -170,7 +170,7 @@ export function GuestShop() {
           const [bl, bt] = BAND[p.band];
           return (
             <div key={p.id} className={`pitem ${Number(cart[p.id]) > 0 ? 'on' : ''}`}>
-              <div className="grow"><b>{p.model}</b>{p.variant && <span className="muted small"> {p.variant}</span>}<div className="small muted">{p.category} · {p.code}{p.shared_models?.length ? ` · ${p.shared_models.slice(0, 3).join(' / ')}` : ''}</div>
+              <div className="grow"><b>{p.model}</b><div className="small muted">{p.category} · {p.code}{p.shared_models?.length ? ` · ${p.shared_models.slice(0, 3).join(' / ')}` : ''}</div>
                 <div style={{ marginTop: 4 }}><Pill tone={bt}>{bl}</Pill></div></div>
               <div className="qty-step">
                 <button type="button" onClick={() => setCart((c) => ({ ...c, [p.id]: Math.max(0, Number(c[p.id] || 0) - 5) }))}>−</button>

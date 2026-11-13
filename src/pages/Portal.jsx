@@ -64,7 +64,7 @@ export function PortalShop() {
           const [bl, bt] = BAND[p.band];
           return (
             <div key={p.id} className={`pitem ${Number(cart[p.id]) > 0 ? 'on' : ''}`}>
-              <div className="grow"><b>{p.model}</b>{p.variant && <span className="muted small"> {p.variant}</span>}<div className="small muted">{p.category} · {p.code}</div>
+              <div className="grow"><b>{p.model}</b><div className="small muted">{p.category} · {p.code}</div>
                 <div className="row" style={{ gap: 4, marginTop: 4 }}><Pill tone={bt}>{bl}</Pill>{p.coming && <Pill tone="blue">在途 · En route</Pill>}</div></div>
               <div className="qty-step">
                 <button type="button" onClick={() => setCart((c) => ({ ...c, [p.id]: Math.max(0, Number(c[p.id] || 0) - 5) }))}>−</button>

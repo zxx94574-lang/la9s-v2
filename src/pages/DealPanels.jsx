@@ -26,7 +26,7 @@ function baseCols({ price, cur, extra = [] }) {
   return [
     { key: 'code', label: '编码', w: 64, render: (l) => (l.code ? <span className="mono">{l.code}</span> : <Pill tone="amber">未建档</Pill>) },
     { key: 'category', label: '种类', w: 100 },
-    { key: 'model', label: '型号', w: 100, render: (l) => <><ModelLink id={l.product_id} model={l.model} />{l.variant && <span className="muted small"> {l.variant}</span>}</> },
+    { key: 'model', label: '型号', w: 100, render: (l) => <><ModelLink id={l.product_id} model={l.model} /></> },
     { key: 'shared', label: '通用性', w: 150, render: (l) => <Shared list={l.shared_models} /> },
     ...extra,
     ...(price ? [{ key: 'unit_price', label: `单价 ${cur}`, w: 130, render: (l) => <span className="row" style={{ gap: 4, flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>{money(l.unit_price, cur)}<LowTag l={l} />{l.price_manual && <span className="pill amber">手改</span>}{l.requested_price != null && <span className="pill amber">申请 {money(l.requested_price, cur)}</span>}</span> }] : []),
@@ -100,7 +100,9 @@ export function QuotePanel({ deal, lines, catalog, categories, act, role }) {
           {editable && can(role, 'cancel') && <CancelButton deal={deal} act={act} />}
         </div>
         <div className="row">
-          {price && <DocActions kind="quote" deal={deal} lines={lines} copyLabel="复制报价图片" primary="copy" />}
+          {price && (deal.approval === 'pending' && (deal.approval_reasons || []).some((x) => String(x).startsWith('申请特价'))
+            ? <span className="why">改价等中方批完，才能复制报价图片</span>
+            : <DocActions kind="quote" deal={deal} lines={lines} copyLabel="复制报价图片" primary="copy" />)}
         </div>
       </div>
       <Grid id="deal-quote" table="deal_lines" columns={cols} rows={lines} rowClass={(l) => (!l.product_id ? 'manual' : '')}
@@ -464,31 +466,40 @@ export function SoPanel({ deal, lines, catalog, categories, act, role, events })
   const real = lines.filter((l) => l.qty_supply > 0 || l.product_id);
   const th = getThresholds();
   const canQty = afterSo && can(role, 'change_qty');
-  const saveQty = async (l) => {
-    const o = open[l.id];
-    if (!(N(o.qty) >= 0) || o.qty === '') return toast('请填数量', 'err');
-    await act(`${l.model} 数量已改为 ${o.qty}${N(o.qty) === 0 ? '（预占已释放）' : ''}`, `select app.change_line_qty($1,$2,$3)`, [l.id, N(o.qty), o.reason]).catch(() => null);
-    setOpen((x) => { const n = { ...x }; delete n[l.id]; return n; });
+  const canReqPrice = ['manager', 'hotline', 'sales', 'sales_manager', 'finance'].includes(role);
+  // 288 (Frank 11-13): 改完不在格子里点保存 —— 改动先列在表格下面 (改前 → 改后), 一次「提交改动」; 数量提交后直接生效并发变更通知, 价格走中方审批
+  const pend = real.filter((l) => open[l.id]).map((l) => ({ l, o: open[l.id], changed: open[l.id].qty !== '' && N(open[l.id].qty) !== N(l.qty_supply) }));
+  const reqs = real.filter((l) => l.price_req != null);
+  const locked = pend.length > 0 || reqs.length > 0;
+  const [decide, setDecide] = useState(null);
+  const dropOpen = (id) => setOpen((x) => { const n = { ...x }; delete n[id]; return n; });
+  const submitQty = async () => {
+    const todo = pend.filter((x) => x.changed);
+    if (pend.some((x) => x.o.qty === '')) return toast('有数量没填', 'err');
+    if (!todo.length) { setOpen({}); return toast('没有改动，已重新锁上'); }
+    for (const { l, o } of todo) {
+      const ok = await act(`${l.model} 数量 ${l.qty_supply} → ${o.qty}${N(o.qty) === 0 ? '（预占已释放）' : ''}，已记进变更通知`, `select app.change_line_qty($1,$2,$3)`, [l.id, N(o.qty), o.reason]).then(() => true, () => false);
+      if (!ok) return;
+      dropOpen(l.id);
+    }
+    setOpen({});
   };
   const cols = [
     ...baseCols({ price: false }),
     { key: 'qty_req', label: '需求数量', w: 70, render: (l) => qty(l.qty_req) },
     { key: 'qty_supply', label: '供货数量', w: 110, ...(canQty ? {
-      edit: (l) => (open[l.id] ? { type: 'number', value: open[l.id].qty, title: `原因：${open[l.id].reason}`, onChange: (v) => setOpen({ ...open, [l.id]: { ...open[l.id], qty: v.replace(/\D/g, '') } }),
-        hint: <span className="row" style={{ gap: 4 }}><button type="button" className="linkbtn" onClick={() => saveQty(l)}>保存</button><button type="button" className="linkbtn" onClick={() => setOpen((x) => { const n = { ...x }; delete n[l.id]; return n; })}>取消</button></span> } : null),
-      render: (l) => <span className="row" style={{ gap: 6, justifyContent: 'center' }}><b>{qty(l.qty_supply)}</b>{N(l.qty_shipped) > 0 && <span className="small muted">已出 {l.qty_shipped}</span>}</span> }
+      edit: (l) => (open[l.id] ? { type: 'number', value: open[l.id].qty, title: `原因：${open[l.id].reason}`, onChange: (v) => setOpen((o) => ({ ...o, [l.id]: { ...o[l.id], qty: String(v).replace(/\D/g, '') } })) } : null),
+      render: (l) => <span className="row" style={{ gap: 6, justifyContent: 'center' }}><b>{qty(l.qty_supply)}</b>{N(l.qty_shipped) > 0 && <span className="small muted">已出 {l.qty_shipped}</span>}{l.added_after_pick && <Pill tone="blue">追加</Pill>}</span> }
       : { render: (l) => <b>{qty(l.qty_supply)}</b> }) },
     ...(price ? [
       { key: 'unit_price', label: `单价 ${cur}`, w: 170, render: (l) => (
         <span className="row" style={{ gap: 4, justifyContent: 'flex-end', flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>{money(l.unit_price, cur)}<PriceTag l={l} cur={cur} />{l.price_manual && <span className="pill amber sm-pill">手改</span>}
-          {(pricing || afterSo) && can(role, 'set_price') && l.product_id && <button type="button" className="btn sm icon-btn" title="改价（中方直接生效，留痕）" onClick={() => setPriceLine(l)}>✎</button>}</span>) },
+          {l.price_req != null && <span className="pill amber sm-pill" title={`申请改成 ${money(l.price_req, cur)}：${l.price_req_note || ''}（等中方批）`}>申请 {money(l.price_req, cur)} · 待批</span>}
+          {(pricing || afterSo) && l.product_id && l.price_req == null && (can(role, 'set_price')
+            ? <button type="button" className="cell-ico" title="改价（中方直接生效，要写原因，留痕）" onClick={(e) => { e.stopPropagation(); setPriceLine(l); }}>✎</button>
+            : canReqPrice ? <button type="button" className="cell-ico" title="申请改价（写原因 → 中方批了才生效）" onClick={(e) => { e.stopPropagation(); setPriceLine({ ...l, _req: true }); }}>✎</button> : null)}</span>) },
       { key: 'amount', label: `金额 ${cur}`, w: 120, value: (l) => N(l.qty_supply) * N(l.unit_price), render: (l) => <b>{money(N(l.qty_supply) * N(l.unit_price), cur)}</b> },
     ] : []),
-    { key: 'lock', label: '', w: 110, sortable: false, filterable: false, render: (l) => {
-      if (!canQty || open[l.id]) return l.added_after_pick ? <Pill tone="blue">追加</Pill> : '';
-      if (l.added_after_pick) return <button type="button" className="btn sm" onClick={() => setOpen({ ...open, [l.id]: { qty: String(l.qty_supply), reason: '追加行改数量' } })}>✎ 改数量</button>;
-      return <button type="button" className="btn sm" title="已有的行默认锁住；选原因后才能改" onClick={() => setUnlock(l)}>🔒 解锁修改</button>;
-    } },
   ];
   const totQ = real.reduce((a, l) => a + N(l.qty_supply), 0), totA = real.reduce((a, l) => a + N(l.qty_supply) * N(l.unit_price), 0);
   const manual = real.filter((l) => l.price_manual);
@@ -511,7 +522,7 @@ export function SoPanel({ deal, lines, catalog, categories, act, role, events })
           {canAdd && <button type="button" className="btn" onClick={() => setAdding([])}>＋ 出库前追加货</button>}
         </div>
         <div className="row">
-          {deal.so_no && price && <DocActions kind="so" deal={deal} lines={lines} copyLabel="复制销售单图片" primary="copy" />}
+          {deal.so_no && price && (locked ? <span className="why">{pend.length ? '先「提交改动」，才能复制销售单' : '改价等中方批完，才能复制销售单'}</span> : <DocActions kind="so" deal={deal} lines={lines} copyLabel="复制销售单图片" primary="copy" />)}
         </div>
       </div>
       {pricing && price && (
@@ -523,11 +534,33 @@ export function SoPanel({ deal, lines, catalog, categories, act, role, events })
           <Info>先勾选行再获取；手改价不会被覆盖。改价只有中方能操作；和档位价偏差 ≥{th[0]}% 黄、≥{th[1]}% 橙、≥{th[2]}% 红。</Info>
         </div>
       )}
-      {afterSo && canQty && <div className="grid-tools" style={{ borderBottom: 0 }}><span className="small muted">已有行默认锁住</span><Info>点「🔒 解锁修改」选原因后才能改数量（改完自动锁回、留记录）；出库前追加的新行可直接改。</Info></div>}
-      <Grid id="deal-so" table="deal_lines" columns={cols} rows={real} rowClass={(l) => (l.review_changed ? 'changed' : priceLevel(l.unit_price, l.tier_price, th).level >= 3 && l.product_id ? 'warn' : l.price_manual ? 'manual' : '')}
+      <Grid id="deal-so" table="deal_lines" columns={cols} rows={real}
+        rowActions={afterSo && canQty ? [{ label: '🔒 解锁改数量', tone: '', when: (l) => !open[l.id], run: (l) => (l.added_after_pick ? setOpen((o) => ({ ...o, [l.id]: { qty: String(l.qty_supply), reason: '追加行改数量' } })) : setUnlock(l)) }] : undefined} rowClass={(l) => (l.review_changed ? 'changed' : priceLevel(l.unit_price, l.tier_price, th).level >= 3 && l.product_id ? 'warn' : l.price_manual ? 'manual' : '')}
         selectable={pricing && price ? { selected: sel, onChange: setSel } : null}
         foot={(rows) => ({ code: '合计', model: `${rows.filter((l) => N(l.qty_supply) > 0).length} 个型号`, qty_supply: `${qty(rows.reduce((a, l) => a + N(l.qty_supply), 0))} 件`,
           amount: price ? `${money(rows.reduce((a, l) => a + N(l.qty_supply) * N(l.unit_price), 0), cur)} ${cur}` : '' })} />
+      {(pend.length > 0 || reqs.length > 0) && (
+        <div className="chg-box">
+          {pend.length > 0 && <>
+            <div className="chg-h"><b>本次改动（还没提交）</b><span className="grow" />
+              <button type="button" className="btn sm" onClick={() => setOpen({})}>放弃</button>
+              <button type="button" className="btn sm primary" onClick={submitQty}>提交改动</button></div>
+            {pend.map(({ l, o, changed }) => (
+              <div className="chg-row" key={l.id}><span className="mono muted">#{real.indexOf(l) + 1}</span> <b>{l.model}</b> 数量 {changed ? <><span className="chg-old">{qty(l.qty_supply)}</span> → <b className="chg-new">{o.qty === '' ? '?' : qty(o.qty)}</b></> : <span className="muted">{qty(l.qty_supply)}（已解锁，还没改：在「供货数量」那格直接打数字）</span>}
+                <span className="small muted"> · 原因：{o.reason}</span><button type="button" className="linkbtn small" style={{ marginLeft: 8 }} onClick={() => dropOpen(l.id)}>撤掉这条</button></div>))}
+            <div className="small muted">提交后数量直接生效（不用审批），同时记一条「变更通知」给中方。</div>
+          </>}
+          {reqs.length > 0 && <>
+            <div className="chg-h"><b>改价申请 · 等中方审批</b><Pill tone="amber">批完才能复制销售单 / 往下走</Pill></div>
+            {reqs.map((l) => (
+              <div className="chg-row" key={l.id}><span className="mono muted">#{real.indexOf(l) + 1}</span> <b>{l.model}</b> 单价 <span className="chg-old">{money(l.unit_price, cur)}</span> → <b className="chg-new">{money(l.price_req, cur)}</b> {cur}
+                <span className="small muted"> · 档位价 {money(l.tier_price, cur)} · 原因：{l.price_req_note}</span>
+                {role === 'admin' && <span style={{ marginLeft: 8 }}><button type="button" className="btn sm primary" onClick={() => setDecide({ l, ok: true })}>批准</button> <button type="button" className="btn sm" onClick={() => setDecide({ l, ok: false })}>不批</button></span>}</div>))}
+          </>}
+        </div>
+      )}
+      {decide && <NoteModal title={`${decide.ok ? '批准' : '不批'}改价：${decide.l.model} ${money(decide.l.unit_price, cur)} → ${money(decide.l.price_req, cur)} ${cur}`} label="备注（为什么给 / 不给这个价，必填）" danger={!decide.ok} okText={decide.ok ? '批准，按这个价' : '不批，价格不变'}
+        onClose={() => setDecide(null)} onOk={(note) => act(decide.ok ? '已批准改价' : '已驳回改价申请', `select app.decide_line_price($1,$2,$3)`, [decide.l.id, decide.ok, note]).then(() => setDecide(null), () => {})} />}
       {price && (
         <div className="sumbar">
           <div className="s"><div className="k">共发</div><div className="v">{qty(totQ)} 件</div></div>
@@ -537,14 +570,16 @@ export function SoPanel({ deal, lines, catalog, categories, act, role, events })
       {pricing && (
         <div className="actionbar">
           <span className="hint">{zero.length ? <b className="red-t">有 {zero.length} 行单价为 0，不能下推</b> : risky.length ? <b className="red-t">{risky.length} 行价格偏差 ≥{th[2]}%，下推时会再提醒</b> : manual.length ? `有 ${manual.length} 行手动改价，生成前会再确认一次。` : '价格按客户档位自动带出。'}</span>
-          {can(role, 'sales_order') ? <button type="button" className="btn primary lg" onClick={create}>生成销售订单 →</button> : <Blocked action="sales_order" />}
+          {can(role, 'sales_order') ? <button type="button" className="btn primary lg" disabled={locked} title={locked ? '有改动没提交 / 改价等中方批' : undefined} onClick={create}>生成销售订单 →</button> : <Blocked action="sales_order" />}
         </div>
       )}
-      {priceLine && <PriceModal line={priceLine} cur={cur} onClose={() => setPriceLine(null)}
-        onSave={(p, r) => act('已改价，已标记「手改」', `select app.set_line_price($1,$2,$3)`, [priceLine.id, p, r]).then(() => setPriceLine(null), () => {})} />}
+      {priceLine && <PriceModal line={priceLine} cur={cur} request={!!priceLine._req} onClose={() => setPriceLine(null)}
+        onSave={(p, r) => (priceLine._req
+          ? act('改价申请已提交，等中方审批', `select app.request_line_price($1,$2,$3)`, [priceLine.id, p, r])
+          : act('已改价，已标记「手改」', `select app.set_line_price($1,$2,$3)`, [priceLine.id, p, r])).then(() => setPriceLine(null), () => {})} />}
       {unlock && <UnlockModal line={unlock} onClose={() => setUnlock(null)} onOk={(reason) => {
         setOpen({ ...open, [unlock.id]: { qty: reason === '客户不要了' ? '0' : String(unlock.qty_supply), reason } }); setUnlock(null);
-        toast(`已解锁 ${unlock.model}：改好数量点「保存」`);
+        toast(`已解锁 ${unlock.model}：在「供货数量」那格改好，再点表格下面的「提交改动」`);
       }} />}
       {confirmSo && (
         <Modal title="二次确认：下推销售订单" onClose={() => setConfirmSo(false)}
@@ -571,6 +606,16 @@ export function SoPanel({ deal, lines, catalog, categories, act, role, events })
   );
 }
 
+export function NoteModal({ title, label, okText = '确定', danger, onClose, onOk, hint }) {
+  const [v, setV] = useState('');
+  return (
+    <Modal title={title} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className={`btn ${danger ? 'danger' : 'primary'}`} disabled={!v.trim()} onClick={() => onOk(v.trim())}>{okText}</button></>}>
+      {hint && <p className="hint">{hint}</p>}
+      <div className="field req"><label>{label}</label><textarea className="in" rows={3} autoFocus value={v} onChange={(e) => setV(e.target.value)} /></div>
+    </Modal>
+  );
+}
+
 function UnlockModal({ line, onClose, onOk }) {
   const [r, setR] = useState(NOTE_OPTIONS.unlock[0]);
   return (
@@ -584,7 +629,7 @@ function UnlockModal({ line, onClose, onOk }) {
   );
 }
 
-function PriceModal({ line, cur, onClose, onSave }) {
+function PriceModal({ line, cur, onClose, onSave, request }) {
   const [p, setP] = useState(String(N(line.unit_price)));
   const [r, setR] = useState('');
   const [ok, setOk] = useState(false);
@@ -594,10 +639,10 @@ function PriceModal({ line, cur, onClose, onSave }) {
   const needOk = level >= 2 && level < 4;
   const disabled = p === '' || !(N(p) >= 0) || !r?.trim() || (needOk && !ok) || (level === 4 && !['赠品', '样品'].includes(r));
   return (
-    <Modal title={`改价：${line.model} ${line.category}`} onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className={`btn ${level >= 3 ? 'danger' : 'primary'}`} disabled={disabled} onClick={() => onSave(N(p), r)}>确认改价</button></>}>
+    <Modal title={`${request ? '申请改价' : '改价'}：${line.model} ${line.category}`} onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className={`btn ${level >= 3 ? 'danger' : 'primary'}`} disabled={disabled} onClick={() => onSave(N(p), r)}>{request ? '提交申请（等中方批）' : '确认改价'}</button></>}>
       <div className="stack">
-        <div className="hint">档位价 <b>{money(line.tier_price, cur)} {cur}</b>。改价只有中方能做，改后标记「手改」，生成销售订单前再确认一次。</div>
+        <div className="hint">档位价 <b>{money(line.tier_price, cur)} {cur}</b>。{request ? '价格只有中方能定：你填想要的价和原因，中方批了才生效；批之前这张单不能复制销售单、不能往下走。' : '改价只有中方能做，必须写原因；改后标记「手改」，偏离档位价超过设定比例的单会标「异价单」。'}</div>
         <div className="field req"><label>新单价 {cur}</label><input className="in" inputMode="decimal" autoFocus value={p} onChange={(e) => { setP(e.target.value.replace(/[^\d.]/g, '')); setOk(false); }} style={{ maxWidth: 200, fontSize: 18, fontWeight: 700 }} /></div>
         {level === 1 && <div className="dev-box dev1">比档位价{pct < 0 ? '低' : '高'} {Math.abs(pct).toFixed(1)}%</div>}
         {level >= 2 && level < 4 && (

@@ -575,7 +575,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
                 const f = liveConds.some((x) => x.key === c.key);
                 return (
                   <th key={c.key} data-ck={c.key} style={{ ...widthStyle(c), textAlign: alignOf(c) }}
-                    className={`${fill ? 'fill-col' : ''} ${activeCol === c.key ? 'fill-active' : ''}`}>
+                    className={`${fill || c.tint ? 'fill-col' : ''} ${activeCol === c.key ? 'fill-active' : ''}`}>
                     <span className="th-inner" style={{ justifyContent: alignOf(c) === 'right' ? 'flex-end' : alignOf(c) === 'center' ? 'center' : 'flex-start' }}>
                       <span className="grip" onPointerDown={(e) => startDrag(e, c.key)} title="拖动调整列顺序">⠿</span>
                       {fill && <span className="pen" title="这一列要填">✎</span>}
@@ -629,7 +629,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
                       if (inner instanceof Date) inner = fmtDate(inner);
                       else if (inner !== null && typeof inner === 'object' && !React.isValidElement(inner) && !Array.isArray(inner)) inner = String(inner);
                     }
-                    const fillCell = (ed && !ed.disabled) || c.fill;
+                    const fillCell = c.plain ? false : ((ed && !ed.disabled) || c.fill || c.tint);   // tint = 只上底色 (一组金额列同色), plain = 能改也不上色
                     const errMsg = errors?.[k]?.[c.key] || (ed?.invalid ? (ed.title || '有问题') : null);
                     return <td key={c.key} data-ck={c.key} data-cr={r} data-cc={ci} style={{ textAlign: alignOf(c), ...widthStyle(c) }} title={errMsg || undefined}
                       className={`${errMsg ? 'cell-err' : ''} ${inSel(r, ci) ? 'sel' : ''} ${sel && sel.a[0] === r && sel.a[1] === ci && range.r0 === range.r1 && range.c0 === range.c1 ? 'sel-a' : ''} ${isEditing ? 'editing' : ''} ${fillCell ? 'fill-col' : ''} ${fillCell && activeCol === c.key ? 'fill-active' : ''}`}

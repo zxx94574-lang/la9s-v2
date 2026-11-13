@@ -59,6 +59,7 @@ export default function Deal({ id }) {
   // 268 (Frank 11-12): 流程条吸顶, 往下滑后缩成一行 (只留「卡在哪 + 上报 / 撤回」), 回到顶部恢复完整; 高度用 margin 补回去, 页面不跳
   const sentRef = useRef(null); const stepsRef = useRef(null);
   const [stuck, setStuck] = useState(false); const [stepsH, setStepsH] = useState(0);
+  const narrow = typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches;
   const hasDeal = !!data?.deal;
   useEffect(() => {
     const el = sentRef.current; if (!el || typeof IntersectionObserver === 'undefined') return undefined;
@@ -105,8 +106,9 @@ export default function Deal({ id }) {
   return (
     <>
       <div ref={sentRef} style={{ height: 1, marginBottom: -1 }} />
-      <div className={`flow2 ${stuck ? 'stuck' : ''}`} style={stuck && stepsH ? { marginBottom: 12 + stepsH } : undefined}>
-        <div className="flow2-steps" ref={stepsRef}>
+      {/* 287 (Frank 11-13): 往下滑 = 整排步骤块原样冻结在顶上, 不再缩成一行字. 手机上只冻结步骤块那一排 (下面那行按钮跟着滑走, 不挡半屏) */}
+      <div className={`flow2 ${stuck ? 'stuck' : ''}`} style={stuck && stepsH && narrow ? { marginBottom: 12 + stepsH } : undefined}>
+        <div className="flow2-steps">
           {STEPS.map((s, i) => {
             const done = !cancelled && i <= reached;
             const now = !cancelled && i === current && !allDone;
@@ -134,12 +136,11 @@ export default function Deal({ id }) {
             </>
           )}
         </div>
-        <div className="flow2-now">
+        <div className="flow2-now" ref={stepsRef}>
           <Light v={dealLight(deal)} />
           <span>卡在：<b>{stuckOf(deal)}</b>{!cancelled && dealLight(deal) !== 'done' && nextLabel && <span className="muted"> · 下一步：{nextLabel}</span>}</span>
           {(overdue || dueToday) && <span className={`pill ${overdue ? 'red' : 'amber'}`}>约定 {dDate(deal.planned_ship_date)} 发货{overdue ? ' · 已过期未出库' : ' · 今天该出库'}</span>}
           <span className="grow" />
-          {stuck && <button type="button" className="btn sm" title="回到顶部，展开全部步骤" onClick={() => sentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>正在看：{curKey === 'return' ? '退货' : STEPS[curIdx]?.label} · 全部步骤 ↑</button>}
           {!atNow && !cancelled && curKey !== 'return' && <><span className="pill gray">回看已完成的步骤 · 只读</span><button type="button" className="btn sm" onClick={() => setView(null)}>回到当前步 →</button></>}
           {atNow && !cancelled && <IssueButton deal={deal} step={STEPS[Math.min(current, STEPS.length - 1)]?.key} />}
           {atNow && REVERT_LABEL[deal.status] && can(role, 'revert') && <button type="button" className="btn sm soft-red" onClick={() => setRevert(true)}>↶ 撤回到上一步</button>}
@@ -150,7 +151,7 @@ export default function Deal({ id }) {
       {/* 订单信息窄条 (11-09 196): 一行放完, 不占大块 */}
       <div className="card dealbar">
         <span className="big mono">{deal.biz_no}</span>
-        {deal.status === 'quoted' && deal.tier_pending ? <Pill tone="amber">草稿 · 等中方定档位</Pill> : <Pill tone={STATUS[deal.status].tone}>{STATUS[deal.status].label}</Pill>}{deal.kind !== 'normal' && <Pill tone="gray">{deal.kind}</Pill>}
+        {deal.status === 'quoted' && deal.tier_pending ? <Pill tone="amber">草稿 · 等中方定档位</Pill> : <Pill tone={STATUS[deal.status].tone}>{STATUS[deal.status].label}</Pill>}{deal.odd_price && <Pill tone="amber" title="有行的单价偏离档位价超过设定比例（设置 → 规则参数）。原因和中方备注在操作记录里。">异价单</Pill>}{Number(deal.price_req_n) > 0 && <Pill tone="red">改价待批</Pill>}{deal.kind !== 'normal' && <Pill tone="gray">{deal.kind}</Pill>}
         <Info>订单号 {deal.biz_no}：{deal.biz_no.startsWith('BIZ-') ? '旧格式（年月 + 当月流水）。' : 'CI = 科特，中间 6 位 = 年月日，最后 = 当天第几单。'}同一张订单下面的单据都跟着这个号：-Q 报价单（Quotation）、-P 找货单（Picking）、-O 销售订单（Order）、-S1 / -S2 第 1 / 2 批出库（Shipment）。</Info>
         {deal.status === 'confirmed' && deal.planned_ship_date && dDate(deal.planned_ship_date) > today() && (deal.staged_at
           ? <span className="pill amber" title="到约定那天再复检打包">等待发货 · 约 {dDate(deal.planned_ship_date)} · 放在：{deal.staged_note || '（没写）'}</span>

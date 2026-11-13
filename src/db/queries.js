@@ -46,7 +46,7 @@ select d.id, d.biz_no, d.quote_no, d.pick_no, d.so_no, d.kind, d.status, d.curre
   c.id as customer_id, coalesce(c.code, c.temp_code) as customer_code, c.name as customer_name, c.city, c.tier,
   (select string_agg(distinct coalesce(p.model, l.req_model), ' / ') from app.deal_lines l left join app.products p on p.id = l.product_id where l.deal_id = d.id) as models,
   ${dealTotals},
-  t.first_shipped_at, t.shipped_amount, t.returned_amount, t.allocated_amount, t.shipped_amount - t.returned_amount - t.allocated_amount - t.writeoff_amount as due, t.writeoff_amount,
+  t.first_shipped_at, t.shipped_amount, t.returned_amount, t.allocated_amount, t.shipped_amount - t.returned_amount - t.allocated_amount - t.writeoff_amount + t.adjust_amount as due, t.writeoff_amount,
   (select coalesce(sum(a.amount), 0) from app.receipt_allocations a join app.receipts r on r.id = a.receipt_id where a.deal_id = d.id and r.voided_at is null and a.at > r.created_at + interval '1 minute') as prepaid_used,
   (select count(*) from app.shipments sx where sx.deal_id = d.id and sx.voided_at is null and sx.customer_received_at is null)::int as unsigned_n,
   (select count(*) from app.returns rx where rx.deal_id = d.id and (rx.status = 'requested' or (rx.status = 'approved' and rx.reconciled_at is null)))::int as open_returns_n,
@@ -55,6 +55,9 @@ select d.id, d.biz_no, d.quote_no, d.pick_no, d.so_no, d.kind, d.status, d.curre
   (select count(*) from app.shipments sf where sf.deal_id = d.id and sf.voided_at is null and sf.freight_bearer in ('company','company_part') and sf.freight_paid_at is null)::int as freight_due_n,
   (select count(*) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.status = 'open')::int as open_disc_n,
   (c.tier_confirmed_at is null) as tier_pending, c.tier_requested_at,
+  exists (select 1 from app.deal_lines ol where ol.deal_id = d.id and ol.odd and coalesce(ol.qty_req, 0) + coalesce(ol.qty_supply, 0) > 0) as odd_price,
+  (select count(*) from app.deal_lines ol where ol.deal_id = d.id and ol.price_req is not null)::int as price_req_n,
+  (select count(*) from app.payment_appeals pa where pa.deal_id = d.id and pa.status = 'open')::int as appeal_n,
   (select max(e.at) from app.deal_events e where e.deal_id = d.id and e.action = 'sales_order_created') as so_sent_at,
   (select count(*) from app.deal_lines hl join app.stock_holds h on h.stock_item_id = hl.stock_item_id and h.status = 'active' and h.whole where hl.deal_id = d.id)::int as frozen_n,
   (select coalesce(sum(rd.amount), 0) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.decision = 'credit') as disc_credit,
@@ -76,6 +79,9 @@ select d.*, c.code as customer_code, c.name as customer_name, c.city, c.tier, c.
   (select count(*) from app.shipments sf where sf.deal_id = d.id and sf.voided_at is null and sf.freight_bearer in ('company','company_part') and sf.freight_paid_at is null)::int as freight_due_n,
   (select count(*) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.status = 'open')::int as open_disc_n,
   (c.tier_confirmed_at is null) as tier_pending, c.tier_requested_at,
+  exists (select 1 from app.deal_lines ol where ol.deal_id = d.id and ol.odd and coalesce(ol.qty_req, 0) + coalesce(ol.qty_supply, 0) > 0) as odd_price,
+  (select count(*) from app.deal_lines ol where ol.deal_id = d.id and ol.price_req is not null)::int as price_req_n,
+  (select count(*) from app.payment_appeals pa where pa.deal_id = d.id and pa.status = 'open')::int as appeal_n,
   (select max(e.at) from app.deal_events e where e.deal_id = d.id and e.action = 'sales_order_created') as so_sent_at,
   (select count(*) from app.deal_lines hl join app.stock_holds h on h.stock_item_id = hl.stock_item_id and h.status = 'active' and h.whole where hl.deal_id = d.id)::int as frozen_n,
   (select coalesce(sum(rd.amount), 0) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.decision = 'credit') as disc_credit,
@@ -83,7 +89,7 @@ select d.*, c.code as customer_code, c.name as customer_name, c.city, c.tier, c.
   (select count(*) from app.pick_checks pc join app.deal_lines pl on pl.id = pc.deal_line_id join app.deals pd on pd.id = pl.deal_id
      where pd.picker_employee_id = d.picker_employee_id and pc.result <> 'ok' and pc.at > now() - interval '30 days') as picker_errors,
   ${dealTotals},
-  t.first_shipped_at, t.shipped_amount, t.returned_amount, t.allocated_amount, t.shipped_amount - t.returned_amount - t.allocated_amount - t.writeoff_amount as due, t.writeoff_amount,
+  t.first_shipped_at, t.shipped_amount, t.returned_amount, t.allocated_amount, t.shipped_amount - t.returned_amount - t.allocated_amount - t.writeoff_amount + t.adjust_amount as due, t.writeoff_amount,
   (select coalesce(sum(a.amount), 0) from app.receipt_allocations a join app.receipts r on r.id = a.receipt_id where a.deal_id = d.id and r.voided_at is null and a.at > r.created_at + interval '1 minute') as prepaid_used,
   (select coalesce(sum(e.amount),0) from app.ar_entries e where e.customer_id = d.customer_id and e.currency = d.currency) as customer_balance
 from app.deals d
@@ -315,7 +321,15 @@ select doc from (
   union all select d.biz_no || ' 客户确认截图', d.confirm_proof from app.deals d where d.org_id = $1
   union all select s.out_no || ' 出库凭证', s.proof_path from app.shipments s where s.org_id = $1
   union all select r.rcv_no || ' 收款凭证', r.proof_path from app.receipts r where r.org_id = $1
-) x where p is not null and split_part(p, 'base64,', 2) = $2 limit 3`;
+  union all select r.rcv_no || ' 交款凭证', r.handed_proof from app.receipts r where r.org_id = $1
+  union all select s.out_no || ' 签收照片', s.signed_photo from app.shipments s where s.org_id = $1
+  union all select s.out_no || ' 运费凭证', s.freight_proof from app.shipments s where s.org_id = $1
+  union all select d.biz_no || ' 对账凭证', d.balance_proof from app.deals d where d.org_id = $1
+  union all select d.biz_no || ' 暂存照片', d.staged_photo from app.deals d where d.org_id = $1
+  union all select d.biz_no || ' 退货实物照片', rt.received_photo from app.returns rt join app.deals d on d.id = rt.deal_id where rt.org_id = $1
+  union all select d.biz_no || ' 退货对账凭证', rt.reconciled_proof from app.returns rt join app.deals d on d.id = rt.deal_id where rt.org_id = $1
+  union all select d.biz_no || ' 收货差异凭证', rd.proof from app.receipt_discrepancies rd join app.deals d on d.id = rd.deal_id where rd.org_id = $1
+) x where p is not null and split_part(p, 'base64,', 2) = $2 limit 6`;
 
 // 物料与定价 (中方): cost side + the four tier prices (locked = 一口价)
 export const productsPricing = `
@@ -691,8 +705,9 @@ export const openReturns = `select * from app.v_open_returns where org_id = $1 o
 // 254 订单预览 (小眼睛): 一张单的头 + 每行要多少 / 给多少 / 单价
 export const dealPeek = `
 select d.id, d.biz_no, d.status, d.currency, d.created_at, d.planned_ship_date, c.name as customer_name, c.city, c.tier,
+  exists (select 1 from app.deal_lines ol where ol.deal_id = d.id and ol.odd) as odd_price,
   (select coalesce(json_agg(json_build_object('model', coalesce(p.model, l.req_model), 'category', coalesce(cat.name, rc.name), 'code', p.code,
-     'qty_req', l.qty_req, 'qty_supply', l.qty_supply, 'qty_shipped', l.qty_shipped, 'unit_price', l.unit_price) order by l.seq), '[]'::json)
+     'qty_req', l.qty_req, 'qty_supply', l.qty_supply, 'qty_shipped', l.qty_shipped, 'unit_price', l.unit_price, 'odd', l.odd) order by l.seq), '[]'::json)
    from app.deal_lines l left join app.products p on p.id = l.product_id
    left join app.categories cat on cat.id = p.category_id left join app.categories rc on rc.id = l.req_category_id
    where l.deal_id = d.id) as lines

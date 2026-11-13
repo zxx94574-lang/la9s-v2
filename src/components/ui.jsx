@@ -49,21 +49,40 @@ export const Light = ({ v }) => { const [tone, label] = LIGHT[v] || LIGHT.active
 export const Pill = ({ tone = 'gray', children }) => <span className={`pill ${tone}`}>{typeof children === 'string' ? t(children) : children}</span>;
 
 // ── shared models: summary, hover (desktop) / tap (phone) for all ──
-export function Shared({ list, show = 2 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef();
+// 通用性 (Frank 11-13 283, 底层规则): 格子多宽就显示几个型号, 放不下的收成「+N」; 拖列宽实时重算.
+// 「+N」电脑悬停 / 手机轻点 → 浮出全部 (浮层挂在 body 上, 不会被表格格子裁掉).
+let _mc; const textW = (t, font) => { _mc = _mc || document.createElement('canvas').getContext('2d'); _mc.font = font; return _mc.measureText(t).width; };
+export function Shared({ list }) {
+  const ref = useRef(); const [n, setN] = useState(list?.length || 0); const [pop, setPop] = useState(null); const timer = useRef();
+  const key = (list || []).join('|');
   useEffect(() => {
-    if (!open) return;
-    const h = (e) => !ref.current?.contains(e.target) && setOpen(false);
-    document.addEventListener('pointerdown', h); return () => document.removeEventListener('pointerdown', h);
-  }, [open]);
+    const el = ref.current; if (!el || !list?.length) return undefined;
+    const calc = () => {
+      const host = el.closest('td') || el.parentElement; const cs = getComputedStyle(host);
+      const W = host.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0) - 2;
+      const font = getComputedStyle(el).font || '13px sans-serif';
+      let k = list.length;
+      for (; k > 1; k--) { const more = list.length - k; if (textW(list.slice(0, k).join(' / '), font) + (more ? 34 + String(more).length * 7 : 0) <= W) break; }
+      if (k === 1 && list.length > 1 && textW(list[0], font) + 40 > W) k = 1;
+      setN(k);
+    };
+    calc(); const ro = new ResizeObserver(calc); ro.observe(el.closest('td') || el.parentElement); return () => ro.disconnect();
+  }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!pop) return undefined;
+    const off = (e) => { if (!ref.current?.contains(e.target) && !e.target.closest?.('.shared-pop')) setPop(null); };
+    const sc = () => setPop(null);
+    document.addEventListener('pointerdown', off); window.addEventListener('scroll', sc, true);
+    return () => { document.removeEventListener('pointerdown', off); window.removeEventListener('scroll', sc, true); };
+  }, [pop]);
   if (!list || !list.length) return <span className="muted">—</span>;
-  const head = list.slice(0, show).join(' / ');
+  const more = list.length - n;
+  const open = () => { const r = ref.current.getBoundingClientRect(); const w = Math.min(340, window.innerWidth - 16); setPop({ left: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)), w, ...(window.innerHeight - r.bottom > 180 ? { top: r.bottom + 4 } : { bottom: window.innerHeight - r.top + 4 }) }); };
   return (
-    <span ref={ref} className={`shared ${open ? 'open' : ''}`}>
-      <span className="s-text">{head}</span>
-      {list.length > show && <button type="button" className="more" onClick={() => setOpen(!open)}>+{list.length - show}</button>}
-      {list.length > show && <span className="pop"><b>通用 {list.length} 个型号</b><br />{list.join(' / ')}</span>}
+    <span ref={ref} className="shared" onMouseEnter={() => { if (more > 0) { clearTimeout(timer.current); timer.current = setTimeout(open, 200); } }} onMouseLeave={() => { clearTimeout(timer.current); timer.current = setTimeout(() => setPop(null), 250); }}>
+      <span className="s-text">{list.slice(0, n).join(' / ')}</span>
+      {more > 0 && <button type="button" className="more" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); clearTimeout(timer.current); if (pop) setPop(null); else open(); }}>+{more}</button>}
+      {pop && createPortal(<span className="shared-pop" style={{ left: pop.left, width: pop.w, top: pop.top, bottom: pop.bottom }} onMouseEnter={() => clearTimeout(timer.current)} onMouseLeave={() => setPop(null)}><b>通用 {list.length} 个型号</b><br />{list.join(' / ')}</span>, document.body)}
     </span>
   );
 }
@@ -250,7 +269,12 @@ export function PhotoInput({ value, onChange, label = '拍照 / 上传', camera 
       const { q } = await import('../db/client.js'); const Q = await import('../db/queries.js');
       const uses = await q(Q.proofUses, [org, v.split('base64,')[1]]);
       setDup(uses.map((u) => u.doc)); onDup?.(uses.map((u) => u.doc));
-      if (uses.length) toast?.(`这张图片已用于 ${uses[0].doc}，请确认不是旧图`, 'err');
+      if (uses.length) {
+        toast?.(`这张图片已用于 ${uses[0].doc}，请确认不是旧图（可以继续，会通知中方）`, 'err');
+        // 290 (Frank 11-13): 全站所有凭证 —— 同一张图用在别处: 不拦、不审批, 记一条「变更通知」给中方
+        const { call } = await import('../db/client.js'); const dealId = (location.hash.match(/deal\/([0-9a-f-]{36})/) || [])[1] || null;
+        call(role, `select app.note_dup_photo($1,$2,$3,$4)`, [org, dealId, label, uses.map((u) => u.doc).join('、')]).catch(() => {});
+      }
     } catch { setDup([]); onDup?.([]); }
   };
   const onPaste = (e) => {
@@ -278,8 +302,24 @@ export function PhotoInput({ value, onChange, label = '拍照 / 上传', camera 
 }
 
 // thumbnail: hover = bigger preview, click = full viewer (←/→ through the group, who / when / how it was taken)
+const DUP_CACHE = new Map();
+function useDupUses(src) {
+  const { org } = useApp() || {}; const [uses, setUses] = useState(null);
+  useEffect(() => {
+    if (!src?.startsWith?.('data:') || !org) return undefined;
+    const b = src.split('base64,')[1]; if (!b) return undefined; const k = b.length + ':' + b.slice(-80);
+    if (DUP_CACHE.has(k)) { setUses(DUP_CACHE.get(k)); return undefined; }
+    let live = true;
+    const t = setTimeout(async () => {
+      try { const { q } = await import('../db/client.js'); const Q = await import('../db/queries.js'); const u = (await q(Q.proofUses, [org, b])).map((x) => x.doc); DUP_CACHE.set(k, u); if (live) setUses(u); } catch { /* 查不到就不标 */ }
+    }, 500);
+    return () => { live = false; clearTimeout(t); };
+  }, [src, org]);
+  return uses && uses.length > 1 ? uses : null;
+}
 export function Thumb({ src, size = 40, group, label }) {
   const [open, setOpen] = useState(false);
+  const dupUses = useDupUses(src);
   if (!src) return null;
   if (!src.startsWith('data:')) return <span className="pill green" title="演示数据里的占位凭证">✓ {label || '凭证'}（演示）</span>;
   const list = (group || [{ src, label }]).filter((x) => x.src?.startsWith('data:'));
@@ -288,6 +328,7 @@ export function Thumb({ src, size = 40, group, label }) {
       <span className="thumb" onClick={(e) => { e.stopPropagation(); setOpen(true); }}>
         <img src={src} alt={label || '凭证'} style={{ height: size, width: size }} />
         <span className="thumb-pop"><img src={src} alt="" /></span>
+        {dupUses && <span className="thumb-dup" title={`同一张图用在 ${dupUses.length} 个地方：${dupUses.join('、')}`}>!</span>}
       </span>
       {open && <Lightbox list={list} start={Math.max(0, list.findIndex((x) => x.src === src))} onClose={() => setOpen(false)} />}
     </>

@@ -85,6 +85,8 @@ export async function setup() {
 
   // full happy path up to 'confirmed'
   // 0007 order: 初拣 → 销售订单 → 客户确认 → 复检打包 → 出库. `review:false` stops at 'confirmed'.
+  // 0045: 销售员欠款不出货默认开; 老测试用固定的过去日期出库, 这里先关掉, v18 里单独打开测
+  await db.query(`insert into app.org_settings (org_id, key, value) values ($1,'rep_debt_rules','{"on":false}')`, [ids.org]);
   const toConfirmed = async (customer, lineSpec, { manualConfirm = false, review = true } = {}) => {
     const deal = await val(U.manager, `select app.create_quote($1,$2,'XOF',$3)`, [ids.org, customer, JSON.stringify(lineSpec)]);
     await as(U.manager, `select app.start_picking($1)`, [deal]);

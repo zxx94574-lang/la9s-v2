@@ -8,7 +8,7 @@ import { PERM_GROUPS, PERM_ROLES, defaultRoles } from '../lib/perm.js';
 import { ROLE_LABELS, rolesFor } from '../lib/domain.js';
 import { saveFile } from '../lib/saveFile.js';
 import { friendlyError, dt } from '../lib/format.js';
-import { GS_DEFAULT, BL_SUGGEST_DEFAULT } from './Bl.jsx';
+import { BL_TYPES_DEFAULT, GS_DEFAULT, BL_SUGGEST_DEFAULT } from './Bl.jsx';
 
 export function ExportPanel() {
   const { org, role, toast } = useApp();
@@ -76,6 +76,9 @@ export function DocSettings() {
         </div>
         <div className="field"><label className="small">BL 页脚文字（G&amp;S 抬头，一行一段）</label>
           <textarea className="in" rows={2} defaultValue={header.footer} key={header.footer} onBlur={(e) => e.target.value !== header.footer && setting('doc_header_gs', { ...header, footer: e.target.value })} /></div>
+          <div className="field" style={{ marginTop: 8 }}><label>BL 上「Type」怎么写（一行一个：种类=单据名称；BL 不出中文，没写的种类留空）</label>
+            <textarea className="in" rows={5} defaultValue={Object.entries({ ...BL_TYPES_DEFAULT, ...(header.types || {}) }).map(([k, v]) => `${k}=${v}`).join('\n')} key={JSON.stringify(header.types || {})}
+              onBlur={(e) => { const t = Object.fromEntries(e.target.value.split('\n').map((x) => x.split('=').map((y) => y.trim())).filter((x) => x[0] && x[1])); setting('doc_header_gs', { ...header, types: t }); }} /></div>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <span className="small">大单建议打印：金额 ≥</span><input className="in" style={{ width: 120 }} inputMode="numeric" defaultValue={suggest.amount} key={`a${suggest.amount}`} onBlur={(e) => Number(e.target.value) !== Number(suggest.amount) && setting('bl_suggest', { ...suggest, amount: Number(e.target.value) || 0 })} />
           <span className="small">XOF 或件数 ≥</span><input className="in" style={{ width: 90 }} inputMode="numeric" defaultValue={suggest.qty} key={`q${suggest.qty}`} onBlur={(e) => Number(e.target.value) !== Number(suggest.qty) && setting('bl_suggest', { ...suggest, qty: Number(e.target.value) || 0 })} />
@@ -126,10 +129,13 @@ const RULES = [
   ['volume_shift', 'pct', '客户提货量月对比：涨跌超过多少算变化大', 50, '%'],
   ['draft_rules', 'days', '草稿（等定档的报价）几天没人动自动作废', 7, '天'],
   ['discrepancy_window', 'hours', '收货差异：签收后多少小时内反馈算正常', 24, '小时'],
+  ['price_rules', 'odd_pct', '改价：单价偏离客户档位价超过多少算「异价单」', 10, '%'],
+  ['writeoff_rules', 'max_xof', '抹零：一张单最多抹多少', 100, 'XOF'],
+  ['cash_rules', 'held_days', '员工代收：钱在员工手上超过几天没交就进紧急', 1, '天'],
 ];
 export function RulesPanel() {
   const { org, role, toast, refresh } = useApp();
-  const { data } = useData(() => q(`select key, value from app.org_settings where org_id = $1 and key = any($2)`, [org, [...new Set(RULES.map((r) => r[0])), 'freight_rules']]), [org]);
+  const { data } = useData(() => q(`select key, value from app.org_settings where org_id = $1 and key = any($2)`, [org, [...new Set(RULES.map((r) => r[0])), 'freight_rules', 'rep_debt_rules']]), [org]);
   const [draft, setDraft] = useState({});
   if (!data) return null;
   const cur = (k, f, d) => draft[k + f] ?? String(data.find((x) => x.key === k)?.value?.[f] ?? d);
@@ -141,6 +147,8 @@ export function RulesPanel() {
         {RULES.map(([k, f, label, d, unit]) => (
           <div key={k + f} className="row" style={{ gap: 10, flexWrap: 'wrap' }}><span style={{ minWidth: 300, flex: '1 1 300px' }}>{label}</span>
             <input className="in" style={{ width: 90 }} inputMode="numeric" value={cur(k, f, d)} onChange={(e) => setDraft({ ...draft, [k + f]: e.target.value.replace(/[^\d.]/g, '') })} onBlur={(e) => { if (draft[k + f] != null && Number(e.target.value) > 0) save(k, f, e.target.value); }} /><span className="small muted" style={{ width: 40 }}>{unit}</span></div>))}
+        <label className="row" style={{ gap: 10, flexWrap: 'wrap' }}><span style={{ minWidth: 300, flex: '1 1 300px' }}>销售员名下有隔天没收回的欠款 → 他名下所有客户暂不出货（中方可对单放行）</span>
+          <input type="checkbox" checked={data.find((x) => x.key === 'rep_debt_rules')?.value?.on !== false} onChange={async (e) => { try { await call(role, `select app.set_org_setting($1,$2,$3)`, [org, 'rep_debt_rules', JSON.stringify({ on: e.target.checked })]); toast(e.target.checked ? '已打开' : '已关掉'); refresh(); } catch (er) { toast(friendlyError(er), 'err'); } }} /><span className="small muted">开着</span></label>
         <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}><span style={{ minWidth: 300, flex: '1 1 300px' }}>我们出的运费记在哪个账户</span>
           <input className="in" style={{ width: 140 }} value={cur('freight_rules', 'account', 'Wave-XOF')} onChange={(e) => setDraft({ ...draft, freight_rulesaccount: e.target.value })} onBlur={(e) => { if (draft.freight_rulesaccount != null && e.target.value.trim()) save('freight_rules', 'account', e.target.value.trim()); }} /><span className="small muted">账户名要和「资金账户」里的一样</span></div>
       </div>

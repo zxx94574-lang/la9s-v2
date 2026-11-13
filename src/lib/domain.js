@@ -164,6 +164,7 @@ export function priceLevel(price, tierPrice, th = getThresholds()) {
 
 export const EVENT_LABELS = {
   quote_approved: '中方批准', quote_rejected: '中方没批', approval_resubmitted: '重新提交审批', approval_auto_cleared: '客户付款后自动通过审批',
+  price_decided: '中方审批改价', payment_appeal: '付款申诉', payment_appeal_decided: '中方处理付款申诉',
   debt_released: '中方放行（欠款）', fx_set: '设定汇率', price_requested: '员工申请改价',
   hotline_busy: '客户忙，稍后再联系', bl_issued: '出 BL 编号', customer_received: '客户签收', balance_confirmed: '客户确认对账', deal_split: '拆单：一部分拆到新单', partial_reason: '只发一部分的原因', split_created: '从原单拆出', issue_reported: '⚠ 上报问题', issue_closed: '✓ 中方处理了上报',
   quote_created: '创建报价', quote_edited: '修改报价', price_set: '中方改价', hotline_confirmed: '热线确认',

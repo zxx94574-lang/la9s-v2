@@ -42,7 +42,7 @@ export async function payrollWorkbook({ month, header, lines }) {
     if (l) {
       r.getCell(2).value = l.snap_name; r.getCell(3).value = l.snap_dept || ''; r.getCell(4).value = l.snap_position || '';
       r.getCell(5).value = N(l.days_worked);
-      [[6, l.base], [7, l.allowance], [8, l.incentive], [9, l.prime_team], [10, l.cnps], [11, l.deduction]].forEach(([c, v]) => { if (N(v)) r.getCell(c).value = N(v); });
+      [[6, l.base], [7, l.allowance], [8, N(l.incentive) + N(l.wh_comm)],   /* 仓库提成并进「个人奖金」这一栏 (表样不加列) */ [9, l.prime_team], [10, l.cnps], [11, l.deduction]].forEach(([c, v]) => { if (N(v)) r.getCell(c).value = N(v); });
       r.getCell(13).value = paid ? 'PAYÉ / 已付' : 'EN ATTENTE / 待付';
       if (l.paid_on || header.paid_on) { r.getCell(14).value = new Date(`${(l.paid_on || header.paid_on).slice(0, 10)}T00:00:00Z`); r.getCell(14).numFmt = 'yyyy-mm-dd'; }
       r.getCell(15).value = approved ? 'APPROUVÉ / 已批' : '';

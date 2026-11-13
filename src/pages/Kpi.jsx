@@ -143,11 +143,12 @@ export default function Kpi() {
         ]} />
       </div>
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-h"><h2>仓库提成（正确出货每片 {data.rate} XOF）</h2><Info>按出库的片数算给这张单的复核人（没有复核人就给找货人）。这张单被记了发错的责任（少发 / 多发 / 发错型号），整张单的提成取消，下面列出是哪几张。月底算工资照这张表。每片多少钱在「设置 → 规则参数」里可调。</Info></div>
+        <div className="card-h"><h2>仓库准确绩效 · 提成（正确出货每片 {data.rate} XOF）</h2><Info>按出库的片数算给这张单的复核人（没有复核人就给找货人）。这张单被记了发错的责任（少发 / 多发 / 发错型号），整张单的提成取消，下面列出是哪几张。月底算工资照这张表。每片多少钱在「设置 → 规则参数」里可调。</Info></div>
         <Grid id="kpi-com" rows={calc.comPeople} empty="这段时间没有出库" columns={[
           { key: 'emp_no', label: '工号', w: 80 }, { key: 'name', label: '谁', w: 120, render: (r) => <b>{r.name}</b> },
           { key: 'deals', label: '经手几单', w: 90, type: 'number' }, { key: 'pieces', label: '出库片数', w: 100, type: 'number', render: (r) => qtyf(r.pieces) },
           { key: 'okPieces', label: '算提成的片数', w: 120, type: 'number', render: (r) => <b>{qtyf(r.okPieces)}</b> },
+          { key: 'acc', label: '准确率（按片）', w: 120, type: 'number', value: (r) => (r.pieces ? Math.round(r.okPieces / r.pieces * 1000) / 10 : null), render: (r) => { if (!r.pieces) return ''; const v = Math.round(r.okPieces / r.pieces * 1000) / 10; return <span className={`pill ${v >= 99.5 ? 'green' : v >= 97 ? 'amber' : 'red'}`}>{v}%</span>; } },
           { key: 'amount', label: '提成 XOF', w: 120, type: 'number', render: (r) => <b>{qtyf(r.amount)}</b> },
           { key: 'voided', label: '发错被取消的单', w: 320, value: (r) => r.voided.length, render: (r) => (r.voided.length ? <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}><span className="pill red">{r.voided.length} 单 · 少拿 {qtyf(r.lost)}</span>{r.voided.map((v) => <DealLink key={v.deal_id} id={v.deal_id} no={v.biz_no} />)}</span> : <span className="pill green">0</span>) },
         ]} />

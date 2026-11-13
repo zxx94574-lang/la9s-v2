@@ -73,8 +73,9 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
   }, [foreign, base, data]);
   const dbRate = !foreign ? 1 : currency === foreign ? N(rate) : (N(rate) > 0 ? 1 / N(rate) : 0);
   const feePct = N(data?.feeRates?.[method]);
-  const feeV = feeTouched ? N(fee) : (feePct > 0 && N(amount) > 0 ? Math.round(N(amount) * feePct / (100 - feePct) * (currency === 'XOF' ? 1 : 100)) / (currency === 'XOF' ? 1 : 100) : 0);
-  const credit = N(amount) + (bearer === 'company' ? feeV : 0);   // 冲客户账 = 到账 (+ 我方出的手续费)
+  // B7 (Frank 11-13): 客户账一律按全额冲 —— 到账被扣了手续费才填; 手续费另记一笔「办公费」支出. 不再自动带出, 不再选谁出.
+  const feeV = feeTouched ? N(fee) : 0;
+  const credit = N(amount) + feeV;   // 冲客户账 = 到账 (+ 我方出的手续费)
   const conv = Math.round(credit * dbRate * (acc === 'XOF' ? 1 : 100)) / (acc === 'XOF' ? 1 : 100);
   const accOpts = (data?.accounts || []).filter((a) => a.currency === currency);
   const accAuto = accOpts.find((a) => a.kind === method) || (accOpts.length === 1 ? accOpts[0] : null);
@@ -107,12 +108,11 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
     if (cap > 0 && conv > cap && !overOk) { setOverOk(true); return toast(`实收 ${money(conv, acc)} 比${lockDeal ? '本单待付' : '全部欠款'} ${money(cap, acc)} 多 ${money(conv - cap, acc)}，多出的记为预付。核对过金额再点一次「确认收款」`, 'err'); }
     if (!proof) return toast(method === 'cash' ? '现金也要传凭证：在客户群里说「收到现金 XX」，客户回复确认后截图传上来' : `${PAY_METHODS[method]} 收款请上传付款截图`, 'err');
     if (mode === 'specific' && !picked.length) return toast('请点选要冲的单', 'err');
-    if (feeV > 0 && !bearer) return toast('有手续费，请选谁出（客户出 / 我方出）', 'err');
     if (byStaff && !collector) return toast('员工代收：选是哪位员工收的', 'err');
     setBusy(true);
     try {
       await call(role, `select app.record_receipt2($1,$2)`, [org, JSON.stringify({ customer_id: customer, received_on: date, amount_landed: N(amount), currency, method, account_currency: acc, rate: dbRate,
-        mode, targets: mode === 'specific' ? picked : [], proof: proof || null, fee: feeV, fee_bearer: feeV > 0 ? bearer : null, payer: payer || null,
+        mode, targets: mode === 'specific' ? picked : [], proof: proof || null, fee: feeV, fee_bearer: feeV > 0 ? 'company' : null, payer: payer || null,
         account_id: byStaff ? null : (accSel || null), collector_employee_id: byStaff ? collector : null })]);
       toast(byStaff ? '收款已登记：客户账已冲，钱挂在员工名下（在途），交到公司再确认到账' : '收款已登记（待核对到账），客户总账已更新');
       const sum = { amount: N(amount), currency, conv, acc, hits: hits.map(([id, v]) => [nameOf(id), v]), left: preview.left };
@@ -164,9 +164,8 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
           )}
           <FRow label="手续费">
             <input className="in" inputMode="decimal" style={{ width: 100 }} value={feeTouched ? fee : (feeV ? String(feeV) : '')} onChange={(e) => { setFeeTouched(true); setFee(e.target.value.replace(/[^\d.]/g, '')); }} placeholder="0" />
-            <span className="small muted">{currency}{feePct > 0 && !feeTouched ? `（${PAY_METHODS[method]} 默认 ${feePct}%）` : ''}</span>
-            {feeV > 0 && <span className="chips">{[['customer', '客户出'], ['company', '我方出']].map(([k, l]) => <button type="button" key={k} className={`chip ${bearer === k ? 'on' : ''} ${errs && !bearer ? 'err' : ''}`} onClick={() => setBearer(k)}>{l}</button>)}</span>}
-            <Info>客户出：客户多付了手续费（欠 10,000 付 10,100），冲客户账 = 到账金额。我方出：客户只付了 9,900，冲客户账 = 到账 + 手续费，差的记成我方手续费支出。手续费不算客户欠款。</Info>
+            <span className="small muted">{currency}{feeV > 0 ? `　客户账冲 ${money(credit, currency)}（到账 ${money(N(amount), currency)} + 手续费 ${money(feeV, currency)}）` : feePct > 0 ? `（${PAY_METHODS[method]} 一般扣 ${feePct}%；没被扣就不填）` : ''}</span>
+            <Info>客户账按他该付的全额冲。钱到账时被 Wave / 银行扣了手续费（客户付 10,000，只到 9,900）→ 到账填 9,900、手续费填 100：客户账冲 10,000，另记一笔 100 的「办公费」支出。客户自己多付了手续费、到账就是全额的，这里不填。</Info>
           </FRow>
           <FRow label="进哪个账户">
             {method === 'cash' && <span className="chips"><button type="button" className={`chip ${!byStaff ? 'on' : ''}`} onClick={() => setByStaff(false)}>交到公司</button><button type="button" className={`chip ${byStaff ? 'on' : ''}`} onClick={() => setByStaff(true)}>员工代收</button></span>}
@@ -262,7 +261,7 @@ export function RcvStatus({ r }) {
   return (
     <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
       <span className={`pill ${tone}`}>{label}</span>
-      {N(r.fee) > 0 && <span className="small muted">手续费 {money(r.fee, r.currency)}（{r.fee_bearer === 'company' ? '我方出' : '客户出'}）</span>}
+      {N(r.fee) > 0 && <span className="small muted">手续费 {money(r.fee, r.currency)}（{r.fee_bearer === 'company' ? '记办公费' : '客户出'}）</span>}
       {r.payer && <span className="small muted">付款人 {r.payer}</span>}
     </span>
   );

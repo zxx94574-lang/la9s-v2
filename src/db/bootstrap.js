@@ -83,6 +83,7 @@ export async function seedDemo(db) {
     insert into app.countries values ('CI','科特迪瓦','Côte d''Ivoire','XOF') on conflict do nothing;`);
   const org = (await one(`insert into app.orgs (kind,name,country,base_currency,doc_prefix) values ('hq','LA&9S Côte d''Ivoire','CI','XOF','CI') returning id`)).id;
 
+  await db.query(`insert into app.org_settings (org_id, key, value) values ($1,'rep_debt_rules','{"on":false}')`, [org]);   // 种子里的单用过去的日期出库, 造数据时先关掉
   const emp = async (short, full, dept, pos, role, extra = {}) =>
     (await one(`insert into app.employees (org_id, short_name, full_name, department, position, sys_role, email, phone, joined_on, sales_channel)
       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`, [org, short, full, dept, pos, role, extra.email || null, extra.phone || null, extra.joined || null, extra.channel || null])).id;
@@ -341,5 +342,6 @@ export async function seedDemo(db) {
   if (shipped) await as(USERS.manager, `select app.issue_bl($1)`, [shipped]);
   await as(USERS.admin, `update app.customers set contact_name = 'M. ' || initcap(split_part(name, ' ', 1)) where org_id = $1 and status = 'active' and contact_name is null`, [org]);
 
+  await db.query(`update app.org_settings set value = '{"on":true}' where org_id = $1 and key = 'rep_debt_rules'`, [org]);   // 种子数据造完再打开「销售员欠款不出货」
   return { org };
 }

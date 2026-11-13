@@ -62,9 +62,11 @@ export default function Kingdee() {
       <div className="card">
         <div className="tabs"><button type="button" className={tab === 'queue' ? 'on' : ''} onClick={() => setTab('queue')}>出库单录金蝶 <span className="queue-n">{counts.ready || ''}</span></button>
           <button type="button" className={tab === 'grn' ? 'on' : ''} onClick={() => setTab('grn')}>采购入库 <span className="queue-n">{data.grn.filter((g) => g.kd_status === 'ready').length || ''}</span></button>
+          <button type="button" className={tab === 'misc' ? 'on' : ''} onClick={() => setTab('misc')}>其他出入库 / 调拨 / 退货</button>
           <button type="button" className={tab === 'stock' ? 'on' : ''} onClick={() => setTab('stock')}>库存对账</button></div>
         {tab === 'grn' && <GrnList rows={data.grn} />}
-        {tab === 'grn' ? null : tab === 'queue' ? (
+        {tab === 'misc' && <MiscList />}
+        {tab === 'grn' || tab === 'misc' ? null : tab === 'queue' ? (
           <Grid id="kd-queue" table="kingdee_outbox" columns={cols} rows={rows} onRowClick={(r) => go('deal/' + r.deal_id)} empty="没有"
             tools={<div className="chips">{[['ready', '待录'], ['saved', '已保存'], ['submitted', '待审核'], ['synced', '已审核'], ['await_receipt', '待签收'], ['', '全部']].map(([k, l]) =>
               <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} {k ? counts[k] : data.rows.length}</button>)}</div>} />
@@ -176,5 +178,36 @@ function GrnList({ rows }) {
           </div>);
       })}
     </div>
+  );
+}
+
+
+// 11-13: 销售出库以外会动库存的事 (收货差异补扣 / 冲回、冻结转待检、退货入库、检验分流) → 都列成金蝶待录, 录完填金蝶单号
+const MISC_REASON = { discrepancy_back: '收货差异：货回仓', discrepancy_fix: '收货差异：修正', hold_to_pending: '问题库存转待检仓', inspect_good: '退货检验：好货回原仓', inspect_scrap: '退货检验：坏货进报废仓', return_in: '客户退货入待检仓', adjust: '手工调整' };
+function MiscList() {
+  const { org, role, toast, refresh } = useApp();
+  const [f, setF] = useState('ready'); const [sel, setSel] = useState(new Set()); const [no, setNo] = useState('');
+  const { data } = useData(() => q(`select k.*, p.code, p.model, c.name as category, p.id as product_id, w.code as warehouse, s.bin
+    from app.kingdee_misc k join app.stock_items s on s.id = k.stock_item_id join app.products p on p.id = s.product_id
+    join app.categories c on c.id = p.category_id join app.warehouses w on w.id = s.warehouse_id
+    where k.org_id = $1 order by k.at desc limit 500`, [org]), [org]);
+  if (!data) return <div className="card-b muted">加载中…</div>;
+  const rows = data.filter((r) => !f || r.status === f);
+  const done = async (skip) => { try { const n = (await call(role, `select app.kingdee_misc_done($1,$2,$3) as n`, [[...sel], no, skip]))[0].n; toast(skip ? `${n} 条标成不用录` : `${n} 条已录金蝶 ${no}`); setSel(new Set()); setNo(''); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (
+    <Grid id="kd-misc" rows={rows} selectable={['admin', 'manager', 'finance'].includes(role) ? { selected: sel, onChange: setSel } : undefined} empty="没有要录的"
+      tools={<><div className="chips">{[['ready', '待录'], ['done', '已录'], ['skip', '不用录'], ['', '全部']].map(([k, l]) => <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} {k ? data.filter((r) => r.status === k).length : data.length}</button>)}</div>
+        {sel.size > 0 && <span className="row" style={{ gap: 6 }}><input className="in" style={{ width: 150 }} placeholder="金蝶单号" value={no} onChange={(e) => setNo(e.target.value)} />
+          <button type="button" className="btn sm primary" disabled={!no.trim()} onClick={() => done(false)}>选中的 {sel.size} 条已录金蝶</button><button type="button" className="btn sm" onClick={() => done(true)}>不用录</button></span>}</>}
+      columns={[
+        { key: 'at', label: '什么时候', w: 130, value: (r) => r.at, render: (r) => dt(r.at) },
+        { key: 'doc_type', label: '金蝶单据', w: 120, render: (r) => <b>{r.doc_type}</b> },
+        { key: 'reason', label: '怎么来的', w: 190, value: (r) => MISC_REASON[r.reason] || r.reason },
+        { key: 'warehouse', label: '仓库', w: 80 }, { key: 'code', label: '编码', w: 100 }, { key: 'category', label: '种类', w: 90 },
+        { key: 'model', label: '型号', w: 110, render: (r) => <ModelLink id={r.product_id} model={r.model} /> },
+        { key: 'qty', label: '数量（+ 进 / − 出）', w: 130, type: 'number', render: (r) => <b style={{ color: r.qty < 0 ? 'var(--red)' : undefined }}>{r.qty > 0 ? '+' : ''}{qty(r.qty)}</b> },
+        { key: 'status', label: '状态', w: 90, value: (r) => r.status, render: (r) => <Pill tone={r.status === 'ready' ? 'amber' : r.status === 'done' ? 'green' : 'gray'}>{r.status === 'ready' ? '待录' : r.status === 'done' ? '已录' : '不用录'}</Pill> },
+        { key: 'remote_no', label: '金蝶单号', w: 130 },
+      ]} />
   );
 }
