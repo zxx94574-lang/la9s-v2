@@ -152,6 +152,13 @@ async function applyPacks(onProgress) {
     } finally { await db.query(`select set_config('request.jwt.claim.sub', '', false)`); }
     await db.query(`insert into public.demo_meta values ($1,'1') on conflict (k) do nothing`, [k]);
   }
+  // 每个公司都要有的资金账户 (0044 四个 + 0048 Roland 公户): 新装的库迁移跑在建公司之前, 补一次; 已有同名不碰
+  if (!(await db.query(`select 1 from public.demo_meta where k = 'acc:0048'`)).rows.length) {
+    await db.query(`select app.ensure_cash_accounts(id) from app.orgs`);
+    const f = Object.entries(files).find(([n]) => n.includes('0048_roland_accounts'));
+    if (f) await db.exec(f[1]);
+    await db.query(`insert into public.demo_meta values ('acc:0048','1') on conflict (k) do nothing`);
+  }
   for (const [name, url, fn] of PACKS) {
     let pack = null;
     try { const r = await fetch(url, { cache: 'no-store' }); if (r.ok) pack = await r.json(); } catch { /* 没有这个包 */ }

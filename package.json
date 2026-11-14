@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "node scripts/serve.mjs dist 5173",
-    "test": "node --test tests/rules.test.mjs tests/flow.test.mjs tests/security.test.mjs tests/demo-seed.test.mjs tests/crm.test.mjs tests/cash.test.mjs tests/supply.test.mjs tests/modules.test.mjs tests/approval.test.mjs tests/accounts.test.mjs tests/v9.test.mjs tests/v10.test.mjs tests/v11.test.mjs tests/v12.test.mjs tests/v13.test.mjs tests/v14.test.mjs tests/v15.test.mjs tests/v16.test.mjs tests/v17.test.mjs tests/v18.test.mjs tests/v19.test.mjs"
+    "test": "node --test tests/rules.test.mjs tests/flow.test.mjs tests/security.test.mjs tests/demo-seed.test.mjs tests/crm.test.mjs tests/cash.test.mjs tests/supply.test.mjs tests/modules.test.mjs tests/approval.test.mjs tests/accounts.test.mjs tests/v9.test.mjs tests/v10.test.mjs tests/v11.test.mjs tests/v12.test.mjs tests/v13.test.mjs tests/v14.test.mjs tests/v15.test.mjs tests/v16.test.mjs tests/v17.test.mjs tests/v18.test.mjs tests/v19.test.mjs tests/v20.test.mjs"
   },
   "author": "",
   "license": "ISC",
