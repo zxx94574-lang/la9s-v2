@@ -273,8 +273,8 @@ export default function App() {
               <img className="mlogo" src="./la9s-logo.png" alt="LA&9S" onClick={() => go('dashboard')} />
               <span className="brand">LA&9S<small>{portal ? 'Commande client · 客户下单' : '科特迪瓦 · 中方管理'}</small></span>
               {!portal && <span className="navhist">
-                <button type="button" className="btn sm" disabled={!navPos.back} onClick={navBack} title="回到上一页（档案、滚到哪都照原样）">← 返回</button>
-                <button type="button" className="btn sm" disabled={!navPos.fwd} onClick={navFwd} title="回到刚才那一页">前进 →</button>
+                <button type="button" className="btn sm" disabled={!navPos.back} onClick={navBack} title="回到上一页（档案、滚到哪都照原样）">←<span className="hide-m"> 返回</span></button>
+                <button type="button" className="btn sm hide-m" disabled={!navPos.fwd} onClick={navFwd} title="回到刚才那一页">前进 →</button>
               </span>}
             </div>
             <div className="top-actions">
@@ -305,10 +305,10 @@ export default function App() {
                 )}
               </span>
               {cust && <button type="button" className="btn sm" onClick={() => { setCustomerSession(null); go('login'); setTick((x) => x + 1); }} title={cust.login}>退出登录</button>}
-              {!portal && <button type="button" className="btn icon-btn" onClick={() => go('todo')} aria-label="待办" title="我的待办">
+              {!portal && <button type="button" className="btn icon-btn hide-m" onClick={() => go('todo')} aria-label="待办" title="我的待办">
                 🔔{(overdueN > 0 || todoCount > 0) && <span className={`badge ${overdueN ? 'hot' : ''}`} title={overdueN ? `${overdueN} 张超过 24 小时没发货` : ''}>{overdueN || todoCount}</span>}
               </button>}
-              <Info>{REAL ? '真实数据快照（金蝶 10-19 库存 / 在途，飞书物料与客户；应收还没导）。在这里操作只存在本浏览器，不会写回金蝶 / 飞书。' : '演示版 · 虚构数据。'}数据保存在本浏览器，刷新不丢。未连接金蝶 / WhatsApp。</Info>
+              <span className="hide-m"><Info>{REAL ? '真实数据快照（金蝶 10-19 库存 / 在途，飞书物料与客户；应收还没导）。在这里操作只存在本浏览器，不会写回金蝶 / 飞书。' : '演示版 · 虚构数据。'}数据保存在本浏览器，刷新不丢。未连接金蝶 / WhatsApp。</Info></span>
               <button type="button" className="btn icon-btn" onClick={() => setSettings(true)} aria-label="设置" title="设置">⚙</button>
             </div>
           </header>

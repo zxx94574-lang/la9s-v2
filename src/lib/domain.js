@@ -94,12 +94,12 @@ export const STATUS = {
 // 11-09 Frank (第 14 / 18 / 19 条): 6 步. 底层状态不变.
 //   报价·确认 → 找货·初检 → 销售订单·客户确认 → 复检打包·发货文件·出库 → 签收·对账 → 收款 (+ 退货)
 export const STEPS = [
-  { key: 'quote', label: '报价 · 确认', doc: 'quote_no' },
-  { key: 'pick', label: '找货 · 初检', doc: 'pick_no' },
-  { key: 'so', label: '销售订单 · 客户确认', doc: 'so_no' },
-  { key: 'ship', label: '复检打包 · 发货文件 · 出库' },
-  { key: 'sign', label: '签收 · 对账' },
-  { key: 'pay', label: '收款' },
+  { key: 'quote', label: '报价 · 确认', short: '报价', doc: 'quote_no' },
+  { key: 'pick', label: '找货 · 初检', short: '找货', doc: 'pick_no' },
+  { key: 'so', label: '销售订单 · 客户确认', short: '销售单', doc: 'so_no' },
+  { key: 'ship', label: '复检打包 · 发货文件 · 出库', short: '出库' },
+  { key: 'sign', label: '签收 · 对账', short: '签收' },
+  { key: 'pay', label: '收款', short: '收款' },
 ];
 export const LAST_STEP = STEPS.length - 1;   // 5
 // 每个状态 = 最后一个已完成步骤的下标 (-1 = 第一步还在做); shipped 看签收情况 (reachedStep 里算)

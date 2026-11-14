@@ -88,7 +88,7 @@ function mergeDup(lines) {
 
 const BLANK = () => ({ key: newKey(), product: null, code_in: '', category_id: '', model: '', qty_req: '0', note: '' });
 
-export default function LineEntry({ id, catalog, categories, tier, lines, setLines, showErrors, showPrice = true, currency = 'XOF', canPrice = false, priceMode = null, onProductOpen, errors, fx = null }) {
+export default function LineEntry({ id, catalog, categories, tier, lines, setLines, showErrors, showPrice = true, currency = 'XOF', canPrice = false, priceMode = null, onProductOpen, errors, fx = null, extraTools = null }) {
   const { toast, openArchive } = useApp();
   const openP = onProductOpen || (openArchive ? (pr) => openArchive({ kind: 'product', product: pr, tier }) : null);
   const [unmet, setUnmet] = useState(false);
@@ -354,7 +354,7 @@ export default function LineEntry({ id, catalog, categories, tier, lines, setLin
           onUnpick={(p) => { const next = latest.current.filter((x) => x.product?.id !== p.id); latest.current = next; h.commit(next, `去掉 ${p.model}`); toast(`已去掉 ${p.model}`); }}
           extra={<>
             <button type="button" className="btn" onClick={() => setPickList(true)} title="大表格勾选，一次加很多">☰ 选货清单</button>
-            <button type="button" className="btn" onClick={() => setUnmet(true)} title="客户要的型号我们没有建档 → 记录为未满足需求">＋ 补录需求</button></>} />
+            <button type="button" className="btn" onClick={() => setUnmet(true)} title="客户要的型号我们没有建档 → 记录为未满足需求">＋ 补录需求</button>{extraTools}</>} />
       </div>
       <div ref={scope} id={gid}><Grid id={id}
         tools={<>

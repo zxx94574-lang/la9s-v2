@@ -41,7 +41,7 @@ export default function ModelPicker({ catalog, categories, tier, onPick, onUnpic
         {categories.filter((c) => !catalog || catalog.some((x) => x.category_id === c.id)).map((c) => <button type="button" key={c.id} className={`chip ${cat === c.id ? 'on' : ''}`} onClick={() => { setCat(c.id); setOpen(true); input.current?.focus(); }}>{c.name}</button>)}
       </div>
       <div className="row" style={{ alignItems: 'stretch' }}>
-        <div className="picker grow" ref={box}>
+        <div className={`picker grow ${open ? 'open' : ''}`} ref={box}>
           <input ref={input} className="in" value={text} placeholder="⌕ 加一行：输入型号 / 编码 / 通用型号，↑↓ 选择，Enter 添加"
             onFocus={() => setOpen(true)} onChange={(e) => { setText(e.target.value); setOpen(true); setFocus(0); }} onKeyDown={key} />
           {open && (

@@ -4,21 +4,23 @@ import { createClient } from '@supabase/supabase-js';
 import { inlineSql } from '../lib/sqlinline.js';
 
 const URL = import.meta.env.VITE_SB_URL, KEY = import.meta.env.VITE_SB_KEY;
-export const sb = createClient(URL, KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+// 懒创建: 浏览器演示版 / 真实数据版没有服务器地址, 引入这个文件不能报错
+let _sb = null;
+const sbc = () => (_sb ||= createClient(URL, KEY, { auth: { persistSession: true, autoRefreshToken: true } }));
 
 export const loginEmail = (id) => {
   const s = String(id || '').trim().toLowerCase();
   return s.includes('@') ? s : `${s.replace(/_/g, '-')}@demo.la9s.com`;
 };
 export async function login(id, password) {
-  const { error } = await sb.auth.signInWithPassword({ email: loginEmail(id), password });
+  const { error } = await sbc().auth.signInWithPassword({ email: loginEmail(id), password });
   if (error) throw new Error(/invalid/i.test(error.message) ? '工号或密码不对' : error.message);
 }
-export async function logout() { await sb.auth.signOut(); }
+export async function logout() { await sbc().auth.signOut(); }
 
 const clean = (s) => s.trim().replace(/;+\s*$/, '');
 export async function exec(sql, params = []) {
-  const { data, error } = await sb.rpc('exec_sql', { q: clean(inlineSql(sql, params)) });
+  const { data, error } = await sbc().rpc('exec_sql', { q: clean(inlineSql(sql, params)) });
   if (error) {
     const e = new Error(error.message || String(error));
     if (/JWT|NOT_AUTHENTICATED/.test(e.message)) e.needLogin = true;
@@ -28,7 +30,7 @@ export async function exec(sql, params = []) {
 }
 
 export async function openServer() {
-  const { data } = await sb.auth.getSession();
+  const { data } = await sbc().auth.getSession();
   if (!data?.session) { const e = new Error('请先登录'); e.needLogin = true; throw e; }
   const rows = await exec('select org_id, roles from app.members where user_id = auth.uid()');
   if (!rows.length) { const e = new Error('这个账号还没有加入公司，请联系中方'); e.noMember = true; throw e; }

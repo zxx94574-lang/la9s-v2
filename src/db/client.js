@@ -220,3 +220,6 @@ export async function callValue(role, sql, params) {
   const rows = await call(role, sql, params);
   return rows[0] ? Object.values(rows[0])[0] : undefined;
 }
+
+// 只在本机 localhost 的演示 / 测试构建里露一个测试口子 (线上和 artifact 都没有)
+if (!SERVER && typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)) window.__la9sTest = { q, call: (...a) => call(...a) };

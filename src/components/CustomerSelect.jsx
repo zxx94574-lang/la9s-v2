@@ -25,13 +25,14 @@ export default function CustomerSelect({ customers, value, onChange, onlyActive 
   }, [customers, text, onlyActive]);
   const pick = (c) => { onChange(c.id); setOpen(false); setText(''); };
   return (
-    <div className="picker" ref={ref} style={{ minWidth: 240 }}>
+    <div className={`picker ${open ? 'open' : ''}`} ref={ref} style={{ minWidth: 240 }}>
       <button type="button" className="dp-btn" style={{ width: '100%', justifyContent: 'space-between' }} onClick={() => setOpen(!open)}>
         {cur ? <span><b>{cur.code || cur.temp_code}</b> · {cur.name} <span className="muted small">{cur.city}{dupOf(cur) > 1 && cur.phone ? ` · ${cur.phone}` : ''}</span><DupPill c={cur} />{cur.status === 'prospect' && <span className="pill amber" style={{ marginLeft: 6 }}>潜客</span>}{cur.supply === 'fob' && <span className="pill blue" style={{ marginLeft: 6 }}>FOB</span>}</span> : <span className="muted">选择客户…</span>}
         {cur && <TierPill tier={cur.tier} suffix={cur.status === 'prospect' ? '（估）' : ''} />}
       </button>
       {open && (
         <div className="sugg" style={{ minWidth: 320 }}>
+          <div className="sugg-h show-m"><span className="small muted">选客户</span><button type="button" className="btn sm" onClick={() => setOpen(false)}>关闭</button></div>
           <div style={{ padding: 8 }}>
             <input className="in" autoFocus placeholder="⌕ 编码 / 名字 / 城市" value={text} onChange={(e) => { setText(e.target.value); setFocus(0); }}
               onKeyDown={(e) => {

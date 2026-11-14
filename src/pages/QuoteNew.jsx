@@ -1,4 +1,5 @@
 import DebtBanner from '../components/DebtBanner.jsx';
+import { useLastPrices, diffRows, LastPriceBar, PriceHistory } from '../components/LastPrice.jsx';
 import React, { useEffect, useState } from 'react';
 import { q, call, callValue } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
@@ -72,6 +73,9 @@ export default function QuoteNew() {
     return () => clearTimeout(h);
   }, [date, customer, currency, fxIn, note, lines, restore, org, role, realLines.length]);
 
+  // 上次成交价 (11-14): 这个客户以前谈好的价, 和现在行上的价不一样就提示
+  const lastPrices = useLastPrices(customer || null);
+  const [histOpen, setHistOpen] = useState(false);
   if (!data) return <div className="empty">加载中…</div>;
   const cust = data.customers.find((c) => c.id === customer);
   const tier = cust?.tier;
@@ -113,6 +117,11 @@ export default function QuoteNew() {
         : { req_category_id: l.category_id, req_model: l.model, qty_req: Number(l.qty_req), note: l.note || null }));
       const id = await callValue(role, `select app.create_quote_fx($1,$2,$3,$4,$5,$6)`, [org, customer, currency, JSON.stringify(payload), note || null, fx]);
       if (draftId) await call(role, `select app.delete_quote_draft($1)`, [draftId]).catch(() => {});
+      // 员工没沿用上次谈好的价 → 自动报给中方 (中方自己建的单不报)
+      if (!canPrice && lpDiffs.length) {
+        const txt = `报价没用上次成交价：${lpDiffs.slice(0, 8).map((d) => `${d.model} 上次 ${money(d.last.unit_price, currency)}（${d.last.biz_no}），这次 ${money(d.now, currency)}`).join('；')}${lpDiffs.length > 8 ? ` 等 ${lpDiffs.length} 个型号` : ''}`;
+        await call(role, `select app.report_issue($1,$2,'quote','系统发现 · 没用上次成交价',$3)`, [org, id, txt]).catch(() => {});
+      }
       refresh(); setPriceOk(false);
       toast(fin.lines.some((l) => Number(l.req_price) > 0) ? '报价单已保存；有申请改价的行，已送中方审批，批了才能往下推' : '报价单已保存，下面接着联系客户确认');
       go('deal/' + id);
@@ -127,6 +136,15 @@ export default function QuoteNew() {
 
   const t = lineTotals(lines, tier, showPrice, fx);
   // 板块 (11-01 布局编辑样板页): 中方可以调顺序 / 宽度 / 隐藏; 比如明细 8 + 合计和按钮 4 = 按钮放到右侧栏
+  const nowPrice = (l) => (Number(l.req_price) > 0 ? Number(l.req_price) : (Number(l.unit_price) > 0 ? Number(l.unit_price) : tierPrice(l, tier, fx)));
+  const lpDiffs = tier ? diffRows(lines.filter((l) => l.product).map((l) => ({ key: l.key, product_id: l.product.id, model: l.product.model, now: nowPrice(l) })), lastPrices, currency) : [];
+  const applyLast = () => {
+    const by = Object.fromEntries(lpDiffs.map((d) => [d.key, d.last.unit_price]));
+    setCellErrs(null); setPriceOk(false);
+    setLines(lines.map((l) => (by[l.key] == null ? l : canPrice ? { ...l, unit_price: String(Number(by[l.key])), req_price: '' } : { ...l, req_price: String(Number(by[l.key])) })));
+    toast(canPrice ? `已按上次成交价改了 ${lpDiffs.length} 行（标「手改」）` : `已按上次成交价填了 ${lpDiffs.length} 行申请价，保存后中方审批`);
+  };
+
   const blocks = [
     { id: 'head', title: '日期 · 客户 · 币种', span: 12, locked: true, render: () => (<>
       <div className="card card-b row" style={{ gap: 12, flexWrap: 'wrap' }}>
@@ -143,8 +161,13 @@ export default function QuoteNew() {
       {customer && <div style={{ marginTop: 10 }}><DebtBanner customerId={customer} /></div>}</>) },
     { id: 'lines', title: '询单明细', span: 12, locked: true, render: () => (
       <div className="card">
+        {showPrice && tier && priced && lpDiffs.length > 0 && <div style={{ padding: '10px 10px 0' }}>
+          <LastPriceBar diffs={lpDiffs} currency={currency}
+            onApply={priceMode ? applyLast : null} applyLabel={canPrice ? '全部沿用上次价格' : '申请沿用上次价格（要中方批）'} />
+        </div>}
         <LineEntry id="quote-new" catalog={data.catalog} categories={data.categories} tier={tier} lines={lines} setLines={(v) => { setCellErrs(null); setPriceOk(false); setLines(v); }}
           showErrors={errs} showPrice={showPrice && !!tier && priced} currency={currency} canPrice={canPrice && !!tier && priced} priceMode={tier && priced ? priceMode : null} fx={fx}
+          extraTools={showPrice && customer ? <button type="button" className="btn" onClick={() => setHistOpen(true)} title="这个客户以前每张单成交的价，不用跳页">🕘 历史价格</button> : null}
           onProductOpen={(p) => setProdOpen(p)} errors={cellErrs} />
         {canPrice && tier && <div className="card-b hint" style={{ borderTop: '1px solid var(--line-2)' }}>单价格子里可以直接给价（谈好的价）：标 ✎ 手改、报价单上留痕；没给的按「{cust?.tier}」档位价。</div>}
         {currency !== 'XOF' && <div className="card-b hint">{fx ? `价格 = XOF 档位价 ÷ ${fx}（按你填的汇率，保留两位小数），保存时汇率锁在这张单上。` : `先在上面填汇率（1 ${currency} = ? XOF），价格才会显示。`}</div>}
@@ -172,7 +195,7 @@ export default function QuoteNew() {
             <React.Fragment key={s.key}>
               {i > 0 && <span className="flow2-line" />}
               <button type="button" className={`flow2-step ${i === 0 ? 'now viewing' : ''}`} disabled={i > 0}>
-                <span className="c">{i + 1}</span><span className="l">{s.label}</span><span className="d">{i === 0 ? '新订单' : ''}</span>
+                <span className="c">{i + 1}</span><span className="l"><span className="hide-m">{s.label}</span><span className="show-m">{s.short}</span></span><span className="d">{i === 0 ? '新订单' : ''}</span>
               </button>
             </React.Fragment>))}
         </div>
@@ -182,6 +205,7 @@ export default function QuoteNew() {
           {role === 'admin' && <PageGear items={[['种类顺序（所有人同款）', () => setCatOrderOpen(true)], [edit ? '退出调整版面' : '调整版面', () => setLayoutEdit(!edit)]]} />}
         </div>
       </div>
+      {histOpen && customer && <PriceHistory customerId={customer} customerName={cust?.name} productIds={lines.filter((l) => l.product).map((l) => l.product.id)} onClose={() => setHistOpen(false)} />}
       {prodOpen && <ProductDrawer product={prodOpen} tier={tier} onClose={() => setProdOpen(null)} />}
       {custOpen && cust && <CustomerDrawer id={cust.id} onClose={() => setCustOpen(false)} />}
       {catOrderOpen && <CatOrderModal categories={data.categories} onClose={() => setCatOrderOpen(false)} />}

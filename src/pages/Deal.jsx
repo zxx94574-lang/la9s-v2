@@ -2,13 +2,14 @@
 // the current step shows its action, a finished step shows a read-only record (待改 13).
 // Going back = 「撤回到上一步」 with a reason (待改 14); cancelled deals can be restored (待改 16).
 import DebtBanner from '../components/DebtBanner.jsx';
+import { DealLastPrice } from '../components/LastPrice.jsx';
 import { dealLight, stuckOf } from '../lib/domain.js';
 import React, { useEffect, useRef, useState } from 'react';
 const N = (v) => Number(v) || 0;
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { TierPill, Light, useApp, useData, Pill, Modal, OptionNote, Info } from '../components/ui.jsx';
-import { STATUS, STEPS, LAST_STEP, reachedStep, EVENT_LABELS, ROLES, CONFIRM_METHODS, NOTE_OPTIONS, TIERS, can, seesPrice } from '../lib/domain.js';
+import { STATUS, STEPS, LAST_STEP, reachedStep, EVENT_LABELS, ROLES, CONFIRM_METHODS, NOTE_OPTIONS, TIERS, can, seesPrice, dealPriceVisible } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, friendlyError } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
 import { CustomerDrawer } from './Customers.jsx';
@@ -107,7 +108,7 @@ export default function Deal({ id }) {
     <>
       <div ref={sentRef} style={{ height: 1, marginBottom: -1 }} />
       {/* 287 (Frank 11-13): 往下滑 = 整排步骤块原样冻结在顶上, 不再缩成一行字. 手机上只冻结步骤块那一排 (下面那行按钮跟着滑走, 不挡半屏) */}
-      <div className={`flow2 ${stuck ? 'stuck' : ''}`} style={stuck && stepsH && narrow ? { marginBottom: 12 + stepsH } : undefined}>
+      <div className={`flow2 ${stuck ? 'stuck' : ''}`} >
         <div className="flow2-steps">
           {STEPS.map((s, i) => {
             const done = !cancelled && i <= reached;
@@ -121,7 +122,7 @@ export default function Deal({ id }) {
                 <button type="button" className={`flow2-step ${done ? 'done' : ''} ${now ? 'now' : ''} ${curKey === s.key ? 'viewing' : ''}`}
                   disabled={!reachable} onClick={() => setView(s.key)} title={doc ? `${s.label}：${doc}` : s.label}>
                   <span className="c">{done ? '✓' : i + 1}</span>
-                  <span className="l">{t(s.label)}</span>
+                  <span className="l"><span className="hide-m">{t(s.label)}</span><span className="show-m">{t(s.short)}</span></span>
                   <span className="d">{curKey === s.key ? (doc ? (isDocNo ? short(doc) : doc) : now ? '当前' : '') : now ? '当前' : ''}</span>
                 </button>
               </React.Fragment>
@@ -173,6 +174,7 @@ export default function Deal({ id }) {
         </div>)}
       {custOpen && <CustomerDrawer id={deal.customer_id} onClose={() => setCustOpen(false)} />}
       {!cancelled && seesPrice(role) && !['shipped'].includes(deal.status) && <DebtBanner customerId={deal.customer_id} deal={deal} />}
+      {!cancelled && dealPriceVisible(role, deal) && ['quote', 'so'].includes(curKey) && <DealLastPrice deal={deal} lines={data.lines} />}
       {(deal.split_from || deal.split_children?.length > 0) && (
         <div className="card card-b other-pending"><span className="pill blue">拆单</span>
           {deal.split_from && <span>这张单是从 <DealLink id={deal.split_from} no={deal.split_from_no} /> 拆出来的{deal.want_on ? `，约定 ${dDate(deal.want_on)} 发` : ''}；价格锁在拆单时的价。</span>}
