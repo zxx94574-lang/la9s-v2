@@ -8,6 +8,11 @@ import { SOP_DEFAULTS } from './sopDefaults.js';
 
 // 真实数据版 (VITE_REAL=1): 同一套规则, 开局导入金蝶 / 飞书快照 (real-data.json, 不进代码仓库), 和演示版的浏览器数据完全分开
 export const REAL = import.meta.env.VITE_REAL === '1';
+// 服务器版 (VITE_SERVER=1): 数据在 Supabase, 要登录; q / call 都走 server.js
+export const SERVER = import.meta.env.VITE_SERVER === '1';
+import { exec as srvExec, openServer } from './server.js';
+let srvMe = null;
+export const serverMe = () => srvMe;
 
 const files = import.meta.glob('../../supabase/migrations/*.sql', { query: '?raw', import: 'default', eager: true });
 const MIGRATIONS = Object.keys(files).sort().map((k) => [k.split('/').pop(), files[k]]);
@@ -59,6 +64,7 @@ async function freshInstall(d) {
 }
 
 export async function openDb(onProgress = () => {}) {
+  if (SERVER) { onProgress('正在连接服务器…'); srvMe = await openServer(); org = srvMe.org; return { org, persistent: true }; }
   onProgress('正在启动数据库…');
   const opts = await pgliteOptions();
   try {
@@ -165,6 +171,7 @@ async function wipe() {
 }
 
 export async function resetDemo() {
+  if (SERVER) throw new Error('线上环境不能一键重置');
   return exclusive(async () => { await wipe(); org = await freshInstall(db); return org; });
 }
 
@@ -173,6 +180,7 @@ export const isPersistent = () => persistent;
 
 // read (as superuser; the demo shows everything to keep screens simple)
 export function q(sql, params = []) {
+  if (SERVER) return srvExec(sql, params);
   return exclusive(async () => (await db.query(sql, params)).rows);
 }
 
@@ -191,6 +199,7 @@ export const customerSession = () => { try { return JSON.parse(localStorage.getI
 
 // 不登录也能用的动作 (登录、改密码、游客询价): 用空身份调用, 只能走 SQL 里对外开放的函数
 export function callAnon(sql, params = []) {
+  if (SERVER) return Promise.reject(new Error('线上演示环境暂不开放客户 / 游客入口'));
   return exclusive(async () => {
     await db.query(`select set_config('request.jwt.claim.sub', '', false)`);
     return (await db.query(sql, params)).rows;
@@ -198,6 +207,7 @@ export function callAnon(sql, params = []) {
 }
 
 export function call(role, sql, params = []) {
+  if (SERVER) return srvExec(sql, params);   // 线上: 一律用登录账号本人的身份, 岗位只决定看到哪些菜单
   const uid = role === 'boss' && custUid ? custUid : USERS[role];
   return exclusive(async () => {
     await db.query(`select set_config('request.jwt.claim.sub', $1, false)`, [uid]);

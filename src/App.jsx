@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { openDb, resetDemo, q, isPersistent, REAL, setCustomerSession, customerSession } from './db/client.js';
+import { openDb, resetDemo, q, isPersistent, REAL, SERVER, serverMe, setCustomerSession, customerSession } from './db/client.js';
+import { StaffLogin, doLogout } from './components/StaffLogin.jsx';
 import { CustomerLogin, GuestShop, MustChange } from './pages/Guest.jsx';
 import * as Q from './db/queries.js';
 import Kpi from './pages/Kpi.jsx';
@@ -74,8 +75,15 @@ export default function App() {
   const roleRef = useOutside(roleMenu, () => setRoleMenu(false));
 
   useEffect(() => {
-    openDb((msg) => setBoot((b) => ({ ...b, msg }))).then(({ org }) => { setOrg(org); setBoot({ ready: true }); })
-      .catch((e) => { console.error(e); setBoot({ ready: false, err: e.message || String(e) }); });
+    openDb((msg) => setBoot((b) => ({ ...b, msg }))).then(({ org }) => {
+      setOrg(org);
+      if (SERVER) {   // 线上: 岗位只能是这个账号本身有的那几个
+        const mine = serverMe().roles.filter((r) => ROLES[r]);
+        setRoleState((cur) => { const r = mine.includes(cur) ? cur : mine[0] || 'viewer'; store.set('la9s.role', r); return r; });
+      }
+      setBoot({ ready: true });
+    })
+      .catch((e) => { console.error(e); setBoot({ ready: false, err: e.message || String(e), needLogin: !!e.needLogin, noMember: !!e.noMember }); });
   }, []);
   // 返回 / 前进 (Frank 11-12 260–262): 自己记一条「去过哪」的线, 每一站记 网址 + 滚到哪 + 当时开着哪张档案.
   // 返回 = 回到上一站, 档案和位置原样摆回去; 前进 = 回到刚才那一站. 浏览器 / 手机自带的返回键走同一套.
@@ -164,6 +172,7 @@ export default function App() {
   useEffect(() => { archRef.current = arch; }, [arch]);
   const ctx = useMemo(() => ({ org, role, go, refresh, tick, toast, lang, setRole, openArchive }), [org, role, go, refresh, tick, toast, lang, setRole, openArchive]);
 
+  if (!boot.ready && SERVER && (boot.needLogin || boot.noMember)) return <StaffLogin noMember={boot.noMember} />;
   if (!boot.ready) {
     return (
       <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', textAlign: 'center', padding: 20 }}>
@@ -171,7 +180,7 @@ export default function App() {
           <img src="./la9s-logo.png" alt="LA&9S" style={{ width: 200 }} />
           {boot.err ? (
             <div className="card card-b" style={{ marginTop: 16, maxWidth: 520 }}>
-              <h3>演示数据库没能启动</h3>
+              <h3>{SERVER ? '连不上服务器' : '演示数据库没能启动'}</h3>
               <p className="muted small">{boot.err}</p>
               <p className="small">请用电脑或手机上的 Chrome / Safari 最新版打开。</p>
             </div>
@@ -279,18 +288,19 @@ export default function App() {
                 )}
               </span>
               <span style={{ position: 'relative' }} ref={roleRef}>
-                <button type="button" className="role-pill" onClick={() => setRoleMenu(!roleMenu)} title="演示用：切换岗位体验不同权限">
+                <button type="button" className="role-pill" onClick={() => setRoleMenu(!roleMenu)} title={SERVER ? '切换我的岗位 / 退出登录' : '演示用：切换岗位体验不同权限'}>
                   <span className="hide-m">{t('岗位')}：</span>{t(ROLES[role].label)} ▾
                 </button>
                 {roleMenu && (
                   <div className="menu" style={{ right: 0, top: '115%', width: 290 }}>
-                    <div className="hint" style={{ padding: '6px 10px' }}>演示用：切换岗位，看每个人能做什么</div>
-                    <button type="button" className="mi" onClick={() => { setRoleMenu(false); go('login'); }}><div><b>客户入口（登录 / 游客）</b><div className="small muted">销售员发给客户的那个总链接打开就是这一页</div></div></button>
-                    {Object.entries(ROLES).map(([k, r]) => (
+                    {SERVER ? <div className="hint" style={{ padding: '6px 10px' }}>{serverMe()?.email}</div> : <div className="hint" style={{ padding: '6px 10px' }}>演示用：切换岗位，看每个人能做什么</div>}
+                    {!SERVER && <button type="button" className="mi" onClick={() => { setRoleMenu(false); go('login'); }}><div><b>客户入口（登录 / 游客）</b><div className="small muted">销售员发给客户的那个总链接打开就是这一页</div></div></button>}
+                    {Object.entries(ROLES).filter(([k]) => !SERVER || serverMe()?.roles.includes(k)).map(([k, r]) => (
                       <button type="button" key={k} className={`mi ${k === role ? 'focus' : ''}`} onClick={() => setRole(k)}>
                         <div><b>{r.label}</b><div className="small muted">{r.desc}</div></div>
                       </button>
                     ))}
+                    {SERVER && <button type="button" className="mi" onClick={doLogout}><div><b>退出登录</b></div></button>}
                   </div>
                 )}
               </span>
@@ -341,7 +351,7 @@ export default function App() {
             <PermPanel />
             <ExportPanel />
             <DocSettings />
-            <div className="field"><label>当前岗位（演示）</label>
+            {!SERVER && <><div className="field"><label>当前岗位（演示）</label>
               <select className="in" value={role} onChange={(e) => setRole(e.target.value)}>{Object.entries(ROLES).map(([k, r]) => <option key={k} value={k}>{r.label} — {r.desc}</option>)}</select>
             </div>
             <div className="field"><label>演示数据</label>
@@ -349,7 +359,7 @@ export default function App() {
                 <ResetButton onReset={async () => { const o = await resetDemo(); setOrg(o); setSettings(false); refresh(); go('dashboard'); toast('演示数据已重置'); }} />
                 <span className="hint">{isPersistent() ? '数据存在本浏览器（IndexedDB），换设备不同步。' : '当前浏览器不允许存储。'}</span>
               </div>
-            </div>
+            </div></>}
           </div>
         </Modal>
       )}
