@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { PhotoInput, TierPill, Light, useApp, useData, Pill, Modal, OptionNote, BigNum } from '../components/ui.jsx';
+import { PhotoInput, TierPill, Light, useApp, useData, Pill, Modal, OptionNote, BigNum, DatePicker, Info } from '../components/ui.jsx';
 import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import { BalanceCopy } from '../components/Doc.jsx';
 import { DealDrawer, DealChip, BalanceLine } from '../components/ReceiptForm.jsx';
 import { TIERS, seesPrice, balanceWords, can, NOTE_OPTIONS, RETURN_REASONS } from '../lib/domain.js';
-import { money, qty, dt, dDate, friendlyError, pad } from '../lib/format.js';
+import { money, qty, dt, dDate, friendlyError, pad, periodRange, ymd } from '../lib/format.js';
 
 const N = (v) => Number(v || 0);
 
@@ -89,17 +89,7 @@ export function CustomerLedger({ id }) {
           { key: 'due', label: '未付', w: 110, render: (d) => <b>{money(d.due)}</b> },
         ]} foot={(rs) => ({ biz_no: `${rs.length} 单`, due: money(rs.reduce((a, d) => a + N(d.due), 0)) })} />
       </div>
-      <div className="card">
-        <div className="card-h"><h2>逐笔流水</h2><span className="muted small">出库、收款、退货、撤销出库、抹零每一笔都在；单号可点开</span></div>
-        <Grid id="cust-ledger" rowKey={(e) => e.id} rows={ledger} columns={[
-          { key: 'at', label: '日期', w: 130, render: (e) => (e.kind === 'receipt' ? dDate(e.eff_at) : dt(e.eff_at)) },
-          { key: 'kind', label: '类型', w: 90, render: (e) => <Pill tone={KIND[e.kind]?.[1] || 'gray'}>{KIND[e.kind]?.[0] || e.kind}</Pill> },
-          { key: 'doc_no', label: '单据', w: 150, render: (e) => (e.deal_id && e.doc_no ? <DealLink id={e.deal_id} no={e.doc_no} /> : <span className="mono">{e.doc_no || e.note || ''}</span>) },
-          { key: 'biz_no', label: '订单', w: 150, render: (e) => (e.deal_id && e.biz_no ? <DealChip id={e.deal_id} no={e.biz_no} onOpen={setDrawer} /> : '') },
-          { key: 'amount', label: '金额（+欠 / −减）', w: 140, render: (e) => <b style={{ color: N(e.amount) < 0 ? 'var(--green)' : '' }}>{N(e.amount) > 0 ? '+' : ''}{money(e.amount)}</b> },
-          { key: 'running', label: '余额', w: 170, render: (e) => { const x = balanceWords(e.running); return <b className={`${x.tone}-t2`}>{x.label === '已结清' ? '已结清' : `${x.label === '预付' ? '预付 ' : '欠 '}${money(x.amount)}`}</b>; } },
-        ]} />
-      </div>
+      <LedgerCard ledger={ledger} setDrawer={setDrawer} />
       {returns.length > 0 && (
         <div className="card">
           <div className="card-h"><h2>退货记录</h2><span className="muted small">点单号打开原单的「退货对账」</span></div>
@@ -186,5 +176,46 @@ function CustomerReturnModal({ customerId, name, onClose }) {
         </div>
       )}
     </Modal>
+  );
+}
+
+/* Q8 (Frank 11-16): Balance 永远是全部没付清的 (不按今年截断); 这里可以只看某段时间的流水, 跟客户对某个月的账 */
+const LEDGER_PERIODS = [['all', '全部'], ['month', '本月'], ['last', '上月'], ['quarter', '本季度'], ['year', '本年度'], ['custom', '自定义']];
+const day = (e) => ymd(new Date(e.eff_at));
+function LedgerCard({ ledger, setDrawer }) {
+  const [period, setPeriod] = useState('all');
+  const [custom, setCustom] = useState(() => periodRange('month'));
+  const [from, to] = useMemo(() => {
+    if (period === 'all') return [null, null];
+    if (period === 'custom') return custom;
+    if (period === 'last') { const d = new Date(); return [ymd(new Date(d.getFullYear(), d.getMonth() - 1, 1)), ymd(new Date(d.getFullYear(), d.getMonth(), 0))]; }
+    return periodRange(period);
+  }, [period, custom]);
+  const rows = useMemo(() => (from ? ledger.filter((e) => day(e) >= from && day(e) <= to) : ledger), [ledger, from, to]);
+  const opening = useMemo(() => (from ? ledger.filter((e) => day(e) < from).reduce((a, e) => a + N(e.amount), 0) : 0), [ledger, from]);
+  const plus = rows.filter((e) => N(e.amount) > 0).reduce((a, e) => a + N(e.amount), 0);
+  const minus = rows.filter((e) => N(e.amount) < 0).reduce((a, e) => a + N(e.amount), 0);
+  const words = (v) => { const x = balanceWords(v); return x.label === '已结清' ? '已结清' : `${x.label === '预付' ? '预付 ' : '欠 '}${money(x.amount)}`; };
+  return (
+    <div className="card">
+      <div className="card-h"><h2>逐笔流水 <Info>出库、收款、退货、撤销出库、抹零每一笔都在；单号可点开。上面的欠款永远是全部没付清的，不按年份截断。选一个时间段 = 只看这段时间的流水，用来跟客户对某个月的账：期初 + 这段增加 − 这段减少 = 期末。</Info></h2>
+        <div className="seg">{LEDGER_PERIODS.map(([k, l]) => <button type="button" key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
+        {period === 'custom' && <DatePicker range value={custom} onChange={setCustom} />}</div>
+      {from && <div className="card-b row small" style={{ gap: 16, flexWrap: 'wrap', paddingBottom: 0 }}>
+        <span>{from} ~ {to}</span>
+        <span>期初 <b>{words(opening)}</b></span>
+        <span>这段增加 <b>+{money(plus)}</b></span>
+        <span>这段减少 <b className="green-t2">{money(minus)}</b></span>
+        <span>期末 <b>{words(opening + plus + minus)}</b></span>
+      </div>}
+      <Grid id="cust-ledger" rowKey={(e) => e.id} rows={rows} empty={from ? '这段时间没有流水' : '还没有流水'} columns={[
+        { key: 'at', label: '日期', w: 130, render: (e) => (e.kind === 'receipt' ? dDate(e.eff_at) : dt(e.eff_at)) },
+        { key: 'kind', label: '类型', w: 90, render: (e) => <Pill tone={KIND[e.kind]?.[1] || 'gray'}>{KIND[e.kind]?.[0] || e.kind}</Pill> },
+        { key: 'doc_no', label: '单据', w: 150, render: (e) => (e.deal_id && e.doc_no ? <DealLink id={e.deal_id} no={e.doc_no} /> : <span className="mono">{e.doc_no || e.note || ''}</span>) },
+        { key: 'biz_no', label: '订单', w: 150, render: (e) => (e.deal_id && e.biz_no ? <DealChip id={e.deal_id} no={e.biz_no} onOpen={setDrawer} /> : '') },
+        { key: 'amount', label: '金额（+欠 / −减）', w: 140, render: (e) => <b style={{ color: N(e.amount) < 0 ? 'var(--green)' : '' }}>{N(e.amount) > 0 ? '+' : ''}{money(e.amount)}</b> },
+        { key: 'running', label: '余额', w: 170, render: (e) => <b className={`${balanceWords(e.running).tone}-t2`}>{words(e.running)}</b> },
+      ]} />
+    </div>
   );
 }

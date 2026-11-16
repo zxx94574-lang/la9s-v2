@@ -1146,6 +1146,7 @@ function ReturnRecon({ r, deal, act, role }) {
       toast(okc ? '已导出 CSV（Excel 可直接打开），表格也已复制，可直接粘贴进 Excel' : '已导出 CSV（Excel 可直接打开）；浏览器没让复制表格');
     } catch { toast('导出失败', 'err'); }
   };
+  const [decide, setDecide] = useState(null);
   const allInspected = r.lines.every((x) => N(x.qty_good) + N(x.qty_scrap) >= N(x.qty));
   const doneRecon = !!r.reconciled_at;
   const stepTone = (ok, cur) => (ok ? 'green' : cur ? 'amber' : 'gray');
@@ -1168,9 +1169,15 @@ function ReturnRecon({ r, deal, act, role }) {
           <span className="grow" />
           <Pill tone={tone}>{st}</Pill>
           {r.status === 'requested' && (can(role, 'decide_return') ? <>
-            <button type="button" className="btn sm" onClick={() => act('已驳回', `select app.decide_return($1,false)`, [r.id]).catch(() => {})}>驳回</button>
-            <button type="button" className="btn sm primary" onClick={() => act('已批准：货进待检仓，总账已冲减', `select app.decide_return($1,true)`, [r.id]).catch(() => {})}>批准</button></> : <Blocked action="decide_return" />)}
+            <button type="button" className="btn sm" onClick={() => setDecide('reject')}>驳回</button>
+            <button type="button" className="btn sm primary" onClick={() => setDecide('approve')}>批准</button></> : <Blocked action="decide_return" />)}
         </div>
+        {(r.late || r.reason_type === 'customer_damage' || r.decide_note) && <div className="row small" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+          {r.late && <Pill tone="amber">签收后 {Math.round((new Date(r.received_at) - new Date(r.signed_ref)) / 36e5)} 小时才反馈（超过 24 小时）</Pill>}
+          {r.reason_type === 'customer_damage' && r.status === 'requested' && <Pill tone="amber">人为损坏，原则上不认</Pill>}
+          {r.decide_note && <span className="muted">{r.status === 'rejected' ? '驳回原因' : '中方说明'}：{r.decide_note}</span>}
+        </div>}
+        {decide && <ReturnDecide r={r} mode={decide} act={act} onClose={() => setDecide(null)} />}
       </div>
       {/* ② 对账 + 核验 */}
       <div className="card-b" style={{ paddingBottom: 0 }}><b>② 对账 + 核验</b> <span className="small muted">金额按原单价冲；检验好货回原仓、坏货报废</span></div>
@@ -1381,12 +1388,13 @@ function DiscDecide({ x, s, deal, act, onClose }) {
   const dflt = `复检没查出来${reviewer ? `（复检人 ${reviewer}）` : ''}`;
   const [decision, setDecision] = useState(''); const [fault, setFault] = useState(dflt); const [where, setWhere] = useState(''); const [note, setNote] = useState('');
   const other = fault.trim() && fault !== dflt;
-  const ok = decision && fault.trim() && where && (decision !== 'reject' || note.trim()) && (!other || decision === 'reject' || note.trim());
+  const lateNeed = x.late && decision && decision !== 'reject' && !note.trim();
+  const ok = decision && fault.trim() && where && (decision !== 'reject' || note.trim()) && (!other || decision === 'reject' || note.trim()) && !lateNeed;
   const go = () => act('收货差异已处理', `select app.decide_discrepancy($1,$2,$3,$4,$5)`, [x.id, decision, fault, where, note || null]).then(onClose, () => {});
   const Chip = ({ k, children }) => <button type="button" className={`chip ${decision === k ? 'on' : ''}`} onClick={() => setDecision(k)}>{children}</button>;
   return (
     <Modal title={`处理收货差异${fix ? '（修正）' : ''} · ${s.out_no}`} wide onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">还差：{[!decision && '怎么处理', !fault.trim() && '谁的问题', !where && '货在哪', decision === 'reject' && !note.trim() && '不认的原因', other && decision !== 'reject' && !note.trim() && '不算复检人的理由'].filter(Boolean).join('、')}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>确定</button></>}>
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">还差：{[!decision && '怎么处理', !fault.trim() && '谁的问题', !where && '货在哪', decision === 'reject' && !note.trim() && '不认的原因', other && decision !== 'reject' && !note.trim() && '不算复检人的理由', lateNeed && '超过 24 小时的破例原因'].filter(Boolean).join('、')}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>确定</button></>}>
       <div className="stack">
         <div className="pd-sec disc-say"><div className="pd-h">{fix ? '这次修正' : '客户说的'} {x.late && <span className="pill amber">超过 24 小时才反馈，属于特批</span>}</div>
           <div>{DISC_KIND[x.kind]}：{x.lines.map((l) => <span key={l.deal_line_id} className="pill red" style={{ marginRight: 6 }}>{discLineText(l)}</span>)} {N(x.amount) !== 0 && <b>{discMoneyText(x, deal.currency)}</b>}</div>
@@ -1408,32 +1416,69 @@ function DiscDecide({ x, s, deal, act, onClose }) {
           <div className="small muted">规矩：只要发错（少发 / 多发 / 发错型号），默认记复检人的责任。要算到别处，在下面「说明」里写清理由。</div></div></FRow>
         <FRow label="货现在在哪" req><div className="chips">{Object.entries(DISC_WHERE).map(([k, v]) => <button type="button" key={k} className={`chip ${where === k ? 'on' : ''}`} onClick={() => setWhere(k)}>{v}</button>)}</div></FRow>
         {where === 'in_warehouse' && decision !== 'reject' && N(x.amount) > 0 && <div className="hint">选「还在仓库」：系统会把少发的数量加回库存。</div>}
-        <FRow label="说明" req={decision === 'reject' || (other && decision !== 'reject')}><input className="in" style={{ width: '100%', maxWidth: 460 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder={decision === 'reject' ? '不认必须写原因' : other ? '为什么不算复检人的责任' : '补充说明（会记进操作记录）'} /></FRow>
+        {decision === 'reject' && <div className="chips">{RETURN_REJECT.map((v) => <button type="button" key={v} className={`chip ${note === v ? 'on' : ''}`} onClick={() => setNote(v)}>{v}</button>)}</div>}
+        {x.late && <div className="hint">签收超过 24 小时才反馈，原则上不认；要认必须在「说明」里写破例原因。</div>}
+        <FRow label="说明" req={decision === 'reject' || (other && decision !== 'reject') || (x.late && decision && decision !== 'reject')}><input className="in" style={{ width: '100%', maxWidth: 460 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder={decision === 'reject' ? '不认必须写原因' : other ? '为什么不算复检人的责任' : '补充说明（会记进操作记录）'} /></FRow>
       </div>
     </Modal>
   );
 }
+/* Q7 (Frank 11-16): 损坏反馈 24 小时 —— 超时 / 人为损坏原则上不认, 中方破例必须写原因; 驳回也必须写原因 */
+const RETURN_REJECT = ['人为摔坏 / 压坏（裂痕、变形）', '装过机（拆装痕迹、胶印）', '拿不出照片 / 视频', '和我们发的批次 / 标签对不上', '签收超过 24 小时才反馈'];
+function ReturnDecide({ r, mode, act, onClose }) {
+  const [note, setNote] = useState('');
+  const needs = mode === 'reject' || r.late || r.reason_type === 'customer_damage';
+  const why = r.reason_type === 'customer_damage' ? '人为损坏原则上不认' : r.late ? '签收超过 24 小时才反馈，原则上不认' : '';
+  const go = () => { if (needs && !note.trim()) return; act(mode === 'approve' ? '已批准：货进待检仓，总账已冲减' : '已驳回', `select app.decide_return($1,$2,$3)`, [r.id, mode === 'approve', note.trim() || null]).then(onClose, () => {}); };
+  return (
+    <Modal title={`${mode === 'approve' ? '批准' : '驳回'}退货 ${r.rt_no}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className={`btn ${mode === 'approve' ? 'primary' : ''}`} disabled={needs && !note.trim()} onClick={go}>{mode === 'approve' ? (why ? '破例批准' : '批准') : '驳回'}</button></>}>
+      <div className="stack" style={{ gap: 10 }}>
+        <div className="small">{RETURN_REASONS[r.reason_type]} · {r.reason}{r.received_at && <> · 收到 {dt(r.received_at)}</>}{r.signed_ref && <> · 签收 {dt(r.signed_ref)}</>}</div>
+        {mode === 'approve' && why && <div className="hint">{why}。要批准，写清楚为什么破例（例：老板出差，货先到、只说收到没点数，回来点货才发现）。</div>}
+        {mode === 'approve' && !why && <div className="small muted">批准后：货进待检仓，客户账减掉退货金额。</div>}
+        {mode === 'reject' && <div className="chips">{RETURN_REJECT.map((v) => <button type="button" key={v} className={`chip ${note === v ? 'on' : ''}`} onClick={() => setNote(v)}>{v}</button>)}</div>}
+        <FRow label={mode === 'reject' ? '驳回原因' : '说明'} req={needs}><input className="in" style={{ width: '100%', maxWidth: 460 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder={mode === 'reject' ? '选上面一条或自己写' : why ? '破例原因（必填）' : '补充说明（可不填）'} /></FRow>
+      </div>
+    </Modal>
+  );
+}
+const CONFIRM_ROLE = { boss: '老板', staff: '店员', other: '其他人' };
+const normDigits = (v) => String(v || '').replace(/\D/g, '').slice(-10);
 function SignRow({ s, act, role, discs = [], lines = [], deal }) {
   const [disc, setDisc] = useState(false); const [decide, setDecide] = useState(null);
   const [photo, setPhoto] = useState('');
   const [at, setAt] = useState(() => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); });
   const [errs, setErrs] = useState(false);
-  const go = (withDisc) => { setErrs(true); if (!photo && !s.signed_photo) return; act(`${s.out_no} 已签收`, `select app.sign_receipt($1,$2,$3)`, [s.id, photo || null, new Date(at).toISOString()]).then(() => { if (withDisc === true) setDisc(true); }, () => {}); };
+  /* Q7 (Frank 11-16): 谁收的货就跟谁确认 —— 老板不在国内就要店员电话; 姓名 + 电话 + 身份必填, 电话自动进客户联系人 */
+  const [who, setWho] = useState({ role: '', name: '', phone: '' });
+  const { data: cust } = useData(() => (deal?.customer_id && !s.customer_received_at ? q(`select coalesce(nullif(contact_name, ''), name) as name, phone, contacts from app.customers where id = $1`, [deal.customer_id]).then((r) => r[0]) : Promise.resolve(null)), [deal?.customer_id, s.customer_received_at]);
+  const known = cust ? [...(cust.phone ? [{ name: cust.name, phone: cust.phone, role: 'boss' }] : []), ...(cust.contacts || [])] : [];
+  const missing = [!photo && !s.signed_photo && '签收凭证', !who.role && '确认人身份', !who.name.trim() && '确认人姓名', !(who.phone.trim() && phoneValid(who.phone)) && '确认人电话'].filter(Boolean);
+  const go = (withDisc) => { setErrs(true); if (missing.length) return; act(`${s.out_no} 已签收`, `select app.sign_receipt($1,$2,$3,$4,$5,$6)`, [s.id, photo || null, new Date(at).toISOString(), who.name.trim(), who.phone, who.role]).then(() => { if (withDisc === true) setDisc(true); }, () => {}); };
   const hours = s.customer_received_at ? (Date.now() - new Date(s.customer_received_at).getTime()) / 36e5 : 0;
   return (
     <div className="signrow">
       <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
         <b className="mono">{s.out_no}</b>{s.bl_no && <span className="muted small">{s.bl_no}</span>}
         <span className="small muted">出库 {dt(s.shipped_at)} · {SHIP_METHODS[s.method]} · {qty(s.qty)} 件</span>
-        {s.customer_received_at && <><Pill tone="green">已签收 {dt(s.customer_received_at)}</Pill>{s.signed_photo && <Thumb src={s.signed_photo} size={34} label={`${s.out_no} 签收凭证`} />}</>}
+        {s.customer_received_at && <><Pill tone="green">已签收 {dt(s.customer_received_at)}</Pill>{s.signed_photo && <Thumb src={s.signed_photo} size={34} label={`${s.out_no} 签收凭证`} />}
+          {s.confirm_name && <span className="small muted">跟 <b>{s.confirm_name}</b>（{CONFIRM_ROLE[s.confirm_role] || ''} · <a href={telHref(s.confirm_phone)}>{fmtPhone(s.confirm_phone)}</a>）确认过数量</span>}</>}
       </div>
       {!s.customer_received_at && (can(role, 'mark_received') ? (
         <>
           <div className="fgrid" style={{ marginTop: 8 }}>
             <FRow label="签收时间" req><input className="in" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} style={{ width: 210 }} /></FRow>
             <FRow label="签收凭证" req><PhotoInput value={photo} onChange={setPhoto} invalid={errs && !photo} label="客户照片 / WhatsApp / 通话截图" /></FRow>
+            <FRow label="跟谁确认的" req><div className="stack" style={{ gap: 6, flex: 1, minWidth: 0 }}>
+              <div className="chips">{Object.entries(CONFIRM_ROLE).map(([k, v]) => <button type="button" key={k} className={`chip ${who.role === k ? 'on' : ''} ${errs && !who.role ? 'invalid' : ''}`} onClick={() => setWho((w) => ({ ...w, role: k }))}>{v}</button>)}</div>
+              {known.length > 0 && <div className="chips">{known.map((c) => <button type="button" key={c.phone} className={`chip ${normDigits(who.phone) === normDigits(c.phone) ? 'on' : ''}`} onClick={() => setWho({ role: c.role || 'other', name: c.name || '', phone: fmtPhone(c.phone) })}>{c.name} · {fmtPhone(c.phone)}</button>)}</div>}
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                <input className={`in ${errs && !who.name.trim() ? 'invalid' : ''}`} style={{ width: 160 }} value={who.name} onChange={(e) => setWho((w) => ({ ...w, name: e.target.value }))} placeholder="姓名" />
+                <PhoneInput value={who.phone} onChange={(v) => setWho((w) => ({ ...w, phone: v }))} invalid={errs && !(who.phone.trim() && phoneValid(who.phone))} style={{ width: 170 }} />
+              </div>
+              <div className="small muted">谁收的货就跟谁确认数量；老板不在国内，就把店员的电话要来跟店员确认。电话会存进客户档案的联系人。</div></div></FRow>
           </div>
-          <div className="actbar">{!photo && <span className="why">还差：签收凭证</span>}<button type="button" className="btn soft-amber" onClick={() => go(true)}>⚠ 收到了，但客户说数量 / 型号不对…</button><button type="button" className="btn primary" onClick={() => go(false)}>客户已签收（全部收到）→</button></div>
+          <div className="actbar">{missing.length > 0 && <span className="why">还差：{missing.join('、')}</span>}<button type="button" className="btn soft-amber" onClick={() => go(true)}>⚠ 收到了，但客户说数量 / 型号不对…</button><button type="button" className="btn primary" onClick={() => go(false)}>客户已签收（全部收到）→</button></div>
         </>) : <Blocked action="mark_received" />)}
       {/* 240 (Frank 11-11): 客户说少了 / 发错了 → 记一张收货差异单, 差一片也必须中方处理; 原出库单不改 */}
       {discs.map((x) => (
