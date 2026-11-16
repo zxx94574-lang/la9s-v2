@@ -130,6 +130,7 @@ const RULES = [
   ['draft_rules', 'days', '草稿（等定档的报价）几天没人动自动作废', 7, '天'],
   ['discrepancy_window', 'hours', '收货差异：签收后多少小时内反馈算正常', 24, '小时'],
   ['price_rules', 'odd_pct', '改价：单价偏离客户档位价超过多少算「异价单」', 10, '%'],
+  ['margin_rules', 'low_pct', '毛利：毛利率低于多少标黄（要留意）；负数一律标红', 10, '%'],
   ['writeoff_rules', 'max_xof', '抹零：一张单最多抹多少', 100, 'XOF'],
   ['cash_rules', 'held_days', '员工代收：钱在员工手上超过几天没交就进紧急', 1, '天'],
 ];

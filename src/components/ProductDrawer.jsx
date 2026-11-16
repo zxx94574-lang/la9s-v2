@@ -2,6 +2,7 @@
 // 员工: 基本信息 + 库存 + 这单客户档位的价. 中方 (see_cost):
 //   分块 (Frank 11-11 206): ① 基本信息 ② 成本 (采购价 + 运费 = 到岸, 实际值 → 进位) ③ 利润 ④ 各档售价 ⑤ 采购批次 ⑥ 库存 ⑦ 修改记录
 //   档案里直接改: 「✎ 修改」解锁一次 → 改几项 → 保存前列出 改前 → 改后 + 自检 (低于成本红 / 运费没填黄 / 档位倒挂黄 / 改动太大黄) → 确认后存 + 留记录, 自动锁回
+import { sumMargin, MarginPill, MarginKpis, useMarginRules } from './Margin.jsx';
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import { PoLink } from '../pages/Po.jsx';
@@ -187,6 +188,7 @@ export default function ProductDrawer({ product, tier, onClose }) {
               { key: 'qty_supply', label: '数量', w: 90, type: 'number', render: (x) => qty(x.qty_supply) }, { key: 'unit_price', label: '单价', w: 100, type: 'number', render: (x) => money(x.unit_price) }]} />
           </section>
         )}
+        {role === 'admin' && product?.id && <ProductMargin productId={product.id} />}
         {seeAll && data && <HistoryBlock hist={data.hist} />}
       </div>
       {confirm && <ConfirmEdit c={confirm} onBack={() => setConfirm(null)} onSave={save} />}
@@ -273,14 +275,15 @@ function CostBlocks({ p, ps, batches, tier, priceOf, lockedOf, ed, setEd, onChan
 
       {/* ③ 利润 */}
       <section className="pd-sec">
-        <div className="pd-h">③ 各档利润与加价 <Info>利润 = 售价 − 到岸成本；括号里是按最贵一批算</Info></div>
-        <table className="t"><thead><tr><th>档位</th><th style={{ textAlign: 'right' }}>加价（FEE）</th><th style={{ textAlign: 'right' }}>利润</th><th style={{ textAlign: 'right' }}>利润率</th></tr></thead>
+        <div className="pd-h">③ 各档利润与加价 <Info>利润 = 售价 − 到岸成本；括号里是按最贵一批算。加价率 = 利润 ÷ 成本（定价用）；毛利率 = 利润 ÷ 售价（和订单、看板、金蝶同一个口径）</Info></div>
+        <table className="t"><thead><tr><th>档位</th><th style={{ textAlign: 'right' }}>加价（FEE）</th><th style={{ textAlign: 'right' }}>利润</th><th style={{ textAlign: 'right' }}>加价率</th><th style={{ textAlign: 'right' }}>毛利率</th></tr></thead>
           <tbody>{TIER_ORDER.map((t) => {
             const pr = priceOf(t); const prof = pr != null && landed != null ? pr - landed : null; const profW = pr != null && maxCost != null ? pr - maxCost : null;
             return (<tr key={t} className={tier === t ? 'pd-cur' : ''}><td><TierPill tier={t} />{tier === t ? ' ← 本单' : ''}</td>
               <td style={{ textAlign: 'right' }}>{ed ? numIn(FEE[t], 80) : p[FEE[t]] != null ? money(p[FEE[t]]) : '—'}</td>
               <td style={{ textAlign: 'right' }}>{prof != null ? <b className={prof < 0 ? 'red-t2' : ''}>{money(prof)}</b> : '—'}{profW != null && profW !== prof && <span className={`small ${profW < 0 ? 'red-t2' : 'muted'}`}>（{money(profW)}）</span>}</td>
-              <td style={{ textAlign: 'right' }}>{prof != null && landed ? `${(prof / landed * 100).toFixed(1)}%` : '—'}</td></tr>);
+              <td style={{ textAlign: 'right' }}>{prof != null && landed ? `${(prof / landed * 100).toFixed(1)}%` : '—'}</td>
+              <td style={{ textAlign: 'right' }}>{prof != null && pr ? `${(prof / pr * 100).toFixed(1)}%` : '—'}</td></tr>);
           })}</tbody></table>
       </section>
 
@@ -342,5 +345,29 @@ function BatchForm({ p, f, setF, role, toast, onDone }) {
         {per != null ? <span className="small">= 每片 <b>{money(per)}</b></span> : <span className="small muted">空 = 用默认 {p.freight_xof ?? '（没填）'}</span>}</span></td>
       <td colSpan={2}><span className="row" style={{ gap: 4 }}><button type="button" className="btn sm primary" disabled={!(Number(f.qty) > 0) || f.unit_price === ''} onClick={save}>{f.id ? '保存' : '记下'}</button><button type="button" className="btn sm ghost" onClick={() => setF(null)}>取消</button></span></td>
     </tr>
+  );
+}
+
+// 328: 这个型号实际卖出去的毛利 (只中方): 全部 + 按档位
+function ProductMargin({ productId }) {
+  const { org, role } = useApp();
+  const { lowPct } = useMarginRules();
+  const { data } = useData(() => call(role, `select * from app.margin_rows($1) where product_id = $2`, [org, productId]), [org, role, productId]);
+  if (!data?.length) return null;
+  const by = {}; for (const r of data) (by[r.tier || ''] ||= []).push(r);
+  const rows = ['S', 'WHOLESALE', 'RETAIL', 'REPAIR', ''].filter((k) => by[k]).map((k) => ({ id: k || 'none', tier: k, ...sumMargin(by[k]) }));
+  const all = sumMargin(data);
+  return (
+    <section className="pd-sec">
+      <div className="pd-h">实际毛利（已出货） <span className="pill gray">只中方</span> <Info>出库时锁定的成本，退货 / 调整 / 运费 / 手续费已扣；毛利率 = 利润 ÷ 销售额，加权</Info></div>
+      <MarginKpis t={all} lowPct={lowPct} compact />
+      <Grid id="pd-margin" compactTools rows={rows} columns={[
+        { key: 'tier', label: '档位', w: 110, value: (r) => TIERS[r.tier] || '（没档位）', render: (r) => <TierPill tier={r.tier} /> },
+        { key: 'qty', label: '数量', w: 80, type: 'number', render: (r) => qty(r.qty) },
+        { key: 'revenue', label: '销售额', w: 110, type: 'number', render: (r) => money(Math.round(r.revenue)) },
+        { key: 'profit', label: '利润', w: 110, type: 'number', render: (r) => money(Math.round(r.profit)) },
+        { key: 'pct', label: '毛利率', w: 90, type: 'number', render: (r) => <MarginPill pct={r.pct} lowPct={lowPct} missing={!r.revKnown} /> },
+      ]} />
+    </section>
   );
 }

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { sumMargin, MarginPill, useMarginRules } from '../components/Margin.jsx';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { TierPill, Light, useApp, useData, Pill, DatePicker, useOutside } from '../components/ui.jsx';
@@ -56,6 +57,9 @@ export default function Orders() {
     return true;
   }), [data, text, tier, grp, light, fcust, ftier, fpay, fmodel, modelDeals]);
   const price = seesPrice(role);
+  const mRows = useData(() => (role === 'admin' ? call(role, `select deal_id, qty, revenue, cost, profit, cost_missing, cost_goods, sale, returned, adjust, freight, fee from app.margin_rows($1)`, [org]) : Promise.resolve([])), [org, role]).data;
+  const margins = useMemo(() => { const by = {}; for (const r of mRows || []) (by[r.deal_id] ||= []).push(r); return Object.fromEntries(Object.entries(by).map(([k, v]) => [k, sumMargin(v)])); }, [mRows]);
+  const { lowPct: mLow } = useMarginRules();
   const catsOf = useMemo(() => { const m = new Map(); for (const l of olines) { if (!l.category) continue; const set = m.get(l.deal_id) || new Set(); set.add(l.category); m.set(l.deal_id, set); } return new Map([...m].map(([k, v]) => [k, [...v].join(' / ')])); }, [olines]);
   const cols = [
     { key: 'biz_no', label: '订单号', w: 150, render: (d) => <b><DealLink id={d.id} no={d.biz_no} /></b> },
@@ -77,6 +81,11 @@ export default function Orders() {
     ...(price ? [
       { key: 'amount', label: '金额', w: 110, render: (d) => money(d.amount, d.currency) },
       { key: 'due', label: '未收', w: 110, render: (d) => (Number(d.due) > 0 ? <b style={{ color: 'var(--red)' }}>{money(d.due)}</b> : Number(d.shipped_amount) > 0 ? <Pill tone="green">已收清</Pill> : '') },
+    ] : []),
+    // 328: 毛利只中方看 (已出库的才有; 成本出库时锁定, 事后变动已扣)
+    ...(role === 'admin' ? [
+      { key: 'm_profit', label: '毛利', w: 110, type: 'number', value: (d) => margins[d.id]?.profit ?? null, render: (d) => { const m = margins[d.id]; return m && m.revKnown ? <span className={m.profit < 0 ? 'red-t2' : ''}>{money(Math.round(m.profit))}</span> : ''; } },
+      { key: 'm_pct', label: '毛利率', w: 90, type: 'number', value: (d) => margins[d.id]?.pct ?? null, render: (d) => { const m = margins[d.id]; return m ? <MarginPill pct={m.pct} lowPct={mLow} missing={!m.revKnown} /> : ''; } },
     ] : []),
   ];
   const active = text || tier || grp || light;

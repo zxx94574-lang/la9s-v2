@@ -1,16 +1,17 @@
 // 客户档案 (Frank 2026-10-29): 一个客户一张档案 —— 正式 / 潜客 / 回收 都在这里.
 // 欠款上限和账期只预警不拦截 (THOMAS 这类有协议的大客户照常出货); 档位、正式编码、上限、账期只中方改.
+import { sumMargin, MarginPill, MarginKpis, useMarginRules } from '../components/Margin.jsx';
 import { normPhone, fmtPhone } from '../lib/phone.js';
 import { ConfirmEdit, HistoryBlock } from '../components/ProductDrawer.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker , PhoneInput, phoneValid} from '../components/ui.jsx';
+import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker , PhoneInput, phoneValid, Info } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { CallModal, ProspectModal, ResultPill, KIND, custLabel } from '../components/Crm.jsx';
 import { AccountPanel, ACC } from '../components/Account.jsx';
 import { can, seesPrice, TIERS } from '../lib/domain.js';
-import { money, dDate, dt, today, friendlyError } from '../lib/format.js';
+import { money, qty, dDate, dt, today, friendlyError } from '../lib/format.js';
 import { SUPPLY, customerOptions, optLabel, selOpts } from '../lib/customerOptions.js';
 import { optTag } from '../lib/tableOptions.js';
 import { OptionRows } from '../components/TableOptions.jsx';
@@ -150,6 +151,7 @@ export function CustomerDrawer({ id, onClose }) {
             <button type="button" className="btn sm" onClick={() => setEdit('info')}>✎ 修改档案（负责人 / 电话 / 城市 / 地址{role === 'admin' ? ' / 档位' : ''}）</button>
           </div>)}
         <AccountPanel customer={c} />
+        {role === 'admin' && c.status === 'active' && <CustMargin customerId={c.id} />}
         {role === 'admin' && <CustHistory c={c} />}
         <h3 style={{ margin: '8px 0 0' }}>联系记录 <span className="muted small">{contacts.length} 次</span></h3>
         {contacts.length === 0 ? <div className="empty">还没有回访或拜访记录</div> : (
@@ -311,4 +313,27 @@ function CustHistory({ c }) {
   const { org, role, tick } = useApp();
   const { data } = useData(() => call(role, `select * from app.archive_history($1,'customer',$2)`, [org, c.id]).catch(() => []), [org, role, c.id, tick]);
   return <HistoryBlock hist={data || []} title="修改记录" />;
+}
+
+// 328: 这个客户的毛利 (只中方): 全部 + 按种类
+function CustMargin({ customerId }) {
+  const { org, role } = useApp();
+  const { lowPct } = useMarginRules();
+  const { data } = useData(() => call(role, `select * from app.margin_rows($1) where customer_id = $2`, [org, customerId]), [org, role, customerId]);
+  if (!data?.length) return null;
+  const by = {}; for (const r of data) (by[r.category || '（没种类）'] ||= []).push(r);
+  const rows = Object.entries(by).map(([k, v]) => ({ id: k, category: k, ...sumMargin(v) })).sort((a, b) => b.revenue - a.revenue);
+  return (
+    <div className="pd-sec">
+      <div className="pd-h">毛利（已出货） <span className="pill gray">只中方</span> <Info>出库时锁定的成本，退货 / 调整 / 运费 / 手续费已扣；毛利率 = 利润 ÷ 销售额，加权。细看去侧栏「毛利分析」</Info></div>
+      <MarginKpis t={sumMargin(data)} lowPct={lowPct} compact />
+      <Grid id="cust-margin" compactTools rows={rows} columns={[
+        { key: 'category', label: '种类', w: 110 },
+        { key: 'qty', label: '数量', w: 80, type: 'number', render: (r) => qty(r.qty) },
+        { key: 'revenue', label: '销售额', w: 110, type: 'number', render: (r) => money(Math.round(r.revenue)) },
+        { key: 'profit', label: '利润', w: 110, type: 'number', render: (r) => money(Math.round(r.profit)) },
+        { key: 'pct', label: '毛利率', w: 90, type: 'number', render: (r) => <MarginPill pct={r.pct} lowPct={lowPct} missing={!r.revKnown} /> },
+      ]} />
+    </div>
+  );
 }

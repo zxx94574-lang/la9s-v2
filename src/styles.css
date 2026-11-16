@@ -1115,3 +1115,14 @@ input.in.gf-search { width: 230px; max-width: 100%; flex: 0 1 230px; }
   .flow2 .flow2-step .hide-m { display: none !important; }
   .flow2 .flow2-step .show-m { display: inline !important; }
 }
+
+/* 328 毛利 (只中方) */
+.mkpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.mkpi { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+.mkpi .k { font-size: 12.5px; color: var(--muted); font-weight: 650; }
+.mkpi .v { font-size: 22px; font-weight: 780; font-variant-numeric: tabular-nums; margin-top: 4px; overflow-wrap: anywhere; }
+.mkpi .v .pill { font-size: 15px; padding: 3px 10px; }
+.mkpi .s { font-size: 11.5px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; }
+.mkpi.sm { padding: 8px 10px; } .mkpi.sm .v { font-size: 18px; }
+.mpivot-cell { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; line-height: 1.2; }
+.mpivot-cell .small { color: var(--muted); }

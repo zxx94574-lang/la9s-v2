@@ -2,6 +2,7 @@
 // the current step shows its action, a finished step shows a read-only record (待改 13).
 // Going back = 「撤回到上一步」 with a reason (待改 14); cancelled deals can be restored (待改 16).
 import DebtBanner from '../components/DebtBanner.jsx';
+import { DealMargin } from '../components/Margin.jsx';
 import { DealLastPrice } from '../components/LastPrice.jsx';
 import { dealLight, stuckOf } from '../lib/domain.js';
 import React, { useEffect, useRef, useState } from 'react';
@@ -205,6 +206,7 @@ export default function Deal({ id }) {
       {curKey === 'sign' && <SignPanel {...ctx} />}
       {curKey === 'pay' && <PayPanel {...ctx} />}
       {curKey === 'return' && <ReturnPanel {...ctx} />}
+      {role === 'admin' && !cancelled && <DealMargin deal={deal} />}
 
       <div className="card">
         <div className="card-h"><h2>操作记录</h2><span className="muted small">谁、什么时候、做了什么</span></div>

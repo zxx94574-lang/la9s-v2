@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { q } from '../db/client.js';
+import { sumMargin, MarginKpis, useMarginRules } from '../components/Margin.jsx';
+import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { TierPill, Light, Info, useApp, useData, DatePicker, Pill, useOutside } from '../components/ui.jsx';
 import { ModelLink, CustLink, EmpLink , DealLink} from '../components/Archives.jsx';
@@ -86,6 +87,7 @@ export default function Dashboard() {
           <div className="f"><span><b>{data.rc.length}</b> 笔 · 来自 <b>{new Set(data.rc.filter((r) => !r.voided_at).map((r) => r.customer_id || r.customer_name)).size}</b> 位客户</span></div>
         </button>
       </div>) },
+    ...(role === 'admin' ? [{ id: 'margin', title: '已出货毛利（只中方）', span: 12, render: () => <DashMargin from={from} to={to} periodLabel={periodLabel} go={go} /> }] : []),
     { id: 'att', title: '今天打卡', span: 4, render: () => (
       <div className="card card-b mini" onClick={() => go('attendance')} role="button" tabIndex={0}>
         <div className="pd-h">今天打卡</div>
@@ -246,6 +248,24 @@ function Trend({ rows, from, to, bare }) {
             <text x="0" y="10" fontSize="11" fill="#8a94a6">{money(max)}</text>
           </svg>)}
       </div>
+    </div>
+  );
+}
+
+// 328 (Frank 11-16): 看板上的已出货毛利 —— 只中方; 按出库日期算, 加权毛利率; 点进去看任意细分
+function DashMargin({ from, to, periodLabel, go }) {
+  const { org, role } = useApp();
+  const { lowPct } = useMarginRules();
+  const { data } = useData(() => call(role, `select * from app.margin_rows($1)`, [org]), [org, role]);
+  if (!data) return <div className="card card-b muted">加载中…</div>;
+  const rows = data.filter((r) => { const d = ymd(r.shipped_on); return d >= from && d <= to; });
+  const t = sumMargin(rows);
+  return (
+    <div className="card">
+      <button type="button" className="kpi flat" onClick={() => go('margin')}>
+        <div className="t"><span>已出货毛利 · {periodLabel}</span><span>按档位 / 种类 / 型号细看 →</span></div>
+      </button>
+      <div className="card-b" style={{ paddingTop: 0 }}>{rows.length ? <MarginKpis t={t} lowPct={lowPct} compact /> : <div className="muted small">这个时间段还没有出库</div>}</div>
     </div>
   );
 }
