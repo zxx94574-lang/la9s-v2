@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, DatePicker, Info } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, DatePicker, Info, Choice } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import ModelPicker from '../components/ModelPicker.jsx';
 import { SimpleForm } from './Fob.jsx';
@@ -95,8 +95,7 @@ function EditPR({ r, onClose }) {
         <button type="button" className="btn primary" disabled={!f.title.trim() || !lines.length || (f.kind === 'fob' && !f.fob_project_id)} onClick={save}>{r.id ? '保存' : '提交申请'}</button></>}>
       <div className="stack">
         <div className="field req"><label>用途（从源头分开，到货不用再猜）</label><div className="seg">{Object.entries(PR_KIND).map(([k, [l]]) => <button type="button" key={k} className={f.kind === k ? 'on' : ''} onClick={() => setF({ ...f, kind: k })}>{l}</button>)}</div></div>
-        {f.kind === 'fob' && <div className="field req"><label>哪个 FOB 项目</label><select className="in" value={f.fob_project_id} onChange={(e) => setF({ ...f, fob_project_id: e.target.value })} style={{ maxWidth: 360 }}>
-          <option value="">选 FOB 项目</option>{data.fobs.map((x) => <option key={x.id} value={x.id}>{x.fob_no} · {x.customer_code} {x.customer_name}</option>)}</select></div>}
+        {f.kind === 'fob' && <div className="field req"><label>哪个 FOB 项目</label><Choice value={f.fob_project_id} onChange={(v) => setF({ ...f, fob_project_id: v })} options={data.fobs.map((x) => [x.id, `${x.fob_no} · ${x.customer_code} ${x.customer_name}`])} placeholder="选 FOB 项目" flat={false} style={{ width: 360 }} /></div>}
         <div className="grid2">
           <div className="field req"><label>申请什么（标题）</label><input className="in" value={f.title} placeholder={f.kind === 'supplies' ? '例：仓库工服 30 套' : '例：10 月屏幕补货'} onChange={(e) => setF({ ...f, title: e.target.value })} /></div>
           <div className="field"><label>运输方式</label><div className="seg">{Object.entries(MODE).map(([k, l]) => <button type="button" key={k} className={f.mode === k ? 'on' : ''} onClick={() => setF({ ...f, mode: k })}>{l}</button>)}</div></div>

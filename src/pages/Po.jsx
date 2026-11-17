@@ -4,7 +4,7 @@
 // 箱单 (飞书「98.箱单 › 科特」里那种 Excel) 直接拖进来: 按内容认页签 (页签名字不可靠), 读需求批次 / 入仓号 / 每箱型号数量 / 单价 / 金蝶料号.
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Pill, Modal, Info, PhotoInput, FileDrop, Drawer, Thumb, DatePicker } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, Info, PhotoInput, FileDrop, Drawer, Thumb, DatePicker, Choice } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { ModelLink } from '../components/Archives.jsx';
 import { can } from '../lib/domain.js';
@@ -221,7 +221,7 @@ function GapModal({ line, left, onClose, onDone }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><button type="button" className="btn danger" disabled={!r || !proof || (r === '其他' && !note.trim())} onClick={go}>确认关掉这 {qty(left)} 片</button></>}>
       <div className="stack">
         <div className="hint">关掉以后这 {qty(left)} 片不再算在途，备货看板也不再等它。只有中方能关；必须选结果、传凭证（国内确认的截图 / 破损照片…）。</div>
-        <div className="field req"><label>结果</label><div className="chips">{GAP_RESULTS.map((x) => <button type="button" key={x} className={`chip ${r === x ? 'on' : ''}`} onClick={() => setR(x)}>{x}</button>)}</div></div>
+        <div className="field req"><label>结果</label><Choice value={r} onChange={setR} options={GAP_RESULTS} /></div>
         <div className="field req"><label>凭证</label><PhotoInput value={proof} onChange={setProof} label="凭证" /></div>
         <div className="field"><label>说明{r === '其他' ? '（选「其他」必填）' : ''}</label><input className="in" value={note} onChange={(e) => setNote(e.target.value)} /></div>
       </div>
@@ -269,8 +269,8 @@ export function PoForm({ init, onClose }) {
       <div className="stack">
         <div className="hint">国内发了货再建单：保存后这些货就算在途，本地看得到什么时候到。单价以国内实际录入为准。{init.request_id ? ' 这张单来自本地的物料申请，保存后申请自动变成「国内已下单」。' : ''}</div>
         <div className="rgrid">
-          <div className="field req"><label>用途</label><div className="chips">{[['local', '本地备货'], ['fob', 'FOB']].map(([k, l]) => <button type="button" key={k} className={`chip ${f.purpose === k ? 'on' : ''}`} onClick={() => set('purpose', k)}>{l}</button>)}</div></div>
-          {f.purpose === 'fob' && <div className="field"><label>FOB 项目（系统里有就选）</label><select className="in" value={f.fob_project_id} onChange={(e) => set('fob_project_id', e.target.value)}><option value="">— 不挂项目 —</option>{(fobs || []).map((x) => <option key={x.id} value={x.id}>{x.fob_no}</option>)}</select></div>}
+          <div className="field req"><label>用途</label><Choice value={f.purpose} onChange={(k) => set('purpose', k)} options={[['local', '本地备货'], ['fob', 'FOB']]} /></div>
+          {f.purpose === 'fob' && <div className="field"><label>FOB 项目（系统里有就选）</label><Choice value={f.fob_project_id} onChange={(v) => set('fob_project_id', v)} options={(fobs || []).map((x) => [x.id, x.fob_no])} empty="— 不挂项目 —" flat={false} /></div>}
           {f.purpose === 'fob' && !f.fob_project_id && <div className="field req"><label>FOB 客户（例 LA9S-KABRE）</label><input className="in" value={f.fob_customer || ''} onChange={(e) => set('fob_customer', e.target.value.toUpperCase())} /></div>}
           <div className="field"><label>需求批次（例 20260715-KABRE海运-3批）</label><input className="in" value={f.batch_name} onChange={(e) => set('batch_name', e.target.value)} /></div>
           <div className="field"><label>入仓号（货代给的，例 CG2601995A）</label><input className="in" value={f.inbound_no} onChange={(e) => set('inbound_no', e.target.value.toUpperCase())} /></div>
@@ -324,8 +324,8 @@ export function PackingImport({ onClose }) {
             <div className="field"><label>需求批次</label><input className="in" value={p.batch_name} onChange={(e) => setP({ ...p, batch_name: e.target.value })} /></div>
             <div className="field"><label>入仓号</label><input className="in" value={p.inbound_no} onChange={(e) => setP({ ...p, inbound_no: e.target.value.toUpperCase() })} /></div>
             <div className="field"><label>发货日</label><DatePicker value={p.date} onChange={(v) => setP({ ...p, date: v })} /></div>
-            <div className="field req"><label>用途（系统猜的，请确认）</label><div className="chips">{[['local', '本地备货'], ['fob', 'FOB']].map(([k, l]) => <button type="button" key={k} className={`chip ${p.purpose === k ? 'on' : ''}`} onClick={() => setP({ ...p, purpose: k })}>{l}</button>)}</div></div>
-            {p.purpose === 'fob' && <div className="field"><label>FOB 项目（系统里有就选）</label><select className="in" value={p.fob_project_id} onChange={(e) => setP({ ...p, fob_project_id: e.target.value })}><option value="">— 不挂项目 —</option>{(fobs || []).map((x) => <option key={x.id} value={x.id}>{x.fob_no}{role === 'cn_support' ? '' : ` · ${x.name}`}</option>)}</select></div>}
+            <div className="field req"><label>用途（系统猜的，请确认）</label><Choice value={p.purpose} onChange={(k) => setP({ ...p, purpose: k })} options={[['local', '本地备货'], ['fob', 'FOB']]} /></div>
+            {p.purpose === 'fob' && <div className="field"><label>FOB 项目（系统里有就选）</label><Choice value={p.fob_project_id} onChange={(v) => setP({ ...p, fob_project_id: v })} options={(fobs || []).map((x) => [x.id, `${x.fob_no}${role === 'cn_support' ? '' : ` · ${x.name}`}`])} empty="— 不挂项目 —" flat={false} /></div>}
             {p.purpose === 'fob' && !p.fob_project_id && <div className="field req"><label>FOB 客户（箱单上的，例 LA9S-KABRE）</label><input className="in" value={p.fwdCustomer || ''} onChange={(e) => setP({ ...p, fwdCustomer: e.target.value.toUpperCase() })} /></div>}
           </div>
           <Grid id="pl-lines" noTools rows={p.lines} rowKey={(l) => l.descr} columns={[
@@ -348,7 +348,7 @@ export function fromRequest(r, lines) {
 }
 export function PurchaseTodo() {
   const { org, role, openArchive, go, tick } = useApp();
-  const [form, setForm] = useState(null);
+  const [form, setForm] = useState(null); const [openG, setOpenG] = useState(null);
   const { data } = useData(async () => {
     const [pos, reqs] = await Promise.all([q(poListSql, [org]),
       q(`select r.*, (select coalesce(json_agg(json_build_object('product_id', l.product_id, 'item', l.item, 'qty', l.qty, 'code', p.code)), '[]') from app.purchase_request_lines l left join app.products p on p.id = l.product_id where l.request_id = r.id) as lines
@@ -360,26 +360,36 @@ export function PurchaseTodo() {
   const open = data.pos.filter((p) => p.status !== 'closed');
   const T = [];   // [谁, 紧急?, 做什么, 单子们, 点了干嘛]
   const cn = role === 'cn_support' || role === 'admin', wh = role === 'manager' || role === 'admin';
-  if (cn) data.reqs.forEach((r) => T.push({ red: r.need_by && dDate(r.need_by) <= in3, what: `本地申请 ${r.req_no}「${r.title}」等国内下单${r.need_by ? `（要在 ${dDate(r.need_by)} 前到）` : ''}`, btn: '建采购单', run: () => setForm(fromRequest(r, r.lines || [])) }));
-  if (cn) open.filter((p) => !p.boxes_n).forEach((p) => T.push({ what: `${p.po_no} 还没有箱单：发货后把箱单 Excel 导进来，本地才知道每箱是什么`, po: p }));
-  if (cn) open.filter((p) => !p.eta).forEach((p) => T.push({ what: `${p.po_no} 没填预计到货日：问货代后填上`, po: p }));
-  if (cn || wh) open.filter((p) => p.unmatched_n > 0).forEach((p) => T.push({ red: p.eta && dDate(p.eta) <= in3, what: `${p.po_no} 有 ${p.unmatched_n} 行没对上系统编码：到货前必须对上，不然不能入库`, po: p }));
-  if (cn) open.filter((p) => p.eta && dDate(p.eta) < td && N(p.received) === 0).forEach((p) => T.push({ red: true, what: `${p.po_no} 预计 ${dDate(p.eta)} 到，过了还没到：跟货代确认，改预计到货日`, po: p }));
-  if (wh) open.filter((p) => p.eta && dDate(p.eta) <= in3 && p.boxes_n > p.boxes_in).forEach((p) => T.push({ red: dDate(p.eta) <= td, what: `${p.po_no} ${dDate(p.eta) <= td ? '应该到了' : `${dDate(p.eta)} 到`}（${p.boxes_n - p.boxes_in} 箱）：货到当天勾箱、拍照、下推入库`, po: p }));
-  if (role === 'admin') open.filter((p) => N(p.received) > 0 && p.boxes_n > 0 && p.boxes_in === p.boxes_n && transitOf(p) > 0).forEach((p) => T.push({ red: true, what: `${p.po_no} 箱都到了还差 ${qty(transitOf(p))} 片：选结果 + 传凭证关差额`, po: p }));
+  if (cn) data.reqs.forEach((r) => T.push({ g: 'req',  red: r.need_by && dDate(r.need_by) <= in3, what: `本地申请 ${r.req_no}「${r.title}」等国内下单${r.need_by ? `（要在 ${dDate(r.need_by)} 前到）` : ''}`, btn: '建采购单', run: () => setForm(fromRequest(r, r.lines || [])) }));
+  if (cn) open.filter((p) => !p.boxes_n).forEach((p) => T.push({ g: 'info',  what: `${p.po_no} 还没有箱单：发货后把箱单 Excel 导进来，本地才知道每箱是什么`, po: p }));
+  if (cn) open.filter((p) => !p.eta).forEach((p) => T.push({ g: 'info',  what: `${p.po_no} 没填预计到货日：问货代后填上`, po: p }));
+  if (cn || wh) open.filter((p) => p.unmatched_n > 0).forEach((p) => T.push({ g: 'code',  red: p.eta && dDate(p.eta) <= in3, what: `${p.po_no} 有 ${p.unmatched_n} 行没对上系统编码：到货前必须对上，不然不能入库`, po: p }));
+  if (cn) open.filter((p) => p.eta && dDate(p.eta) < td && N(p.received) === 0).forEach((p) => T.push({ g: 'late',  red: true, what: `${p.po_no} 预计 ${dDate(p.eta)} 到，过了还没到：跟货代确认，改预计到货日`, po: p }));
+  if (wh) open.filter((p) => p.eta && dDate(p.eta) <= in3 && p.boxes_n > p.boxes_in).forEach((p) => T.push({ g: 'due',  red: dDate(p.eta) <= td, what: `${p.po_no} ${dDate(p.eta) <= td ? '应该到了' : `${dDate(p.eta)} 到`}（${p.boxes_n - p.boxes_in} 箱）：货到当天勾箱、拍照、下推入库`, po: p }));
+  if (role === 'admin') open.filter((p) => N(p.received) > 0 && p.boxes_n > 0 && p.boxes_in === p.boxes_n && transitOf(p) > 0).forEach((p) => T.push({ g: 'gap',  red: true, what: `${p.po_no} 箱都到了还差 ${qty(transitOf(p))} 片：选结果 + 传凭证关差额`, po: p }));
   if (!T.length && role !== 'cn_support') return null;
   T.sort((a, b) => (b.red ? 1 : 0) - (a.red ? 1 : 0));
+  // 311 (Frank 11-14 / 11-17 再强调): 看板 / 待办看总数, 不看明细 —— 一类事一个数字块, 点开才列出来
+  const GROUPS = [['due', '该到货 / 快到'], ['late', '过期没到'], ['code', '编码没对上'], ['info', '资料不全'], ['gap', '差额待关'], ['req', '本地申请等下单']];
+  const blocks = GROUPS.map(([g, label]) => { const rows = T.filter((x) => x.g === g); return { g, label, rows, red: rows.some((x) => x.red) }; }).filter((b) => b.rows.length);
+  const cur = blocks.find((b) => b.g === openG);
   return (
     <div className="card" style={{ marginBottom: 12 }}>
       <div className="card-h"><h2>采购与到货</h2>{T.length ? <Pill tone={T.some((x) => x.red) ? 'red' : 'amber'}>{T.length} 件</Pill> : <Pill tone="green">都做完了</Pill>}
-        <Info>每条都写了做什么。点一下直接打开那张单。做法见「SOP」→ 采购与到货。</Info><span className="grow" />
+        <Info>这里只看总数。点一个数字块才列出是哪几张单，再点一条直接打开那张单。做法见「SOP」→ 采购与到货。</Info><span className="grow" />
         <button type="button" className="btn sm ghost" onClick={() => go('po')}>全部采购单 ›</button></div>
-      {T.length ? T.map((x, i) => (
+      {blocks.length ? <div className="numblocks">
+        {blocks.map((b) => (
+          <button type="button" key={b.g} className={`numblock ${b.red ? 'red' : 'amber'} ${openG === b.g ? 'on' : ''}`} aria-expanded={openG === b.g} onClick={() => setOpenG(openG === b.g ? null : b.g)}>
+            <b>{b.rows.length}</b><span>{b.label}</span>
+          </button>))}
+      </div> : <div className="card-b small muted">今天没有要做的采购事项。</div>}
+      {cur && cur.rows.map((x, i) => (
         <div key={i} className="orow" style={{ gridTemplateColumns: 'auto 1fr auto' }} onClick={() => (x.run ? x.run() : openArchive({ kind: 'po', id: x.po.id }))}>
           <span className={`age ${x.red ? 'red' : 'amber'}`}>{x.red ? '紧急' : '今天'}</span>
           <span className="small">{x.what}</span>
           {x.btn ? <button type="button" className="btn sm primary" onClick={(e) => { e.stopPropagation(); x.run(); }}>{x.btn}</button> : <span className="muted">›</span>}
-        </div>)) : <div className="card-b small muted">今天没有要做的采购事项。国内发了货 → 导入箱单；本地提了申请 → 这里会出现「建采购单」。</div>}
+        </div>))}
       {form && <PoForm init={form} onClose={() => setForm(null)} />}
     </div>
   );

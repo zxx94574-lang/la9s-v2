@@ -2,7 +2,7 @@
 // 回访结果用选项不手打; 下次跟进日期一键 (明天 / 3 天 / 一周 / 自选); 新潜客自动临时编码.
 import React, { useState } from 'react';
 import { call, q } from '../db/client.js';
-import { useApp, Modal, Pill, PhotoInput, DatePicker , PhoneInput} from './ui.jsx';
+import { useApp, Modal, Pill, PhotoInput, DatePicker , PhoneInput, Choice } from './ui.jsx';
 import { friendlyError, ymd } from '../lib/format.js';
 
 export const CALL_RESULTS = [['order', '下单', 'green'], ['quote', '要报价', 'blue'], ['later', '以后再要', 'amber'], ['no_need', '暂不需要', 'gray'],
@@ -49,8 +49,7 @@ export function CallModal({ customer, onClose, onDone }) {
         {customer.kind === 'both' && <div className="field"><label>回访线</label><div className="seg">{[['spare', '备件'], ['recycle', '回收']].map(([v, l]) =>
           <button type="button" key={v} className={f.line === v ? 'on' : ''} onClick={() => set('line')(v)}>{l}</button>)}</div></div>}
         <div className="field"><label>方式</label><div className="seg">{CHANNELS.map(([v, l]) => <button type="button" key={v} className={f.channel === v ? 'on' : ''} onClick={() => set('channel')(v)}>{l}</button>)}</div></div>
-        <div className="field req"><label>结果</label><div className="chips">{CALL_RESULTS.map(([v, l]) =>
-          <button type="button" key={v} className={`chip ${f.result === v ? 'on' : ''}`} onClick={() => set('result')(v)}>{l}</button>)}</div></div>
+        <div className="field req"><label>结果</label><Choice value={f.result} onChange={(v) => set('result')(v)} options={CALL_RESULTS} /></div>
         {f.result === 'order' && <div className="hint">客户要下单：保存后去「新建询单 / 报价」开单，单子会跟这个客户挂在一起。</div>}
         <div className="field"><label>说明（要什么型号、多少、为什么不要）</label><input className="in" value={f.note} onChange={(e) => set('note')(e.target.value)} placeholder="例：要 BG6M 盖子 20 个 / 嫌价格高" /></div>
         <div className="field"><label>下次跟进{needNext && <span className="muted small">（建议填）</span>}</label><FollowDate value={f.next} onChange={set('next')} /></div>

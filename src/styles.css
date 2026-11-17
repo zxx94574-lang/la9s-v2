@@ -1159,3 +1159,38 @@ button.card-h.fold-h:hover h2 { color: var(--brand); }
 .sugg-h .btn { flex: 0 0 auto; white-space: nowrap; }
 .cell-pop, .dp-pop { max-width: calc(100vw - 16px); }
 .sugg .sugg-h .btn { display: inline-flex; width: auto; padding: 5px 14px; }
+/* 311 数字块: 看板 / 待办同类事只给总数, 点开才是明细 */
+.numblocks { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; padding: 10px 14px 12px; }
+.numblock { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font: inherit; cursor: pointer; text-align: left; min-width: 0; }
+.numblock b { font-size: 22px; line-height: 1.1; }
+.numblock span { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.numblock.red b { color: #c0392b; } .numblock.amber b { color: #b7791f; }
+.numblock:hover, .numblock.on { border-color: var(--brand); background: var(--brand-soft); }
+/* Choice: ≤3 平铺 / ≥4 带搜索下拉 —— 同高同圆角 */
+.choice-flat { display: inline-flex; gap: 6px; flex-wrap: wrap; max-width: 100%; }
+.choice-flat .chip { min-height: 36px; padding: 6px 14px; }
+.choice-flat.sm .chip { min-height: 30px; padding: 4px 10px; }
+button.in.choice-btn { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; min-width: 120px; max-width: 100%; text-align: left; cursor: pointer; background: #fff; border-radius: 8px; }
+button.in.choice-btn.sm { min-height: 30px; min-width: 84px; }
+button.in.choice-btn:disabled { cursor: default; opacity: .6; }
+button.in.choice-btn.err-in { border-color: var(--red) !important; background: var(--red-bg); }
+.choice-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.choice-v.ph { color: var(--muted); }
+.choice-caret { color: var(--muted); font-size: 11px; flex: 0 0 auto; }
+.menu.choice-pop { z-index: 600; padding: 6px; display: flex; flex-direction: column; overflow: hidden; }
+.choice-pop .choice-q { width: 100%; box-sizing: border-box; min-height: 32px; margin-bottom: 6px; flex: 0 0 auto; }
+.choice-list { overflow: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+.choice-pop .opt { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: 8px; font: inherit; color: #111; cursor: pointer; }
+.choice-pop .opt.hi { background: var(--brand-soft); }
+.choice-pop .opt.on { font-weight: 600; }
+.choice-pop .opt-l { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.choice-pop .opt-h { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.choice-pop .tick { color: var(--brand); }
+@media (max-width: 760px) { .menu.choice-pop { z-index: 640 !important; bottom: auto !important; } .choice-pop .opt { padding: 11px 12px; font-size: 15px; } .choice-list { max-height: 50vh; } }
+/* 333 表格分组 */
+tr.grp-row > td { background: #f3f6fb; border-top: 1px solid var(--line); cursor: pointer; padding: 6px 10px; }
+tr.grp-row:hover > td { background: var(--brand-soft); }
+.grp-h { display: inline-flex; align-items: center; gap: 10px; flex-wrap: nowrap; white-space: nowrap; }
+button.in.choice-btn.gf-group { min-width: 96px; }
+button.in.choice-btn { border: 1px solid var(--line); color: inherit; font: inherit; padding: 6px 10px; }
+button.in.choice-btn:hover, button.in.choice-btn[aria-expanded="true"] { border-color: var(--brand); }

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
-import { useApp, useData, Modal, FRow, Info, PhotoInput, Thumb, DatePicker, FileDrop } from './ui.jsx';
+import { useApp, useData, Modal, FRow, Info, PhotoInput, Thumb, DatePicker, FileDrop, Choice } from './ui.jsx';
 import { EmpLink } from './Archives.jsx';
 import { dt, dDate, friendlyError } from '../lib/format.js';
 
@@ -141,7 +141,7 @@ function NewDirective({ onClose }) {
         <FRow label="紧急程度"><div className="chips"><button type="button" className={`chip ${!f.urgent ? 'on' : ''}`} onClick={() => setF({ ...f, urgent: false })}>普通</button><button type="button" className={`chip ${f.urgent ? 'on' : ''}`} onClick={() => setF({ ...f, urgent: true })}>紧急</button></div></FRow>
         <FRow label="结果要求"><div className="chips"><button type="button" className={`chip ${!f.require_photo ? 'on' : ''}`} onClick={() => setF({ ...f, require_photo: false })}>文字或照片都行</button><button type="button" className={`chip ${f.require_photo ? 'on' : ''}`} onClick={() => setF({ ...f, require_photo: true })}>必须拍照</button></div></FRow>
         <FRow label="什么时候前做完"><DatePicker value={f.due_on} onChange={(v) => setF({ ...f, due_on: v })} /></FRow>
-        <FRow label="重复"><div className="chips">{[['', '只这一次'], ['daily', '每天'], ['weekly', '每周'], ['monthly', '每月']].map(([k, l]) => <button type="button" key={k} className={`chip ${f.repeat === k ? 'on' : ''}`} onClick={() => setF({ ...f, repeat: k })}>{l}</button>)}</div></FRow>
+        <FRow label="重复"><Choice value={f.repeat} onChange={(k) => setF({ ...f, repeat: k })} options={[['', '只这一次'], ['daily', '每天'], ['weekly', '每周'], ['monthly', '每月']]} /></FRow>
         {f.repeat && <div className="hint">定期任务：系统{REPEAT[f.repeat]}自动给他生成一条（每天的周日不生成），每条都要他点收到、完成，你确认。</div>}
       </div>
     </Modal>

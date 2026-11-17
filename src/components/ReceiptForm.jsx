@@ -5,7 +5,7 @@ import { DealLink } from './Archives.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, DatePicker, PhotoInput, Drawer, BigNum, Modal, FRow, Info, RateInput } from './ui.jsx';
+import { useApp, useData, DatePicker, PhotoInput, Drawer, BigNum, Modal, FRow, Info, RateInput, Choice } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { can, whoCan, PAY_METHODS, balanceWords } from '../lib/domain.js';
 import { money, today, dDate, friendlyError } from '../lib/format.js';
@@ -148,10 +148,10 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
       <div className="card-b stack">
         <div className="rgrid">
           <FRow label="收款日期" req><DatePicker value={date} onChange={setDate} /></FRow>
-          <FRow label="收款方式" req><div className="chips">{['cash', 'wave', 'orange', 'bank'].map((k) => <button type="button" key={k} className={`chip ${method === k ? 'on' : ''}`} onClick={() => setMethod(k)}>{PAY_METHODS[k]}</button>)}</div></FRow>
+          <FRow label="收款方式" req><Choice value={method} onChange={(k) => setMethod(k)} options={['cash', 'wave', 'orange', 'bank'].map((k) => [k, PAY_METHODS[k]])} /></FRow>
           <FRow label="到账金额" req>
             <input className={`in ${errs && !(N(amount) > 0) ? 'err-in' : ''}`} inputMode="decimal" style={{ width: 150, fontSize: 17, fontWeight: 700 }} value={amount} onChange={(e) => { setAmount(e.target.value.replace(/[^\d.]/g, '')); setOverOk(false); }} placeholder="0" />
-            <select className="in" style={{ width: 84 }} value={currency} onChange={(e) => { setCurrency(e.target.value); setRate(''); setRateOk(false); }}>{[...new Set(['XOF', acc, 'USD', 'CNY', 'EUR'])].map((c) => <option key={c} value={c}>{c}</option>)}</select>
+            <Choice value={currency} onChange={(v) => { setCurrency(v); setRate(''); setRateOk(false); }} options={[...new Set(['XOF', acc, 'USD', 'CNY', 'EUR'])].filter(Boolean)} flat={false} size="sm" style={{ width: 92, minWidth: 0 }} />
             {lockDeal && defaultAmount != null && <Info>本单待付 {money(defaultAmount, acc)}，只作参考，实收请按到账手填。</Info>}
           </FRow>
           <FRow label="凭证" req><PhotoInput value={proof} onChange={setProof} label={method === 'cash' ? '群里客户确认收到现金的截图' : '付款截图'} camera invalid={errs && !proof} />{method === 'cash' && <Info>收现金：先在客户群里说「收到现金 XX」，客户回复没问题后，把这段聊天截图传上来。</Info>}</FRow>
@@ -169,8 +169,8 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
           </FRow>
           <FRow label="进哪个账户">
             {method === 'cash' && <span className="chips"><button type="button" className={`chip ${!byStaff ? 'on' : ''}`} onClick={() => setByStaff(false)}>交到公司</button><button type="button" className={`chip ${byStaff ? 'on' : ''}`} onClick={() => setByStaff(true)}>员工代收</button></span>}
-            {byStaff ? <select className={`in ${errs && !collector ? 'err-in' : ''}`} style={{ width: 160 }} value={collector} onChange={(e) => setCollector(e.target.value)}><option value="">选员工…</option>{(data.staff || []).map((e) => <option key={e.id} value={e.id}>{e.short_name}</option>)}</select>
-              : <select className="in" style={{ width: 170 }} value={accSel} onChange={(e) => setAccountId(e.target.value)}><option value="">（先不选账户）</option>{accOpts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>}
+            {byStaff ? <Choice value={collector} onChange={setCollector} options={(data.staff || []).map((e) => [e.id, e.short_name])} placeholder="选员工…" err={errs && !collector} flat={false} style={{ width: 170 }} />
+              : <Choice value={accSel} onChange={setAccountId} options={accOpts.map((a) => [a.id, a.name])} empty="（先不选账户）" flat={false} style={{ width: 190 }} />}
             <Info>{byStaff ? '客户把现金给了员工：客户账照冲，钱挂在员工名下（在途）；员工存进 Wave 转给公司后，在「资金账户 → 员工代收」点「已交」才进账户。' : '选了账户：核对到账（或导入流水自动配对）后，这笔钱记进这个账户的流水，分类「收客户货款」。'}</Info>
           </FRow>
           <FRow label="付款人"><input className="in" style={{ width: 200 }} value={payer} onChange={(e) => setPayer(e.target.value)} placeholder="别人代付时写（可不填）" /></FRow>
@@ -178,7 +178,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
         {!lockDeal && (
           <div className="field"><label>冲账方式</label>
             <div className="row" style={{ gap: 10, alignItems: 'stretch' }}>
-              <div className="chips">{MODES.map(([k, l]) => <button type="button" key={k} className={`chip ${mode === k ? 'on' : ''}`} onClick={() => setMode(k)}>{l}</button>)}</div>
+              <Choice value={mode} onChange={setMode} options={MODES} flat />
               <div className="infobar">ⓘ 收款立即进客户总账；冲到哪一单只影响单据「未付」，不影响总欠款。没冲完的部分记为预付，下次出库自动抵扣。</div>
             </div>
           </div>
@@ -289,8 +289,8 @@ export function ReallocModal({ r, onClose, onDone }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{!reason.trim() ? '要写原因' : f && N(amt) > f.max ? `最多挪 ${money(f.max)}` : t && N(amt) > t.max ? `目标单只欠 ${money(t.max)}` : '选好挪出 / 挪入和金额'}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>确认改冲账</button></>}>
       <div className="stack">
         <div className="hint">收款本身不动（金额、日期、凭证都不变），只改「这笔钱算在哪张单」。客户总欠款不变。</div>
-        <FRow label="从" req><select className="in" value={from} onChange={(e) => { setFrom(e.target.value); setTo(''); }}>{froms.map((x) => <option key={x.id || 'pre'} value={x.id}>{x.label}</option>)}</select></FRow>
-        <FRow label="挪到" req><select className="in" value={to} onChange={(e) => setTo(e.target.value)}><option value="">请选择</option>{tos.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select></FRow>
+        <FRow label="从" req><Choice value={from} onChange={(v) => { setFrom(v); setTo(''); }} options={froms.map((x) => [x.id, x.label])} flat={false} /></FRow>
+        <FRow label="挪到" req><Choice value={to} onChange={setTo} options={tos.map((x) => [x.id, x.label])} flat={false} /></FRow>
         <FRow label="金额" req><input className="in" inputMode="decimal" style={{ width: 140 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} />{f && <button type="button" className="btn sm ghost" onClick={() => setAmt(String(Math.min(f.max, t?.max ?? Infinity)))}>全部</button>}</FRow>
         <FRow label="原因" req><input className="in" style={{ width: '100%', maxWidth: 420 }} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例如 客户说这笔付的是另一张单" /></FRow>
       </div>

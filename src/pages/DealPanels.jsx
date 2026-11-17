@@ -10,7 +10,7 @@ import { DocActions, DocSheet, BalanceCopy, BalancePreview } from '../components
 import { BlActions } from '../components/Bl.jsx';
 import { flagAnomaly } from '../components/IssueReport.jsx';
 import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus } from '../components/ReceiptForm.jsx';
-import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip } from '../components/ui.jsx';
+import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip, Choice } from '../components/ui.jsx';
 import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, PAY_METHODS, RETURN_REASONS, CONFIRM_METHODS, CHECK_RESULTS, priceLevel, getThresholds, balanceWords, TIERS } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, pad, ymd } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
@@ -196,8 +196,8 @@ export function ConfirmBlock({ deal, events, act, role, lines }) {
         {can(role, 'hotline_confirm') ? (
           <div className="panel">
             <div className="fgrid">
-              <FRow label="确认方式" req><div className="chips">{Object.entries(CONFIRM_METHODS).map(([k, v]) => <button type="button" key={k} className={`chip ${method === k ? 'on' : ''} ${errs && !method ? 'err' : ''}`} onClick={() => setMethod(k)}>{v}</button>)}</div></FRow>
-              <FRow label="什么时候要" req><div className="chips">{[['today', '今天要'], ['tomorrow', '明天要'], ['date', '改天']].map(([k, l]) => <button type="button" key={k} className={`chip ${when === k ? 'on' : ''} ${errs && !when ? 'err' : ''}`} onClick={() => setWhen(k)}>{l}</button>)}</div>
+              <FRow label="确认方式" req><Choice value={method} onChange={(k) => setMethod(k)} options={Object.entries(CONFIRM_METHODS)} err={errs && !method} /></FRow>
+              <FRow label="什么时候要" req><Choice value={when} onChange={(k) => setWhen(k)} options={[['today', '今天要'], ['tomorrow', '明天要'], ['date', '改天']]} err={errs && !when} />
                 {when === 'date' && <DatePicker value={date || null} onChange={setDate} label={date ? '' : '选日期'} />}</FRow>
               <FRow label="结果"><OptionNote options={NOTE_OPTIONS.hotline} value={note} onChange={setNote} /></FRow>
               <FRow label="截图"><PhotoInput value={proof} onChange={setProof} label="WhatsApp 截图（可选）" /></FRow>
@@ -698,7 +698,7 @@ export function ConfirmPanel({ deal, lines, events, act, role }) {
           {can(role, 'customer_confirm') ? (
             <>
               {/* 210: 电脑上「标签：选项」一行一项, 手机自动上下 */}
-              <FRow label="确认方式" req><div className="chips">{Object.entries(CONFIRM_METHODS).map(([k, v]) => <button type="button" key={k} className={`chip ${method === k ? 'on' : ''} ${errs && !method ? 'err' : ''}`} onClick={() => setMethod(k)}>{v}</button>)}</div></FRow>
+              <FRow label="确认方式" req><Choice value={method} onChange={(k) => setMethod(k)} options={Object.entries(CONFIRM_METHODS)} err={errs && !method} /></FRow>
               <FRow label="确认截图" req><div className="proofbox-wrap" style={{ flex: 1, minWidth: 0 }}><PhotoInput value={proof} onChange={setProof} label="客户回复 OK 的截图" invalid={errs} /></div><Info>电话确认的：先在群里补发一句确认文字，再截那一句。以后有「我没同意这个价」的纠纷靠这张。</Info></FRow>
               <FRow label="约定发货" req>
                 <div className="seg">{[['today', '今天'], ['tomorrow', '明天'], ['date', '指定日期']].map(([k, l]) => <button type="button" key={k} className={when === k ? 'on' : ''} onClick={() => setWhen(k)}>{l}</button>)}</div>
@@ -786,7 +786,7 @@ function ShipForm({ deal, lines, shipments, act }) {
           <div className="field req"><label>发货日期</label><DatePicker value={date} onChange={setDate} /></div>
           <div className="field req"><label>时间</label><input className="in" type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ width: 120 }} /></div>
           <div className="field req grow"><label>发货方式</label>
-            <div className="chips">{Object.entries(SHIP_METHODS).map(([k, v]) => <button type="button" key={k} className={`chip ${method === k ? 'on' : ''} ${errs && !method ? 'err' : ''}`} onClick={() => setMethod(k)}>{v}</button>)}</div></div>
+            <Choice value={method} onChange={(k) => setMethod(k)} options={Object.entries(SHIP_METHODS)} err={errs && !method} /></div>
         </div>
         <div className="row" style={{ gap: 16, alignItems: 'flex-end' }}>
           <div className="field req" style={{ width: 220 }}><label>{method.startsWith('yango') ? 'Yango 司机电话' : method === 'customer_pickup' ? '取货人电话' : '联系电话'}</label>
@@ -797,7 +797,7 @@ function ShipForm({ deal, lines, shipments, act }) {
         </div>
         <div className="row" style={{ gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div className="field req"><label>运费谁出 <Info>默认客户出。S 档大客户：我们出。外区客户：我们只出仓库到 Adjamé 交通站这一段。选了我们出：填实际付的钱（照 Yango 截图上的价格），出库时自动记一笔支出流水（本地物流费，Wave-XOF 账户）。只进我们自己的流水，不动客户的账。</Info></label>
-            <div className="chips">{[['customer', '客户出'], ['company', '我们出'], ['company_part', '我们出一段（到交通站）']].map(([k, l]) => <button type="button" key={k} className={`chip ${bearer === k ? 'on' : ''}`} onClick={() => setBearer(k)}>{l}</button>)}</div></div>
+            <Choice value={bearer} onChange={(k) => setBearer(k)} options={[['customer', '客户出'], ['company', '我们出'], ['company_part', '我们出一段（到交通站）']]} flat /></div>
           {bearer !== 'customer' && <div className="field req" style={{ width: 220 }}><label>实际付了多少（照截图上的价格）</label><input className={`in ${errs && !(N(freight) > 0) ? 'err-in' : ''}`} inputMode="numeric" value={freight} onChange={(e) => setFreight(e.target.value.replace(/\D/g, ''))} placeholder="XOF" /></div>}
         </div>
       </div>
@@ -859,7 +859,7 @@ function FreightModal({ s, act, onClose }) {
       <button type="button" className="btn primary" disabled={!ok} onClick={() => act(`运费 ${money(amt)} 已付，已记一笔本地物流费支出`, `select app.pay_ship_freight($1,$2,$3,$4)`, [s.id, account, N(amt), proof]).then(onClose, () => {})}>已付，记账</button></>}>
       <div className="stack">
         {acc && !acc.length && <div className="pill red" style={{ whiteSpace: 'normal' }}>还没有资金账户：先到「资金账户 → 账户设置」建 Wave / 现金账户</div>}
-        <FRow label="从哪个账户付" req><select className="in" value={account} onChange={(e) => setAccount(e.target.value)}><option value="">选账户…</option>{(acc || []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></FRow>
+        <FRow label="从哪个账户付" req><Choice value={account} onChange={setAccount} options={(acc || []).map((a) => [a.id, a.name])} placeholder="选账户…" flat={false} /></FRow>
         <FRow label="实际金额" req><input className="in" inputMode="numeric" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">XOF{s.freight_est ? `（仓库填的大概 ${money(s.freight_est)}）` : ''}</span></FRow>
         <FRow label="支付截图" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="Wave / Orange 支付截图" /></div></FRow>
       </div>
@@ -1014,7 +1014,7 @@ function TierGate({ deal, info, act, role }) {
         <div className="panel stack">
           <div className="hint">这个客户的档位中方还没确认，报价现在按<b>最贵档（Repair）</b>显示，<b>先不要发给客户</b>。中方定了档位，价格会自动重算，才能联系客户确认。超过 7 天没人动的草稿会自动作废（可恢复）。</div>
           {role === 'admin' ? (<>
-            <FRow label="定档位" req><div className="chips">{Object.entries(TIERS).map(([k, v]) => <button type="button" key={k} className={`chip ${tier === k ? 'on' : ''}`} onClick={() => setTier(k)}>{v}</button>)}</div></FRow>
+            <FRow label="定档位" req><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} /></FRow>
             <FRow label="备注"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如 看了店铺照片，按零售店" /></FRow>
             {deal.tier_request_note && <div className="small muted">员工说：{deal.tier_request_note}</div>}
             {prospect && <FRow label="客户编码" req><input className="in" style={{ width: 140 }} value={code} onChange={(e) => setCode(e.target.value)} /><span className="small muted">潜客定档 = 转成正式客户，系统给了下一个号，可改（和金蝶 / 飞书一致）</span></FRow>}
@@ -1097,7 +1097,7 @@ export function ReturnPanel({ deal, lines, returns, act, role }) {
               </div></div>
             <b>② 退的什么、为什么</b>
             <div className="field req"><label>退货类型</label>
-              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><div className="chips">{Object.entries(RETURN_REASONS).map(([k, v]) => <button type="button" key={k} className={`chip ${form.type === k ? 'on' : ''}`} onClick={() => setForm({ ...form, type: k })}>{v}</button>)}</div>
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><Choice value={form.type} onChange={(k) => setForm({ ...form, type: k })} options={Object.entries(RETURN_REASONS)} />
                 {form.type === 'other' && <input className={`in ${form.errs && !form.typeNote?.trim() ? 'invalid' : ''}`} style={{ width: 260 }} autoFocus value={form.typeNote || ''} onChange={(e) => setForm({ ...form, typeNote: e.target.value })} placeholder="「其他」是什么？（必填）" />}</div></div>
             <div className="field req"><label>具体原因</label><OptionNote options={NOTE_OPTIONS.return} value={form.reason} onChange={(v) => setForm({ ...form, reason: v })} /></div>
             <Grid id="return-form" noTools columns={[
@@ -1320,7 +1320,7 @@ function BalanceConfirm({ deal, events, act, role, unsigned, others = [], openDi
               <div className="panel">
                 {deal.balance_confirmed_at && <div className="pill amber" style={{ marginBottom: 8 }}>上次对账后又签收了新的一批，要重新对一次</div>}
                 <div className="fgrid">
-                  <FRow label="确认方式" req><div className="chips">{Object.entries(CONFIRM_METHODS).map(([k, v]) => <button type="button" key={k} className={`chip ${method === k ? 'on' : ''} ${errs && !method ? 'err' : ''}`} onClick={() => setMethod(k)}>{v}</button>)}</div></FRow>
+                  <FRow label="确认方式" req><Choice value={method} onChange={(k) => setMethod(k)} options={Object.entries(CONFIRM_METHODS)} err={errs && !method} /></FRow>
                   <FRow label="确认截图" req><PhotoInput value={proof} onChange={setProof} invalid={errs && !proof} label="客户回复确认的 WhatsApp / 通话截图" /></FRow>
                   <FRow label="备注"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(ev) => setNote(ev.target.value)} placeholder="例如 客户说月底一起付" /></FRow>
                   {others.length > 0 && <FRow label="一起对掉"><div className="stack" style={{ gap: 4 }}>
@@ -1356,7 +1356,7 @@ function DiscModal({ s, lines, act, onClose, discs = [], role }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{why && <span className="why">{why}</span>}<button type="button" className="btn primary" disabled={!!why} onClick={go}>{fixHit ? '提交修正' : '报给中方'}</button></>}>
       <div className="stack">
         <div className="hint">原来的出库单不改。这里记下客户<b>最终</b>实际收到多少，<b>差一片也要中方处理</b>。{fixing && <> 标黄的机型之前已经处理过：直接把数改成正确的，系统只补扣或冲回<b>差的那部分</b>，之前的记录都留着。</>}</div>
-        <FRow label="类型" req><div className="chips">{Object.entries(DISC_KIND).map(([k, v]) => <button type="button" key={k} className={`chip ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>{v}</button>)}</div></FRow>
+        <FRow label="类型" req><Choice value={kind} onChange={(k) => setKind(k)} options={Object.entries(DISC_KIND)} /></FRow>
         <Grid id="disc-lines" noTools rows={mine} rowKey={(x) => x.deal_line_id} columns={[
           { key: 'model', label: '型号', w: 150, render: (x) => <b>{x.line.model}</b> },
           { key: 'category', label: '种类', w: 90, render: (x) => x.line.category },
@@ -1407,7 +1407,7 @@ function DiscDecide({ x, s, deal, act, onClose }) {
             {['找货少数 / 拿错', '运输途中丢 / 坏', '客户自己的问题', '工厂原盒就少', '还没查清'].map((v) => <button type="button" key={v} className={`chip ${fault === v ? 'on' : ''}`} onClick={() => setFault(v)}>{v}</button>)}</div>
           <input className="in" style={{ width: '100%', maxWidth: 460 }} value={fault} onChange={(e) => setFault(e.target.value)} placeholder="写清楚是哪个环节、谁" />
           <div className="small muted">规矩：只要发错（少发 / 多发 / 发错型号），默认记复检人的责任。要算到别处，在下面「说明」里写清理由。</div></div></FRow>
-        <FRow label="货现在在哪" req><div className="chips">{Object.entries(DISC_WHERE).map(([k, v]) => <button type="button" key={k} className={`chip ${where === k ? 'on' : ''}`} onClick={() => setWhere(k)}>{v}</button>)}</div></FRow>
+        <FRow label="货现在在哪" req><Choice value={where} onChange={(k) => setWhere(k)} options={Object.entries(DISC_WHERE)} /></FRow>
         {where === 'in_warehouse' && decision !== 'reject' && N(x.amount) > 0 && <div className="hint">选「还在仓库」：系统会把少发的数量加回库存。</div>}
         {decision === 'reject' && <div className="chips">{RETURN_REJECT.map((v) => <button type="button" key={v} className={`chip ${note === v ? 'on' : ''}`} onClick={() => setNote(v)}>{v}</button>)}</div>}
         {x.late && <div className="hint">签收超过 24 小时才反馈，原则上不认；要认必须在「说明」里写破例原因。</div>}

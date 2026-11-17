@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import ModelPicker from '../components/ModelPicker.jsx';
@@ -111,8 +111,7 @@ function NewFob({ onClose }) {
         <div className="grid2">
           <div className="field req"><label>客户</label><CustomerSelect customers={data.customers} value={cust} onChange={setCust} /></div>
           <div className="field req"><label>目的国</label><div className="row" style={{ gap: 6 }}>
-            <select className="in" value={country} style={{ maxWidth: 160 }} onChange={(e) => { setCountry(e.target.value); setControl(e.target.value === 'CI' ? 'warehouse' : 'logistics'); }}>
-              {data.countries.map((c) => <option key={c.code} value={c.code}>{c.code} {c.name_zh}</option>)}</select>
+            <Choice value={country} onChange={(v) => { setCountry(v); setControl(v === 'CI' ? 'warehouse' : 'logistics'); }} options={data.countries.map((c) => [c.code, `${c.code} ${c.name_zh}`])} flat={false} style={{ width: 170 }} />
             <div className="seg">{Object.entries(ctrl).map(([k, l]) => <button type="button" key={k} className={control === k ? 'on' : ''} onClick={() => setControl(k)}>{l}</button>)}</div></div></div>
         </div>
         <ModelPicker catalog={data.catalog} categories={data.categories} onPick={add} showPrice={false} />

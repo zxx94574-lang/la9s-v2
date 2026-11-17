@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ymd, today, pad } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
@@ -623,6 +623,70 @@ export function RateInput({ a, b = 'XOF', value, onChange, placeholder, invalid,
 }
 
 // 「⋯ 更多」(减法巡检 C4, 11-17): 不常用 / 危险的操作收在这里, 不在页面上放红色大按钮. items = [[label, run, tone?]]
+// ── Choice: 全站单选控件 (Frank 11-17 定, 352 / 354 / 360) ──
+// 选项 ≤ 3 个且字短 → 一排平铺按钮; ≥ 4 个 → 下拉, 第一行永远是搜索 (包含即匹配, 不分大小写).
+// 平铺和下拉同高同圆角. options: ['a', 'b'] 或 [[值, 显示名, 右侧小字?]]. empty = 「不选」那一项的名字 (给了才有).
+const sv = (x) => (x == null ? '' : String(x));
+const normOpts = (options) => (options || []).filter((o) => o != null).map((o) => (Array.isArray(o) ? { v: o[0], l: String(o[1] ?? o[0]), hint: o[2] } : (typeof o === 'object' ? { v: o.v ?? o.value ?? o.id, l: String(o.l ?? o.label ?? o.name ?? ''), hint: o.hint } : { v: o, l: String(o) })));
+export function Choice({ value, onChange, options, empty, placeholder = '请选择', err, disabled, flat, width, style, className = '', size }) {
+  const opts = normOpts(options);
+  const asFlat = flat ?? (opts.length + (empty ? 1 : 0) <= 3 && opts.every((o) => o.l.length <= 12));
+  const [open, setOpen] = useState(false); const [kw, setKw] = useState(''); const [hi, setHi] = useState(0); const [pos, setPos] = useState(null);
+  const btn = useRef(null); const pop = useRef(null); const qin = useRef(null);
+  const all = empty ? [{ v: '', l: empty, empty: true }, ...opts] : opts;
+  const k = kw.trim().toLowerCase();
+  const list = k ? all.filter((o) => o.l.toLowerCase().includes(k) || String(o.hint || '').toLowerCase().includes(k)) : all;
+  const cur = opts.find((o) => sv(o.v) === sv(value));
+  const place = useCallback(() => {
+    const r = btn.current?.getBoundingClientRect(); if (!r) return;
+    const w = Math.min(Math.max(r.width, 240), window.innerWidth - 16);
+    const h = Math.min(360, window.innerHeight - 16);
+    const below = window.innerHeight - r.bottom - 8, up = below < Math.min(h, 220) && r.top > below;
+    setPos({ left: Math.max(8, Math.min(r.left, window.innerWidth - 8 - w)), width: w, maxHeight: Math.max(160, Math.min(h, (up ? r.top : below) - 4)), ...(up ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }) });
+  }, []);
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    place(); setKw(''); setHi(Math.max(0, all.findIndex((o) => sv(o.v) === sv(value))));
+    const t = setTimeout(() => { if (window.innerWidth > 760) qin.current?.focus(); }, 0);
+    const out = (e) => { if (!btn.current?.contains(e.target) && !pop.current?.contains(e.target)) setOpen(false); };
+    const sc = (e) => { if (!pop.current?.contains(e.target)) place(); };
+    document.addEventListener('pointerdown', out); window.addEventListener('resize', place); window.addEventListener('scroll', sc, true);
+    return () => { clearTimeout(t); document.removeEventListener('pointerdown', out); window.removeEventListener('resize', place); window.removeEventListener('scroll', sc, true); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, place]);
+  useEffect(() => { pop.current?.querySelector('.opt.hi')?.scrollIntoView({ block: 'nearest' }); }, [hi, open]);
+  const pick = (o) => { onChange(o.v); setOpen(false); btn.current?.focus(); };
+  const key = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi((i) => Math.min(list.length - 1, i + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((i) => Math.max(0, i - 1)); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (list[hi]) pick(list[hi]); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); btn.current?.focus(); }
+  };
+  if (asFlat) return (
+    <span className={`choice-flat ${size === 'sm' ? 'sm' : ''} ${className}`} style={style} role="radiogroup">
+      {all.map((o) => { const on = sv(o.v) === sv(value); return (
+        <button type="button" key={sv(o.v)} role="radio" aria-checked={on} disabled={disabled} className={`chip ${on ? 'on' : ''} ${err && !cur && !empty ? 'err' : ''}`} onClick={() => onChange(o.v)}>{o.l}</button>); })}
+    </span>);
+  return (
+    <>
+      <button type="button" ref={btn} disabled={disabled} className={`in choice-btn ${size === 'sm' ? 'sm' : ''} ${err && !cur ? 'err-in' : ''} ${className}`} style={{ width, ...style }} aria-haspopup="listbox" aria-expanded={open}
+        onClick={() => setOpen((o) => !o)} onKeyDown={(e) => { if (!open && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setOpen(true); } }}>
+        <span className={`choice-v ${cur ? '' : 'ph'}`}>{cur ? cur.l : (empty && (value ?? '') === '' ? empty : placeholder)}</span><span className="choice-caret">▾</span>
+      </button>
+      {open && pos && createPortal(
+        <div className="menu choice-pop" ref={pop} style={{ position: 'fixed', ...pos }} role="listbox" onKeyDown={key}>
+          <input ref={qin} className="in choice-q" placeholder="搜索…" value={kw} onChange={(e) => { setKw(e.target.value); setHi(0); }} />
+          <div className="choice-list">
+            {list.map((o, i) => { const on = sv(o.v) === sv(value); return (
+              <button type="button" key={sv(o.v)} role="option" aria-selected={on} className={`opt ${i === hi ? 'hi' : ''} ${on ? 'on' : ''} ${o.empty ? 'muted' : ''}`} onMouseEnter={() => setHi(i)} onClick={() => pick(o)}>
+                <span className="opt-l">{o.l}</span>{o.hint ? <span className="opt-h">{o.hint}</span> : null}{on ? <span className="tick">✓</span> : null}
+              </button>); })}
+            {!list.length && <div className="small muted" style={{ padding: 10 }}>没有匹配的选项</div>}
+          </div>
+        </div>, document.body)}
+    </>);
+}
+
 export function MoreMenu({ items, label = '⋯ 更多', title = '更多操作' }) {
   const [open, setOpen] = useState(false);
   const ref = useOutside(open, () => setOpen(false));

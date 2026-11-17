@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { useOutside, DateCalendar, useApp, copyToClipboard, Info } from './ui.jsx';
+import { useOutside, DateCalendar, useApp, copyToClipboard, Info, Choice } from './ui.jsx';
 import { loadTableOptions, loadRowAttrs, saveRowAttrs, customColumns } from '../lib/tableOptions.js';
 import TableOptionsModal from './TableOptions.jsx';
 
@@ -164,7 +164,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
   useEffect(() => { try { sessionStorage.setItem(gfKey, JSON.stringify(gf)); } catch { /* 无痕模式存不了就算了 */ } }, [gf, gfKey]);
   const filters = gf.conds; const setFilters = (v) => setGf((g) => ({ ...g, conds: typeof v === 'function' ? v(g.conds) : Array.isArray(v) ? v : [] }));
   const liveConds = filters.filter((f) => condReady(f) && byKey[f.key]);
-  const shown = useMemo(() => {
+  const allShown = useMemo(() => {
     const live = filters.filter((f) => condReady(f) && byKey[f.key]);
     const words = String(gf.q || '').trim().toUpperCase().split(/\s+/).filter(Boolean);
     const cols = Object.values(byKey).filter((c) => c.label);
@@ -191,6 +191,27 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
     return out;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, gf, sort, byKey, layout.rowOrder]);
+  // 333 (Frank 11-17): 飞书式分组 —— 任意一列都能当分组; 组内保持上面的筛选 / 排序; 组头显示 值 + 行数 (+ 数字列合计), 可收起. 存法同筛选 (本机这个岗位)
+  const groupCol = gf.group && byKey[gf.group] ? byKey[gf.group] : null;
+  const [folded, setFolded] = useState(() => new Set());
+  const gvOf = (c, r) => { const v = cellValue(c, r); return v == null || v === '' ? '' : String(v); };
+  const groups = useMemo(() => {
+    if (!groupCol) return null;
+    const m = new Map();
+    allShown.forEach((r) => { const v = gvOf(groupCol, r); if (!m.has(v)) m.set(v, []); m.get(v).push(r); });
+    const keys = [...m.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'zh-CN', { numeric: true })));
+    return keys.map((v) => ({ v, rows: m.get(v) }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allShown, groupCol]);
+  const shown = useMemo(() => (groups ? groups.flatMap((g) => (folded.has(g.v) ? [] : g.rows)) : allShown), [groups, allShown, folded]);
+  // 每个组头插在哪一行前面 (收起的组没有行, 挂到下一个展开组的第一行前; 最后剩下的挂在表尾)
+  const groupHeads = useMemo(() => {
+    if (!groups) return null;
+    const before = new Map(); let pend = []; 
+    groups.forEach((g) => { pend.push(g); if (!folded.has(g.v) && g.rows.length) { before.set(rowKey(g.rows[0]), pend); pend = []; } });
+    return { before, tail: pend };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, folded]);
   // 只在「筛出来的行」或条件真的变了才通知页面 (按内容比, 不按引用: 页面每次渲染给新数组也不会转圈)
   const shownSig = useRef('');
   useEffect(() => {
@@ -214,7 +235,17 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
     setLayout((l) => ({ ...l, rowOrder: keys })); setSort(null);
     if (navigator.vibrate) navigator.vibrate(8);
   };
-  const nFilters = liveConds.length + (String(gf.q || '').trim() ? 1 : 0);
+  const nFilters = liveConds.length + (String(gf.q || '').trim() ? 1 : 0) + (groupCol ? 1 : 0);
+  const groupHead = (g) => {
+    const off = folded.has(g.v);
+    const sums = vis.filter((c) => c.key !== groupCol.key && footObjKeys.has(c.key) && isNumCol(c)).map((c) => [c.label, g.rows.reduce((a, r) => a + (Number(cellValue(c, r)) || 0), 0)]);
+    return (
+      <tr key={`grp:${g.v}`} className="grp-row" onClick={() => setFolded((f) => { const n = new Set(f); n.has(g.v) ? n.delete(g.v) : n.add(g.v); return n; })}>
+        <td className="rowhead"><span className="caret">{off ? '▸' : '▾'}</span></td>
+        <td colSpan={vis.length}><span className="sticky-left grp-h"><b>{g.v === '' ? '（空）' : g.v}</b><span className="pill">{g.rows.length} 行</span>
+          {sums.map(([l, n]) => <span key={l} className="small muted">{l} <b>{n.toLocaleString('en-US', { maximumFractionDigits: 2 })}</b></span>)}</span></td>
+      </tr>);
+  };
   const [toolsOpen, setToolsOpen] = useState(false);   // 265: 档案里的小表, 工具栏收成一个小图标
   const [panel, setPanel] = useState(null);   // 筛选面板的位置
   const panelBtn = useRef(null);
@@ -509,6 +540,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
   }, [onDelete, selectable?.selected, sel, shown]);
   const colIdx = Object.fromEntries(vis.map((c, i) => [c.key, i]));
   const footObj = typeof foot === 'function' ? foot(shown) : foot;
+  const footObjKeys = new Set(Object.keys(footObj || {}).filter((k) => footObj[k] !== "" && footObj[k] != null));
   const isFill = (c) => c.fill || (!!c.edit && shown.some((r, i) => { const ed = c.edit(r, i); return ed && !ed.disabled; }));
   // 有可编辑列的表: 点格子 = 选格子, 不再整行打开; 打开走行号旁的 ↗ (飞书的「查看」)
   const hasEdit = vis.some((c) => !!c.edit);
@@ -556,6 +588,8 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
           <button type="button" ref={panelBtn} className={`btn sm gf-keep ${liveConds.length ? 'primary' : ''}`} onClick={() => (panel ? setPanel(null) : openPanel())} title="筛选：可以叠加多个条件">⏷ 筛选{liveConds.length ? ` ${liveConds.length}` : ''}</button>
           {liveConds.map((f) => <span key={f.id} className="pill blue gf-chip gf-keep" onClick={() => openPanel()} title="点开修改">{byKey[f.key].label}{f.op === 'in' ? '：' : f.op === 'not_in' ? ' 不是：' : f.op === 'empty' ? ' 为空' : f.op === 'not_empty' ? ' 不为空' : f.op === 'contains' ? ' 包含 ' : f.op === 'not_contains' ? ' 不包含 ' : { eq: ' = ', ne: ' ≠ ', gt: ' > ', lt: ' < ', between: ' 介于 ' }[f.op] || ' '}{['in', 'not_in'].includes(f.op) ? ((f.vals || []).length > 2 ? `${f.vals.length} 个` : (f.vals || []).join('、')) : ['empty', 'not_empty'].includes(f.op) ? '' : f.op === 'between' ? `${f.a}–${f.b}` : f.a}
             <button type="button" className="x-mini" title="去掉这个条件" onClick={(e) => { e.stopPropagation(); setFilters((cs) => cs.filter((c) => c.id !== f.id)); }}>×</button></span>)}
+          <Choice size="sm" flat={false} className="gf-keep gf-group" value={groupCol ? gf.group : ''} onChange={(v) => { setFolded(new Set()); setGf((g) => ({ ...g, group: v || '' })); }} empty="不分组" placeholder="▤ 分组"
+            options={layout.order.map((k) => byKey[k]).filter((c) => c && c.label && typeof c.label === 'string').map((c) => [c.key, `按「${c.label}」分组`])} />
           <input className="in sm gf-search" placeholder="⌕ 搜这张表（单号、名字、机型…）" value={gf.q || ''} onChange={(e) => setGf((g) => ({ ...g, q: e.target.value }))} />
           <Schemes id={id || 'grid'} current={gf} onApply={(s2) => setGf({ conds: (s2.conds || []).map((c) => ({ ...c })), any: !!s2.any, q: s2.q || '' })} />
           {nFilters > 0 && <span className="pill blue">筛出 {shown.length}/{rows.length} 行</span>}
@@ -624,11 +658,12 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td colSpan={vis.length + 3} className="empty"><span className="sticky-left">{rows.length ? <>筛选以后没有符合条件的行 <button type="button" className="btn sm" onClick={() => setGf({ conds: [], any: false, q: '' })}>清除筛选</button></> : empty}</span></td></tr>}
+            {allShown.length === 0 && <tr><td colSpan={vis.length + 3} className="empty"><span className="sticky-left">{rows.length ? <>筛选以后没有符合条件的行 <button type="button" className="btn sm" onClick={() => setGf({ conds: [], any: false, q: '' })}>清除筛选</button></> : empty}</span></td></tr>}
             {shown.map((row, r) => {
               const k = rowKey(row);
-              return (
-                <tr key={k} data-row={r} className={`${rowClass?.(row) || ''} ${rowOpen ? 'click' : ''} ${dragRow ? (dragRow.from === r ? 'dragging' : dragRow.over === r ? (dragRow.over > dragRow.from ? 'drop-below' : 'drop-above') : '') : ''}`} onClick={rowOpen ? (e) => !e.target.closest('input,select,button,.shared,.thumb,.rowhead,.cell-pop') && rowOpen(row) : undefined}>
+              return (<React.Fragment key={k}>
+                {groupHeads?.before.get(k)?.map(groupHead)}
+                <tr data-row={r} className={`${rowClass?.(row) || ''} ${rowOpen ? 'click' : ''} ${dragRow ? (dragRow.from === r ? 'dragging' : dragRow.over === r ? (dragRow.over > dragRow.from ? 'drop-below' : 'drop-above') : '') : ''}`} onClick={rowOpen ? (e) => !e.target.closest('input,select,button,.shared,.thumb,.rowhead,.cell-pop') && rowOpen(row) : undefined}>
                   <td className={`rowhead ${range && range.r0 <= r && r <= range.r1 ? 'sel' : ''}`} onPointerDown={(e) => { if (e.target.closest('input,.rgrip,.ropen')) return; e.preventDefault(); if (editing) commitEdit(); if (e.shiftKey && sel) setSel({ a: [sel.a[0], 0], b: [r, vis.length - 1] }); else { setSel({ a: [r, 0], b: [r, vis.length - 1] }); anchor.current = [r, 0]; } }} title="点行号选中整行，Shift 点选多行">
                     <span className="rgrip" title="按住拖动，上下挪行" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); startRowDrag(e, r); }}>⋮⋮</span>
                     {selectable && <input type="checkbox" checked={selectable.selected.has(k)} onChange={() => { const s = new Set(selectable.selected); s.has(k) ? s.delete(k) : s.add(k); selectable.onChange(s); }} />}
@@ -669,8 +704,9 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
                       onDoubleClick={isEditing ? undefined : onCellOpen ? () => onCellOpen(row, c.key) : (ed && !ed.disabled ? () => openEdit(r, ci) : undefined)}>{inner}</td>;
                   })}
                 </tr>
-              );
+              </React.Fragment>);
             })}
+            {groupHeads?.tail.map(groupHead)}
           </tbody>
           {footObj && shown.length > 0 && (
             <tfoot><tr>

@@ -1,7 +1,7 @@
 // 11-12 第 2 批: 问题库存冻结 (266) · 打电话名单 (250) · 价格调整单 (262) · 销量月对比 (252)
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, FRow, PhotoInput, Thumb, Info, FileDrop } from './ui.jsx';
+import { useApp, useData, Modal, FRow, PhotoInput, Thumb, Info, FileDrop, Choice } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { ModelLink, CustLink, DealLink } from './Archives.jsx';
 import { money, qty, dt, dDate, friendlyError } from '../lib/format.js';
@@ -153,7 +153,7 @@ function AddCallList({ onClose }) {
     <Modal wide title="加一张打电话名单" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{why && <span className="why">{why}</span>}<button type="button" className="btn primary" disabled={!!why} onClick={go}>建名单（{rows.length} 人）</button></>}>
       <div className="stack">
         <FRow label="名单叫什么" req><input className="in" style={{ width: '100%', maxWidth: 380 }} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="例如 Adjamé 新店摸排 11 月" /></FRow>
-        <FRow label="给谁打"><select className="in" value={assignee} onChange={(e) => setAssignee(e.target.value)}><option value="">热线（不指定）</option>{emps.map((e) => <option key={e.id} value={e.id}>{e.short_name}</option>)}</select></FRow>
+        <FRow label="给谁打"><Choice value={assignee} onChange={setAssignee} options={emps.map((e) => [e.id, e.short_name])} empty="热线（不指定）" flat={false} /></FRow>
         <FRow label="名单" req><div className="stack" style={{ flex: 1, gap: 6 }}>
           <FileDrop accept=".xlsx,.xls,.csv,.txt" label="把 Excel / CSV 拖进来，或者直接在下面粘贴" onFiles={async (fs) => { const f = fs[0]; if (!f) return; if (/\.(csv|txt)$/i.test(f.name)) { setText(await f.text()); return; } try { const X = await import('exceljs'); const wb = new X.Workbook(); await wb.xlsx.load(await f.arrayBuffer()); const out = []; wb.worksheets[0].eachRow((r) => out.push(r.values.slice(1).map((v) => (v && typeof v === 'object' ? (v.text || v.result || '') : v ?? '')).join('\t'))); setText(out.join('\n')); } catch (e) { toast('读不了这个文件：' + (e.message || e), 'err'); } }} />
           <textarea className="in" rows={7} style={{ width: '100%', fontFamily: 'inherit' }} value={text} onChange={(e) => setText(e.target.value)} placeholder={'一行一个人，列的顺序：名字、电话、城市、备注（从 Excel 复制几列直接粘贴）\nKONE\t0711111111\tAdjamé\nBAMBA\t0722222222\tYopougon'} />

@@ -9,7 +9,7 @@ import React, { useEffect, useRef, useState } from 'react';
 const N = (v) => Number(v) || 0;
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { TierPill, Light, useApp, useData, Pill, Modal, OptionNote, Info, MoreMenu } from '../components/ui.jsx';
+import { TierPill, Light, useApp, useData, Pill, Modal, OptionNote, Info, MoreMenu, Choice } from '../components/ui.jsx';
 import { STATUS, STEPS, LAST_STEP, reachedStep, EVENT_LABELS, ROLES, CONFIRM_METHODS, NOTE_OPTIONS, TIERS, can, seesPrice, dealPriceVisible } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, friendlyError } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
@@ -303,7 +303,7 @@ function ApproveModal({ deal, lines, onClose }) {
         <div className="hint">要审批的原因：{deal.approval_reasons.join('、')}</div>
         {prospect && <div className="grid2">
           <div className="field req"><label>新客户：正式编码</label><input className="in mono" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} /></div>
-          <div className="field req"><label>档位（决定价格）</label><div className="chips">{Object.entries(TIERS).map(([k, l]) => <button type="button" key={k} className={`chip ${tier === k ? 'on' : ''}`} onClick={() => setTier(k)}>{l}</button>)}</div></div></div>}
+          <div className="field req"><label>档位（决定价格）</label><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} /></div></div>}
         <Grid id="approve-lines" noTools rows={lines} columns={[
           { key: 'code', label: '编码', w: 90, value: (l) => l.code || '没编码', mono: true },
           { key: 'model', label: '型号', w: 150, value: (l) => l.model, render: (l) => <><ModelLink id={l.product_id} model={l.model} tier={deal.tier} /> <span className="muted small">{l.category}</span></> },

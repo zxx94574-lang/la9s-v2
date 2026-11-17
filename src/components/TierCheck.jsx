@@ -3,7 +3,7 @@
 // 只提醒, 不自动改档位. 中方两个选择: 立即确认 (以后不再提醒) / 先试一段时间 (到期再提醒)
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, FRow, Info, TierPill, Thumb } from './ui.jsx';
+import { useApp, useData, Modal, FRow, Info, TierPill, Thumb, Choice } from './ui.jsx';
 import { CustLink } from './Archives.jsx';
 import { TIERS } from '../lib/domain.js';
 import { qty, dDate, today, friendlyError } from '../lib/format.js';
@@ -71,7 +71,7 @@ function TierModal({ c, onClose }) {
           <div><div className="k">员工填的店铺类型</div><div className="v" style={{ fontSize: 15 }}>{c.shop_type || '—'}</div></div>
           <div><div className="k">店铺照片</div><div className="v">{c.shop_photo ? <Thumb src={c.shop_photo} size={64} label="店铺照片" /> : <span className="muted small">没传</span>}</div></div>
         </div>
-        <FRow label="档位" req><div className="chips">{Object.entries(TIERS).map(([k, v]) => <button type="button" key={k} className={`chip ${tier === k ? 'on' : ''}`} onClick={() => setTier(k)}>{v}</button>)}</div></FRow>
+        <FRow label="档位" req><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} /></FRow>
         <FRow label="怎么确认" req><div className="chips">
           <button type="button" className={`chip ${mode === 'confirm' ? 'on' : ''}`} onClick={() => setMode('confirm')}>立即确认（以后不再提醒）</button>
           <button type="button" className={`chip ${mode === 'trial' ? 'on' : ''}`} onClick={() => setMode('trial')}>先用这个档位试一段时间</button></div></FRow>

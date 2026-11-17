@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { PhotoInput, TierPill, Light, useApp, useData, Pill, Modal, OptionNote, BigNum, DatePicker, Info } from '../components/ui.jsx';
+import { PhotoInput, TierPill, Light, useApp, useData, Pill, Modal, OptionNote, BigNum, DatePicker, Info, Choice } from '../components/ui.jsx';
 import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import { BalanceCopy } from '../components/Doc.jsx';
@@ -170,7 +170,7 @@ function CustomerReturnModal({ customerId, name, onClose }) {
             <div className="field req"><label>收到退货的时间</label><input className="in" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></div>
             <div className="field req"><label>实物照片（不是盒子）</label><PhotoInput value={photo} onChange={setPhoto} invalid={errs && !photo} label="拍退回的货" /></div>
           </div>
-          <div className="field req"><label>退货类型</label><div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><div className="chips">{Object.entries(RETURN_REASONS).map(([k, v]) => <button type="button" key={k} className={`chip ${type === k ? 'on' : ''}`} onClick={() => setType(k)}>{v}</button>)}</div>
+          <div className="field req"><label>退货类型</label><div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><Choice value={type} onChange={(k) => setType(k)} options={Object.entries(RETURN_REASONS)} />
             {type === 'other' && <input className={`in ${errs && !typeNote.trim() ? 'invalid' : ''}`} style={{ width: 260 }} autoFocus value={typeNote} onChange={(e) => setTypeNote(e.target.value)} placeholder="「其他」是什么？（必填）" />}</div></div>
           <div className="field req"><label>具体原因</label><OptionNote options={NOTE_OPTIONS.return} value={reason} onChange={setReason} /></div>
         </div>

@@ -8,7 +8,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import AttCalendar from '../components/AttCalendar.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop , PhoneInput, phoneValid} from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop , PhoneInput, phoneValid, Choice } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { ROLE_LABELS } from '../lib/domain.js';
 import { staffOptions, optLabel, SYS_ROLES } from '../lib/staffOptions.js';
@@ -118,10 +118,7 @@ async function compress(file) {
 
 function Select({ value, onChange, options, placeholder = '— 选择 —' }) {
   return (
-    <select className="in" value={value || ''} onChange={(e) => onChange(e.target.value)}>
-      <option value="">{placeholder}</option>
-      {options.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
-    </select>
+    <Choice value={value || ''} onChange={onChange} options={options.map((o) => [o.v, o.l])} empty={placeholder} flat={false} />
   );
 }
 
@@ -204,7 +201,7 @@ export function EmpModal({ e, opts, onClose }) {
       </fieldset>
       <div className="stack" style={{ marginTop: 14, gap: 8 }}>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><b>证件照</b><span className="small muted">只有中方能看。存在系统里，不会删除（移除只是隐藏，审计里有记录）。</span><span className="grow" />
-          <span className="small">这张是</span><select className="in" style={{ maxWidth: 140 }} value={kind} onChange={(x) => setKind(x.target.value)}>{Object.entries(KIND).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
+          <span className="small">这张是</span><Choice value={kind} onChange={setKind} options={Object.entries(KIND)} size="sm" /></div>
         <FileDrop accept="image/*" multiple compact label="把身份证照片拖到这里，或点击从电脑选" hint="可一次拖多张，按上面选的类型归档；也可以 ⌘V 粘贴截图" onFiles={(fs) => fs.forEach((f) => addFile(f))} />
         <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
           {all.length === 0 && <span className="muted small">还没有照片</span>}

@@ -2,7 +2,7 @@
 // 分工制衡做成三步 (登记 → 确认到账 → 对账), 现在中方一个人也能走完; 以后招了财务在权限配置里分出去.
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, PhotoInput, DatePicker, FRow, Info, Thumb } from '../components/ui.jsx';
+import { useApp, useData, Modal, PhotoInput, DatePicker, FRow, Info, Thumb, Choice } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { CustLink } from '../components/Archives.jsx';
 import { RcvStatus, verifyRcvAction } from '../components/ReceiptForm.jsx';
@@ -131,7 +131,7 @@ function HandModal({ r, acc, onClose }) {
   return (
     <Modal title={`员工交款 · ${r.rcv_no}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!account || !proof} onClick={go}>确认收到</button></>}>
       <div className="stack">
-        <FRow label="进哪个账户" req><select className="in" value={account} onChange={(e) => setAccount(e.target.value)}>{opts.map((a) => <option key={a.account_id} value={a.account_id}>{a.name}</option>)}</select></FRow>
+        <FRow label="进哪个账户" req><Choice value={account} onChange={setAccount} options={opts.map((a) => [a.account_id, a.name])} /></FRow>
         <FRow label="凭证" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="Wave 转账截图 / 当面交现金照片" /></div></FRow>
       </div>
     </Modal>
@@ -218,8 +218,8 @@ function TransferModal({ acc, onClose }) {
   return (
     <Modal title="账户互转" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!from || !to || from === to || !(N(amt) > 0) || (cross && !(N(amtIn) > 0))} onClick={go}>记下</button></>}>
       <div className="stack">
-        <FRow label="从" req><select className="in" value={from} onChange={(e) => setFrom(e.target.value)}>{acc.map((a) => <option key={a.account_id} value={a.account_id}>{a.name}</option>)}</select></FRow>
-        <FRow label="转到" req><select className="in" value={to} onChange={(e) => setTo(e.target.value)}>{acc.map((a) => <option key={a.account_id} value={a.account_id}>{a.name}</option>)}</select></FRow>
+        <FRow label="从" req><Choice value={from} onChange={setFrom} options={acc.map((a) => [a.account_id, a.name])} /></FRow>
+        <FRow label="转到" req><Choice value={to} onChange={setTo} options={acc.map((a) => [a.account_id, a.name])} /></FRow>
         <FRow label="金额" req><input className="in" inputMode="decimal" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{A?.currency}</span></FRow>
         {cross && <FRow label="到账金额" req><input className="in" inputMode="decimal" style={{ width: 150 }} value={amtIn} onChange={(e) => setAmtIn(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{B?.currency}（两边币种不同）</span></FRow>}
         <FRow label="日期" req><DatePicker value={on} onChange={setOn} /></FRow>
@@ -291,7 +291,7 @@ export function RefundModal({ acc, customers, onClose }) {
       <div className="stack">
         <div className="hint">客户多付了 / 预付不要了，把钱退回去。账户出一笔支出，客户总账加回这个数。</div>
         <FRow label="客户" req><div style={{ flex: 1, minWidth: 0 }}><CustomerSelect customers={customers} value={cust} onChange={setCust} allowCreate={false} /></div></FRow>
-        <FRow label="从哪个账户退" req><select className="in" value={account} onChange={(e) => setAccount(e.target.value)}>{acc.map((a) => <option key={a.account_id} value={a.account_id}>{a.name}</option>)}</select></FRow>
+        <FRow label="从哪个账户退" req><Choice value={account} onChange={setAccount} options={acc.map((a) => [a.account_id, a.name])} /></FRow>
         <FRow label="金额" req><input className="in" inputMode="decimal" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{A?.currency}</span></FRow>
         <FRow label="日期" req><DatePicker value={on} onChange={setOn} /></FRow>
         <FRow label="原因" req><input className="in" style={{ width: '100%', maxWidth: 420 }} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例如 多付了 / 不要预付了" /></FRow>

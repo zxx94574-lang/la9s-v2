@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { q, call, callValue } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, DatePicker, Modal, SortList, RateInput, Info, PageGear } from '../components/ui.jsx';
+import { useApp, useData, DatePicker, Modal, SortList, RateInput, Info, PageGear, Choice } from '../components/ui.jsx';
 import ProductDrawer from '../components/ProductDrawer.jsx';
 import { CustomerDrawer } from './Customers.jsx';
 import { STEPS } from '../lib/domain.js';
@@ -152,8 +152,7 @@ export default function QuoteNew() {
         <div className="grow" style={{ maxWidth: 460, minWidth: 220 }}><CustomerSelect customers={data.customers} value={customer} onChange={setCustomer} /></div>
         {cust && <button type="button" className="btn sm" onClick={() => setCustOpen(true)} title="客户档案">档案 ↗</button>}
         {cust && !cust.tier && <span className="pill amber" title="没档位报不了价：在档案里给档位，或建客户时选店铺类型">没档位</span>}
-        <select className="in" style={{ width: 96 }} value={currency} onChange={(e) => { setCurrency(e.target.value); setPriceOk(false); }}>
-          <option>XOF</option><option>CNY</option><option>USD</option></select>
+        <Choice value={currency} onChange={(v) => { setCurrency(v); setPriceOk(false); }} options={['XOF', 'CNY', 'USD']} />
         {currency !== 'XOF' && <span className="row" style={{ gap: 6 }}><span className="small">汇率</span>
           <RateInput a={currency} b="XOF" value={fxIn} onChange={(v) => setFxIn(v === '' ? '' : String(v))} invalid={!fx && errs} /></span>}
         <span className="pill gray" title="由账号决定，不能改">🇨🇮 科特迪瓦 · 账号固定</span>
