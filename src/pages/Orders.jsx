@@ -102,6 +102,23 @@ export default function Orders() {
       r.pcs += pcs; r.amount += pcs * Number(l.unit_price || 0); r.req += Number(l.qty_req); r.deals.add(l.deal_id); r.custs.add(d.customer_id); m.set(k, r); }
     return [...m.values()].map((r) => ({ ...r, deal_n: r.deals.size, cust_n: r.custs.size })).sort((a, b) => b.pcs - a.pcs);
   }, [rows, olines, gridShown]);
+  // 按客户看 (Frank 11-17): 筛出来的这些单里, 每个客户拿了多少片、多少钱、还欠多少; 中方多看 成本 / 毛利 / 毛利率
+  const byCust = useMemo(() => {
+    const base = gridShown?.rows || rows; const m = new Map();
+    const pcsOf = {}; for (const l of olines) pcsOf[l.deal_id] = (pcsOf[l.deal_id] || 0) + Number(l.qty_shipped) - Number(l.qty_returned);
+    const mBy = {}; for (const r of mRows || []) (mBy[r.deal_id] ||= []).push(r);
+    for (const d of base) {
+      if (d.status === 'cancelled') continue;
+      const r = m.get(d.customer_id) || { key: d.customer_id, customer_id: d.customer_id, name: d.customer_name, code: d.customer_code, city: d.city, tier: d.tier, deal_n: 0, shipped_n: 0, pcs: 0, amount: 0, fx_n: 0, due: 0, last: null, mrows: [] };
+      r.deal_n += 1; r.pcs += pcsOf[d.id] || 0; if (Number(d.shipped_amount) > 0) r.shipped_n += 1;
+      if (d.currency === 'XOF') { r.amount += Number(d.shipped_amount) - Number(d.returned_amount); r.due += Math.max(0, Number(d.due)); } else if (Number(d.shipped_amount) > 0) r.fx_n += 1;
+      if (!r.last || d.created_at > r.last) r.last = d.created_at;
+      if (mBy[d.id]) r.mrows.push(...mBy[d.id]);
+      m.set(d.customer_id, r);
+    }
+    return [...m.values()].map((r) => ({ ...r, m: r.mrows.length ? sumMargin(r.mrows) : null })).sort((a, b) => (b.m?.revenue ?? b.amount) - (a.m?.revenue ?? a.amount));
+  }, [rows, olines, gridShown, mRows]);
+  const custTotal = useMemo(() => sumMargin(byCust.flatMap((r) => r.mrows)), [byCust]);
   const counts = useMemo(() => { const c = { done: 0, active: 0, cancelled: 0 }; for (const d of data || []) c[dealLight(d)] += 1; return c; }, [data]);
   const drafts = useData(() => q(`select qd.*, c.name as customer_name, c.code as customer_code, coalesce(e.short_name, e.full_name) as by_name from app.quote_drafts qd join app.customers c on c.id = qd.customer_id left join app.members m on m.user_id = qd.user_id and m.org_id = qd.org_id left join app.employees e on e.id = m.employee_id where qd.org_id = $1 ${role === 'admin' ? '' : 'and qd.user_id = $2'} order by qd.updated_at desc`, role === 'admin' ? [org] : [org, USERS[role]]), [org, role]).data || [];
   return (
@@ -124,7 +141,7 @@ export default function Orders() {
         <div className="fbar">
           <span className="small muted">筛选、搜索、筛选方案都在下面表格左上角（⏷ 筛选）。</span>
           <span className="grow" />
-          <div className="seg"><button type="button" className={mode === 'orders' ? 'on' : ''} onClick={() => setMode('orders')}>按订单看</button><button type="button" className={mode === 'models' ? 'on' : ''} onClick={() => setMode('models')}>按机型看</button></div>
+          <div className="seg"><button type="button" className={mode === 'orders' ? 'on' : ''} onClick={() => setMode('orders')}>按订单看</button><button type="button" className={mode === 'models' ? 'on' : ''} onClick={() => setMode('models')}>按机型看</button><button type="button" className={mode === 'customers' ? 'on' : ''} onClick={() => setMode('customers')}>按客户看</button></div>
         </div>
         <div className="row light-bar">
           {[['', '全部'], ['active', '进行中'], ['draft', '草稿'], ['done', '已完成'], ['cancelled', '已取消']].map(([k, l]) => (
@@ -147,6 +164,39 @@ export default function Orders() {
               { key: 'deal_n', label: '几张单', w: 80, type: 'number' },
               { key: 'cust_n', label: '几个客户', w: 90, type: 'number' },
             ]} foot={(rs) => ({ model: '合计', pcs: `${qty(rs.reduce((a, r) => a + r.pcs, 0))} 片`, ...(price ? { amount: money(rs.reduce((a, r) => a + r.amount, 0)) } : {}) })} />
+          </>
+        ) : mode === 'customers' ? (
+          <>
+            <div className="bigsum">
+              <div><div className="k">客户</div><div className="v">{byCust.length}</div></div>
+              <div><div className="k">出货片数（已出库 − 已退货）</div><div className="v">{qty(byCust.reduce((a, r) => a + r.pcs, 0))} <small>片</small></div></div>
+              {role === 'admin' ? <>
+                <div><div className="k">销售额（退货、调整后）</div><div className="v">{money(Math.round(custTotal.revenue))} <small>XOF</small></div></div>
+                <div><div className="k">毛利</div><div className={`v ${custTotal.profit < 0 ? 'red-t2' : ''}`}>{money(Math.round(custTotal.profit))} <small>XOF</small></div></div>
+                <div><div className="k">毛利率（加权）</div><div className="v">{custTotal.pct == null ? '—' : `${custTotal.pct.toFixed(1)}%`}</div></div>
+              </> : price && <div><div className="k">出货金额</div><div className="v">{money(byCust.reduce((a, r) => a + r.amount, 0))} <small>XOF</small></div></div>}
+              {price && <div><div className="k">还欠</div><div className="v">{money(byCust.reduce((a, r) => a + r.due, 0))} <small>XOF</small></div></div>}
+            </div>
+            <div className="small muted" style={{ padding: '8px 18px 0' }}>时间段按订单创建日期算；作废的单不算。{role === 'admin' ? '毛利 = 销售额 − 出库时锁定的成本 − 我们出的运费和手续费；没有成本的货不算进毛利率。' : ''}</div>
+            <Grid id="orders-customers" rows={byCust} rowKey={(r) => r.key} empty="这些条件下没有客户" columns={[
+              { key: 'name', label: '客户', w: 200, value: (r) => r.name, render: (r) => <b><CustLink id={r.customer_id} name={r.name} /></b> },
+              { key: 'code', label: '客户编码', w: 100 },
+              { key: 'city', label: '城市', w: 100 },
+              { key: 'tier', label: '档位', w: 120, value: (r) => r.tier, render: (r) => <TierPill tier={r.tier} /> },
+              { key: 'deal_n', label: '订单数', w: 80, type: 'number' },
+              { key: 'pcs', label: '出货片数', w: 100, type: 'number', value: (r) => r.pcs, render: (r) => <b>{qty(r.pcs)}</b> },
+              ...(role === 'admin' ? [
+                { key: 'm_rev', label: '销售额 XOF', w: 130, type: 'money', value: (r) => r.m?.revenue ?? null, render: (r) => (r.m ? <b>{money(Math.round(r.m.revenue))}</b> : '') },
+                { key: 'm_cost', label: '成本', w: 120, type: 'money', value: (r) => r.m?.cost ?? null, render: (r) => (r.m && r.m.revKnown ? money(Math.round(r.m.cost)) : '') },
+                { key: 'm_profit', label: '毛利', w: 120, type: 'money', value: (r) => r.m?.profit ?? null, render: (r) => (r.m && r.m.revKnown ? <b className={r.m.profit < 0 ? 'red-t2' : ''}>{money(Math.round(r.m.profit))}</b> : '') },
+                { key: 'm_pct', label: '毛利率', w: 100, type: 'number', value: (r) => r.m?.pct ?? null, render: (r) => (r.m ? <MarginPill pct={r.m.pct} lowPct={mLow} missing={!r.m.revKnown} /> : '') },
+                { key: 'm_share', label: '占总毛利', w: 90, type: 'number', value: (r) => (r.m && custTotal.profit > 0 ? (r.m.profit / custTotal.profit) * 100 : null), render: (r) => (r.m && r.m.revKnown && custTotal.profit > 0 ? `${((r.m.profit / custTotal.profit) * 100).toFixed(1)}%` : '') },
+              ] : price ? [{ key: 'amount', label: '出货金额 XOF', w: 130, type: 'money', value: (r) => r.amount, render: (r) => <b>{money(r.amount)}</b> }] : []),
+              ...(price ? [{ key: 'due', label: '还欠 XOF', w: 120, type: 'money', value: (r) => r.due, render: (r) => (r.due > 0 ? <b className="red-t2">{money(r.due)}</b> : <span className="muted">0</span>) }] : []),
+              { key: 'last', label: '最近下单', w: 110, value: (r) => r.last, render: (r) => dDate(r.last) },
+            ]} foot={(rs) => { const t = sumMargin(rs.flatMap((r) => r.mrows)); return { name: `合计 ${rs.length} 个客户`, deal_n: rs.reduce((a, r) => a + r.deal_n, 0), pcs: `${qty(rs.reduce((a, r) => a + r.pcs, 0))} 片`,
+              ...(role === 'admin' ? { m_rev: money(Math.round(t.revenue)), m_cost: money(Math.round(t.cost)), m_profit: money(Math.round(t.profit)), m_pct: t.pct == null ? '' : `${t.pct.toFixed(1)}%` } : price ? { amount: money(rs.reduce((a, r) => a + r.amount, 0)) } : {}),
+              ...(price ? { due: money(rs.reduce((a, r) => a + r.due, 0)) } : {}) }; }} />
           </>
         ) : null}
         {light !== 'draft' && mode === 'orders' && <Grid id="orders" table="deals" columns={cols} rows={rows} onShown={(rs, conds, qq) => { const ms = conds.filter((c) => c.key === 'models').flatMap((c) => (c.op === 'in' ? c.vals || [] : c.op === 'contains' ? [c.a] : [])).map((v) => String(v || '').toUpperCase()).filter(Boolean); setPeekHighlight([...ms, qq]); setGridShown({ rows: rs, models: (conds.find((c) => c.key === 'models' && c.op === 'in')?.vals || []).map((v) => String(v).toUpperCase()) }); }} onRowClick={(d) => go('deal/' + d.id)} empty={!data ? '加载中…' : light ? `${custom && period === 'custom' ? `${custom[0]} 至 ${custom[1]} ` : '这个时间段'}没有「${LIGHT_LABEL[light]}」的订单` : (data.length ? '没有符合条件的订单' : '这个时间段还没有订单')}
