@@ -622,6 +622,22 @@ export function RateInput({ a, b = 'XOF', value, onChange, placeholder, invalid,
   );
 }
 
+// 「⋯ 更多」(减法巡检 C4, 11-17): 不常用 / 危险的操作收在这里, 不在页面上放红色大按钮. items = [[label, run, tone?]]
+export function MoreMenu({ items, label = '⋯ 更多', title = '更多操作' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useOutside(open, () => setOpen(false));
+  const list = (items || []).filter(Boolean);
+  if (!list.length) return null;
+  return (
+    <span ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
+      <button type="button" className="btn sm" title={title} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{label}</button>
+      {open && <div className="menu more-menu" role="menu">
+        {list.map(([l, run, tone]) => <button type="button" key={l} role="menuitem" className={`mi ${tone === 'danger' ? 'danger' : ''}`} onClick={() => { setOpen(false); run(); }}>{l}</button>)}
+      </div>}
+    </span>
+  );
+}
+
 // 页面设置 (Frank 11-13 293): 每页标题旁一个小 ⚙, 收这页自己的设置 (种类顺序 / 调整版面 / 选项设置…); 右上角的 ⚙ 只放系统级的
 export function PageGear({ items, title = '这一页的设置' }) {
   const [open, setOpen] = useState(false);

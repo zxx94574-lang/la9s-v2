@@ -122,7 +122,6 @@ export default function Orders() {
       </div>
       {tab === 'ship' ? <ShipmentsList from={from} to={to} /> : tab === 'void' ? <VoidedList rows={voided} /> : tab === 'inq' ? <Inquiry embedded /> : <div className="card">
         <div className="fbar">
-          <span className="small muted">筛选、搜索、筛选方案都在下面表格左上角（⏷ 筛选）。</span>
           <span className="grow" />
           <div className="seg"><button type="button" className={mode === 'orders' ? 'on' : ''} onClick={() => setMode('orders')}>按订单看</button><button type="button" className={mode === 'models' ? 'on' : ''} onClick={() => setMode('models')}>按机型看</button></div>
         </div>

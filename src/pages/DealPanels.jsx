@@ -15,7 +15,6 @@ import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, P
 import { money, qty, dt, dDate, today, pad, ymd } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
 
-import { PriceAdjust } from '../components/Batch2.jsx';
 const N = (v) => Number(v || 0);
 const Blocked = ({ action }) => <span className="lock">当前岗位不能操作，需要：{whoCan(action)}</span>;
 const evOf = (events, action) => [...events].reverse().find((e) => e.action === action);
@@ -95,9 +94,8 @@ export function QuotePanel({ deal, lines, catalog, categories, act, role }) {
       <div className="card-h">
         {/* Frank 11-09 13:42: 改单的放左边标题后, 往外发的 (图片 / 文字 / 打印) 放右边 */}
         <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-          <h2>① 报价 · 确认 <span className="muted small mono">{deal.quote_no}</span></h2>
+          <h2>报价 · 确认 <span className="muted small mono">{deal.quote_no}</span></h2>
           {editable && can(role, 'quote') && <button type="button" className="btn" onClick={startEdit}>✎ 修改报价（增删行）</button>}
-          {editable && can(role, 'cancel') && <CancelButton deal={deal} act={act} />}
         </div>
         <div className="row">
           {price && (deal.approval === 'pending' && (deal.approval_reasons || []).some((x) => String(x).startsWith('申请特价'))
@@ -105,7 +103,7 @@ export function QuotePanel({ deal, lines, catalog, categories, act, role }) {
             : <DocActions kind="quote" deal={deal} lines={lines} copyLabel="复制报价图片" primary="copy" />)}
         </div>
       </div>
-      <Grid id="deal-quote" table="deal_lines" columns={cols} rows={lines} rowClass={(l) => (!l.product_id ? 'manual' : '')}
+      <Grid id="deal-quote" slimTools table="deal_lines" columns={cols} rows={lines} rowClass={(l) => (!l.product_id ? 'manual' : '')}
         foot={(rows) => ({ code: '合计', model: `${rows.length} 个型号`, qty_req: `${qty(rows.reduce((a, l) => a + N(l.qty_req), 0))} 件`,
           amount: `${money(rows.reduce((a, l) => a + N(l.qty_req) * N(l.unit_price), 0), cur)} ${cur}` })} />
       {lines.some((l) => !l.product_id) && <div className="card-b hint">黄色行 = 我们没建档的型号：单价 0、不会出货，已自动记入「未满足需求」。</div>}
@@ -114,21 +112,18 @@ export function QuotePanel({ deal, lines, catalog, categories, act, role }) {
   );
 }
 
-function CancelButton({ deal, act }) {
-  const [open, setOpen] = useState(false);
+// 减法巡检 C4 (11-17): 作废不再是页面上的红色大按钮, 入口在订单页流程条的「⋯ 更多」里
+export function CancelModal({ deal, act, onClose }) {
   const [reason, setReason] = useState('客户不要了');
   return (
-    <>
-      <button type="button" className="btn danger" onClick={() => setOpen(true)}>作废订单</button>
-      {open && <Modal title={`作废 ${deal.biz_no}`} onClose={() => setOpen(false)}
-        footer={<><button type="button" className="btn" onClick={() => setOpen(false)}>不作废</button>
-          <button type="button" className="btn primary" onClick={() => act(['picked', 'ordered', 'confirmed', 'reviewed'].includes(deal.status) ? '已作废：请把已拿出的货放回原库位（预占已释放）' : '订单已作废，预占已释放（可在「订单总览 → 已作废」恢复）', `select app.cancel_deal($1,$2)`, [deal.id, reason]).then(() => setOpen(false), () => {})}>确认作废</button></>}>
+    <Modal title={`作废 ${deal.biz_no}`} onClose={onClose}
+        footer={<><button type="button" className="btn" onClick={onClose}>不作废</button>
+          <button type="button" className="btn primary" onClick={() => act(['picked', 'ordered', 'confirmed', 'reviewed'].includes(deal.status) ? '已作废：请把已拿出的货放回原库位（预占已释放）' : '订单已作废，预占已释放（可在「订单总览 → 已作废」恢复）', `select app.cancel_deal($1,$2)`, [deal.id, reason]).then(onClose, () => {})}>确认作废</button></>}>
         <div className="stack">
           <div className="hint">作废不是删除：单子进「已作废」列表，随时可以恢复。</div>
           <OptionNote options={['客户不要了', '价格谈不拢', '重复下单', '其他']} value={reason} onChange={setReason} />
         </div>
-      </Modal>}
-    </>
+      </Modal>
   );
 }
 
@@ -239,8 +234,8 @@ export function PickPanel({ deal, lines, employees, events, act, role }) {
   if (before) {
     return (
       <div className="card">
-        <div className="card-h"><h2>② 找货 · 初检</h2></div>
-        <div className="card-b hint">还没下推：先在「① 报价 · 确认」里确认客户要货并下推，库存预占后找货人在这里填实际供货、拍照、提交初检。</div>
+        <div className="card-h"><h2>找货 · 初检</h2></div>
+        <div className="card-b hint">还没下推：先在「报价 · 确认」里确认客户要货并下推，库存预占后找货人在这里填实际供货、拍照、提交初检。</div>
       </div>
     );
   }
@@ -277,10 +272,10 @@ export function PickPanel({ deal, lines, employees, events, act, role }) {
   return (
     <div className="card" ref={scope}>
       <div className="card-h">
-        <h2>② 找货 · 初检 <span className="muted small mono">{deal.pick_no}</span></h2>
+        <h2>找货 · 初检 <span className="muted small mono">{deal.pick_no}</span></h2>
         <div className="row">{picking && part === 'picked' && <UndoBar h={h} scope={scope} />}<DocActions kind="pick" deal={deal} lines={real} hideCopy printLabel="打印找货单" primary="print" /></div>
       </div>
-      <Grid id="deal-pick" table="deal_lines" columns={cols} rows={real} rowClass={(l) => (N(l.qty_supply) < N(l.qty_req) ? 'warn' : '')}
+      <Grid id="deal-pick" slimTools table="deal_lines" columns={cols} rows={real} rowClass={(l) => (N(l.qty_supply) < N(l.qty_req) ? 'warn' : '')}
         foot={(rows) => ({ code: '合计', model: `${rows.length} 个型号`, qty_req: `${qty(rows.reduce((a, l) => a + N(l.qty_req), 0))} 件`,
           qty_supply: picking && part === 'picked' ? `${qty(rows.reduce((a, l) => a + N(get(l).qty), 0))} 件` : showPicked ? `${qty(rows.reduce((a, l) => a + N(l.qty_picked ?? l.qty_supply), 0))} 件` : '' })} />
       {picking && part === 'picked' && (
@@ -373,7 +368,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
   if (hold && !early) {
     return (
       <div className="card">
-        <div className="card-h"><h2>④-1 复检 + 打包 <Info>约定发货日还没到的单不提前打包：客户第二天可能加货。到了那天再从头检到尾。</Info></h2>
+        <div className="card-h"><h2>复检 + 打包 <Info>约定发货日还没到的单不提前打包：客户第二天可能加货。到了那天再从头检到尾。</Info></h2>
           <span className="pill amber">约 {dDate(deal.planned_ship_date)} 发货 · 先不打包</span></div>
         <div className="card-b stack">
           {deal.staged_at ? (
@@ -399,9 +394,9 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
   }
   return (
     <div className="card" ref={scope}>
-      <div className="card-h"><h2>④-1 复检 + 打包 <Info>客户确认后由主管抽检、打包；打完包出发货文件，再出库</Info></h2>
+      <div className="card-h"><h2>复检 + 打包 <Info>客户确认后由主管抽检、打包；打完包出发货文件，再出库</Info></h2>
         <div className="row">{reviewing ? <UndoBar h={h} scope={scope} /> : <Who e={e} />}</div></div>
-      <Grid id="deal-review" table="deal_lines" columns={cols} rows={real} rowClass={(l) => (suggest.has(l.id) && reviewing ? 'suggest' : '')}
+      <Grid id="deal-review" slimTools table="deal_lines" columns={cols} rows={real} rowClass={(l) => (suggest.has(l.id) && reviewing ? 'suggest' : '')}
         foot={(rows) => ({ code: '合计', qty_picked: `${qty(rows.reduce((a, l) => a + N(l.qty_picked ?? l.qty_supply), 0))} 件`,
           rqty: `${qty(rows.reduce((a, l) => a + N(reviewing ? get(l).qty : l.qty_supply), 0))} 件` })} />
       {reviewing ? (
@@ -518,7 +513,7 @@ export function SoPanel({ deal, lines, catalog, categories, act, role, events })
       <div className="card-h">
         {/* 209: 改单类 (追加货 / 获取价格) 在左, 往外发的在右 */}
         <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-          <h2>③ 销售订单 <span className="muted small mono">{deal.so_no || '（初检后生成）'}</span> <Info>出了单把图发群，下面接客户确认</Info></h2>
+          <h2>销售订单 <span className="muted small mono">{deal.so_no || '（初检后生成）'}</span> <Info>出了单把图发群，下面接客户确认</Info></h2>
           {canAdd && <button type="button" className="btn" onClick={() => setAdding([])}>＋ 出库前追加货</button>}
         </div>
         <div className="row">
@@ -534,7 +529,7 @@ export function SoPanel({ deal, lines, catalog, categories, act, role, events })
           <Info>先勾选行再获取；手改价不会被覆盖。改价只有中方能操作；和档位价偏差 ≥{th[0]}% 黄、≥{th[1]}% 橙、≥{th[2]}% 红。</Info>
         </div>
       )}
-      <Grid id="deal-so" table="deal_lines" columns={cols} rows={real}
+      <Grid id="deal-so" slimTools table="deal_lines" columns={cols} rows={real}
         rowActions={afterSo && canQty ? [{ label: '🔒 解锁改数量', tone: '', when: (l) => !open[l.id], run: (l) => (l.added_after_pick ? setOpen((o) => ({ ...o, [l.id]: { qty: String(l.qty_supply), reason: '追加行改数量' } })) : setUnlock(l)) }] : undefined} rowClass={(l) => (l.review_changed ? 'changed' : priceLevel(l.unit_price, l.tier_price, th).level >= 3 && l.product_id ? 'warn' : l.price_manual ? 'manual' : '')}
         selectable={pricing && price ? { selected: sel, onChange: setSel } : null}
         foot={(rows) => ({ code: '合计', model: `${rows.filter((l) => N(l.qty_supply) > 0).length} 个型号`, qty_supply: `${qty(rows.reduce((a, l) => a + N(l.qty_supply), 0))} 件`,
@@ -674,7 +669,7 @@ export function ConfirmPanel({ deal, lines, events, act, role }) {
   if (deal.status !== 'ordered') {
     return (
       <div className="card">
-        <div className="card-h"><h2>③ 客户最终确认</h2><Who e={e} /></div>
+        <div className="card-h"><h2>客户最终确认</h2><Who e={e} /></div>
         <div className="card-b kv">
           <div><div className="k">确认方式</div><div className="v">{CONFIRM_METHODS[deal.confirm_method] || '—'}</div></div>
           <div><div className="k">确认截图</div><div className="v">{deal.confirm_proof ? <Thumb src={deal.confirm_proof} size={64} label="客户确认截图" /> : '—'}</div></div>
@@ -693,7 +688,7 @@ export function ConfirmPanel({ deal, lines, events, act, role }) {
   };
   return (
     <div className="card">
-      <div className="card-h"><h2>③ 客户最终确认 <Info>确认的是销售单上的数量和价格；确认后主管复检打包，再出库</Info></h2></div>
+      <div className="card-h"><h2>客户最终确认 <Info>确认的是销售单上的数量和价格；确认后主管复检打包，再出库</Info></h2></div>
       <div className="card-b stack">
         {changed.length > 0 && <div className="lock">复检后有变动，只需要客户重新确认这几行：{changed.map((l) => `${l.model} ${l.category} → ${l.qty_supply} 件`).join('；')}</div>}
         <div className="substep"><span className="sn">1</span><div className="grow"><b>把销售单图片发到客户群</b> <Info>没发也能确认（当面给客户看过），但一般先发再确认。</Info></div>
@@ -784,7 +779,7 @@ function ShipForm({ deal, lines, shipments, act }) {
   };
   return (
     <div className="card">
-      <div className="card-h"><h2>④-3 出库单 {shippedBefore > 0 && <span className="pill amber">第 {shipments.filter((s) => !s.voided_at).length + 1} 批</span>}</h2>
+      <div className="card-h"><h2>出库单 {shippedBefore > 0 && <span className="pill amber">第 {shipments.filter((s) => !s.voided_at).length + 1} 批</span>}</h2>
         <span className="hint">司机真正把货拉走时再点「确认出库」；只叫了车、约了明天的先别登记</span></div>
       <div className="card-b stack">
         <div className="row" style={{ gap: 16, alignItems: 'flex-end' }}>
@@ -805,7 +800,6 @@ function ShipForm({ deal, lines, shipments, act }) {
             <div className="chips">{[['customer', '客户出'], ['company', '我们出'], ['company_part', '我们出一段（到交通站）']].map(([k, l]) => <button type="button" key={k} className={`chip ${bearer === k ? 'on' : ''}`} onClick={() => setBearer(k)}>{l}</button>)}</div></div>
           {bearer !== 'customer' && <div className="field req" style={{ width: 220 }}><label>实际付了多少（照截图上的价格）</label><input className={`in ${errs && !(N(freight) > 0) ? 'err-in' : ''}`} inputMode="numeric" value={freight} onChange={(e) => setFreight(e.target.value.replace(/\D/g, ''))} placeholder="XOF" /></div>}
         </div>
-        <div className="hint">下一版：上传 Yango 截图后自动读出司机名字、电话、时间，人只核对（现在先手填）。</div>
       </div>
       <div className="grid-tools">
         <div className="shipmode">
@@ -820,7 +814,7 @@ function ShipForm({ deal, lines, shipments, act }) {
             <input className={`in ${errs && !preason.trim() ? 'err-in' : ''}`} style={{ width: 200 }} value={preason} onChange={(e) => setPreason(e.target.value)} placeholder="或者自己写" /></span>}
         </div>
       </div>
-      <Grid id="deal-ship" table="deal_lines" columns={cols} rows={left} foot={(rows) => ({ code: '合计', model: `${rows.length} 个型号`, ship_now: `${qty(rows.reduce((a, l) => a + now(l), 0))} 件` })} />
+      <Grid id="deal-ship" slimTools table="deal_lines" columns={cols} rows={left} foot={(rows) => ({ code: '合计', model: `${rows.length} 个型号`, ship_now: `${qty(rows.reduce((a, l) => a + now(l), 0))} 件` })} />
       <div className="actionbar"><span className="hint">本次发 <b>{qty(thisTime)}</b> 件 · 订单共 {qty(total)} 件 · 剩 <b>{qty(total - shippedBefore - thisTime)}</b> 件下次发</span>
         <button type="button" className="btn primary lg" onClick={check}>确认出库 →</button></div>
       {askPartial && (
@@ -902,7 +896,7 @@ function ShipmentsCard({ deal, lines, shipments, act, role }) {
     <div className="card">
       <div className="card-h"><h2>出库记录</h2></div>
       {justVoided && <div className="card-b lock">已撤销出库。如果已经把这笔的 Balance 发给客户，请到「签收 · 对账」重新复制一张发过去。</div>}
-      <Grid id="deal-shipments" table="shipments" columns={cols} rows={shipments} rowClass={(s) => (s.voided_at ? 'voided' : '')} />
+      <Grid id="deal-shipments" slimTools table="shipments" columns={cols} rows={shipments} rowClass={(s) => (s.voided_at ? 'voided' : '')} />
       <div className="card-b hint">发货文件：「BL ×2」生成编号并打印两张（一张仓库备案、一张客户签字），「海关文件」打开设置里上传的固定 PDF；大单（金额或件数到设置的阈值）会提示建议打印，小单不强制。客户签字后拍照挂上就是发货证明。「发货失败 / 退回」只用于货没到客户手上（Yango 去不了、改期、我方隔天发）：货回原仓位并重新预占、应收冲回、订单回到待出库，作废的出库单留痕。客户签收后只能走退货。金蝶写入暂未接入。</div>
       {voiding && <VoidModal s={voiding} onClose={() => setVoiding(null)} onOk={(r) => act(`${voiding.out_no} 已撤销，货已回库并重新预占`, `select app.void_shipment($1,$2)`, [voiding.id, r]).then(() => { setVoiding(null); setJustVoided(true); }, () => {})} />}
     </div>
@@ -935,7 +929,7 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
   return (
     <>
       <div className="card">
-        <div className="card-h"><h2>⑥ 本单收款</h2>
+        <div className="card-h"><h2>本单收款</h2>
           <div className="row">
             {can(role, 'write_off') && N(deal.due) > 0 && N(deal.due) <= (cur === 'XOF' ? 100 : 1) && <button type="button" className="btn" onClick={() => setWo(true)}>抹零 {money(deal.due, cur)}</button>}
             {role === 'admin' && N(deal.due) > (cur === 'XOF' ? 100 : 1) && <button type="button" className="btn soft-red" onClick={() => setBad(true)}>坏账核销</button>}
@@ -947,7 +941,7 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
           <div><div className="k">本单待付</div><BigNum size={26} style={{ color: N(deal.due) > 0 ? 'var(--red)' : 'var(--green)' }}>{N(deal.due) > 0 ? <>{money(deal.due, cur)} <small>{cur}</small></> : '已结清 ✓'}</BigNum></div>
         </div>
         {!shipments.some((s) => !s.voided_at) && <div className="card-b hint">还没出库：客户总账只在出库后增加。现在收的钱会记为预付，出库时自动抵扣。</div>}
-        {receipts.length > 0 && <Grid id="deal-receipts" columns={[
+        {receipts.length > 0 && <Grid id="deal-receipts" slimTools columns={[
           { key: 'seq', label: '第几笔', w: 70, sortable: false, render: (r) => `第 ${receipts.indexOf(r) + 1} 笔` },
           { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <b className="mono">{r.rcv_no}</b> },
           { key: 'received_on', label: '收款日期', w: 100, render: (r) => dDate(r.received_on) },
@@ -961,7 +955,6 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
         ]} rows={receipts} rowKey={(r) => r.rcv_no + r.at} selectable={can(role, 'receipt') ? { selected: pick, onChange: setPick } : undefined} />}
         {receipts.length > 0 && <div className="card-b hint" style={{ borderTop: '1px solid var(--line-2)' }}>钱到没到账不在这里确认：统一到「资金账户 → 待核对到账」核对，避免出错。</div>}
         {voidRc && <VoidReceiptModal rc={voidRc} onClose={() => { setVoidRc(null); setPick(new Set()); }} />}
-        <PriceAdjust deal={deal} />
       </div>
       {can(role, 'receipt') && N(deal.due) > 0 && (
         <div className="card">
@@ -1258,7 +1251,7 @@ function DocsBlock({ deal, lines, role }) {
   const pseudo = pending ? { id: null, bl_no: deal.next_bl_no, shipped_at: new Date(), lines: left.map((l) => ({ deal_line_id: l.id, qty: N(l.qty_supply) - N(l.qty_shipped) })), qty: left.reduce((a, l) => a + N(l.qty_supply) - N(l.qty_shipped), 0), amount: left.reduce((a, l) => a + (N(l.qty_supply) - N(l.qty_shipped)) * N(l.unit_price), 0) } : null;
   return (
     <div className="card">
-      <div className="card-h"><h2>④-2 发货文件 <Info>打包完先打印，随货走；BL 编号出库时自动落到出库单上</Info></h2></div>
+      <div className="card-h"><h2>发货文件 <Info>打包完先打印，随货走；BL 编号出库时自动落到出库单上</Info></h2></div>
       <div className="card-b stack" style={{ gap: 8 }}>
         {pending ? (
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>

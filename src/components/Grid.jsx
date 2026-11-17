@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { useOutside, DateCalendar, useApp, copyToClipboard } from './ui.jsx';
+import { useOutside, DateCalendar, useApp, copyToClipboard, Info } from './ui.jsx';
 import { loadTableOptions, loadRowAttrs, saveRowAttrs, customColumns } from '../lib/tableOptions.js';
 import TableOptionsModal from './TableOptions.jsx';
 
@@ -120,7 +120,7 @@ function edgeScroller(box) {
 }
 
 export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r.id, rowClass, onRowClick, onDelete, selectable, foot, tools, empty = '暂无数据', maxHeight, noTools,
-  onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors, onShown, compactTools, rowActions }) {
+  onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors, onShown, compactTools, slimTools, rowActions }) {
   // ── 每张表的自定义列 (Frank 11-08): 传 table="xxx" 就自动长出「选项设置」里加的列, 值存 row_attrs ──
   const app = useApp() || {};
   const [tbl, setTbl] = useState({ opts: null, attrs: {} });
@@ -551,6 +551,8 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
       {!noTools && (!compactTools || toolsOpen) && (
         <div className="grid-tools">
           {tools}
+          {/* 减法巡检 A2 (11-17): 订单里的小表 (slimTools) 平时不摆筛选 / 搜索 / 筛选方案, 点右边 ⏷ 才展开; 有筛选在生效时一直显示 */}
+          {(!slimTools || toolsOpen || nFilters > 0) && <>
           <button type="button" ref={panelBtn} className={`btn sm gf-keep ${liveConds.length ? 'primary' : ''}`} onClick={() => (panel ? setPanel(null) : openPanel())} title="筛选：可以叠加多个条件">⏷ 筛选{liveConds.length ? ` ${liveConds.length}` : ''}</button>
           {liveConds.map((f) => <span key={f.id} className="pill blue gf-chip gf-keep" onClick={() => openPanel()} title="点开修改">{byKey[f.key].label}{f.op === 'in' ? '：' : f.op === 'not_in' ? ' 不是：' : f.op === 'empty' ? ' 为空' : f.op === 'not_empty' ? ' 不为空' : f.op === 'contains' ? ' 包含 ' : f.op === 'not_contains' ? ' 不包含 ' : { eq: ' = ', ne: ' ≠ ', gt: ' > ', lt: ' < ', between: ' 介于 ' }[f.op] || ' '}{['in', 'not_in'].includes(f.op) ? ((f.vals || []).length > 2 ? `${f.vals.length} 个` : (f.vals || []).join('、')) : ['empty', 'not_empty'].includes(f.op) ? '' : f.op === 'between' ? `${f.a}–${f.b}` : f.a}
             <button type="button" className="x-mini" title="去掉这个条件" onClick={(e) => { e.stopPropagation(); setFilters((cs) => cs.filter((c) => c.id !== f.id)); }}>×</button></span>)}
@@ -558,6 +560,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
           <Schemes id={id || 'grid'} current={gf} onApply={(s2) => setGf({ conds: (s2.conds || []).map((c) => ({ ...c })), any: !!s2.any, q: s2.q || '' })} />
           {nFilters > 0 && <span className="pill blue">筛出 {shown.length}/{rows.length} 行</span>}
           {(nFilters > 0 || sort) && <button type="button" className="btn sm" onClick={() => { setGf({ conds: [], any: false, q: '' }); setSort(null); }} title="清掉所有筛选和排序，回到最初的样子">↺ 清空</button>}
+          </>}
 
           {rowActions?.length > 0 && (actRow ? (
             <span className="row-acts"><span className="small">第 {shown.indexOf(actRow) + 1} 行：</span>
@@ -578,7 +581,8 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
             <button type="button" className="btn sm" disabled={!redo.length} onClick={doRedo} title="⌘⇧Z">↷ 重做</button></span>}
           {sel && <button type="button" className="btn sm" onClick={async () => { const n = await copySel(true); flash(n < 0 ? '浏览器不让复制' : `已复制 ${n} 行（含表头）`); }}>复制所选</button>}
           {onDelete && delRows.length > 0 && <button type="button" className="btn sm danger" title="删掉选中的行（勾选的行，或点行号选中的行）；删错了可撤销" onClick={() => { const rs = delRows; setSel(null); if (selectable?.onChange) selectable.onChange(new Set()); onDelete(rs[0], shown.indexOf(rs[0]), rs); }}>🗑 删 {delRows.length} 行</button>}
-          {vis.some(isFill) && <span className="hide-m small">⌘/Ctrl+V 粘贴整列 · ⌘/Ctrl+D 向下填充 · 拖表头边线调宽、双击自适应</span>}
+          {vis.some(isFill) && <span className="hide-m"><Info>这张表可以像 Excel 一样用：⌘/Ctrl+V 粘贴整列 · ⌘/Ctrl+D 向下填充 · ⌘Z 撤销 · 拖表头边线调宽、双击自适应。</Info></span>}
+          {slimTools && !toolsOpen && nFilters === 0 && <button type="button" className="btn sm ghost" title="筛选 / 搜索这张表" aria-label="筛选 / 搜索这张表" onClick={() => setToolsOpen(true)}>⏷</button>}
           <span style={{ position: 'relative' }} ref={menuRef}>
             <button type="button" className="btn sm" onClick={() => setMenu(!menu)}>☷ 列</button>
             {menu && (

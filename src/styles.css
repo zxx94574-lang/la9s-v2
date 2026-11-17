@@ -1126,3 +1126,36 @@ input.in.gf-search { width: 230px; max-width: 100%; flex: 0 1 230px; }
 .mkpi.sm { padding: 8px 10px; } .mkpi.sm .v { font-size: 18px; }
 .mpivot-cell { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; line-height: 1.2; }
 .mpivot-cell .small { color: var(--muted); }
+
+/* ===== v54 (11-17) 减法第一批 ===== */
+/* 「⋯ 更多」菜单: 不常用 / 危险的操作收进来 */
+.more-wrap { position: relative; display: inline-flex; }
+.menu.more-menu { right: 0; left: auto; top: calc(100% + 4px); min-width: 180px; padding: 6px; }
+.menu button.mi.danger { color: var(--red, #c0392b); }
+.menu button.mi.danger:hover { background: #fdecea; }
+/* 订单头部的毛利小块 (只中方): 一个数字, 点开才是明细 */
+.margin-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.margin-chip .k { color: var(--muted); }
+.margin-chip.loss { border-color: #e9b4ae; background: #fdecea; color: #a5281b; font-weight: 600; }
+.margin-chip:hover { border-color: var(--brand); }
+.caret { color: var(--muted); font-size: 12px; }
+/* 可收起的卡片标题 */
+button.card-h.fold-h { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+button.card-h.fold-h:hover h2 { color: var(--brand); }
+/* 336 选型号: 一行 = 机型 + 种类 / 小字编码 | 库存 + 价格; 放不下省略, 不串行 */
+.sugg button.pk-row { grid-template-columns: minmax(0, 1fr) auto; gap: 0; padding: 0; border-bottom: 1px solid var(--line-2); align-items: stretch; -webkit-touch-callout: none; user-select: none; }
+.pk-row > span + span { border-left: 0; }
+.pk-main { overflow: hidden; }
+.pk-l1 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.pk-l1 > *, .pk-l2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pk-l1 .m { flex: 0 1 auto; } .pk-l1 .muted { flex: 0 2 auto; }
+.pk-l2 { display: block; font-size: 11.5px; }
+.pk-c { flex-direction: row !important; align-items: center !important; justify-content: flex-end; gap: 8px !important; }
+.pk-tip { position: fixed; z-index: 500; width: 280px; max-width: calc(100vw - 16px); background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 32px #0f2a5230; padding: 10px 12px; display: grid; gap: 4px; pointer-events: none; word-break: break-word; }
+@media (max-width: 520px) { .sugg button.pk-row { grid-template-columns: minmax(0, 1fr) auto; } .pk-c { flex-direction: column !important; align-items: flex-end !important; gap: 2px !important; } }
+/* 337 下拉宽度不跟触发框走: 有最小宽度, 最宽不超屏; 提示放不下就省掉 */
+@media (min-width: 761px) { .picker > .sugg { min-width: min(420px, calc(100vw - 16px)); max-width: calc(100vw - 16px); } }
+.sugg-h-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sugg-h .btn { flex: 0 0 auto; white-space: nowrap; }
+.cell-pop, .dp-pop { max-width: calc(100vw - 16px); }
+.sugg .sugg-h .btn { display: inline-flex; width: auto; padding: 5px 14px; }

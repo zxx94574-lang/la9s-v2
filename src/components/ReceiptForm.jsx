@@ -208,7 +208,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
         </>
       )}
       <div className="actionbar">
-        <span className="hint">{method === 'cash' ? '门店现金当面收款可以不传凭证。' : '凭证可直接粘贴 WhatsApp 截图。'}</span>
+        <span className="hint">{method === 'cash' ? '现金也要拍照：数钱 / 收条的照片。' : '凭证可直接粘贴 WhatsApp 截图。'}</span>
         <button type="button" className="btn primary lg" disabled={busy || !can(role, 'receipt')} onClick={submit}>{busy ? '登记中…' : overOk ? '金额核对过，确认收款 →' : rateOk ? '汇率核对过，确认收款 →' : '确认收款 →'}</button>
       </div>
       {drawer && <DealDrawer id={drawer} onClose={() => setDrawer(null)} />}

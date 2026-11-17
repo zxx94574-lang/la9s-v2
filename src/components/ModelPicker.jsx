@@ -1,6 +1,7 @@
 // Fast line entry: category chips switch instantly (屏幕 ↔ 电池盖 ↔ 屏幕…), then type model / code / 通用型号.
 // Arrow keys + Enter or mouse. Frank 11-01: 点一个不关, 可以接着点 (点过的打 ✓); 「完成」/ Esc / 点外面才关.
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { money, qty } from '../lib/format.js';
 import { useOutside } from './ui.jsx';
 
@@ -34,6 +35,22 @@ export default function ModelPicker({ catalog, categories, tier, onPick, onUnpic
     else if (e.key === 'Enter') { e.preventDefault(); if (list[focus]) pick(list[focus]); }
     else if (e.key === 'Escape') setOpen(false);
   };
+  // 337 (Frank 11-17): 下拉宽度不跟输入框走 —— 自己有最小宽度 (CSS), 右边放不下就往左挪
+  const sugg = useRef(null); const [shift, setShift] = useState(0);
+  useLayoutEffect(() => {
+    if (!open) { setShift(0); return undefined; }
+    const fit = () => { const b = box.current?.getBoundingClientRect(); const w = sugg.current?.offsetWidth || 0; if (!b || !w) return; setShift(Math.max(0, Math.min(b.left - 8, Math.ceil(b.left + w - (window.innerWidth - 8))))); };
+    fit(); window.addEventListener('resize', fit); return () => window.removeEventListener('resize', fit);
+  }, [open, box]);
+  // 336: 完整信息 —— 电脑悬停 0.45 秒 / 手机长按 0.5 秒
+  const [tip, setTip] = useState(null); const timer = useRef(null); const pressed = useRef(false);
+  const show = (p, el) => { const r = el.getBoundingClientRect(); setTip({ p, top: r.bottom + 190 > window.innerHeight ? Math.max(8, r.top - 150) : r.bottom + 2, left: Math.max(8, Math.min(r.left + 160, window.innerWidth - 288)) }); };
+  const hover = (p, el) => { clearTimeout(timer.current); timer.current = setTimeout(() => show(p, el), 450); };
+  const unhover = () => { clearTimeout(timer.current); setTip(null); };
+  const press = (p, el) => { clearTimeout(timer.current); pressed.current = false; timer.current = setTimeout(() => { pressed.current = true; show(p, el); }, 500); };
+  const unpress = () => { clearTimeout(timer.current); if (pressed.current) setTimeout(() => setTip(null), 2500); };
+  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => { if (!open) setTip(null); }, [open]);
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="chips cats">
@@ -45,15 +62,20 @@ export default function ModelPicker({ catalog, categories, tier, onPick, onUnpic
           <input ref={input} className="in" value={text} placeholder="⌕ 加一行：输入型号 / 编码 / 通用型号，↑↓ 选择，Enter 添加"
             onFocus={() => setOpen(true)} onChange={(e) => { setText(e.target.value); setOpen(true); setFocus(0); }} onKeyDown={key} />
           {open && (
-            <div className="sugg">
-              <div className="sugg-h"><span className="small muted">点一个加一行，可以接着点；数量在下面明细里填</span>
+            <div className="sugg" ref={sugg} style={shift ? { left: -shift, right: 'auto' } : null}>
+              <div className="sugg-h"><span className="small muted sugg-h-t">点一个加一行，可以接着点</span>
                 <button type="button" className="btn sm primary" onClick={() => setOpen(false)}>完成</button></div>
               {list.length === 0 && <div className="empty">没有匹配的物料。客户要的型号我们没建档？用右边「＋ 补录需求」记下来。</div>}
+              {/* 336 (Frank 11-17): 每行只显示 种类 · 机型（下面小字编码）· 库存 · 价格; 放不下一律省略, 不许串行; 完整信息电脑悬停 / 手机长按 */}
               {list.map((p, i) => (
-                <button type="button" key={p.id} className={`pk-row ${i === focus ? 'focus' : ''} ${picked?.has(p.id) ? 'picked' : ''}`} onMouseEnter={() => setFocus(i)} onClick={() => pick(p)}>
-                  <span className="pk-a"><span className="mono">{picked?.has(p.id) ? '✓ ' : ''}{p.code}</span><span className="muted small">{p.category}</span></span>
-                  <span className="pk-b"><span><span className="m">{p.model}</span>{p.variant && list.some((x) => x.id !== p.id && x.model === p.model && x.category === p.category) && <span className="pill blue" style={{ marginLeft: 6 }}>{p.variant}</span>}</span>
-                    <span className="muted small pk-shared" title={p.shared_models.join(' / ')}>{p.shared_models.length ? p.shared_models.join(' / ') : '—'}</span></span>
+                <button type="button" key={p.id} className={`pk-row ${i === focus ? 'focus' : ''} ${picked?.has(p.id) ? 'picked' : ''}`}
+                  onMouseEnter={(e) => { setFocus(i); hover(p, e.currentTarget); }} onMouseLeave={unhover}
+                  onTouchStart={(e) => press(p, e.currentTarget)} onTouchEnd={unpress} onTouchMove={unpress} onContextMenu={(e) => e.preventDefault()}
+                  onClick={() => { if (pressed.current) { pressed.current = false; return; } pick(p); }}>
+                  <span className="pk-main">
+                    <span className="pk-l1"><span className="m">{picked?.has(p.id) ? '✓ ' : ''}{p.model}</span><span className="muted small">{p.category}</span></span>
+                    <span className="pk-l2 muted small"><span className="mono">{p.code}</span>{p.variant ? ` · ${p.variant}` : ''}{p.shared_models.length ? ` · 通用 ${p.shared_models.length}` : ''}</span>
+                  </span>
                   <span className="pk-c"><StockPill n={avail(p)} />{showPrice && (tier ? <span className="small muted">{money(p.prices[tier])} XOF</span> : <span className="small muted">先选客户</span>)}</span>
                 </button>
               ))}
@@ -62,6 +84,14 @@ export default function ModelPicker({ catalog, categories, tier, onPick, onUnpic
         </div>
         {extra}
       </div>
+      {tip && createPortal(
+        <div className="pk-tip" style={{ top: tip.top, left: tip.left }}>
+          <div><b>{tip.p.model}</b> <span className="muted">{tip.p.category}</span></div>
+          <div className="small"><span className="muted">编码</span> <span className="mono">{tip.p.code}</span></div>
+          {tip.p.variant && <div className="small"><span className="muted">区分</span> {tip.p.variant}</div>}
+          {tip.p.shared_models.length > 0 && <div className="small"><span className="muted">通用机型</span> {tip.p.shared_models.join(' / ')}</div>}
+          <div className="small"><span className="muted">可售</span> {avail(tip.p)} 片{showPrice && tier ? <> · <span className="muted">单价</span> {money(tip.p.prices[tier])} XOF</> : null}</div>
+        </div>, document.body)}
     </div>
   );
 }

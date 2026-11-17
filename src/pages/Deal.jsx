@@ -2,21 +2,21 @@
 // the current step shows its action, a finished step shows a read-only record (待改 13).
 // Going back = 「撤回到上一步」 with a reason (待改 14); cancelled deals can be restored (待改 16).
 import DebtBanner from '../components/DebtBanner.jsx';
-import { DealMargin } from '../components/Margin.jsx';
+import { useDealMargin, DealMarginChip, DealMarginCard } from '../components/Margin.jsx';
 import { DealLastPrice } from '../components/LastPrice.jsx';
 import { dealLight, stuckOf } from '../lib/domain.js';
 import React, { useEffect, useRef, useState } from 'react';
 const N = (v) => Number(v) || 0;
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { TierPill, Light, useApp, useData, Pill, Modal, OptionNote, Info } from '../components/ui.jsx';
+import { TierPill, Light, useApp, useData, Pill, Modal, OptionNote, Info, MoreMenu } from '../components/ui.jsx';
 import { STATUS, STEPS, LAST_STEP, reachedStep, EVENT_LABELS, ROLES, CONFIRM_METHODS, NOTE_OPTIONS, TIERS, can, seesPrice, dealPriceVisible } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, friendlyError } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
 import { CustomerDrawer } from './Customers.jsx';
 import Grid from '../components/Grid.jsx';
 import { IssueButton } from '../components/IssueReport.jsx';
-import { QuotePanel, ConfirmBlock, PickPanel, SoPanel, ConfirmPanel, ShipStepPanel, SignPanel, PayPanel, ReturnPanel, discLineText, DISC_WHERE } from './DealPanels.jsx';
+import { CancelModal, QuotePanel, ConfirmBlock, PickPanel, SoPanel, ConfirmPanel, ShipStepPanel, SignPanel, PayPanel, ReturnPanel, discLineText, DISC_WHERE } from './DealPanels.jsx';
 import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 
 const STEP_KEYS = STEPS.map((s) => s.key);
@@ -24,6 +24,7 @@ const REVERT_LABEL = {
   hotline_ok: '撤回确认 → 回到报价', picking: '撤回找货 → 释放预占，回到报价·确认', picked: '撤回初检 → 回到找货中',
   ordered: '撤回销售订单 → 回到已初拣（可改价、追加）', confirmed: '撤回客户确认 → 回到待客户确认', reviewed: '撤回复检打包 → 回到待复检',
 };
+const CANCELLABLE = ['quoted', 'hotline_ok', 'picking', 'picked', 'reviewed', 'ordered', 'confirmed'];   // 和后端 cancel_deal 一致: 出库前都能作废
 const short = (no) => (no ? '…' + String(no).slice(-4) : '');
 const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩';
 
@@ -38,6 +39,9 @@ export default function Deal({ id }) {
   const [approve, setApprove] = useState(false);
   const [revert, setRevert] = useState(false);
   const [custOpen, setCustOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);      // 减法巡检 C3: 操作记录默认收起
+  const [mOpen, setMOpen] = useState(null);           // 减法巡检 C2: 毛利默认只显示一个小块; null = 跟着「亏没亏」自动定
   const { data, error } = useData(async () => {
     const [deal] = await q(Q.dealById, [id]);
     if (!deal) return { deal: null };
@@ -68,6 +72,9 @@ export default function Deal({ id }) {
     const io = new IntersectionObserver(([en]) => { if (!en.isIntersecting && stepsRef.current) setStepsH(stepsRef.current.offsetHeight || 0); setStuck(!en.isIntersecting); }, { threshold: 0, rootMargin: '-66px 0px 0px 0px' });   // 顶栏高 60: 流程条贴到顶栏下面才算吸顶
     io.observe(el); return () => io.disconnect();
   }, [hasDeal, id]);
+
+  const margin = useDealMargin(data?.deal || null);
+  const marginOpen = mOpen ?? !!margin?.loss;        // 亏钱 → 自动展开 (Frank 344)
 
   if (error) return <div className="card card-b">读取失败：{String(error.message || error)}</div>;
   if (!data) return <div className="empty">加载中…</div>;
@@ -145,7 +152,10 @@ export default function Deal({ id }) {
           <span className="grow" />
           {!atNow && !cancelled && curKey !== 'return' && <><span className="pill gray">回看已完成的步骤 · 只读</span><button type="button" className="btn sm" onClick={() => setView(null)}>回到当前步 →</button></>}
           {atNow && !cancelled && <IssueButton deal={deal} step={STEPS[Math.min(current, STEPS.length - 1)]?.key} />}
-          {atNow && REVERT_LABEL[deal.status] && can(role, 'revert') && <button type="button" className="btn sm soft-red" onClick={() => setRevert(true)}>↶ 撤回到上一步</button>}
+          {!cancelled && <MoreMenu items={[
+            atNow && REVERT_LABEL[deal.status] && can(role, 'revert') && ['↶ 撤回到上一步', () => setRevert(true)],
+            CANCELLABLE.includes(deal.status) && can(role, 'cancel') && ['作废订单', () => setCancelOpen(true), 'danger'],
+          ]} />}
           {cancelled && can(role, 'restore') && <button type="button" className="btn sm primary" onClick={() => act('已恢复为报价，可以重新下推', `select app.restore_deal($1)`, [deal.id]).catch(() => {})}>↺ 恢复这张单</button>}
         </div>
       </div>
@@ -162,10 +172,12 @@ export default function Deal({ id }) {
         <span style={{ fontWeight: 650 }}><CustLink id={deal.customer_id} name={deal.customer_name} /></span>
         <span className="muted small">{deal.customer_code} · {deal.city}</span><TierPill tier={deal.tier} />
         <span className="grow" />
+        <DealMarginChip m={margin} open={marginOpen} onToggle={() => setMOpen(!marginOpen)} />
         {deal.currency !== 'XOF' && <span className="small">币种 <b>{deal.currency}</b>{deal.fx_rate ? ` · 1 ${deal.currency} = ${Number(deal.fx_rate)} XOF` : ''}</span>}
         <span className="small muted">{dDate(deal.created_at)} 建单</span>
       </div>
 
+      {marginOpen && <DealMarginCard m={margin} />}
       {deal.source === 'guest' && (
         <div className="banner info row" style={{ marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
           <span>🌐 <b>游客询价</b>：{deal.guest_info?.contact || ''} · {deal.guest_info?.phone || ''} · {deal.guest_info?.shop || ''} · {deal.guest_info?.city || ''}
@@ -198,7 +210,7 @@ export default function Deal({ id }) {
       {!cancelled && deal.approval === 'rejected' && deal.status === 'quoted' && <ResubmitBanner deal={deal} act={act} role={role} />}
       {!cancelled && deal.approval === 'approved' && deal.status === 'quoted' && <div className="small muted" style={{ marginBottom: 8 }}>✓ 中方已批{deal.approval_note ? `（${deal.approval_note}）` : ''}</div>}
       {cancelled && <div className="lock" style={{ marginBottom: 12 }}>这张单已作废（取消），预占的库存已释放。作废不是删除：点上面的「恢复这张单」可以恢复为报价。</div>}
-      {readOnly && !cancelled && <div className="readonly-bar">🔒 这一步已下推，只读。要修改请先「撤回到上一步」（主管 / 中方，需选原因）。</div>}
+      {readOnly && !cancelled && <div className="readonly-bar">🔒 这一步已下推，只读。要修改请先撤回到上一步（在上面「⋯ 更多」里，主管 / 中方，需选原因）。</div>}
       {curKey === 'quote' && <><QuotePanel {...ctx} />{!cancelled && <ConfirmBlock {...ctx} />}</>}
       {curKey === 'pick' && <PickPanel {...ctx} />}
       {curKey === 'so' && <><SoPanel {...ctx} />{deal.so_no && <ConfirmPanel {...ctx} />}</>}
@@ -206,11 +218,11 @@ export default function Deal({ id }) {
       {curKey === 'sign' && <SignPanel {...ctx} />}
       {curKey === 'pay' && <PayPanel {...ctx} />}
       {curKey === 'return' && <ReturnPanel {...ctx} />}
-      {role === 'admin' && !cancelled && <DealMargin deal={deal} />}
 
       <div className="card">
-        <div className="card-h"><h2>操作记录</h2><span className="muted small">谁、什么时候、做了什么</span></div>
-        <div className="card-b">
+        <button type="button" className="card-h fold-h" aria-expanded={logOpen} onClick={() => setLogOpen((o) => !o)}>
+          <h2>操作记录</h2><span className="muted small">{data.events.length} 条{logOpen ? '' : ' · 谁、什么时候、做了什么'}</span><span className="grow" /><span className="caret">{logOpen ? '▾ 收起' : '▸ 展开'}</span></button>
+        {logOpen && <div className="card-b">
           <ul className="timeline">
             {data.events.map((e, i) => {
               const stepKey = EVENT_STEP[e.action]; const line = e.detail?.line && data.lines.find((l) => l.id === e.detail.line);
@@ -241,10 +253,11 @@ export default function Deal({ id }) {
               );
             })}
           </ul>
-        </div>
+        </div>}
       </div>
 
       {approve && <ApproveModal deal={deal} lines={data.lines} onClose={() => setApprove(false)} />}
+      {cancelOpen && <CancelModal deal={deal} act={act} onClose={() => setCancelOpen(false)} />}
       {revert && <RevertModal deal={deal} act={act} onClose={() => setRevert(false)} onDone={() => { setRevert(false); setView(null); }} />}
     </>
   );
