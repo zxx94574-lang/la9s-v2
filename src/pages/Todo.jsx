@@ -29,6 +29,7 @@ export function shipAlert(d) {
 import { HoldsCard, VolumeShift } from '../components/Batch2.jsx';
 import { MoneyUrgent, ChangeNotices } from '../components/Batch3.jsx';
 import { LossTodo } from '../components/Loss.jsx';
+import { PricePendingTodo } from '../components/PricePending.jsx';
 export function nextAction(d, role) {
   // 251: 新客户档位没定 → 这张报价是草稿; 申请了就卡在中方
   if (d.status === 'quoted' && d.tier_pending) return d.tier_requested_at ? { roles: ['admin'], what: '给这个新客户定档位（员工已申请，报价等着发给客户）' } : { roles: ['hotline', 'manager', 'sales', 'sales_manager'], what: '草稿：客户档位没定，点进去「申请定级」，中方定了再发给客户' };
@@ -163,6 +164,7 @@ export default function Todo() {
     <>
       <div className="pagehead"><div><div className="eyebrow">Mes tâches</div><h1 tabIndex={0}>我的待办</h1>
         <div className="sub">当前岗位：<b>{ROLES[role].label}</b>。下推一步，单子就自动出现在下一个人的待办里。</div></div></div>
+      <PricePendingTodo />
       <LossTodo />
       <MoneyUrgent />
       <DirectiveBoard />

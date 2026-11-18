@@ -4,6 +4,7 @@
 import DebtBanner from '../components/DebtBanner.jsx';
 import { LossGate, LossReview } from '../components/Loss.jsx';
 import { DiscountModal, canDiscount } from '../components/Discount.jsx';
+import { AllowUnpricedModal, PricePendingBar, canAllowUnpriced } from '../components/PricePending.jsx';
 import { useDealMargin, DealMarginChip, DealMarginCard } from '../components/Margin.jsx';
 import { DealLastPrice } from '../components/LastPrice.jsx';
 import { dealLight, stuckOf } from '../lib/domain.js';
@@ -41,7 +42,7 @@ export default function Deal({ id }) {
   const [approve, setApprove] = useState(false);
   const [revert, setRevert] = useState(false);
   const [custOpen, setCustOpen] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false); const [discOpen, setDiscOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false); const [discOpen, setDiscOpen] = useState(false); const [unpricedOpen, setUnpricedOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);      // 减法巡检 C3: 操作记录默认收起
   const [mOpen, setMOpen] = useState(null);           // 减法巡检 C2: 毛利默认只显示一个小块; null = 跟着「亏没亏」自动定
   const { data, error } = useData(async () => {
@@ -157,6 +158,7 @@ export default function Deal({ id }) {
           {!cancelled && <MoreMenu items={[
             atNow && REVERT_LABEL[deal.status] && can(role, 'revert') && ['↶ 撤回到上一步', () => setRevert(true)],
             canDiscount(deal, role) && [deal.discount_amount != null ? '整单折扣（已打，查看 / 撤销）' : '整单折扣…', () => setDiscOpen(true)],
+            canAllowUnpriced(deal, role) && ['先出库、价格以后定…', () => setUnpricedOpen(true)],
             CANCELLABLE.includes(deal.status) && can(role, 'cancel') && ['作废订单', () => setCancelOpen(true), 'danger'],
           ]} />}
           {cancelled && can(role, 'restore') && <button type="button" className="btn sm primary" onClick={() => act('已恢复为报价，可以重新下推', `select app.restore_deal($1)`, [deal.id]).catch(() => {})}>↺ 恢复这张单</button>}
@@ -190,6 +192,7 @@ export default function Deal({ id }) {
         </div>)}
       {custOpen && <CustomerDrawer id={deal.customer_id} onClose={() => setCustOpen(false)} />}
       {!cancelled && seesPrice(role) && !['shipped'].includes(deal.status) && <DebtBanner customerId={deal.customer_id} deal={deal} />}
+      {!cancelled && <PricePendingBar deal={deal} lines={data.lines} />}
       {!cancelled && <LossGate deal={deal} margin={margin} />}
       {!cancelled && <LossReview deal={deal} margin={margin} />}
       {!cancelled && dealPriceVisible(role, deal) && ['quote', 'so'].includes(curKey) && <DealLastPrice deal={deal} lines={data.lines} />}
@@ -262,6 +265,7 @@ export default function Deal({ id }) {
       </div>
 
       {approve && <ApproveModal deal={deal} lines={data.lines} onClose={() => setApprove(false)} />}
+      {unpricedOpen && <AllowUnpricedModal deal={deal} onClose={() => setUnpricedOpen(false)} />}
       {discOpen && <DiscountModal deal={deal} lines={data.lines} onClose={() => setDiscOpen(false)} />}
       {cancelOpen && <CancelModal deal={deal} act={act} onClose={() => setCancelOpen(false)} />}
       {revert && <RevertModal deal={deal} act={act} onClose={() => setRevert(false)} onDone={() => { setRevert(false); setView(null); }} />}
