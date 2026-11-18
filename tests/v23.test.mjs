@@ -52,3 +52,25 @@ test('事后: 亏了的已出库单进中方清单, 必须选结论 + 写原因�
   await t.as(U.admin, `select app.close_loss_review($1,'清仓','11 月清仓决定，以后清仓走清仓价表')`, [d]);
   assert.equal((await t.as(U.admin, `select * from app.loss_deals($1)`, [t.ids.org])).length, 0);
 });
+
+test('清仓价表: 有生效的清仓价且卖价不低于它 → 不拦; 低于清仓价 / 过期 / 不适用这个档位 → 照拦; 员工设不了', async () => {
+  const t = await setup(); await costly(t);
+  const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  await rejects(t.as(U.manager, `select app.set_clearance($1,$2,500,$3,$4,null,null,'清老库存')`, [t.ids.org, t.ids.bg6mCover, day(0), day(7)]), /PERMISSION/);
+  await rejects(t.as(U.admin, `select app.set_clearance($1,$2,500,$3,$4,null,null,' ')`, [t.ids.org, t.ids.bg6mCover, day(0), day(7)]), /VALIDATION/);
+  // 只给 S 档: 批发客户 (550) 不适用 → 照拦
+  const c1 = await t.val(U.admin, `select app.set_clearance($1,$2,500,$3,$4,array['S'],null,'只给 S')`, [t.ids.org, t.ids.bg6mCover, day(0), day(7)]);
+  await rejects(t.toConfirmed(t.ids.camaraAbobo, [{ product_id: t.ids.bg6mCover, qty_req: 3 }]), /LOSS_BLOCK/);
+  await t.as(U.admin, `select app.end_clearance($1)`, [c1]);
+  // 所有客户、清仓价 500 ≤ 卖价 550 → 放行
+  await t.as(U.admin, `select app.set_clearance($1,$2,500,$3,$4,null,null,'11 月清仓决定')`, [t.ids.org, t.ids.bg6mCover, day(0), day(7)]);
+  const d = await t.toConfirmed(t.ids.camaraAbobo, [{ product_id: t.ids.bg6mCover, qty_req: 3 }]);
+  assert.equal(await t.status(d), 'reviewed');
+  // 卖得比清仓价还低 → 拦
+  await t.db.query(`update app.deal_lines set unit_price = 400 where deal_id = $1`, [d]);
+  assert.equal((await t.val(U.admin, `select app.deal_loss_state($1)`, [d])).blocked, true);
+  // 过期的不算
+  await t.db.query(`update app.deal_lines set unit_price = 550 where deal_id = $1`, [d]);
+  await t.db.query(`update app.clearance_prices set starts_on = current_date - 10, ends_on = current_date - 1 where ended_at is null`);
+  assert.equal((await t.val(U.admin, `select app.deal_loss_state($1)`, [d])).blocked, true);
+});

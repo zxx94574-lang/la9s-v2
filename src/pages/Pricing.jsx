@@ -7,6 +7,7 @@ import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, Modal , RateInput} from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import ProductDrawer from '../components/ProductDrawer.jsx';
+import ClearanceCard from '../components/Clearance.jsx';
 import { can, seesPrice } from '../lib/domain.js';
 import { money, friendlyError, dt } from '../lib/format.js';
 
@@ -99,6 +100,7 @@ export default function Pricing() {
         <Grid id="pricing" table="products" columns={cols} rows={rows} tools={admin ? <span className="hint">点一下选格子，再点一下改成本 / 运费 / FEE，改完自动保存并重算价格。</span> : null} />
         {!admin && <div className="card-b hint">只有中方能改成本、运费、FEE 和汇率。</div>}
       </div>
+      {admin && <ClearanceCard products={data.rows} />}
       {lock && <LockModal lock={lock} onClose={() => setLock(null)} />}
       {openP && <ProductDrawer product={openP} onClose={() => setOpenP(null)} />}
       {rates && <RatesModal org={org} rates={rates} setRates={setRates} onClose={() => setRates(null)} />}
