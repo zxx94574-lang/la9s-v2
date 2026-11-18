@@ -68,7 +68,7 @@ export default function Customers() {
     { key: 'market', label: '市场', w: 100, hidden: true, value: (c) => optLabel(O.markets, c.market), ...optTag(O.markets, (c) => c.market), edit: sel('market', O.markets) },
     { key: 'shop_type', label: '店铺类型', w: 100, value: (c) => optLabel(O.shop_types, c.shop_type), ...optTag(O.shop_types, (c) => c.shop_type), edit: sel('shop_type', O.shop_types) },
     { key: 'follow_status', label: '跟进状态', w: 100, value: (c) => optLabel(O.follow_statuses, c.follow_status), ...optTag(O.follow_statuses, (c) => c.follow_status), edit: sel('follow_status', O.follow_statuses) },
-    { key: 'contact_name', label: '负责人', w: 110, value: (c) => c.contact_name || '', edit: txt('contact_name') },
+    { key: 'contact_name', label: '收货人', w: 110, value: (c) => c.contact_name || '', edit: txt('contact_name') },
     { key: 'phone', label: '电话', w: 150, value: (c) => c.phone || '', render: (c) => fmtPhone(c.phone), edit: (c) => (canEdit ? { type: 'text', value: c.phone || '', onChange: (v, m) => { const n = normPhone(v); if (!n.valid) return toast(`电话位数不对：${v}（+${n.cc} 要 ${n.need} 位）`, 'err'); saveCell(c, 'phone', n.formatted, m); } } : null) },
     { key: 'address', label: '地址', w: 160, hidden: true, value: (c) => c.address || '', edit: txt('address') },
     { key: 'kind', label: '类型', w: 90, value: (c) => KIND[c.kind], render: (c) => (c.kind === 'spare' ? KIND.spare : <Pill tone="blue">{KIND[c.kind]}</Pill>) },
@@ -133,7 +133,7 @@ export function CustomerDrawer({ id, onClose }) {
             <dt>编码</dt><dd className="mono">{c.code || `${c.temp_code}（临时）`}</dd>
             <dt>状态</dt><dd>{c.status === 'prospect' ? <Pill tone="amber">潜客</Pill> : c.status === 'active' ? <Pill tone="green">正式</Pill> : <Pill>停用</Pill>} {KIND[c.kind]}{c.recycle_type ? ` · ${c.recycle_type}` : ''}</dd>
             <dt>档位</dt><dd><TierPill tier={c.tier} empty="—（中方定）" /> · {SUPPLY[c.supply] || SUPPLY.local}</dd>
-            <dt>负责人</dt><dd>{c.contact_name || '—'}</dd>
+            <dt>收货人</dt><dd>{c.contact_name || '—'}</dd>
             <dt>电话</dt><dd>{fmtPhone(c.phone) || '—'}</dd>
             <dt>地址</dt><dd>{c.address || '—'}</dd>
             <dt>城市 / 市场</dt><dd>{[c.city, c.market, c.zone].filter(Boolean).join(' · ') || '—'}</dd>
@@ -148,7 +148,7 @@ export function CustomerDrawer({ id, onClose }) {
           <div className="row" style={{ gap: 8 }}>
             {c.status === 'prospect' && <button type="button" className="btn primary sm" onClick={() => setEdit('activate')}>转正式客户（给编码 + 档位）</button>}
             <button type="button" className="btn sm" onClick={() => setEdit('terms')}>欠款上限 / 账期 / 归属</button>
-            <button type="button" className="btn sm" onClick={() => setEdit('info')}>✎ 修改档案（负责人 / 电话 / 城市 / 地址{role === 'admin' ? ' / 档位' : ''}）</button>
+            <button type="button" className="btn sm" onClick={() => setEdit('info')}>✎ 修改档案（收货人 / 电话 / 城市 / 地址{role === 'admin' ? ' / 档位' : ''}）</button>
           </div>)}
         <AccountPanel customer={c} />
         {role === 'admin' && c.status === 'active' && <CustMargin customerId={c.id} />}
@@ -226,7 +226,7 @@ function InfoModal({ c, onClose }) {
   const [f, setF] = useState(init);
   const [confirm, setConfirm] = useState(null);
   const inp = (k, l, ph) => <div className="field"><label>{l}</label><input className="in" value={f[k]} placeholder={ph} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></div>;
-  const LABEL = { name: '客户名称', contact_name: '负责人', phone: '电话', city: '城市', address: '地址', tier: '档位' };
+  const LABEL = { name: '客户名称', contact_name: '收货人', phone: '电话', city: '城市', address: '地址', tier: '档位' };
   // 206: 保存前列出改前 → 改后 + 自检 (电话位数红 / 和别的客户重号黄 / 改档位黄)
   const review = async () => {
     const rows = Object.keys(f).filter((k) => String(init[k] ?? '') !== String(f[k] ?? '')).map((k) => [LABEL[k], k === 'tier' ? (TIERS[init[k]] || '—') : (init[k] || '—'), k === 'tier' ? (TIERS[f[k]] || '—') : (f[k] || '—')]);
@@ -253,7 +253,7 @@ function InfoModal({ c, onClose }) {
     <Modal title={`修改档案 · ${c.name}`} onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>取消修改</button><button type="button" className="btn primary" disabled={!f.name.trim()} onClick={review}>保存修改…</button></>}>
       <div className="grid2">
-        {inp('name', '客户名称（大写）')}{inp('contact_name', '负责人（BL 上的 Responsable）', 'M. Moumouni')}
+        {inp('name', '客户名称（大写）')}{inp('contact_name', '收货人（客户那边接货的人，BL 上的 Responsable）', 'M. Moumouni')}
         <div className="field"><label>电话（BL 上要印）</label><PhoneInput value={f.phone} onChange={(v) => setF((x) => ({ ...x, phone: v }))} /></div>{inp('city', '城市（BL 上的 Ville）', 'Yamoussoukro')}
         {inp('address', '地址')}
         {'tier' in f && <div className="field"><label>客户档位（只中方）</label><Choice value={f.tier} onChange={(k) => setF({ ...f, tier: k })} options={Object.entries(TIERS)} /></div>}

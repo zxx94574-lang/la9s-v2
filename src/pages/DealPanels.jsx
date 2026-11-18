@@ -137,7 +137,7 @@ export function CustomerInfo({ deal }) {
     <div className="panel info">
       <dl className="infolist">
         <dt>客户</dt><dd><CustLink id={deal.customer_id} name={deal.customer_name} /> <span className="mono muted small">{deal.customer_code || deal.temp_code}</span></dd>
-        <dt>负责人</dt><dd>{deal.customer_contact || '—'}</dd>
+        <dt>收货人</dt><dd>{deal.customer_contact || '—'}</dd>
         <dt>电话</dt><dd>{phone ? <><a href={telHref(phone)}>{fmtPhone(phone)}</a><CopyButton text={fmtPhone(phone)} what="电话" /></> : '—'}</dd>
         <dt>城市</dt><dd>{deal.city || '—'}</dd>
         <dt>销售员</dt><dd>{deal.owner_name || '—'}</dd>
@@ -330,6 +330,16 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
     if (N(deal.picker_errors) > 0) real.forEach((l) => !s.has(l.id) && s.set(l.id, `找货员近 30 天错 ${deal.picker_errors} 次`));
     return s;
   }, [real, deal.picker_errors]);
+  // 347 (Frank 11-17): 必抽检 —— 一行 数量 > 100 片 / 单价 > 5,000 / 总价 > 500,000 (三个数在规则参数里调) → 必须选抽检结果才能完成
+  const { data: ck } = useData(async () => { const [r] = await q(`select value from app.org_settings where org_id = $1 and key = 'check_rules'`, [org]); return { qty: 100, price: 5000, total: 500000, ...(r?.value || {}) }; }, [org]);
+  const must = useMemo(() => {
+    const m = new Map(); if (!ck) return m;
+    const k = deal.currency === 'XOF' ? 1 : N(deal.fx_rate) || 0;
+    real.forEach((l) => { const n = N(l.qty_supply), pr = N(l.unit_price || l.tier_price) * k; const why = [];
+      if (n > N(ck.qty)) why.push('数量大'); if (k && pr > N(ck.price)) why.push('单价高'); if (k && n * pr > N(ck.total)) why.push('金额高');
+      if (why.length && n > 0) m.set(l.id, why.join(' · ')); });
+    return m;
+  }, [real, ck, deal.currency, deal.fx_rate]);
 
   const e = evOf(events, 'pick_reviewed');
   const cols = [
@@ -342,9 +352,9 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
     { key: 'rreason', label: '复检差异原因', w: 130, ...(reviewing
       ? { edit: (l) => (N(get(l).qty) < N(l.qty_supply) ? { type: 'select', value: get(l).reason, invalid: errs && !get(l).reason, options: [['', '请选原因'], ...NOTE_OPTIONS.review_diff.map((x) => [x, x])], onChange: (v) => set(l, { reason: v }, '选原因') } : null), render: () => '' }
       : { render: (l) => (l.diff_reason?.startsWith('复核') ? l.diff_reason : '') }) },
-    { key: 'suggest', label: '建议抽检', w: 110, render: (l) => (suggest.has(l.id) ? <Pill tone="amber">{suggest.get(l.id)}</Pill> : '') },
+    { key: 'suggest', label: '抽检', w: 120, render: (l) => (must.has(l.id) ? <Pill tone="red">必抽检 · {must.get(l.id)}</Pill> : suggest.has(l.id) ? <Pill tone="amber">建议 · {suggest.get(l.id)}</Pill> : '') },
     { key: 'check', label: '抽检结果', w: 130, ...(reviewing
-      ? { edit: (l) => ({ type: 'select', value: get(l).check, invalid: errs && get(l).check && get(l).check !== 'ok' && !get(l).note && N(get(l).qty) === N(l.qty_supply),
+      ? { edit: (l) => ({ type: 'select', value: get(l).check, invalid: errs && ((must.has(l.id) && !get(l).check) || (get(l).check && get(l).check !== 'ok' && !get(l).note && N(get(l).qty) === N(l.qty_supply))),
           options: [['', '未抽检'], ...Object.entries(CHECK_RESULTS)], onChange: (v) => set(l, { check: v }, '抽检') }) }
       : { render: (l) => (l.checks?.length ? l.checks.map((c, i) => <Pill key={i} tone={c.result === 'ok' ? 'green' : 'red'}>{CHECK_RESULTS[c.result]}{c.note ? ` · ${c.note}` : ''}</Pill>) : <span className="muted small">未抽检</span>) }) },
     ...(reviewing ? [{ key: 'cnote', label: '抽检说明', w: 140, edit: (l) => (get(l).check && get(l).check !== 'ok' ? { type: 'text', value: get(l).note, placeholder: '有问题必写', onChange: (v) => set(l, { note: v }, '抽检说明') } : null), render: () => '' }] : []),
@@ -358,6 +368,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
       const a = get(l);
       if (N(a.qty) > N(l.qty_supply)) return toast(`${l.model} 复检数量不能超过订单数量`, 'err');
       if (N(a.qty) < N(l.qty_supply)) { if (!a.reason) return toast(`${l.model} 复检少了，请选原因`, 'err'); actual.push({ line_id: l.id, qty: N(a.qty), reason: a.reason }); }
+      if (must.has(l.id) && N(a.qty) > 0 && !a.check) return toast(`${l.model} 必须抽检（${must.get(l.id)}）：抽 2–3 盒，选抽检结果`, 'err');
       if (a.check) {
         if (a.check !== 'ok' && !a.note && N(a.qty) === N(l.qty_supply)) return toast(`${l.model} 抽检有问题：改复检数量或写说明`, 'err');
         checks.push({ line_id: l.id, result: a.check, note: a.note || null });
@@ -409,7 +420,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
               <button type="button" className="btn primary lg" onClick={submit}>复检打包完成 →</button>
             </div>
           ) : <Blocked action="review_pick" />}
-          <div className="hint" style={{ marginTop: 8 }}>不用每盒拆：黄色「建议抽检」的行抽 2–3 盒，选结果即可。少了就改「复检数量」并选原因：单子会退回热线，只让客户重新确认变动的行。</div>
+          <div className="hint" style={{ marginTop: 8 }}>不用每盒拆：红色「必抽检」的行必须抽 2–3 盒并选结果，黄色「建议」的行最好也抽。少了就改「复检数量」并选原因：单子会退回热线，只让客户重新确认变动的行。</div>
         </div>
       ) : deal.reviewer_name && (
         <div className="card-b row" style={{ borderTop: '1px solid var(--line-2)', gap: 16 }}>

@@ -1194,3 +1194,7 @@ tr.grp-row:hover > td { background: var(--brand-soft); }
 button.in.choice-btn.gf-group { min-width: 96px; }
 button.in.choice-btn { border: 1px solid var(--line); color: inherit; font: inherit; padding: 6px 10px; }
 button.in.choice-btn:hover, button.in.choice-btn[aria-expanded="true"] { border-color: var(--brand); }
+/* 344 亏钱拦截条 */
+.banner.loss-bar { display: block; border-color: #e9b4ae; background: #fdecea; color: #7a1c13; }
+.loss-lines { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; font-size: 13px; }
+.loss-line { background: #fff; border: 1px solid #f0c8c3; border-radius: 8px; padding: 3px 9px; }

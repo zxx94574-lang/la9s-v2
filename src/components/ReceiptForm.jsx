@@ -46,6 +46,8 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
   // 214 / 219 / 220: 进哪个账户、手续费谁出、别人代付、员工代收
   const [accountId, setAccountId] = useState('');
   const [feeTouched, setFeeTouched] = useState(false);
+  // 318 / 358 (Frank 11-15 / 11-17): 每笔一个开关「我们承担手续费」, 默认否; 开了默认 1% (到账 99%); 高于 1% 红色确认 + 写原因, 低于 1% 黄色确认
+  const [feeOn, setFeeOn] = useState(false); const [feeOk, setFeeOk] = useState(false); const [feeWhy, setFeeWhy] = useState('');
   const [bearer, setBearer] = useState('');
   const [payer, setPayer] = useState('');
   const [byStaff, setByStaff] = useState(false);
@@ -74,7 +76,10 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
   const dbRate = !foreign ? 1 : currency === foreign ? N(rate) : (N(rate) > 0 ? 1 / N(rate) : 0);
   const feePct = N(data?.feeRates?.[method]);
   // B7 (Frank 11-13): 客户账一律按全额冲 —— 到账被扣了手续费才填; 手续费另记一笔「办公费」支出. 不再自动带出, 不再选谁出.
-  const feeV = feeTouched ? N(fee) : 0;
+  const feeDefault = method !== 'cash' && N(amount) > 0 ? Math.round(N(amount) / 99 * (currency === 'XOF' ? 1 : 100)) / (currency === 'XOF' ? 1 : 100) : 0;
+  const feeV = !feeOn || method === 'cash' ? 0 : feeTouched ? N(fee) : feeDefault;
+  const feeRate = feeV > 0 ? feeV / (N(amount) + feeV) * 100 : 0;   // 占客户付的总额的百分之几
+  const feeHigh = feeV > 0 && feeRate > 1.05, feeLow = feeV > 0 && feeRate < 0.95;
   const credit = N(amount) + feeV;   // 冲客户账 = 到账 (+ 我方出的手续费)
   const conv = Math.round(credit * dbRate * (acc === 'XOF' ? 1 : 100)) / (acc === 'XOF' ? 1 : 100);
   const accOpts = (data?.accounts || []).filter((a) => a.currency === currency);
@@ -106,17 +111,20 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
     const dueAll = data.open.reduce((a, d) => a + N(d.due), 0);
     const cap = lockDeal && defaultAmount != null ? N(defaultAmount) : dueAll;
     if (cap > 0 && conv > cap && !overOk) { setOverOk(true); return toast(`实收 ${money(conv, acc)} 比${lockDeal ? '本单待付' : '全部欠款'} ${money(cap, acc)} 多 ${money(conv - cap, acc)}，多出的记为预付。核对过金额再点一次「确认收款」`, 'err'); }
+    if (feeOn && method !== 'cash' && !(feeV > 0)) return toast('开了「我们承担手续费」就要填手续费；没被扣就把开关关掉', 'err');
+    if (feeHigh && !feeWhy.trim()) return toast(`手续费 ${feeRate.toFixed(2)}% 高于 1%：要写原因`, 'err');
+    if ((feeHigh || feeLow) && !feeOk) { setFeeOk(true); return toast(`手续费是 ${feeRate.toFixed(2)}%，${feeHigh ? '高于' : '低于'}平常的 1%。核对过再点一次「确认收款」`, 'err'); }
     if (!proof) return toast(method === 'cash' ? '现金也要传凭证：在客户群里说「收到现金 XX」，客户回复确认后截图传上来' : `${PAY_METHODS[method]} 收款请上传付款截图`, 'err');
     if (mode === 'specific' && !picked.length) return toast('请点选要冲的单', 'err');
     if (byStaff && !collector) return toast('员工代收：选是哪位员工收的', 'err');
     setBusy(true);
     try {
       await call(role, `select app.record_receipt2($1,$2)`, [org, JSON.stringify({ customer_id: customer, received_on: date, amount_landed: N(amount), currency, method, account_currency: acc, rate: dbRate,
-        mode, targets: mode === 'specific' ? picked : [], proof: proof || null, fee: feeV, fee_bearer: feeV > 0 ? 'company' : null, payer: payer || null,
+        mode, targets: mode === 'specific' ? picked : [], proof: proof || null, fee: feeV, fee_bearer: feeV > 0 ? 'company' : null, payer: payer || null, note: feeHigh && feeWhy.trim() ? `手续费 ${feeRate.toFixed(2)}%：${feeWhy.trim()}` : null,
         account_id: byStaff ? null : (accSel || null), collector_employee_id: byStaff ? collector : null })]);
       toast(byStaff ? '收款已登记：客户账已冲，钱挂在员工名下（在途），交到公司再确认到账' : '收款已登记（待核对到账），客户总账已更新');
       const sum = { amount: N(amount), currency, conv, acc, hits: hits.map(([id, v]) => [nameOf(id), v]), left: preview.left };
-      setAmount(''); setProof(''); setFee(''); setFeeTouched(false); setBearer(''); setPayer(''); setByStaff(false); setCollector(''); setRate(''); setRateOk(false); setOverOk(false); setErrs(false); if (!lockDeal) setPicked([]);
+      setAmount(''); setProof(''); setFee(''); setFeeTouched(false); setFeeOn(false); setFeeOk(false); setFeeWhy(''); setBearer(''); setPayer(''); setByStaff(false); setCollector(''); setRate(''); setRateOk(false); setOverOk(false); setErrs(false); if (!lockDeal) setPicked([]);
       refresh(); onDone?.(sum);
     } catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
   };
@@ -162,11 +170,17 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
               {N(rate) > 0 && dev >= 3 && <span className={`small ${dev >= 10 ? 'red-t' : 'amber-t'}`}>偏差 {dev.toFixed(1)}%</span>}
             </FRow>
           )}
-          <FRow label="手续费">
-            <input className="in" inputMode="decimal" style={{ width: 100 }} value={feeTouched ? fee : (feeV ? String(feeV) : '')} onChange={(e) => { setFeeTouched(true); setFee(e.target.value.replace(/[^\d.]/g, '')); }} placeholder="0" />
-            <span className="small muted">{currency}{feeV > 0 ? `　客户账冲 ${money(credit, currency)}（到账 ${money(N(amount), currency)} + 手续费 ${money(feeV, currency)}）` : feePct > 0 ? `（${PAY_METHODS[method]} 一般扣 ${feePct}%；没被扣就不填）` : ''}</span>
-            <Info>客户账按他该付的全额冲。钱到账时被 Wave / 银行扣了手续费（客户付 10,000，只到 9,900）→ 到账填 9,900、手续费填 100：客户账冲 10,000，另记一笔 100 的「办公费」支出。客户自己多付了手续费、到账就是全额的，这里不填。</Info>
-          </FRow>
+          {method !== 'cash' && <FRow label="我们承担手续费">
+            <Choice value={feeOn ? 'y' : 'n'} onChange={(v) => { setFeeOn(v === 'y'); setFeeOk(false); if (v !== 'y') { setFee(''); setFeeTouched(false); setFeeWhy(''); } }} options={[['n', '否'], ['y', '是']]} />
+            {feeOn && <>
+              <input className={`in ${feeHigh ? 'err-in' : ''}`} inputMode="decimal" style={{ width: 100 }} value={feeTouched ? fee : (feeV ? String(feeV) : '')} onChange={(e) => { setFeeTouched(true); setFeeOk(false); setFee(e.target.value.replace(/[^\d.]/g, '')); }} placeholder="0" />
+              <span className="small muted">{currency}</span>
+              {feeV > 0 && <span className={`pill ${feeHigh ? 'red' : feeLow ? 'amber' : 'green'}`}>{feeRate.toFixed(2)}%</span>}
+              {feeHigh && <input className={`in ${errs && !feeWhy.trim() ? 'err-in' : ''}`} style={{ flex: '1 1 180px', minWidth: 0 }} placeholder="高于 1%，写原因" value={feeWhy} onChange={(e) => setFeeWhy(e.target.value)} />}
+            </>}
+            <Info>客户账永远按货款全额冲。钱到账时被 Wave / 银行扣了手续费（客户付 10,000，只到 9,900）才选「是」：到账填 9,900，手续费默认按 1% 带出 100，可以改；另记一笔「办公费」支出，中方确认。客户自己多付了手续费、到账就是全额的，选「否」。现金没有手续费。</Info>
+            {feeV > 0 && <div className="small muted" style={{ flexBasis: '100%' }}>客户账冲 {money(credit, currency)}（到账 {money(N(amount), currency)} + 手续费 {money(feeV, currency)}）</div>}
+          </FRow>}
           <FRow label="进哪个账户">
             {method === 'cash' && <span className="chips"><button type="button" className={`chip ${!byStaff ? 'on' : ''}`} onClick={() => setByStaff(false)}>交到公司</button><button type="button" className={`chip ${byStaff ? 'on' : ''}`} onClick={() => setByStaff(true)}>员工代收</button></span>}
             {byStaff ? <Choice value={collector} onChange={setCollector} options={(data.staff || []).map((e) => [e.id, e.short_name])} placeholder="选员工…" err={errs && !collector} flat={false} style={{ width: 170 }} />
@@ -209,7 +223,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
       )}
       <div className="actionbar">
         <span className="hint">{method === 'cash' ? '现金也要拍照：数钱 / 收条的照片。' : '凭证可直接粘贴 WhatsApp 截图。'}</span>
-        <button type="button" className="btn primary lg" disabled={busy || !can(role, 'receipt')} onClick={submit}>{busy ? '登记中…' : overOk ? '金额核对过，确认收款 →' : rateOk ? '汇率核对过，确认收款 →' : '确认收款 →'}</button>
+        <button type="button" className="btn primary lg" disabled={busy || !can(role, 'receipt')} onClick={submit}>{busy ? '登记中…' : feeOk ? '手续费核对过，确认收款 →' : overOk ? '金额核对过，确认收款 →' : rateOk ? '汇率核对过，确认收款 →' : '确认收款 →'}</button>
       </div>
       {drawer && <DealDrawer id={drawer} onClose={() => setDrawer(null)} />}
     </div>

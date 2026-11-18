@@ -236,6 +236,26 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
     if (navigator.vibrate) navigator.vibrate(8);
   };
   const nFilters = liveConds.length + (String(gf.q || '').trim() ? 1 : 0) + (groupCol ? 1 : 0);
+  // 332 (Frank 11-16): 每张表都能导出 Excel —— 导的是「现在看到的」(筛选后的行、没隐藏的列); 主管级以上; 列本来就是按岗位给的, 员工看不到的价格导出里也没有; 留导出记录
+  const canExport = ['admin', 'manager', 'sales_manager', 'finance'].includes(app.role) && rows.length > 0;
+  const exportXlsx = async () => {
+    try {
+      const cols = vis.filter((c) => c.label && typeof c.label === 'string');
+      const out = (groupCol ? allShown : shown);
+      const aoa = [cols.map((c) => c.label), ...out.map((r) => cols.map((c) => { const v = cellValue(c, r); if (v == null) return ''; if (isNumCol(c) && v !== '' && !Number.isNaN(Number(v))) return Number(v); return typeof v === 'object' ? String(renderedText(c, r) ?? '') : v; }))];
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = cols.map((c, i) => ({ wch: Math.min(40, Math.max(8, ...aoa.slice(0, 200).map((row) => String(row[i] ?? '').length + 2))) }));
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+      const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+      const d = new Date(); const p2 = (n) => String(n).padStart(2, '0');
+      const name = `${id || table || 'table'}-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}.xlsx`;
+      const { saveFile } = await import('../lib/saveFile.js');
+      await saveFile(name, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      const { call } = await import('../db/client.js');
+      call(app.role, `select app.log_export($1,$2,$3)`, [app.org, `grid:${id || table || 'table'}`, JSON.stringify({ rows: out.length, cols: cols.length })]).catch(() => {});
+      flash(`已导出 ${out.length} 行`);
+    } catch (e) { flash('导出失败：' + String(e?.message || e).slice(0, 60)); }
+  };
   const groupHead = (g) => {
     const off = folded.has(g.v);
     const sums = vis.filter((c) => c.key !== groupCol.key && footObjKeys.has(c.key) && isNumCol(c)).map((c) => [c.label, g.rows.reduce((a, r) => a + (Number(cellValue(c, r)) || 0), 0)]);
@@ -617,6 +637,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r
           {onDelete && delRows.length > 0 && <button type="button" className="btn sm danger" title="删掉选中的行（勾选的行，或点行号选中的行）；删错了可撤销" onClick={() => { const rs = delRows; setSel(null); if (selectable?.onChange) selectable.onChange(new Set()); onDelete(rs[0], shown.indexOf(rs[0]), rs); }}>🗑 删 {delRows.length} 行</button>}
           {vis.some(isFill) && <span className="hide-m"><Info>这张表可以像 Excel 一样用：⌘/Ctrl+V 粘贴整列 · ⌘/Ctrl+D 向下填充 · ⌘Z 撤销 · 拖表头边线调宽、双击自适应。</Info></span>}
           {slimTools && !toolsOpen && nFilters === 0 && <button type="button" className="btn sm ghost" title="筛选 / 搜索这张表" aria-label="筛选 / 搜索这张表" onClick={() => setToolsOpen(true)}>⏷</button>}
+          {canExport && (!slimTools || toolsOpen) && <button type="button" className="btn sm hide-m" title="把现在看到的行和列导出成 Excel（筛选 / 隐藏列之后的样子）；会记一条导出记录" onClick={exportXlsx}>⇩ 导出</button>}
           <span style={{ position: 'relative' }} ref={menuRef}>
             <button type="button" className="btn sm" onClick={() => setMenu(!menu)}>☷ 列</button>
             {menu && (

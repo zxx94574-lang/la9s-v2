@@ -2,6 +2,7 @@
 // the current step shows its action, a finished step shows a read-only record (待改 13).
 // Going back = 「撤回到上一步」 with a reason (待改 14); cancelled deals can be restored (待改 16).
 import DebtBanner from '../components/DebtBanner.jsx';
+import { LossGate, LossReview } from '../components/Loss.jsx';
 import { useDealMargin, DealMarginChip, DealMarginCard } from '../components/Margin.jsx';
 import { DealLastPrice } from '../components/LastPrice.jsx';
 import { dealLight, stuckOf } from '../lib/domain.js';
@@ -187,6 +188,8 @@ export default function Deal({ id }) {
         </div>)}
       {custOpen && <CustomerDrawer id={deal.customer_id} onClose={() => setCustOpen(false)} />}
       {!cancelled && seesPrice(role) && !['shipped'].includes(deal.status) && <DebtBanner customerId={deal.customer_id} deal={deal} />}
+      {!cancelled && <LossGate deal={deal} margin={margin} />}
+      {!cancelled && <LossReview deal={deal} margin={margin} />}
       {!cancelled && dealPriceVisible(role, deal) && ['quote', 'so'].includes(curKey) && <DealLastPrice deal={deal} lines={data.lines} />}
       {(deal.split_from || deal.split_children?.length > 0) && (
         <div className="card card-b other-pending"><span className="pill blue">拆单</span>
