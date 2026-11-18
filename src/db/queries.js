@@ -85,7 +85,7 @@ select d.*, c.code as customer_code, c.name as customer_name, c.city, c.tier, c.
   (select max(e.at) from app.deal_events e where e.deal_id = d.id and e.action = 'sales_order_created') as so_sent_at,
   (select count(*) from app.deal_lines hl join app.stock_holds h on h.stock_item_id = hl.stock_item_id and h.status = 'active' and h.whole where hl.deal_id = d.id)::int as frozen_n,
   (select coalesce(sum(rd.amount), 0) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.decision = 'credit') as disc_credit,
-  pe.short_name as picker_name, oe.short_name as owner_name, re.short_name as reviewer_name,
+  pe.short_name as picker_name, oe.short_name as owner_name, oe.phone as owner_phone, c.contacts as customer_contacts, re.short_name as reviewer_name,
   (select count(*) from app.pick_checks pc join app.deal_lines pl on pl.id = pc.deal_line_id join app.deals pd on pd.id = pl.deal_id
      where pd.picker_employee_id = d.picker_employee_id and pc.result <> 'ok' and pc.at > now() - interval '30 days') as picker_errors,
   ${dealTotals},

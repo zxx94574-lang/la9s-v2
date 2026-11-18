@@ -133,17 +133,31 @@ export function CustomerInfo({ deal }) {
   // 左栏客户信息竖排 (11-09 195): 打电话前一眼看全
   const { role } = useApp();
   const phone = deal.customer_phone || '';
+  const tel = (p) => (p ? <span className="tel"><a href={telHref(p)}>{fmtPhone(p)}</a><CopyButton text={fmtPhone(p)} what="电话" /></span> : <span className="muted">—</span>);
+  const contacts = (Array.isArray(deal.customer_contacts) ? deal.customer_contacts : []).filter((c) => c?.phone && String(c.phone).replace(/\D/g, '') !== String(phone).replace(/\D/g, '')).slice(0, 3);
   return (
     <div className="panel info">
-      <dl className="infolist">
-        <dt>客户</dt><dd><CustLink id={deal.customer_id} name={deal.customer_name} /> <span className="mono muted small">{deal.customer_code || deal.temp_code}</span></dd>
-        <dt>收货人</dt><dd>{deal.customer_contact || '—'}</dd>
-        <dt>电话</dt><dd>{phone ? <><a href={telHref(phone)}>{fmtPhone(phone)}</a><CopyButton text={fmtPhone(phone)} what="电话" /></> : '—'}</dd>
-        <dt>城市</dt><dd>{deal.city || '—'}</dd>
-        <dt>销售员</dt><dd>{deal.owner_name || '—'}</dd>
-        {Number(deal.customer_balance) > 0 && seesPrice(role) && <><dt>欠款</dt><dd style={{ color: 'var(--red)' }}>{money(deal.customer_balance)} XOF</dd></>}
-        {deal.source === 'guest' && <><dt>来源</dt><dd><Pill tone="amber">游客询价</Pill> {deal.guest_info?.shop || ''}</dd></>}
-      </dl>
+      {/* 340 (Frank 11-17): 四小块 —— 客户 / 收货人 (客户那边接货的人) / 销售员 (我们的人) / 欠款; 三个电话分开, 各自可复制 */}
+      <div className="info4">
+        <div className="info4-b"><div className="info4-t">客户</div>
+          <div><CustLink id={deal.customer_id} name={deal.customer_name} /> <span className="mono muted small">{deal.customer_code || deal.temp_code}</span></div>
+          <div className="small muted">{deal.city || '—'}</div>
+          <div>{tel(phone)}</div>
+          {deal.source === 'guest' && <div><Pill tone="amber">游客询价</Pill> {deal.guest_info?.shop || ''}</div>}
+        </div>
+        <div className="info4-b"><div className="info4-t">收货人</div>
+          <div>{deal.customer_contact || <span className="muted">—</span>}</div>
+          {contacts.map((c) => <div key={c.phone} className="small">{c.name ? `${c.name} · ` : ''}{tel(c.phone)}</div>)}
+          {!contacts.length && !deal.customer_contact && <div className="small muted">档案里还没填</div>}
+        </div>
+        <div className="info4-b"><div className="info4-t">销售员</div>
+          <div>{deal.owner_name || <span className="muted">没有归属</span>}</div>
+          {deal.owner_phone && <div>{tel(deal.owner_phone)}</div>}
+        </div>
+        {seesPrice(role) && <div className="info4-b"><div className="info4-t">客户欠款</div>
+          <div style={{ color: Number(deal.customer_balance) > 0 ? 'var(--red)' : 'var(--green)', fontWeight: 700 }}>{Number(deal.customer_balance) > 0 ? `${money(deal.customer_balance)} XOF` : '没有欠款'}</div>
+        </div>}
+      </div>
     </div>);
 }
 
@@ -793,23 +807,29 @@ function ShipForm({ deal, lines, shipments, act }) {
       <div className="card-h"><h2>出库单 {shippedBefore > 0 && <span className="pill amber">第 {shipments.filter((s) => !s.voided_at).length + 1} 批</span>}</h2>
         <span className="hint">司机真正把货拉走时再点「确认出库」；只叫了车、约了明天的先别登记</span></div>
       <div className="card-b stack">
-        <div className="row" style={{ gap: 16, alignItems: 'flex-end' }}>
-          <div className="field req"><label>发货日期</label><DatePicker value={date} onChange={setDate} /></div>
-          <div className="field req"><label>时间</label><input className="in" type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ width: 120 }} /></div>
-          <div className="field req grow"><label>发货方式</label>
+        {/* 352 (Frank 11-17): 出库表单分三块 —— ① 发货 ② 时间与收货 ③ 运费; 「这次发多少」和明细在下面 */}
+        <div className="fgroups">
+          <div className="fgroup"><div className="fgroup-t">① 发货</div>
+            <div className="row" style={{ gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="field req grow"><label>发货方式</label>
             <Choice value={method} onChange={(k) => setMethod(k)} options={Object.entries(SHIP_METHODS)} err={errs && !method} /></div>
-        </div>
-        <div className="row" style={{ gap: 16, alignItems: 'flex-end' }}>
-          <div className="field req" style={{ width: 220 }}><label>{method.startsWith('yango') ? 'Yango 司机电话' : method === 'customer_pickup' ? '取货人电话' : '联系电话'}</label>
+              <div className="field req" style={{ width: 220 }}><label>{method.startsWith('yango') ? 'Yango 司机电话' : method === 'customer_pickup' ? '取货人电话' : '联系电话'}</label>
             <PhoneInput value={phone} onChange={setPhone} invalid={errs && !phone.trim()} /></div>
-          <div className="field req grow"><label>收货地址 / 联系人</label>
+              <div className="field req"><label>发货凭证（Yango 截图 / 现场照片）</label><PhotoInput value={proof} onChange={setProof} label="司机 / 车辆截图" invalid={errs} /></div>
+            </div></div>
+          <div className="fgroup"><div className="fgroup-t">② 时间与收货</div>
+            <div className="row" style={{ gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="field req"><label>发货日期</label><DatePicker value={date} onChange={setDate} /></div>
+              <div className="field req"><label>时间</label><input className="in" type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ width: 120 }} /></div>
+              <div className="field req grow"><label>收货地址 / 联系人 {(deal.customer_contact || deal.city) && <button type="button" className="btn sm ghost" style={{ marginLeft: 6 }} title="把客户档案里的收货人和城市带进来" onClick={() => { setAddr([deal.city, deal.customer_contact, deal.customer_phone ? fmtPhone(deal.customer_phone) : ''].filter(Boolean).join(' · ')); if (method === 'customer_pickup' && deal.customer_phone && !phone.trim()) setPhone(fmtPhone(deal.customer_phone)); }}>用收货人信息</button>}</label>
             <input className={`in ${errs && !addr.trim() ? 'err-in' : ''}`} value={addr} onChange={(e) => setAddr(e.target.value)} placeholder="例如 Adjamé 市场 · 店主本人" /></div>
-          <div className="field req"><label>发货凭证（Yango 截图 / 现场照片）</label><PhotoInput value={proof} onChange={setProof} label="司机 / 车辆截图" invalid={errs} /></div>
-        </div>
-        <div className="row" style={{ gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div className="field req"><label>运费谁出 <Info>默认客户出。S 档大客户：我们出。外区客户：我们只出仓库到 Adjamé 交通站这一段。选了我们出：填实际付的钱（照 Yango 截图上的价格），出库时自动记一笔支出流水（本地物流费，Wave-XOF 账户）。只进我们自己的流水，不动客户的账。</Info></label>
+            </div></div>
+          <div className="fgroup"><div className="fgroup-t">③ 运费</div>
+            <div className="row" style={{ gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="field req"><label>运费谁出 <Info>默认客户出。S 档大客户：我们出。外区客户：我们只出仓库到 Adjamé 交通站这一段。选了我们出：填实际付的钱（照 Yango 截图上的价格），出库时自动记一笔支出流水（本地物流费，Wave-XOF 账户）。只进我们自己的流水，不动客户的账。</Info></label>
             <Choice value={bearer} onChange={(k) => setBearer(k)} options={[['customer', '客户出'], ['company', '我们出'], ['company_part', '我们出一段（到交通站）']]} flat /></div>
-          {bearer !== 'customer' && <div className="field req" style={{ width: 220 }}><label>实际付了多少（照截图上的价格）</label><input className={`in ${errs && !(N(freight) > 0) ? 'err-in' : ''}`} inputMode="numeric" value={freight} onChange={(e) => setFreight(e.target.value.replace(/\D/g, ''))} placeholder="XOF" /></div>}
+              {bearer !== 'customer' && <div className="field req" style={{ width: 220 }}><label>实际付了多少（照截图上的价格）</label><input className={`in ${errs && !(N(freight) > 0) ? 'err-in' : ''}`} inputMode="numeric" value={freight} onChange={(e) => setFreight(e.target.value.replace(/\D/g, ''))} placeholder="XOF" /></div>}
+            </div></div>
         </div>
       </div>
       <div className="grid-tools">
