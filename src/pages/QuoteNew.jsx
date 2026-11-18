@@ -149,7 +149,8 @@ export default function QuoteNew() {
         <div className="grow" style={{ maxWidth: 460, minWidth: 220 }}><CustomerSelect customers={data.customers} value={customer} onChange={setCustomer} /></div>
         {cust && <button type="button" className="btn sm" onClick={() => setCustOpen(true)} title="客户档案">档案 ↗</button>}
         {cust && !cust.tier && <span className="pill amber" title="没档位报不了价：在档案里给档位，或建客户时选店铺类型">没档位</span>}
-        <Choice value={currency} onChange={(v) => { setCurrency(v); setPriceOk(false); }} options={['XOF', 'CNY', 'USD']} />
+        <Choice value={currency} onChange={(v) => { setCurrency(v); setPriceOk(false); }} options={role === 'admin' || tier === 'S' ? ['XOF', 'CNY', 'USD'] : ['XOF', 'USD']} />
+        {currency === 'CNY' && tier && tier !== 'S' && <span className="pill amber" title="人民币报价按规矩只给 S 档；你是中方，可以破例">破例：不是 S 档</span>}
         {currency !== 'XOF' && <span className="row" style={{ gap: 6 }}><span className="small">汇率</span>
           <RateInput a={currency} b="XOF" value={fxIn} onChange={(v) => setFxIn(v === '' ? '' : String(v))} invalid={!fx && errs} /></span>}
         <span className="pill gray" title="由账号决定，不能改">🇨🇮 科特迪瓦 · 账号固定</span>

@@ -8,7 +8,7 @@ import { useApp, useData, Pill, Modal , RateInput} from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import ProductDrawer from '../components/ProductDrawer.jsx';
 import ClearanceCard from '../components/Clearance.jsx';
-import { can, seesPrice } from '../lib/domain.js';
+import { can, seesPrice, TIERS } from '../lib/domain.js';
 import { money, friendlyError, dt } from '../lib/format.js';
 
 const N = (v) => (v === '' || v == null ? null : Number(v));
@@ -129,19 +129,41 @@ function LockModal({ lock, onClose }) {
 
 function RatesModal({ org, rates, setRates, onClose }) {
   const { role, toast, refresh } = useApp();
+  // 11-18 (Frank 第 10 点): 改汇率先看「改前 → 改后」, 看过再确认. 预览和保存走同一套算法 (0061), 预览不落库.
+  const [pv, setPv] = useState(null); const [busy, setBusy] = useState(false);
+  const sig = [rates.rate, rates.fob, rates.round, rates.usd].join('|');
+  const args = [org, Number(rates.rate), Number(rates.fob), Number(rates.round)];
+  const preview = async () => {
+    setBusy(true);
+    try { const [x] = await call(role, `select app.preview_price_settings($1,$2,$3,$4,$5) as r`, [...args, Number(rates.usd) > 0 ? Number(rates.usd) : null]); setPv({ sig, ...x.r }); }
+    catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
+  };
   const save = async () => {
-    try { const n = (await call(role, `select app.set_price_settings($1,$2,$3,$4) as n`, [org, Number(rates.rate), Number(rates.fob), Number(rates.round)]))[0].n; if (Number(rates.usd) > 0) await call(role, `select app.set_usd_rate($1,$2)`, [org, Number(rates.usd)]); toast(`已保存，重算了 ${n} 个价格`); refresh(); onClose(); }
+    try { const n = (await call(role, `select app.set_price_settings($1,$2,$3,$4) as n`, args))[0].n; if (Number(rates.usd) > 0) { await call(role, `select app.set_usd_rate($1,$2)`, [org, Number(rates.usd)]); await call(role, `select app.recompute_prices($1,null)`, [org]); } toast(`已保存，重算了 ${n} 个价格`); refresh(); onClose(); }
     catch (e) { toast(friendlyError(e), 'err'); }
   };
+  const fresh = pv && pv.sig === sig;
+  const TS = ['S', 'WHOLESALE', 'RETAIL', 'REPAIR'];
+  const cell = (r, t) => { const a = r.before?.[t], b = r.after?.[t]; if (a == null && b == null) return <span className="muted">—</span>; if (Number(a) === Number(b)) return <span className="muted">{money(b)}</span>;
+    return <span style={{ whiteSpace: 'nowrap' }}><span className="muted">{a == null ? '—' : money(a)}</span> → <b style={{ color: Number(b) > Number(a) ? '#c0352b' : '#1b8a4b' }}>{b == null ? '—' : money(b)}</b></span>; };
   return (
-    <Modal title="汇率与取整（只中方）" onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" onClick={save}>保存并重算全部价格</button></>}>
+    <Modal title="汇率与取整（只中方）" wide={!!fresh} risk="red" onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button>
+        <button type="button" className="btn" disabled={busy} onClick={preview}>{busy ? '在算…' : fresh ? '重新预览' : '先看改前 → 改后'}</button>
+        <button type="button" className="btn primary" disabled={!fresh} title={fresh ? '' : '先点「先看改前 → 改后」，看过再确认'} onClick={save}>确认，保存并重算{fresh ? ` ${pv.changed.length} 个型号` : ''}</button></>}>
       <div className="stack">
         <div className="field"><label>本地价汇率（飞书公式里的 1 XOF = 0.0107 RMB）</label><RateInput a="CNY" b="XOF" value={Number(rates.rate) > 0 ? 1 / Number(rates.rate) : ''} onChange={(v) => setRates({ ...rates, rate: v ? String(+(1 / v).toPrecision(6)) : '' })} /></div>
         <div className="field"><label>FOB 成本汇率（飞书里的 1 XOF = 0.01135 RMB）</label><RateInput a="CNY" b="XOF" value={Number(rates.fob) > 0 ? 1 / Number(rates.fob) : ''} onChange={(v) => setRates({ ...rates, fob: v ? String(+(1 / v).toPrecision(6)) : '' })} /></div>
         <div className="field"><label>美元汇率（金蝶采购单是美元，物料档案里批次单价按它折西法）</label><RateInput a="USD" b="XOF" value={rates.usd} onChange={(v) => setRates({ ...rates, usd: v ? String(+v.toPrecision(6)) : '' })} /></div>
         <div className="field"><label>到岸成本取整到</label><div className="seg">{['10', '50', '100', '500'].map((v) => <button type="button" key={v} className={rates.round === v ? 'on' : ''} onClick={() => setRates({ ...rates, round: v })}>{v}</button>)}</div></div>
-        <div className="hint">汇率一改，所有有成本的物料都按新汇率重算；一口价不动。改之前想清楚：已经报出去、还没出销售订单的价格不会自动变，要在单子里点「获取价格」。</div>
+        <div className="hint">汇率一改，所有有成本的物料都按新汇率重算；一口价不动。已经报出去、还没出销售订单的价格不会自动变，要在单子里点「获取价格」。<b>先预览，看过每个型号四档价的变化再确认。</b></div>
+        {pv && !fresh && <div className="banner warn">数字改过了，下面的预览是旧的：再点一次「重新预览」。</div>}
+        {fresh && (pv.changed.length === 0 ? <div className="banner info">按这组数字，{pv.total} 个型号的价格都不会变。</div> : <>
+          <div className="banner warn"><b>{pv.changed.length}</b> / {pv.total} 个型号的价格会变（涨的红、降的绿）。还没保存。</div>
+          <div style={{ maxHeight: 340, overflow: 'auto' }}><Grid id="fx-preview" noTools rows={pv.changed.slice(0, 500)} rowKey={(r) => r.product_id} columns={[
+            { key: 'model', label: '型号', w: 110, render: (r) => <b>{r.model}</b> }, { key: 'category', label: '种类', w: 110 }, { key: 'code', label: '编码', w: 80 },
+            ...TS.map((t) => ({ key: t, label: TIERS[t] || t, w: 150, num: true, value: (r) => Number(r.after?.[t] ?? 0), render: (r) => cell(r, t) }))]} /></div>
+          {pv.changed.length > 500 && <div className="small muted">只列了前 500 个。</div>}</>)}
       </div>
     </Modal>
   );

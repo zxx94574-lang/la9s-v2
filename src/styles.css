@@ -1237,3 +1237,14 @@ button.in.choice-btn:hover, button.in.choice-btn[aria-expanded="true"] { border-
 .beq .v { font-size: 17px; font-weight: 800; white-space: nowrap; }
 .beq .v.red { color: #c62828; } .beq .v.green { color: #1b8a4b; }
 .beq .op { font-size: 18px; font-weight: 800; color: #8a94a6; padding-bottom: 2px; }
+
+/* 11-18 编码甄别: 一组一块 */
+.code-groups { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 14px; }
+.code-group { border: 1px solid var(--line); border-radius: 10px; background: #fff; min-width: 0; }
+.cg-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid var(--line-2); }
+.cg-rows { display: flex; flex-direction: column; }
+.cg-row { display: grid; grid-template-columns: minmax(90px, 140px) minmax(120px, 1.2fr) minmax(100px, 1.5fr) auto; gap: 10px; align-items: center; padding: 6px 12px; min-width: 0; }
+.cg-row + .cg-row { border-top: 1px dashed var(--line-2); }
+.cg-row > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cg-stock { white-space: nowrap; color: var(--muted); }
+@media (max-width: 760px) { .cg-row { grid-template-columns: 1fr auto; } .cg-shared { grid-column: 1 / -1; } }

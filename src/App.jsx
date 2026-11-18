@@ -6,6 +6,7 @@ import * as Q from './db/queries.js';
 import Kpi from './pages/Kpi.jsx';
 import MarginPage from './pages/MarginPage.jsx';
 import RulesPage from './pages/RulesPage.jsx';
+import CodeReview from './pages/CodeReview.jsx';
 import { DirectiveGate } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
@@ -213,6 +214,7 @@ export default function App() {
     case 'kpi': view = <Kpi />; break;
     case 'margin': view = <MarginPage />; break;
     case 'rules': view = <RulesPage />; break;
+    case 'codes': view = <CodeReview />; break;
     case 'staff': view = <Staff />; break;
     case 'sop': view = <Sop />; break;
     case 'kingdee': view = <Kingdee />; break;
