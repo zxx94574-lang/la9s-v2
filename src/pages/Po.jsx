@@ -2,6 +2,7 @@
 // 规矩: 采购单分「本地备货」「FOB」(一张单只有一种); 国内发了货才有采购单 → 没下推入库的部分一律算在途;
 // 到货时按箱勾「到了哪些箱」→ 一次下推一张采购入库单 (本地进 LA / 9S, FOB 进 FOB 仓); 少到的差额只有中方能关, 必须选结果 + 传凭证.
 // 箱单 (飞书「98.箱单 › 科特」里那种 Excel) 直接拖进来: 按内容认页签 (页签名字不可靠), 读需求批次 / 入仓号 / 每箱型号数量 / 单价 / 金蝶料号.
+import { OptChoice } from '../components/Opts.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Pill, Modal, Info, PhotoInput, FileDrop, Drawer, Thumb, DatePicker, Choice } from '../components/ui.jsx';
@@ -221,7 +222,7 @@ function GapModal({ line, left, onClose, onDone }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><button type="button" className="btn danger" disabled={!r || !proof || (r === '其他' && !note.trim())} onClick={go}>确认关掉这 {qty(left)} 片</button></>}>
       <div className="stack">
         <div className="hint">关掉以后这 {qty(left)} 片不再算在途，备货看板也不再等它。只有中方能关；必须选结果、传凭证（国内确认的截图 / 破损照片…）。</div>
-        <div className="field req"><label>结果</label><Choice value={r} onChange={setR} options={GAP_RESULTS} /></div>
+        <div className="field req"><label>结果</label><OptChoice optKey="po_gap_results" title="差额结果" coded={false} value={r} onChange={setR} options={GAP_RESULTS} /></div>
         <div className="field req"><label>凭证</label><PhotoInput value={proof} onChange={setProof} label="凭证" /></div>
         <div className="field"><label>说明{r === '其他' ? '（选「其他」必填）' : ''}</label><input className="in" value={note} onChange={(e) => setNote(e.target.value)} /></div>
       </div>

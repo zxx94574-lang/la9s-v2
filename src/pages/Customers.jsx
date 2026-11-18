@@ -1,5 +1,6 @@
 // 客户档案 (Frank 2026-10-29): 一个客户一张档案 —— 正式 / 潜客 / 回收 都在这里.
 // 欠款上限和账期只预警不拦截 (THOMAS 这类有协议的大客户照常出货); 档位、正式编码、上限、账期只中方改.
+import { TaskModal, CustomerTasks } from '../components/Tasks.jsx';
 import { sumMargin, MarginPill, MarginKpis, useMarginRules } from '../components/Margin.jsx';
 import { normPhone, fmtPhone } from '../lib/phone.js';
 import { ConfirmEdit, HistoryBlock } from '../components/ProductDrawer.jsx';
@@ -109,6 +110,7 @@ export default function Customers() {
 }
 
 export function CustomerDrawer({ id, onClose }) {
+  const [taskOpen, setTaskOpen] = useState(false);
   const { org, role, go } = useApp();
   const [callOpen, setCallOpen] = useState(false);
   const [edit, setEdit] = useState(null);
@@ -124,8 +126,11 @@ export function CustomerDrawer({ id, onClose }) {
     <Drawer title={custLabel(c)} onClose={onClose}
       actions={<>{['admin', 'manager', 'sales_manager', 'hotline'].includes(role) && <button type="button" className="btn sm" onClick={() => setEdit('info')} title="解锁修改：保存前列出改了什么并自检">✎ 修改</button>}{can(role, 'prospect') && <button type="button" className="btn sm" onClick={() => setCallOpen(true)}>☎ 记回访</button>}
         {c.status === 'active' && can(role, 'quote') && <button type="button" className="btn sm" onClick={() => go('quote/new')}>＋ 报价</button>}
-        {c.status === 'active' && price && <button type="button" className="btn sm" onClick={() => go('customer/' + c.id)}>总账</button>}</>}>
+        {c.status === 'active' && price && <button type="button" className="btn sm" onClick={() => go('customer/' + c.id)}>总账</button>}
+        {role === 'admin' && <button type="button" className="btn sm" onClick={() => setTaskOpen(true)}>派任务</button>}</>}>
       <div className="stack">
+        {taskOpen && <TaskModal target={{ kind: 'customer', id: c.id, label: c.code || c.temp_code || c.name, customerName: c.name, ownerId: c.owner_employee_id }} onClose={() => setTaskOpen(false)} />}
+        <CustomerTasks customerId={c.id} />
         {warn.length > 0 && <div className="banner warn">{warn.join('；')}{c.has_agreement ? '。有协议客户，照常出货，只提醒。' : '。只提醒，不自动停货；要不要继续给货由中方定。'}</div>}
         <div className="row" style={{ gap: 14, alignItems: 'flex-start' }}>
           {c.shop_photo && <Thumb src={c.shop_photo} size={84} label="门店照片" />}

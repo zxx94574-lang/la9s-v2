@@ -117,11 +117,7 @@ export default function QuoteNew() {
         : { req_category_id: l.category_id, req_model: l.model, qty_req: Number(l.qty_req), note: l.note || null }));
       const id = await callValue(role, `select app.create_quote_fx($1,$2,$3,$4,$5,$6)`, [org, customer, currency, JSON.stringify(payload), note || null, fx]);
       if (draftId) await call(role, `select app.delete_quote_draft($1)`, [draftId]).catch(() => {});
-      // 员工没沿用上次谈好的价 → 自动报给中方 (中方自己建的单不报)
-      if (!canPrice && lpDiffs.length) {
-        const txt = `报价没用上次成交价：${lpDiffs.slice(0, 8).map((d) => `${d.model} 上次 ${money(d.last.unit_price, currency)}（${d.last.biz_no}），这次 ${money(d.now, currency)}`).join('；')}${lpDiffs.length > 8 ? ` 等 ${lpDiffs.length} 个型号` : ''}`;
-        await call(role, `select app.report_issue($1,$2,'quote','系统发现 · 没用上次成交价',$3)`, [org, id, txt]).catch(() => {});
-      }
+      // 307 (Frank 11-14 定): 撤掉「员工没沿用上次价就自动报中方」—— 只留一行轻提示, 要不要沿用由人定
       refresh(); setPriceOk(false);
       toast(fin.lines.some((l) => Number(l.req_price) > 0) ? '报价单已保存；有申请改价的行，已送中方审批，批了才能往下推' : '报价单已保存，下面接着联系客户确认');
       go('deal/' + id);

@@ -8,7 +8,7 @@ import { money, dDate, today } from '../lib/format.js';
 const N = (v) => Number(v || 0);
 const days = (d) => Math.max(0, Math.round((new Date(today()) - new Date(dDate(d))) / 864e5));
 
-export default function PublicHeld() {
+export default function PublicHeld({ urgentOnly }) {
   const { org, role, tick } = useApp();
   const [open, setOpen] = useState(null);
   const { data } = useData(async () => {
@@ -28,6 +28,17 @@ export default function PublicHeld() {
     });
   }, [org, role, tick]);
   if (!data?.length) return null;
+  // 待办页只在有人压款超期时出现 (317: 压款超 N 天进中方紧急待办)
+  if (urgentOnly) {
+    const late = data.filter((a) => a.late);
+    if (!late.length) return null;
+    return (
+      <div className="card" style={{ marginBottom: 12, borderColor: '#e9b4ae' }}>
+        <div className="card-h"><h2>公司的钱压在个人手里太久</h2><Pill tone="red">{late.length} 个账户</Pill><span className="small muted">到「资金账户」看每一笔</span></div>
+        {late.map((a) => <div key={a.id} className="orow" style={{ gridTemplateColumns: 'auto 1fr auto' }}>
+          <span className="age red">{a.oldest} 天</span><span className="small"><b>{a.holder}</b> · {a.name} · 最老一笔压了 {a.oldest} 天（上限 {a.hold_days} 天）</span><b>{money(a.total, a.currency)}</b></div>)}
+      </div>);
+  }
   return (
     <div className="card" style={{ marginBottom: 12 }}>
       <div className="card-h"><h2>公司收款账户：谁欠公司多少</h2>

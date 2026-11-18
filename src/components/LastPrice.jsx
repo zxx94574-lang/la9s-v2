@@ -32,21 +32,24 @@ export function diffRows(rows, last, currency) {
 }
 
 export function LastPriceBar({ diffs, currency, onApply, applyLabel, onHistory, note }) {
+  // 307 (Frank 11-14): 黄条改成一行轻提示, 点「看一下」才列出是哪些型号
+  const [open, setOpen] = useState(false);
   if (!diffs.length) return null;
   return (
-    <div className="lastprice">
-      <div className="lp-h"><Pill tone="amber">和上次成交价不一样</Pill><span className="small">这个客户有 <b>{diffs.length}</b> 个型号上次成交的价和现在不一样{note ? `，${note}` : ''}</span>
+    <div className="lastprice slim">
+      <div className="lp-h"><span className="small">这个客户有 <b>{diffs.length}</b> 个型号和上次成交价不一样{note ? `，${note}` : ''}</span>
+        <button type="button" className="btn sm ghost" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? '收起' : '看一下'}</button>
         <span className="grow" />
-        {onApply && <button type="button" className="btn sm primary" onClick={onApply}>{applyLabel}</button>}
+        {onApply && <button type="button" className="btn sm" onClick={onApply}>{applyLabel}</button>}
         {onHistory && <button type="button" className="btn sm" onClick={onHistory}>历史价格</button>}
       </div>
-      <div className="lp-list">
+      {open && <div className="lp-list">
         {diffs.map((r) => (
           <span key={r.key} className="lp-item"><b>{r.model}</b>
             <span className="muted">上次</span> <b>{money(r.last.unit_price, currency)}</b>
             <span className="muted small">（{String(dDate(r.last.at)).slice(5)} · <DealLink id={r.last.deal_id} no={r.last.biz_no} />）</span>
             <span className="muted">现在</span> <span className={N(r.now) > N(r.last.unit_price) ? 'lp-up' : 'lp-down'}>{money(r.now, currency)}</span></span>))}
-      </div>
+      </div>}
     </div>
   );
 }

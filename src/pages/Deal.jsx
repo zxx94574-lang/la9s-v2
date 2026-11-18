@@ -43,7 +43,7 @@ export default function Deal({ id }) {
   const [approve, setApprove] = useState(false);
   const [revert, setRevert] = useState(false);
   const [custOpen, setCustOpen] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false); const [discOpen, setDiscOpen] = useState(false); const [unpricedOpen, setUnpricedOpen] = useState(false); const [taskOpen, setTaskOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false); const [discOpen, setDiscOpen] = useState(false); const [unpricedOpen, setUnpricedOpen] = useState(false); const [taskOpen, setTaskOpen] = useState(false); const [holdOpen, setHoldOpen] = useState(null);
   const [logOpen, setLogOpen] = useState(false);      // 减法巡检 C3: 操作记录默认收起
   const [mOpen, setMOpen] = useState(null);           // 减法巡检 C2: 毛利默认只显示一个小块; null = 跟着「亏没亏」自动定
   const { data, error } = useData(async () => {
@@ -161,6 +161,7 @@ export default function Deal({ id }) {
             canDiscount(deal, role) && [deal.discount_amount != null ? '整单折扣（已打，查看 / 撤销）' : '整单折扣…', () => setDiscOpen(true)],
             role === 'admin' && ['派任务（问付款计划 / 核对…）', () => setTaskOpen(true)],
             canAllowUnpriced(deal, role) && ['先出库、价格以后定…', () => setUnpricedOpen(true)],
+            role === 'admin' && !deal.ship_hold && !['shipped', 'cancelled'].includes(deal.status) && ['先别出库（卡住出库）…', () => setHoldOpen('hold')],
             CANCELLABLE.includes(deal.status) && can(role, 'cancel') && ['作废订单', () => setCancelOpen(true), 'danger'],
           ]} />}
           {cancelled && can(role, 'restore') && <button type="button" className="btn sm primary" onClick={() => act('已恢复为报价，可以重新下推', `select app.restore_deal($1)`, [deal.id]).catch(() => {})}>↺ 恢复这张单</button>}
@@ -170,7 +171,7 @@ export default function Deal({ id }) {
       {/* 订单信息窄条 (11-09 196): 一行放完, 不占大块 */}
       <div className="card dealbar">
         <span className="big mono">{deal.biz_no}</span>
-        {deal.status === 'quoted' && deal.tier_pending ? <Pill tone="amber">草稿 · 等中方定档位</Pill> : <Pill tone={STATUS[deal.status].tone}>{STATUS[deal.status].label}</Pill>}{deal.discount_amount != null && seesPrice(role) && <Pill tone="amber">整单折扣 −{money(deal.discount_amount, deal.currency)}</Pill>}{deal.odd_price && <Pill tone="amber" title="有行的单价偏离档位价超过设定比例（设置 → 规则参数）。原因和中方备注在操作记录里。">异价单</Pill>}{Number(deal.price_req_n) > 0 && <Pill tone="red">改价待批</Pill>}{deal.kind !== 'normal' && <Pill tone="gray">{deal.kind}</Pill>}
+        {deal.status === 'quoted' && deal.tier_pending ? <Pill tone="amber">草稿 · 等中方定档位</Pill> : <Pill tone={STATUS[deal.status].tone}>{STATUS[deal.status].label}</Pill>}{deal.discount_amount != null && seesPrice(role) && <Pill tone="amber">整单折扣 −{money(deal.discount_amount, deal.currency)}</Pill>}{deal.discount_amount != null && role === 'admin' && !['partial', 'shipped', 'cancelled'].includes(deal.status) && Math.abs(data.lines.reduce((a, l) => a + (Number(l.qty_supply) > 0 ? Number(l.qty_supply) : Number(l.qty_req)) * Number(l.unit_price || 0), 0) - Number(deal.discount_target) - Number(deal.discount_round || 0)) > 0.5 && <Pill tone="red" title="打折以后数量或单价又改过：现在的总价已经不是谈好的那个数。要按谈好的总价收，请在「⋯ 更多 → 整单折扣」里撤销后重打">折扣后改过数量，总价变了</Pill>}{deal.odd_price && <Pill tone="amber" title="有行的单价偏离档位价超过设定比例（设置 → 规则参数）。原因和中方备注在操作记录里。">异价单</Pill>}{Number(deal.price_req_n) > 0 && <Pill tone="red">改价待批</Pill>}{deal.kind !== 'normal' && <Pill tone="gray">{deal.kind}</Pill>}
         <Info>订单号 {deal.biz_no}：{deal.biz_no.startsWith('BIZ-') ? '旧格式（年月 + 当月流水）。' : 'CI = 科特，中间 6 位 = 年月日，最后 = 当天第几单。'}同一张订单下面的单据都跟着这个号：-Q 报价单（Quotation）、-P 找货单（Picking）、-O 销售订单（Order）、-S1 / -S2 第 1 / 2 批出库（Shipment）。</Info>
         {deal.status === 'confirmed' && deal.planned_ship_date && dDate(deal.planned_ship_date) > today() && (deal.staged_at
           ? <span className="pill amber" title="到约定那天再复检打包">等待发货 · 约 {dDate(deal.planned_ship_date)} · 放在：{deal.staged_note || '（没写）'}</span>
@@ -219,6 +220,9 @@ export default function Deal({ id }) {
           {role === 'admin' && <button type="button" className="btn sm primary" onClick={() => setApprove(true)}>审批</button>}
         </div>)}
       {!cancelled && deal.approval === 'rejected' && deal.status === 'quoted' && <ResubmitBanner deal={deal} act={act} role={role} />}
+      {!cancelled && deal.approval === 'pending' && deal.approval_hold_note && <div className="banner info" style={{ marginBottom: 8 }}><b>中方说先放着、不找货：</b>{deal.approval_hold_note}</div>}
+      {!cancelled && deal.ship_hold && <div className="banner warn loss-bar" style={{ marginBottom: 12 }}><div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><span><b>⚠ 先找货、不出库：</b>{deal.ship_hold_note}。可以找货、复检、打包，<b>出库要等中方放行</b>。</span><span className="grow" />
+        {role === 'admin' && <button type="button" className="btn sm primary" onClick={() => setHoldOpen('release')}>放行出库</button>}</div></div>}
       {!cancelled && deal.approval === 'approved' && deal.status === 'quoted' && <div className="small muted" style={{ marginBottom: 8 }}>✓ 中方已批{deal.approval_note ? `（${deal.approval_note}）` : ''}</div>}
       {cancelled && <div className="lock" style={{ marginBottom: 12 }}>这张单已作废（取消），预占的库存已释放。作废不是删除：点上面的「恢复这张单」可以恢复为报价。</div>}
       {readOnly && !cancelled && <div className="readonly-bar">🔒 这一步已下推，只读。要修改请先撤回到上一步（在上面「⋯ 更多」里，主管 / 中方，需选原因）。</div>}
@@ -267,7 +271,8 @@ export default function Deal({ id }) {
         </div>}
       </div>
 
-      {approve && <ApproveModal deal={deal} lines={data.lines} onClose={() => setApprove(false)} />}
+      {approve && <ApproveModal deal={deal} lines={data.lines} margin={margin} onClose={() => setApprove(false)} />}
+      {holdOpen && <HoldModal deal={deal} kind={holdOpen} onClose={() => setHoldOpen(null)} />}
       {taskOpen && <TaskModal deal={deal} onClose={() => setTaskOpen(false)} />}
       {unpricedOpen && <AllowUnpricedModal deal={deal} onClose={() => setUnpricedOpen(false)} />}
       {discOpen && <DiscountModal deal={deal} lines={data.lines} onClose={() => setDiscOpen(false)} />}
@@ -293,28 +298,60 @@ function RevertModal({ deal, act, onClose, onDone }) {
 }
 
 
+// 345: 卡住出库 / 放行出库 (只中方, 都要写原因)
+function HoldModal({ deal, kind, onClose }) {
+  const { role, toast, refresh } = useApp();
+  const [note, setNote] = useState('');
+  const hold = kind === 'hold';
+  const go = async () => { if (!note.trim()) return toast('写原因', 'err'); try { await call(role, `select app.set_ship_hold($1,$2,$3)`, [deal.id, hold, note.trim()]); toast(hold ? '已卡住：这张单现在出不了库' : '已放行，可以出库了'); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (
+    <Modal title={hold ? '先别出库' : '放行出库'} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className={`btn ${hold ? 'danger' : 'primary'}`} onClick={go}>{hold ? '卡住出库' : '放行'}</button></>}>
+      <div className="stack">
+        <div className="small">{hold ? '找货、复检、打包照常，出库会被拦住，直到你放行。' : `当时卡住的原因：${deal.ship_hold_note || '—'}`}</div>
+        <div className="field req"><label>{hold ? '为什么先别发' : '为什么现在可以发了'}</label><input className="in" value={note} onChange={(e) => setNote(e.target.value)} placeholder={hold ? '例如：等客户把上一张付了' : '例如：钱到了'} autoFocus /></div>
+      </div>
+    </Modal>);
+}
+
 // 中方审批询单: 新客户先转正式 (编码 + 档位); 可以顺手给特价 (默认填销售员申请的价)
-function ApproveModal({ deal, lines, onClose }) {
+function ApproveModal({ deal, lines, margin, onClose }) {
   const { role, toast, refresh } = useApp();
   const prospect = deal.customer_status !== 'active' || !deal.tier;
   const [code, setCode] = useState(''); const [tier, setTier] = useState('');
   const [sp, setSp] = useState(() => Object.fromEntries(lines.filter((l) => l.requested_price != null).map((l) => [l.id, String(Number(l.requested_price))])));
   const [note, setNote] = useState('');
+  // 345 (Frank 11-17): 批的时候三选一 —— 直接放行 / 先找货不出库 / 不找货先放着
+  const [mode, setMode] = useState('pass');
+  const prices = () => JSON.stringify(Object.entries(sp).filter(([, v]) => v !== '').map(([line_id, price]) => ({ line_id, price: Number(price) })));
   const go = async (ok) => {
     try {
-      if (ok && prospect) await call(role, `select app.activate_customer($1,$2,$3)`, [deal.customer_id, code, tier]);
-      await call(role, `select app.approve_quote($1,$2,$3,$4)`, [deal.id, ok, note || null,
-        JSON.stringify(Object.entries(sp).filter(([, v]) => v !== '').map(([line_id, price]) => ({ line_id, price: Number(price) })))]);
-      toast(ok ? '已批，员工现在看得到价格，可以发报价单' : '已退回'); refresh(); onClose();
+      if (!ok) { await call(role, `select app.approve_quote($1,$2,$3,$4)`, [deal.id, false, note || null, prices()]); toast('已退回'); refresh(); onClose(); return; }
+      if (mode !== 'pass' && !note.trim()) return toast('这种批法要写说明：等什么、什么时候再看', 'err');
+      if (mode !== 'no_pick' && prospect) await call(role, `select app.activate_customer($1,$2,$3)`, [deal.customer_id, code, tier]);
+      await call(role, `select app.approve_quote_mode($1,$2,$3,$4)`, [deal.id, mode, note || null, prices()]);
+      toast(mode === 'pass' ? '已批，员工现在看得到价格，可以发报价单' : mode === 'pick_only' ? '已批：可以先找货，出库要等你放行' : '已记下：先放着，不找货'); refresh(); onClose();
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
+  const total = lines.reduce((a, l) => a + Number(l.qty_req || 0) * Number(sp[l.id] || l.requested_price || l.tier_price || 0), 0);
+  const est = margin && !margin.shipped ? margin.t : null;
   return (
     <Modal wide title={`审批 · ${deal.biz_no} · ${deal.customer_code || deal.temp_code} ${deal.customer_name}`} onClose={onClose}
       footer={<><button type="button" className="btn" disabled={!note.trim()} onClick={() => go(false)}>不批（写原因）</button><span className="grow" />
         <button type="button" className="btn" onClick={onClose}>取消</button>
-        <button type="button" className="btn primary" disabled={prospect && (!code.trim() || !tier)} onClick={() => go(true)}>批准</button></>}>
+        <button type="button" className="btn primary" disabled={mode !== 'no_pick' && prospect && (!code.trim() || !tier)} onClick={() => go(true)}>{mode === 'pass' ? '批准，直接放行' : mode === 'pick_only' ? '批准：先找货、不出库' : '先放着，不找货'}</button></>}>
       <div className="stack">
-        <div className="hint">要审批的原因：{deal.approval_reasons.join('、')}</div>
+        {/* 一页纸: 批之前要看的都在这一块 */}
+        <div className="onepage">
+          <div><span className="k">为什么要批</span><b>{deal.approval_reasons.join('、')}</b></div>
+          <div><span className="k">客户</span><b>{deal.customer_name}</b> {deal.tier ? <TierPill tier={deal.tier} /> : <span className="pill amber">还没定档</span>}{deal.owner_name ? <span className="muted small"> · 销售员 {deal.owner_name}</span> : null}</div>
+          <div><span className="k">现在欠款</span><b style={{ color: Number(deal.customer_balance) > 0 ? 'var(--red)' : 'var(--green)' }}>{Number(deal.customer_balance) > 0 ? `${money(deal.customer_balance)} XOF` : '没有欠款'}</b></div>
+          <div><span className="k">这张单</span><b>{money(total, deal.currency)} {deal.currency}</b><span className="muted small"> · {lines.length} 个型号 · {qty(lines.reduce((a, l) => a + Number(l.qty_req || 0), 0))} 片</span></div>
+          <div><span className="k">批了以后欠款</span><b>{money(Math.max(0, Number(deal.customer_balance || 0)) + (deal.currency === 'XOF' ? total : 0))} XOF</b>{deal.currency !== 'XOF' && <span className="muted small"> （本单是 {deal.currency}，没折进来）</span>}</div>
+          {est && <div><span className="k">预估毛利</span><b style={{ color: est.profit < 0 ? 'var(--red)' : undefined }}>{money(Math.round(est.profit))} XOF（{est.revenue ? (est.profit / est.revenue * 100).toFixed(1) : '—'}%）</b>{est.profit < 0 && <span className="pill red">会亏</span>}</div>}
+          {deal.approval_hold_note && <div><span className="k">上次先放着</span>{deal.approval_hold_note}</div>}
+        </div>
+        <div className="field"><label>怎么批</label><Choice value={mode} onChange={setMode} flat options={[['pass', '直接放行'], ['pick_only', '先找货、不出库'], ['no_pick', '不找货、先放着']]} />
+          <div className="small muted" style={{ marginTop: 4 }}>{mode === 'pass' ? '照常往下走。' : mode === 'pick_only' ? '单子照常走到复检，但出库被卡住，等你「放行出库」才能发（比如钱到了再发）。要写说明。' : '审批还挂着，单子留在报价、不动库存；之后你再来批或不批。要写说明。'}</div></div>
         {prospect && <div className="grid2">
           <div className="field req"><label>新客户：正式编码</label><input className="in mono" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} /></div>
           <div className="field req"><label>档位（决定价格）</label><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} /></div></div>}

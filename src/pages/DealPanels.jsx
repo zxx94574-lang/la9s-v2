@@ -1,5 +1,6 @@
 // The panels of one deal. Each workflow step has its own panel: the action when it is the current step,
 // a read-only record once it has been pushed (待改 13). Every button calls exactly one SQL business function.
+import { OptChoice } from '../components/Opts.jsx';
 import PeoplePick from '../components/PeoplePick.jsx';
 import { fmtPhone, telHref } from '../lib/phone.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -210,7 +211,7 @@ export function ConfirmBlock({ deal, events, act, role, lines }) {
         {can(role, 'hotline_confirm') ? (
           <div className="panel">
             <div className="fgrid">
-              <FRow label="确认方式" req><Choice value={method} onChange={(k) => setMethod(k)} options={Object.entries(CONFIRM_METHODS)} err={errs && !method} /></FRow>
+              <FRow label="确认方式" req><OptChoice optKey="confirm_methods" title="确认方式" value={method} onChange={(k) => setMethod(k)} options={Object.entries(CONFIRM_METHODS)} err={errs && !method} /></FRow>
               <FRow label="什么时候要" req><Choice value={when} onChange={(k) => setWhen(k)} options={[['today', '今天要'], ['tomorrow', '明天要'], ['date', '改天']]} err={errs && !when} />
                 {when === 'date' && <DatePicker value={date || null} onChange={setDate} label={date ? '' : '选日期'} />}</FRow>
               <FRow label="结果"><OptionNote options={NOTE_OPTIONS.hotline} value={note} onChange={setNote} /></FRow>
@@ -723,7 +724,7 @@ export function ConfirmPanel({ deal, lines, events, act, role }) {
           {can(role, 'customer_confirm') ? (
             <>
               {/* 210: 电脑上「标签：选项」一行一项, 手机自动上下 */}
-              <FRow label="确认方式" req><Choice value={method} onChange={(k) => setMethod(k)} options={Object.entries(CONFIRM_METHODS)} err={errs && !method} /></FRow>
+              <FRow label="确认方式" req><OptChoice optKey="confirm_methods" title="确认方式" value={method} onChange={(k) => setMethod(k)} options={Object.entries(CONFIRM_METHODS)} err={errs && !method} /></FRow>
               <FRow label="确认截图" req><div className="proofbox-wrap" style={{ flex: 1, minWidth: 0 }}><PhotoInput value={proof} onChange={setProof} label="客户回复 OK 的截图" invalid={errs} /></div><Info>电话确认的：先在群里补发一句确认文字，再截那一句。以后有「我没同意这个价」的纠纷靠这张。</Info></FRow>
               <FRow label="约定发货" req>
                 <div className="seg">{[['today', '今天'], ['tomorrow', '明天'], ['date', '指定日期']].map(([k, l]) => <button type="button" key={k} className={when === k ? 'on' : ''} onClick={() => setWhen(k)}>{l}</button>)}</div>
@@ -812,7 +813,7 @@ function ShipForm({ deal, lines, shipments, act }) {
           <div className="fgroup"><div className="fgroup-t">① 发货</div>
             <div className="row" style={{ gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div className="field req grow"><label>发货方式</label>
-            <Choice value={method} onChange={(k) => setMethod(k)} options={Object.entries(SHIP_METHODS)} err={errs && !method} /></div>
+            <OptChoice optKey="ship_methods" title="发货方式" value={method} onChange={(k) => setMethod(k)} options={Object.entries(SHIP_METHODS)} err={errs && !method} /></div>
               <div className="field req" style={{ width: 220 }}><label>{method.startsWith('yango') ? 'Yango 司机电话' : method === 'customer_pickup' ? '取货人电话' : '联系电话'}</label>
             <PhoneInput value={phone} onChange={setPhone} invalid={errs && !phone.trim()} /></div>
               <div className="field req"><label>发货凭证（Yango 截图 / 现场照片）</label><PhotoInput value={proof} onChange={setProof} label="司机 / 车辆截图" invalid={errs} /></div>
@@ -1351,7 +1352,7 @@ function BalanceConfirm({ deal, events, act, role, unsigned, others = [], openDi
               <div className="panel">
                 {deal.balance_confirmed_at && <div className="pill amber" style={{ marginBottom: 8 }}>上次对账后又签收了新的一批，要重新对一次</div>}
                 <div className="fgrid">
-                  <FRow label="确认方式" req><Choice value={method} onChange={(k) => setMethod(k)} options={Object.entries(CONFIRM_METHODS)} err={errs && !method} /></FRow>
+                  <FRow label="确认方式" req><OptChoice optKey="confirm_methods" title="确认方式" value={method} onChange={(k) => setMethod(k)} options={Object.entries(CONFIRM_METHODS)} err={errs && !method} /></FRow>
                   <FRow label="确认截图" req><PhotoInput value={proof} onChange={setProof} invalid={errs && !proof} label="客户回复确认的 WhatsApp / 通话截图" /></FRow>
                   <FRow label="备注"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(ev) => setNote(ev.target.value)} placeholder="例如 客户说月底一起付" /></FRow>
                   {others.length > 0 && <FRow label="一起对掉"><div className="stack" style={{ gap: 4 }}>

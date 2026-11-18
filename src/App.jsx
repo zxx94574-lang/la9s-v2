@@ -5,6 +5,7 @@ import { CustomerLogin, GuestShop, MustChange } from './pages/Guest.jsx';
 import * as Q from './db/queries.js';
 import Kpi from './pages/Kpi.jsx';
 import MarginPage from './pages/MarginPage.jsx';
+import RulesPage from './pages/RulesPage.jsx';
 import { DirectiveGate } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
@@ -211,6 +212,7 @@ export default function App() {
     case 'attendance': view = <Attendance />; break;
     case 'kpi': view = <Kpi />; break;
     case 'margin': view = <MarginPage />; break;
+    case 'rules': view = <RulesPage />; break;
     case 'staff': view = <Staff />; break;
     case 'sop': view = <Sop />; break;
     case 'kingdee': view = <Kingdee />; break;

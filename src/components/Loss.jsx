@@ -1,6 +1,7 @@
 // 344 (Frank 11-17): 亏钱 = 重中之重.
 // 事前 LossGate: 有卖价低于成本的行 → 这张单推不下去; 员工只看到「这几行价格要中方批」(不出成本), 中方看到每行亏多少 + 批准 (必须写原因).
 // 事后 LossReview: 已出库整单亏的 → 中方必须选结论 + 写原因才能关; LossTodo: 待办最顶上的数字块.
+import { OptChoice } from './Opts.jsx';
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Choice, Pill, Assumed } from './ui.jsx';
@@ -46,7 +47,7 @@ export function LossGate({ deal, margin }) {
       {est.length > 0 && <div className="loss-lines">{est.map((l) => (
         <span key={l.id} className="loss-line"><b>{l.model}</b> <span className="muted">{l.category}</span> · {qty(l.qty)} 片 · 卖 {money(Math.round(l.revenue / (l.qty || 1)))} / 成本 {money(Math.round(N(l.unit_cost)))} · <b>亏 {money(Math.round(-l.profit))}</b></span>))}</div>}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-        <Choice value={why} onChange={setWhy} options={WHY_OK} placeholder="为什么要亏本卖…" flat={false} style={{ width: 220 }} />
+        <OptChoice optKey="loss_ok_reasons" title="亏本出货的原因" coded={false} value={why} onChange={setWhy} options={WHY_OK} placeholder="为什么要亏本卖…" flat={false} style={{ width: 220 }} />
         <input className="in" style={{ flex: '1 1 220px', minWidth: 0 }} placeholder="补充说明（谁定的、哪次清仓…）" value={note} onChange={(e) => setNote(e.target.value)} />
         <button type="button" className="btn danger" disabled={busy} onClick={submit}>批准亏本出货</button>
       </div>
@@ -73,7 +74,7 @@ export function LossReview({ deal, margin }) {
       <div className="loss-lines">{parts.map(([l, v]) => <span key={l} className="loss-line">{l} <b>{v < 0 ? '−' : '+'}{money(Math.abs(Math.round(v)))}</b></span>)}
         {worst && worst[1] < 0 && <span className="loss-line"><span className="muted">最可能的原因：</span><b>{worst[0]}</b></span>}</div>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-        <Choice value={c} onChange={setC} options={LOSS_CONCLUSIONS} placeholder="结论：为什么亏…" flat={false} style={{ width: 220 }} />
+        <OptChoice optKey="loss_conclusions" title="亏损结论" coded={false} value={c} onChange={setC} options={LOSS_CONCLUSIONS} placeholder="结论：为什么亏…" flat={false} style={{ width: 220 }} />
         <input className="in" style={{ flex: '1 1 220px', minWidth: 0 }} placeholder="原因 + 以后怎么避免" value={note} onChange={(e) => setNote(e.target.value)} />
         <button type="button" className="btn primary" disabled={busy} onClick={submit}>记录结论</button>
       </div>

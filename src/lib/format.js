@@ -42,6 +42,8 @@ export function friendlyError(e) {
     [/customer has no price tier/, '该客户还没有价格档位，不能报价'],
     [/INVARIANT: reservation|qty_reserved|check constraint "stock_items/, '库存不足，无法预占'],
     [/INSUFFICIENT_STOCK: available (\d+), need (\d+)/, (x) => `库存不够：可售 ${x[1]}，需要 ${x[2]}`],
+    [/SHIP_HOLD: (.+)/, (x) => `⛔ ${x[1]}`],
+    [/TASK_BLOCK: (.+)/, (x) => `⛔ ${x[1]}`],
     [/LOSS_BLOCK: (.+)/, (x) => `⛔ ${x[1]}（卖价低于成本）`],
     [/DEBT_BLOCK: (.+)/, null],
     [/NEEDS_APPROVAL: (.+)/, null],

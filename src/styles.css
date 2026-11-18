@@ -1213,3 +1213,14 @@ button.in.choice-btn:hover, button.in.choice-btn[aria-expanded="true"] { border-
 .info4-b > div { min-width: 0; overflow-wrap: anywhere; }
 .info4-t { font-size: 12px; color: var(--muted); font-weight: 700; }
 .info4 .tel { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* 345 审批一页纸 */
+.onepage { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 18px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: #fafbfd; font-size: 13.5px; }
+.onepage > div { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; min-width: 0; }
+.onepage .k { color: var(--muted); font-size: 12px; min-width: 76px; }
+.lastprice.slim { background: none; border: 1px dashed #e6d7a8; padding: 6px 10px; }
+.lastprice.slim .lp-h { gap: 8px; }
+/* 360 选项旁的小齿轮 */
+.opt-gear { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 6px; line-height: 1; opacity: .55; }
+.opt-gear:hover { opacity: 1; background: var(--brand-soft); color: var(--brand); }
+.opt-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; background: #fff; border: 1px solid var(--line-2); border-radius: 8px; padding: 5px 8px; }
+.opt-row .grip { color: var(--muted); cursor: grab; }
