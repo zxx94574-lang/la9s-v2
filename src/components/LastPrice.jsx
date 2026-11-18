@@ -20,7 +20,7 @@ export function useLastPrices(customerId, before = null, exceptDeal = null) {
   const { data } = useData(() => (customerId ? q(`
     select distinct on (l.product_id) l.product_id, l.unit_price, d.currency, d.created_at as at, d.biz_no, d.id as deal_id, l.qty_supply as qty, l.price_manual
     from app.deal_lines l join app.deals d on d.id = l.deal_id
-    where d.customer_id = $1 and d.status in ${DONE} and l.product_id is not null and l.unit_price > 0
+    where d.customer_id = $1 and d.status in ${DONE} and l.product_id is not null and l.unit_price > 0 and d.discount_amount is null
       and ($2::timestamptz is null or d.created_at < $2::timestamptz) and ($3::uuid is null or d.id <> $3::uuid)
     order by l.product_id, d.created_at desc`, [customerId, before, exceptDeal]) : Promise.resolve([])), [customerId, before, exceptDeal, tick]);
   return useMemo(() => Object.fromEntries((data || []).map((r) => [r.product_id, r])), [data]);

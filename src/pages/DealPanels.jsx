@@ -10,7 +10,7 @@ import { DocActions, DocSheet, BalanceCopy, BalancePreview } from '../components
 import { BlActions } from '../components/Bl.jsx';
 import { flagAnomaly } from '../components/IssueReport.jsx';
 import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus } from '../components/ReceiptForm.jsx';
-import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip, Choice } from '../components/ui.jsx';
+import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip, Choice, Assumed } from '../components/ui.jsx';
 import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, PAY_METHODS, RETURN_REASONS, CONFIRM_METHODS, CHECK_RESULTS, priceLevel, getThresholds, balanceWords, TIERS } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, pad, ymd } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
@@ -420,7 +420,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
               <button type="button" className="btn primary lg" onClick={submit}>复检打包完成 →</button>
             </div>
           ) : <Blocked action="review_pick" />}
-          <div className="hint" style={{ marginTop: 8 }}>不用每盒拆：红色「必抽检」的行必须抽 2–3 盒并选结果，黄色「建议」的行最好也抽。少了就改「复检数量」并选原因：单子会退回热线，只让客户重新确认变动的行。</div>
+          <div className="hint" style={{ marginTop: 8 }}>不用每盒拆：红色「必抽检」的行必须抽 2–3 盒并选结果，黄色「建议」的行最好也抽。<Assumed>必抽检现在只在这个界面上拦，后台没有硬拦；三个门槛（100 片 / 单价 5,000 / 一行 50 万）在设置 → 规则参数里调。</Assumed>少了就改「复检数量」并选原因：单子会退回热线，只让客户重新确认变动的行。</div>
         </div>
       ) : deal.reviewer_name && (
         <div className="card-b row" style={{ borderTop: '1px solid var(--line-2)', gap: 16 }}>

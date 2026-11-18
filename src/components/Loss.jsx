@@ -3,7 +3,7 @@
 // 事后 LossReview: 已出库整单亏的 → 中方必须选结论 + 写原因才能关; LossTodo: 待办最顶上的数字块.
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Choice, Pill } from './ui.jsx';
+import { useApp, useData, Choice, Pill, Assumed } from './ui.jsx';
 import { DealLink } from './Archives.jsx';
 import { money, qty, friendlyError, dDate } from '../lib/format.js';
 
@@ -42,7 +42,7 @@ export function LossGate({ deal, margin }) {
   };
   return (
     <div className="banner warn loss-bar" style={{ marginBottom: 12 }}>
-      <div><b>⛔ 会亏：{data.rows.length} 行卖价低于到岸成本，这张单现在推不下去。</b> 要么把价格改上去，要么写原因批准。</div>
+      <div><b>⛔ 会亏：{data.rows.length} 行卖价低于到岸成本，这张单现在推不下去。</b> 要么把价格改上去，要么写原因批准。<Assumed>批准时可选的原因（清仓 / 老库存 / 有瑕疵 / 维护大客户 / 成本录错 / 其他）是我列的；批的是「这几行 + 这几个价」，之后再改价要重新批。</Assumed></div>
       {est.length > 0 && <div className="loss-lines">{est.map((l) => (
         <span key={l.id} className="loss-line"><b>{l.model}</b> <span className="muted">{l.category}</span> · {qty(l.qty)} 片 · 卖 {money(Math.round(l.revenue / (l.qty || 1)))} / 成本 {money(Math.round(N(l.unit_cost)))} · <b>亏 {money(Math.round(-l.profit))}</b></span>))}</div>}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 8 }}>

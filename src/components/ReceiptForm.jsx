@@ -5,7 +5,7 @@ import { DealLink } from './Archives.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, DatePicker, PhotoInput, Drawer, BigNum, Modal, FRow, Info, RateInput, Choice } from './ui.jsx';
+import { useApp, useData, DatePicker, PhotoInput, Drawer, BigNum, Modal, FRow, Info, RateInput, Choice, Assumed } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { can, whoCan, PAY_METHODS, balanceWords } from '../lib/domain.js';
 import { money, today, dDate, friendlyError } from '../lib/format.js';
@@ -176,6 +176,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
               <input className={`in ${feeHigh ? 'err-in' : ''}`} inputMode="decimal" style={{ width: 100 }} value={feeTouched ? fee : (feeV ? String(feeV) : '')} onChange={(e) => { setFeeTouched(true); setFeeOk(false); setFee(e.target.value.replace(/[^\d.]/g, '')); }} placeholder="0" />
               <span className="small muted">{currency}</span>
               {feeV > 0 && <span className={`pill ${feeHigh ? 'red' : feeLow ? 'amber' : 'green'}`}>{feeRate.toFixed(2)}%</span>}
+              <Assumed>「高于 1%」我按 1.05% 以上算、「低于 1%」按 0.95% 以下算，中间当成正常的 1%（避免取整差一两块就弹确认）。</Assumed>
               {feeHigh && <input className={`in ${errs && !feeWhy.trim() ? 'err-in' : ''}`} style={{ flex: '1 1 180px', minWidth: 0 }} placeholder="高于 1%，写原因" value={feeWhy} onChange={(e) => setFeeWhy(e.target.value)} />}
             </>}
             <Info>客户账永远按货款全额冲。钱到账时被 Wave / 银行扣了手续费（客户付 10,000，只到 9,900）才选「是」：到账填 9,900，手续费默认按 1% 带出 100，可以改；另记一笔「办公费」支出，中方确认。客户自己多付了手续费、到账就是全额的，选「否」。现金没有手续费。</Info>

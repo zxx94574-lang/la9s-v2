@@ -570,6 +570,8 @@ export function SortList({ items, keyOf, render, onChange, gap = 6, className = 
 // ⓘ 长说明收进来, 悬停 / 点开看 (11-09 196)
 export const Info = ({ children }) => (children ? <span className="info-i" tabIndex={0}>i<span className="info-tip">{children}</span></span> : null);
 // 264 (Frank 11-12): 核对类提醒只给中方一个感叹号 (红 = 低于成本, 黄 = 低于底价 / 档位), 不写字; 鼠标移上去 / 点一下才显示细节
+// 「这条是 Claude 按建议定的」小标记 (Frank 11-18: 不确定的按你的建议, 做完用小感叹号标出来说明). 蓝色小感叹号, 悬停 / 点一下看说明.
+export const Assumed = ({ children }) => <span className="info-i bang assumed" tabIndex={0}>!<span className="info-tip"><b>这条是 Claude 按建议先定的，你没逐条拍过板：</b>{children} 觉得不对告诉我改。</span></span>;
 export const Bang = ({ tone = 'red', children }) => <span className={`info-i bang ${tone}`} tabIndex={0} title={typeof children === 'string' ? children : undefined}>!<span className="info-tip">{children}</span></span>;
 export const lowTip = ({ fl, px, cost, s, tier }, f) => (fl === '会亏' ? `低于到岸成本：成本 ${f(cost)}，这个价 ${f(px)}，每片低 ${f(cost - px)}` : fl === '低于底价' ? `低于 S 档底价：S 档 ${f(s)}，这个价 ${f(px)}` : `低于这个客户的档位价：档位价 ${f(tier)}，这个价 ${f(px)}`);
 // 表单一行: 「标签：[控件]」

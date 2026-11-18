@@ -3,6 +3,7 @@
 // Going back = 「撤回到上一步」 with a reason (待改 14); cancelled deals can be restored (待改 16).
 import DebtBanner from '../components/DebtBanner.jsx';
 import { LossGate, LossReview } from '../components/Loss.jsx';
+import { DiscountModal, canDiscount } from '../components/Discount.jsx';
 import { useDealMargin, DealMarginChip, DealMarginCard } from '../components/Margin.jsx';
 import { DealLastPrice } from '../components/LastPrice.jsx';
 import { dealLight, stuckOf } from '../lib/domain.js';
@@ -40,7 +41,7 @@ export default function Deal({ id }) {
   const [approve, setApprove] = useState(false);
   const [revert, setRevert] = useState(false);
   const [custOpen, setCustOpen] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false); const [discOpen, setDiscOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);      // 减法巡检 C3: 操作记录默认收起
   const [mOpen, setMOpen] = useState(null);           // 减法巡检 C2: 毛利默认只显示一个小块; null = 跟着「亏没亏」自动定
   const { data, error } = useData(async () => {
@@ -155,6 +156,7 @@ export default function Deal({ id }) {
           {atNow && !cancelled && <IssueButton deal={deal} step={STEPS[Math.min(current, STEPS.length - 1)]?.key} />}
           {!cancelled && <MoreMenu items={[
             atNow && REVERT_LABEL[deal.status] && can(role, 'revert') && ['↶ 撤回到上一步', () => setRevert(true)],
+            canDiscount(deal, role) && [deal.discount_amount != null ? '整单折扣（已打，查看 / 撤销）' : '整单折扣…', () => setDiscOpen(true)],
             CANCELLABLE.includes(deal.status) && can(role, 'cancel') && ['作废订单', () => setCancelOpen(true), 'danger'],
           ]} />}
           {cancelled && can(role, 'restore') && <button type="button" className="btn sm primary" onClick={() => act('已恢复为报价，可以重新下推', `select app.restore_deal($1)`, [deal.id]).catch(() => {})}>↺ 恢复这张单</button>}
@@ -164,7 +166,7 @@ export default function Deal({ id }) {
       {/* 订单信息窄条 (11-09 196): 一行放完, 不占大块 */}
       <div className="card dealbar">
         <span className="big mono">{deal.biz_no}</span>
-        {deal.status === 'quoted' && deal.tier_pending ? <Pill tone="amber">草稿 · 等中方定档位</Pill> : <Pill tone={STATUS[deal.status].tone}>{STATUS[deal.status].label}</Pill>}{deal.odd_price && <Pill tone="amber" title="有行的单价偏离档位价超过设定比例（设置 → 规则参数）。原因和中方备注在操作记录里。">异价单</Pill>}{Number(deal.price_req_n) > 0 && <Pill tone="red">改价待批</Pill>}{deal.kind !== 'normal' && <Pill tone="gray">{deal.kind}</Pill>}
+        {deal.status === 'quoted' && deal.tier_pending ? <Pill tone="amber">草稿 · 等中方定档位</Pill> : <Pill tone={STATUS[deal.status].tone}>{STATUS[deal.status].label}</Pill>}{deal.discount_amount != null && seesPrice(role) && <Pill tone="amber">整单折扣 −{money(deal.discount_amount, deal.currency)}</Pill>}{deal.odd_price && <Pill tone="amber" title="有行的单价偏离档位价超过设定比例（设置 → 规则参数）。原因和中方备注在操作记录里。">异价单</Pill>}{Number(deal.price_req_n) > 0 && <Pill tone="red">改价待批</Pill>}{deal.kind !== 'normal' && <Pill tone="gray">{deal.kind}</Pill>}
         <Info>订单号 {deal.biz_no}：{deal.biz_no.startsWith('BIZ-') ? '旧格式（年月 + 当月流水）。' : 'CI = 科特，中间 6 位 = 年月日，最后 = 当天第几单。'}同一张订单下面的单据都跟着这个号：-Q 报价单（Quotation）、-P 找货单（Picking）、-O 销售订单（Order）、-S1 / -S2 第 1 / 2 批出库（Shipment）。</Info>
         {deal.status === 'confirmed' && deal.planned_ship_date && dDate(deal.planned_ship_date) > today() && (deal.staged_at
           ? <span className="pill amber" title="到约定那天再复检打包">等待发货 · 约 {dDate(deal.planned_ship_date)} · 放在：{deal.staged_note || '（没写）'}</span>
@@ -260,6 +262,7 @@ export default function Deal({ id }) {
       </div>
 
       {approve && <ApproveModal deal={deal} lines={data.lines} onClose={() => setApprove(false)} />}
+      {discOpen && <DiscountModal deal={deal} lines={data.lines} onClose={() => setDiscOpen(false)} />}
       {cancelOpen && <CancelModal deal={deal} act={act} onClose={() => setCancelOpen(false)} />}
       {revert && <RevertModal deal={deal} act={act} onClose={() => setRevert(false)} onDone={() => { setRevert(false); setView(null); }} />}
     </>

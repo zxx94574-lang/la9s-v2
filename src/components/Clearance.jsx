@@ -2,7 +2,7 @@
 // 卖价不低于生效清仓价的行, 不再被「会亏」拦住 (规则在 0052).
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, FRow, Info, Choice, DatePicker, Pill } from './ui.jsx';
+import { useApp, useData, Modal, FRow, Info, Choice, DatePicker, Pill, Assumed } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { ModelLink } from './Archives.jsx';
 import { money, friendlyError, today, dDate } from '../lib/format.js';
@@ -49,7 +49,7 @@ export default function ClearanceCard({ products }) {
     <div className="card" style={{ marginTop: 12 }}>
       <div className="card-h"><h2>清仓价表</h2><Pill tone={live ? 'green' : 'gray'}>{live} 条生效中</Pill>
         <Info>不做亏钱的买卖，唯一的例外是清仓。在这里写下清仓决定：哪个型号、清仓价多少、从哪天到哪天、给谁。期间卖价不低于清仓价的单不会被「会亏」拦住；没有清仓决定的亏本价一律要中方逐单批。到期自动失效。</Info>
-        <span className="grow" /><button type="button" className="btn sm primary" onClick={() => setForm({ product: '', price: '', range: [td, plus(30)], scope: 'all', tiers: [], custs: [], note: '' })}>＋ 加清仓价</button></div>
+        <Assumed>清仓价现在只是一条「放行线」：不会自动填进报价的单价，价格还是你手改；多条同时生效取最低的那条。</Assumed><span className="grow" /><button type="button" className="btn sm primary" onClick={() => setForm({ product: '', price: '', range: [td, plus(30)], scope: 'all', tiers: [], custs: [], note: '' })}>＋ 加清仓价</button></div>
       {data.length ? <Grid id="clearance" columns={cols} rows={data} slimTools rowActions={[{ label: '提前结束', tone: 'danger', when: (r) => state(r)[0] === '生效中' || state(r)[0] === '还没开始', run: end }]} />
         : <div className="card-b small muted">还没有清仓决定。</div>}
       {f && <Modal title="加一条清仓价" onClose={() => setForm(null)} footer={<><button type="button" className="btn" onClick={() => setForm(null)}>取消</button><button type="button" className="btn primary" onClick={save}>保存，立即生效</button></>}>
