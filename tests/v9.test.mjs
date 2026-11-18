@@ -327,8 +327,9 @@ test('0032 欠款不出货: 开关只中方; 有欠款的报价进审批; 出库
 test('0033 外币报价手填汇率 + 驳回后可重新提交 / 还款自动通过 + 退货对完账不卡检验', async () => {
   const t = await setup();
   const c = t.ids.camaraAbobo;
-  await rejects(t.as(U.manager, `select app.create_quote_fx($1,$2,'CNY',$3,null,null)`, [t.ids.org, c, JSON.stringify([{ product_id: t.ids.bg6mCover, qty_req: 2 }])]), /汇率/);
-  const d = await t.val(U.manager, `select app.create_quote_fx($1,$2,'CNY',$3,null,93.5)`, [t.ids.org, c, JSON.stringify([{ product_id: t.ids.bg6mCover, qty_req: 2 }])]);
+  // 0061: 人民币报价只给 S 档 → 这里换成美元测外币逻辑 (算法一样)
+  await rejects(t.as(U.manager, `select app.create_quote_fx($1,$2,'USD',$3,null,null)`, [t.ids.org, c, JSON.stringify([{ product_id: t.ids.bg6mCover, qty_req: 2 }])]), /汇率/);
+  const d = await t.val(U.manager, `select app.create_quote_fx($1,$2,'USD',$3,null,93.5)`, [t.ids.org, c, JSON.stringify([{ product_id: t.ids.bg6mCover, qty_req: 2 }])]);
   const xof = Number(await t.val(U.admin, `select app.tier_price($1,$2,'XOF')`, [t.ids.bg6mCover, c]));
   const l = (await t.lines(d))[0];
   assert.equal(Number(l.unit_price), Math.round(xof / 93.5 * 100) / 100);
