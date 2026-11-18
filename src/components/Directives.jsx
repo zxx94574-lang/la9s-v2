@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import { useApp, useData, Modal, FRow, Info, PhotoInput, Thumb, DatePicker, FileDrop, Choice } from './ui.jsx';
-import { EmpLink } from './Archives.jsx';
+import { EmpLink, DealLink } from './Archives.jsx';
 import { dt, dDate, friendlyError } from '../lib/format.js';
 
 const ST = { sent: ['还没点收到', 'red'], acked: ['已收到，在做', 'amber'], done: ['做完了，等中方确认', 'amber'], closed: ['已关闭', 'green'] };
@@ -85,6 +85,7 @@ export default function DirectiveBoard() {
               <div className="stack" style={{ gap: 3, minWidth: 0, flex: 1 }}>
                 <div>{d.urgent && <span className="pill red" style={{ marginRight: 6 }}>紧急</span>}<b>{d.title}</b> <span className={`pill ${ST[d.status][1]}`}>{ST[d.status][0]}</span></div>
                 {d.body && <div className="small" style={{ whiteSpace: 'pre-wrap' }}>{d.body}</div>}
+                {d.ref_label && <div className="small">挂在：{d.ref_kind === 'deal' ? <DealLink id={d.ref_id} no={d.ref_label} /> : <b>{d.ref_label}</b>}</div>}
                 <AttList items={d.attachments} />
                 <div className="small muted">{dt(d.created_at)}{d.due_on ? ` · 要在 ${dDate(d.due_on)} 前做完` : ''}{d.require_photo ? ' · 要拍照' : ''}</div>
                 {d.status === 'acked' && d.confirm_note && <div className="pill red" style={{ whiteSpace: 'normal' }}>中方退回：{d.confirm_note}</div>}
@@ -150,17 +151,36 @@ function NewDirective({ onClose }) {
 function DoneModal({ d, onClose }) {
   const { role, toast, refresh } = useApp();
   const [note, setNote] = useState(''); const [photo, setPhoto] = useState('');
-  const ok = (note.trim() || photo) && (!d.require_photo || photo);
-  const go = async () => { try { await call(role, `select app.complete_directive($1,$2,$3)`, [d.id, note || null, photo || null]); toast('已交，等中方确认'); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  // 338: 问付款计划的任务 —— 结果必须填「哪天付多少」(可以多行) + 截图
+  const plan = d.task_type === 'payment_plan';
+  const [rows, setRows] = useState([{ on: '', amount: '' }]);
+  const rowsOk = rows.filter((r) => r.on && Number(r.amount) > 0);
+  const ok = plan ? rowsOk.length > 0 && rowsOk.length === rows.filter((r) => r.on || r.amount).length && !!photo : (note.trim() || photo) && (!d.require_photo || photo);
+  const go = async () => {
+    try {
+      if (d.task_type) await call(role, `select app.complete_task($1,$2,$3,$4)`, [d.id, JSON.stringify(plan ? rowsOk.map((r) => ({ on: r.on, amount: Number(r.amount) })) : null), note || null, photo || null]);
+      else await call(role, `select app.complete_directive($1,$2,$3)`, [d.id, note || null, photo || null]);
+      toast('已交，等中方确认'); refresh(); onClose();
+    } catch (e) { toast(friendlyError(e), 'err'); }
+  };
   return (
-    <Modal title={`做完了：${d.title}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{d.require_photo && !photo ? '这条要求拍照' : '填结果（文字或照片）'}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>完成</button></>}>
+    <Modal title={`做完了：${d.title}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{plan ? '填哪天付多少，并传截图' : d.require_photo && !photo ? '这条要求拍照' : '填结果（文字或照片）'}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>完成</button></>}>
       <div className="stack">
-        <FRow label="结果" req={!d.require_photo}><textarea className="in" rows={3} style={{ width: '100%' }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="做了什么、结果怎么样" /></FRow>
-        <FRow label="照片" req={d.require_photo}><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={photo} onChange={setPhoto} label="拍结果" /></div></FRow>
+        {plan && <FRow label="付款计划" req><div className="stack" style={{ gap: 6, flex: 1 }}>
+          {rows.map((r, i) => <div key={i} className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <DatePicker value={r.on} onChange={(v) => setRows(rows.map((x, j) => (j === i ? { ...x, on: v } : x)))} label={r.on ? '' : '哪天付'} />
+            <input className="in" inputMode="numeric" style={{ width: 130 }} placeholder="付多少" value={r.amount} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, amount: e.target.value.replace(/\D/g, '') } : x)))} />
+            {rows.length > 1 && <button type="button" className="btn sm" onClick={() => setRows(rows.filter((_, j) => j !== i))}>去掉</button>}
+          </div>)}
+          <div><button type="button" className="btn sm" onClick={() => setRows([...rows, { on: '', amount: '' }])}>＋ 分几次付就加一行</button></div>
+        </div></FRow>}
+        <FRow label={plan ? '补充说明' : '结果'} req={!plan && !d.require_photo}><textarea className="in" rows={plan ? 2 : 3} style={{ width: '100%' }} value={note} onChange={(e) => setNote(e.target.value)} placeholder={plan ? '客户原话 / 谁答应的' : '做了什么、结果怎么样'} /></FRow>
+        <FRow label={plan ? '客户答应的截图' : '照片'} req={plan || d.require_photo}><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={photo} onChange={setPhoto} label={plan ? '聊天截图' : '拍结果'} /></div></FRow>
       </div>
     </Modal>
   );
 }
+
 function RejectModal({ d, onClose }) {
   const { role, toast, refresh } = useApp();
   const [note, setNote] = useState('');
