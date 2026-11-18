@@ -119,8 +119,10 @@ function edgeScroller(box) {
   };
 }
 
-export default function Grid({ id, columns: baseColumns, rows, rowKey = (r) => r.id, rowClass, onRowClick, onDelete, selectable, foot, tools, empty = '暂无数据', maxHeight, noTools,
+export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyProp = (r) => r.id, rowClass, onRowClick, onDelete, selectable, foot, tools, empty = '暂无数据', maxHeight, noTools,
   onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors, onShown, compactTools, slimTools, rowActions }) {
+  // 行没有 id 的表 (汇总表): 退到 key / employee_id / deal_id, 免得 React 报 key 重复、选区错位
+  const rowKey = (r) => rowKeyProp(r) ?? r?.key ?? r?.employee_id ?? r?.deal_id ?? r?.code;
   // ── 每张表的自定义列 (Frank 11-08): 传 table="xxx" 就自动长出「选项设置」里加的列, 值存 row_attrs ──
   const app = useApp() || {};
   const [tbl, setTbl] = useState({ opts: null, attrs: {} });

@@ -1,5 +1,6 @@
 // 241 (Frank 11-11): 时效与准确率 —— 先只显示、不考核; 跑 2–4 周看到真实的中位数再定线
 // 每张单按步骤分段计时 (只算上班时间), 谁的时间算谁的; 等客户的时间单独算; 速度和准确率成对看
+import SalesComm from '../components/SalesComm.jsx';
 import React, { useMemo, useState } from 'react';
 import { q } from '../db/client.js';
 import { useApp, useData, DatePicker, Info } from '../components/ui.jsx';
@@ -142,6 +143,7 @@ export default function Kpi() {
           { key: 'mins', label: '过了多久才点开', w: 170, value: (r) => r.mins, render: (r) => <span className="pill red">{fmtMin(r.mins)}{r.opened ? '' : ' · 到现在还没点开'}</span> },
         ]} />
       </div>
+      <SalesComm from={from} to={to} />
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="card-h"><h2>仓库准确绩效 · 提成（正确出货每片 {data.rate} XOF）</h2><Info>按出库的片数算给这张单的复核人（没有复核人就给找货人）。这张单被记了发错的责任（少发 / 多发 / 发错型号），整张单的提成取消，下面列出是哪几张。月底算工资照这张表。每片多少钱在「设置 → 规则参数」里可调。</Info></div>
         <Grid id="kpi-com" rows={calc.comPeople} empty="这段时间没有出库" columns={[

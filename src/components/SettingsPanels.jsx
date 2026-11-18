@@ -124,6 +124,7 @@ export function PermPanel() {
 
 // 11-12 Frank: 凡是涨跌 / 时限 / 单价这类线, 都放在这里随时调 (改了立即生效)
 const RULES = [
+  ['sales_comm', 'per_piece', '销售提成：每片多少钱（整单付清才算；0 = 还没定）', 0, 'XOF / 片'],
   ['check_rules', 'qty', '复检必抽检：一行数量超过多少片', 100, '片'],
   ['check_rules', 'price', '复检必抽检：单价超过多少', 5000, 'XOF'],
   ['check_rules', 'total', '复检必抽检：一行总价超过多少', 500000, 'XOF'],
