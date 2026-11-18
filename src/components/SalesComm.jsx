@@ -20,7 +20,7 @@ export default function SalesComm({ from, to }) {
     <div className="card">
       <div className="card-h"><h2>销售提成（按片）</h2>{pp > 0 ? <Pill tone="green">每片 {money(pp)} XOF</Pill> : <Pill tone="amber">每片金额还没定</Pill>}
         <Info>规则：按片算；一张单<b>整单付清</b>才算，付清那天落在所选时间段里就计入；只算有归属销售员的客户的单（按这张单建单时的归属人）；特价单照算；FOB 客户不算；片数 = 出库 − 退货。</Info>
-        <Assumed>每片多少钱你还没定，现在是 {pp}（在「规则参数」里改）。这里只算数，暂时不会自动进工资单；「付清那天」按最后一笔冲账的日期算。</Assumed>
+        <Assumed>每片 17 XOF 是 Frank 11-18 定的。建工资单时自动带进「销售提成」一栏，可手改；「付清那天」按最后一笔冲账的日期算——这一点是我按建议定的。</Assumed>
         <span className="grow" /><button type="button" className="btn sm ghost" onClick={() => go('rules')}>改每片金额 ›</button></div>
       {data.sum.length ? <Grid id="sales-comm" slimTools columns={[
         { key: 'short_name', label: '销售员', w: 140, render: (r) => <EmpLink id={r.employee_id} name={r.short_name} /> },

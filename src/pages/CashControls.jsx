@@ -305,7 +305,7 @@ function UnlockModal({ month, onClose }) {
   const [reason, setReason] = useState('');
   const go = async () => { try { await call(role, `select app.unlock_month($1,$2::date,$3)`, [org, month, reason]); toast(`${month.slice(0, 7)} 已解锁（记录在审计里）`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
-    <Modal title={`解锁 ${month.slice(0, 7)}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!reason.trim()} onClick={go}>解锁</button></>}>
+    <Modal title={`解锁 ${month.slice(0, 7)}`} risk="red" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!reason.trim()} onClick={go}>解锁</button></>}>
       <FRow label="原因" req><input className="in" style={{ width: '100%' }} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例如 补录漏掉的一笔收款" /></FRow>
     </Modal>
   );

@@ -9,7 +9,7 @@ import { DealLink } from './Archives.jsx';
 import { money, qty, friendlyError, dDate } from '../lib/format.js';
 
 const N = (v) => Number(v || 0);
-const WHY_OK = ['清仓（有清仓决定）', '老库存 / 滞销处理', '有瑕疵的货', '维护大客户', '成本录错了（实际不亏）', '其他'];
+const WHY_OK = ['促销 / 清仓（有特价决定）', '老库存 / 滞销处理', '有瑕疵的货', '维护大客户', '成本录错了（实际不亏）', '其他'];
 export const LOSS_CONCLUSIONS = ['价格给低了', '成本录错 / 成本没更新', '汇率变了', '运费 / 手续费吃掉了', '退货 / 差异扣减', '清仓（有清仓决定）', '其他'];
 
 export function LossGate({ deal, margin }) {
@@ -38,7 +38,7 @@ export function LossGate({ deal, margin }) {
     if (!why || !text.trim()) { toast('先选原因', 'err'); return; }
     if ((why === '其他' || why.startsWith('成本录错')) && !note.trim()) { toast('这个原因要再写一句说明', 'err'); return; }
     setBusy(true);
-    try { await call(role, `select app.approve_loss($1,$2,$3)`, [deal.id, text, why.startsWith('清仓') ? 'clearance' : 'other']); toast('已批准，这张单可以往下走了'); refresh(); }
+    try { await call(role, `select app.approve_loss($1,$2,$3)`, [deal.id, text, why.includes('清仓') ? 'clearance' : 'other']); toast('已批准，这张单可以往下走了'); refresh(); }
     catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
   };
   return (
@@ -48,7 +48,7 @@ export function LossGate({ deal, margin }) {
         <span key={l.id} className="loss-line"><b>{l.model}</b> <span className="muted">{l.category}</span> · {qty(l.qty)} 片 · 卖 {money(Math.round(l.revenue / (l.qty || 1)))} / 成本 {money(Math.round(N(l.unit_cost)))} · <b>亏 {money(Math.round(-l.profit))}</b></span>))}</div>}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
         <OptChoice optKey="loss_ok_reasons" title="亏本出货的原因" coded={false} value={why} onChange={setWhy} options={WHY_OK} placeholder="为什么要亏本卖…" flat={false} style={{ width: 220 }} />
-        <input className="in" style={{ flex: '1 1 220px', minWidth: 0 }} placeholder="补充说明（谁定的、哪次清仓…）" value={note} onChange={(e) => setNote(e.target.value)} />
+        <input className="in" style={{ flex: '1 1 220px', minWidth: 0 }} placeholder="补充说明（谁定的、哪次促销 / 清仓…）" value={note} onChange={(e) => setNote(e.target.value)} />
         <button type="button" className="btn danger" disabled={busy} onClick={submit}>批准亏本出货</button>
       </div>
     </div>);

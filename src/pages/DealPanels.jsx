@@ -6,7 +6,7 @@ import { fmtPhone, telHref } from '../lib/phone.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Grid from '../components/Grid.jsx';
 import { call, q } from '../db/client.js';
-import LineEntry, { newKey, finalizeLines, tierPrice } from '../components/LineEntry.jsx';
+import LineEntry, { newKey, finalizeLines, tierPrice, PromoTag } from '../components/LineEntry.jsx';
 import { DocActions, DocSheet, BalanceCopy, BalancePreview } from '../components/Doc.jsx';
 import { BlActions } from '../components/Bl.jsx';
 import { flagAnomaly } from '../components/IssueReport.jsx';
@@ -29,7 +29,7 @@ function baseCols({ price, cur, extra = [] }) {
     { key: 'model', label: '型号', w: 100, render: (l) => <><ModelLink id={l.product_id} model={l.model} /></> },
     { key: 'shared', label: '通用性', w: 150, render: (l) => <Shared list={l.shared_models} /> },
     ...extra,
-    ...(price ? [{ key: 'unit_price', label: `单价 ${cur}`, w: 130, render: (l) => <span className="row" style={{ gap: 4, flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>{money(l.unit_price, cur)}<LowTag l={l} />{l.price_manual && <span className="pill amber">手改</span>}{l.requested_price != null && <span className="pill amber">申请 {money(l.requested_price, cur)}</span>}</span> }] : []),
+    ...(price ? [{ key: 'unit_price', label: `单价 ${cur}`, w: 130, render: (l) => <span className="row" style={{ gap: 4, flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>{money(l.unit_price, cur)}<LowTag l={l} />{l.price_manual && <span className="pill amber">手改</span>}<PromoTag l={l} />{l.requested_price != null && <span className="pill amber">申请 {money(l.requested_price, cur)}</span>}</span> }] : []),
   ];
 }
 
@@ -117,7 +117,7 @@ export function QuotePanel({ deal, lines, catalog, categories, act, role }) {
 export function CancelModal({ deal, act, onClose }) {
   const [reason, setReason] = useState('客户不要了');
   return (
-    <Modal title={`作废 ${deal.biz_no}`} onClose={onClose}
+    <Modal title={`作废 ${deal.biz_no}`} risk={deal.pick_no ? 'red' : 'yellow'} onClose={onClose}
         footer={<><button type="button" className="btn" onClick={onClose}>不作废</button>
           <button type="button" className="btn primary" onClick={() => act(['picked', 'ordered', 'confirmed', 'reviewed'].includes(deal.status) ? '已作废：请把已拿出的货放回原库位（预占已释放）' : '订单已作废，预占已释放（可在「订单总览 → 已作废」恢复）', `select app.cancel_deal($1,$2)`, [deal.id, reason]).then(onClose, () => {})}>确认作废</button></>}>
         <div className="stack">
@@ -640,7 +640,7 @@ export function NoteModal({ title, label, okText = '确定', danger, onClose, on
 function UnlockModal({ line, onClose, onOk }) {
   const [r, setR] = useState(NOTE_OPTIONS.unlock[0]);
   return (
-    <Modal title={`解锁修改：${line.model} ${line.category}`} onClose={onClose}
+    <Modal title={`解锁修改：${line.model} ${line.category}`} risk="red" onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!r?.trim()} onClick={() => onOk(r)}>解锁</button></>}>
       <div className="stack">
         <div className="hint">改完自动锁回，并记录「谁、何时、从多少改成多少、原因」。「客户不要了」= 数量改为 0，预占释放。已确认的单改完要客户重新确认。</div>
@@ -660,7 +660,7 @@ function PriceModal({ line, cur, onClose, onSave, request }) {
   const needOk = level >= 2 && level < 4;
   const disabled = p === '' || !(N(p) >= 0) || !r?.trim() || (needOk && !ok) || (level === 4 && !['赠品', '样品'].includes(r));
   return (
-    <Modal title={`${request ? '申请改价' : '改价'}：${line.model} ${line.category}`} onClose={onClose}
+    <Modal title={`${request ? '申请改价' : '改价'}：${line.model} ${line.category}`} risk={request ? 'yellow' : 'red'} onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className={`btn ${level >= 3 ? 'danger' : 'primary'}`} disabled={disabled} onClick={() => onSave(N(p), r)}>{request ? '提交申请（等中方批）' : '确认改价'}</button></>}>
       <div className="stack">
         <div className="hint">档位价 <b>{money(line.tier_price, cur)} {cur}</b>。{request ? '价格只有中方能定：你填想要的价和原因，中方批了才生效；批之前这张单不能复制销售单、不能往下走。' : '改价只有中方能做，必须写原因；改后标记「手改」，偏离档位价超过设定比例的单会标「异价单」。'}</div>
@@ -937,7 +937,7 @@ function ShipmentsCard({ deal, lines, shipments, act, role }) {
 function VoidModal({ s, onClose, onOk }) {
   const [r, setR] = useState(NOTE_OPTIONS.void_ship[0]);
   return (
-    <Modal title={`发货失败 / 退回：${s.out_no}`} onClose={onClose}
+    <Modal title={`发货失败 / 退回：${s.out_no}`} risk="red" onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn danger" disabled={!r?.trim()} onClick={() => onOk(r)}>确认撤销这次出库</button></>}>
       <div className="stack">
         <div className="hint">不是客户退货：货没离开我们的控制，不进待检仓、不需要中方审批。撤销后重新约日期再发。</div>
@@ -1068,7 +1068,7 @@ function BadDebtModal({ deal, act, onClose }) {
   const [proof, setProof] = useState('');
   const ok = N(amt) > 0 && N(amt) <= N(deal.due) && reason.trim() && proof;
   return (
-    <Modal title={`坏账核销：${deal.biz_no}`} onClose={onClose}
+    <Modal title={`坏账核销：${deal.biz_no}`} risk="red" onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{!reason.trim() ? '写原因' : !proof ? '传凭证' : `金额 1 – ${money(deal.due, deal.currency)}`}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={() => act(`已核销坏账 ${money(amt, deal.currency)}`, `select app.write_off_bad_debt($1,$2,$3,$4)`, [deal.id, N(amt), reason, proof || null]).then(onClose, () => {})}>确认核销</button></>}>
       <div className="stack">
         <div className="hint">确认这笔钱收不回来才核销。核销后客户总账减少，但记录永久保留（谁、什么时候、多少、为什么），以后客户又付了照常登记收款。</div>
@@ -1082,7 +1082,7 @@ function BadDebtModal({ deal, act, onClose }) {
 function WriteOffModal({ deal, act, onClose }) {
   const [r, setR] = useState(NOTE_OPTIONS.writeoff[0]);
   return (
-    <Modal title={`抹零：${deal.biz_no}`} onClose={onClose}
+    <Modal title={`抹零：${deal.biz_no}`} risk="red" onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!r?.trim()} onClick={() => act('已抹零，本单结清', `select app.write_off($1,$2,$3)`, [deal.id, N(deal.due), r]).then(onClose, () => {})}>确认抹零 {money(deal.due, deal.currency)} {deal.currency}</button></>}>
       <div className="stack"><div className="hint">只限尾差（≤ 100 XOF）；会记入客户流水，客户对账看得到。</div><OptionNote options={NOTE_OPTIONS.writeoff} value={r} onChange={setR} /></div>
     </Modal>

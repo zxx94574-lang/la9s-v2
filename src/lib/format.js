@@ -46,6 +46,8 @@ export function friendlyError(e) {
     [/TASK_BLOCK: (.+)/, (x) => `⛔ ${x[1]}`],
     [/LOSS_BLOCK: (.+)/, (x) => `⛔ ${x[1]}（卖价低于成本）`],
     [/DEBT_BLOCK: (.+)/, null],
+    [/CREDIT_BLOCK: (.+)/, (x) => `⛔ ${x[1]}`],
+    [/QTY_BLOCK: (.+)/, (x) => `⛔ ${x[1]}`],
     [/NEEDS_APPROVAL: (.+)/, null],
     [/CONFLICT: (.+)/, null],
     [/VALIDATION: (.+)/, null],

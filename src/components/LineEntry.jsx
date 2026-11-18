@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 import Grid from './Grid.jsx';
 import ModelPicker, { avail, StockPill } from './ModelPicker.jsx';
 import { Modal, Shared, useApp, useHistory, UndoBar, Bang, lowTip } from './ui.jsx';
+import { call } from '../db/client.js';
 import { money, qty } from '../lib/format.js';
 import { makeResolver, normModel, pasteRows, isQty } from '../lib/resolve.js';
 
@@ -29,7 +30,31 @@ function dist(a, b) {
 
 // 行的生效单价: 中方直接给的价 (unit_price, 手改) 优先, 否则档位价
 // 档位价 (外币单: XOF 档位价 ÷ 单上手填汇率, 两位小数 —— Frank 11-09 190)
-export const tierPrice = (l, tier, fx) => { if (!l.product) return 0; const x = Number(l.product.prices?.[tier] || 0); return fx > 0 ? Math.round((x / fx) * 100) / 100 : x; };
+// 11-18 特价 (促销价 / 清仓价…, 名字中方自己定): 这个客户现在生效的特价, 比档位价低就自动成为单价 (服务器 tier_price 同一规则)
+let PROMOS = {};        // product_id → { price, label }   (当前选中客户)
+let DEAL_PROMOS = {};   // deal_line_id → { price, label } (当前打开的订单)
+export const promoOf = (l) => (l?.product ? PROMOS[l.product.id] || null : null);
+export function usePromos(customerId) {
+  const { role, tick } = useApp(); const [m, setM] = useState({});
+  useEffect(() => { let alive = true;
+    if (!customerId) { PROMOS = {}; setM({}); return undefined; }
+    call(role, `select * from app.customer_promos($1)`, [customerId]).then((rows) => { if (!alive) return; PROMOS = Object.fromEntries(rows.map((r) => [r.product_id, { price: Number(r.price), label: r.label }])); setM(PROMOS); }).catch(() => { if (alive) { PROMOS = {}; setM({}); } });
+    return () => { alive = false; }; }, [customerId, role, tick]);
+  useEffect(() => () => { PROMOS = {}; }, []);
+  return m;
+}
+export function useDealPromos(dealId) {
+  const { role, tick } = useApp(); const [m, setM] = useState({});
+  useEffect(() => { let alive = true;
+    if (!dealId) { DEAL_PROMOS = {}; setM({}); return undefined; }
+    call(role, `select * from app.deal_promos($1)`, [dealId]).then((rows) => { if (!alive) return; DEAL_PROMOS = Object.fromEntries(rows.map((r) => [r.deal_line_id, { price: Number(r.price), label: r.label }])); setM(DEAL_PROMOS); }).catch(() => { if (alive) { DEAL_PROMOS = {}; setM({}); } });
+    return () => { alive = false; }; }, [dealId, role, tick]);
+  useEffect(() => () => { DEAL_PROMOS = {}; }, []);
+  return m;
+}
+// 订单行上的特价小标 (按定义的名字显示)
+export function PromoTag({ l }) { const pm = DEAL_PROMOS[l?.id]; return pm ? <span className="pill blue" title={`${pm.label}：生效期间自动带出的价`}>{pm.label}</span> : null; }
+export const tierPrice = (l, tier, fx) => { if (!l.product) return 0; let x = Number(l.product.prices?.[tier] || 0); const pm = PROMOS[l.product.id]; if (pm && (x <= 0 || pm.price < x)) x = pm.price; return fx > 0 ? Math.round((x / fx) * 100) / 100 : x; };
 export const priceOf = (l, tier, fx) => (Number(l.unit_price) > 0 ? Number(l.unit_price) : tierPrice(l, tier, fx));
 // 总价 / 合计用: 员工申请价显示申请值 (还没批, 以审批结果为准)
 // 价格异常 (Frank 11-09 192b, 只给中方看): 低于成本 → 会亏; 低于 S 档 → 低于底价; 低于本档 → 低于档位
@@ -334,7 +359,7 @@ export default function LineEntry({ id, catalog, categories, tier, lines, setLin
         { key: 'price', label: `单价 ${currency}`, w: 120, value: (l) => (l.product ? priceOf(l, tier, fx) : null),
           render: (l) => (!l.product ? null : cell(l, 'price', (() => { const fl = canPrice ? priceFlag(l, tier, fx) : null; return fl ? <span className={fl === '会亏' ? 'price-low' : 'price-warn'}>{money(shownPrice(l, tier, fx), currency)} <Bang tone={fl === '会亏' ? 'red' : 'amber'}>{lowTip({ fl, px: (fx > 0 ? fx : 1) * (Number(l.req_price) > 0 ? Number(l.req_price) : Number(l.unit_price)), cost: Number(l.product.cost_xof || 0), s: Number(l.product.prices?.S || 0), tier: Number(l.product.prices?.[tier] || 0) }, (v) => `${money(v)} XOF`)}</Bang>{Number(l.req_price) > 0 && <span className="pill amber">申请</span>}</span> : null; })() || (Number(l.req_price) > 0
             ? <span className="amber-t2" title={`员工申请价，等中方审批（档位价 ${money(tierPrice(l, tier, fx), currency)}）`}>{money(l.req_price, currency)} <span className="pill amber">申请 · 待批</span></span>
-            : <span className={Number(l.unit_price) > 0 ? 'amber-t2' : ''} title={Number(l.unit_price) > 0 ? `手改价（档位价 ${money(tierPrice(l, tier, fx), currency)}）` : priceEditable ? '点一下选中，直接打数字改价' : ''}>{money(priceOf(l, tier, fx), currency)}{Number(l.unit_price) > 0 ? <span className="pill amber" style={{ marginLeft: 4 }}>手改</span> : ''}</span>))),
+            : <span className={Number(l.unit_price) > 0 ? 'amber-t2' : ''} title={Number(l.unit_price) > 0 ? `手改价（档位价 ${money(tierPrice(l, tier, fx), currency)}）` : priceEditable ? '点一下选中，直接打数字改价' : ''}>{money(priceOf(l, tier, fx), currency)}{Number(l.unit_price) > 0 ? <span className="pill amber" style={{ marginLeft: 4 }}>手改</span> : (promoOf(l) && tierPrice(l, tier, null) === promoOf(l).price ? <span className="pill blue" style={{ marginLeft: 4 }} title={`${promoOf(l).label}：生效期间自动带出`}>{promoOf(l).label}</span> : '')}</span>))),
           tint: true, ...(priceEditable ? { type: 'number', fill: true } : {}) },   // 282: 需求数量 / 单价 / 总价 三列一个颜色
         { key: 'total', label: '总价', w: 100, tint: true, value: (l) => (l.product ? (Number(l.qty_req) || 0) * shownPrice(l, tier, fx) : null), render: (l) => (l.product ? <b>{money((Number(l.qty_req) || 0) * shownPrice(l, tier, fx), currency)}</b> : null) },
       ] : []),

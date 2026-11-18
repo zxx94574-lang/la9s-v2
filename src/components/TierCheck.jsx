@@ -63,7 +63,7 @@ function TierModal({ c, onClose }) {
   const [tier, setTier] = useState(c.tier || 'REPAIR'); const [mode, setMode] = useState(''); const [months, setMonths] = useState('2'); const [note, setNote] = useState('');
   const go = async () => { try { await call(role, `select app.confirm_customer_tier($1,$2,$3,$4,$5)`, [c.id, tier, mode, Number(months) || 2, note || null]); toast(mode === 'trial' ? `已定为 ${TIERS[tier]}，${months} 个月后再提醒` : `已确认 ${TIERS[tier]}，以后不再提醒`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
-    <Modal title={`定档位 · ${c.name}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!mode && <span className="why">选 立即确认 / 先试一段时间</span>}<button type="button" className="btn primary" disabled={!mode} onClick={go}>确定</button></>}>
+    <Modal title={`定档位 · ${c.name}`} risk="red" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!mode && <span className="why">选 立即确认 / 先试一段时间</span>}<button type="button" className="btn primary" disabled={!mode} onClick={go}>确定</button></>}>
       <div className="stack">
         <div className="kv">
           <div><div className="k">最近 3 个月月均提货</div><div className="v">{qty(c.monthly)} 片</div></div>

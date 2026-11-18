@@ -1224,3 +1224,8 @@ button.in.choice-btn:hover, button.in.choice-btn[aria-expanded="true"] { border-
 .opt-gear:hover { opacity: 1; background: var(--brand-soft); color: var(--brand); }
 .opt-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; background: #fff; border: 1px solid var(--line-2); border-radius: 8px; padding: 5px 8px; }
 .opt-row .grip { color: var(--muted); cursor: grab; }
+
+/* 11-18 变动两级确认: 弹窗顶上一条 (红 = 大变动会通知中方, 黄 = 小变动) */
+.risk-strip { padding: 7px 16px; font-size: 12.5px; font-weight: 600; }
+.risk-strip.red { background: var(--red-bg, #fdecec); color: var(--red, #c0392b); }
+.risk-strip.yellow { background: var(--amber-bg); color: var(--amber); }

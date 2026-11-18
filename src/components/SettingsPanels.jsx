@@ -124,7 +124,7 @@ export function PermPanel() {
 
 // 11-12 Frank: 凡是涨跌 / 时限 / 单价这类线, 都放在这里随时调 (改了立即生效)
 const RULES = [
-  ['sales_comm', 'per_piece', '销售提成：每片多少钱（整单付清才算；0 = 还没定）', 0, 'XOF / 片'],
+  ['sales_comm', 'per_piece', '销售提成：每片多少钱（整单付清才算，自动带进工资单）', 17, 'XOF / 片'],
   ['check_rules', 'qty', '复检必抽检：一行数量超过多少片', 100, '片'],
   ['check_rules', 'price', '复检必抽检：单价超过多少', 5000, 'XOF'],
   ['check_rules', 'total', '复检必抽检：一行总价超过多少', 500000, 'XOF'],
@@ -140,7 +140,7 @@ const RULES = [
 ];
 export function RulesPanel() {
   const { org, role, toast, refresh } = useApp();
-  const { data } = useData(() => q(`select key, value from app.org_settings where org_id = $1 and key = any($2)`, [org, [...new Set(RULES.map((r) => r[0])), 'freight_rules', 'rep_debt_rules', 'loss_rules']]), [org]);
+  const { data } = useData(() => q(`select key, value from app.org_settings where org_id = $1 and key = any($2)`, [org, [...new Set(RULES.map((r) => r[0])), 'freight_rules', 'rep_debt_rules', 'loss_rules', 'credit_gate']]), [org]);
   const [draft, setDraft] = useState({});
   if (!data) return null;
   const cur = (k, f, d) => draft[k + f] ?? String(data.find((x) => x.key === k)?.value?.[f] ?? d);
@@ -154,6 +154,8 @@ export function RulesPanel() {
             <input className="in" style={{ width: 90 }} inputMode="numeric" value={cur(k, f, d)} onChange={(e) => setDraft({ ...draft, [k + f]: e.target.value.replace(/[^\d.]/g, '') })} onBlur={(e) => { if (draft[k + f] != null && Number(e.target.value) > 0) save(k, f, e.target.value); }} /><span className="small muted" style={{ width: 40 }}>{unit}</span></div>))}
         <label className="row" style={{ gap: 10, flexWrap: 'wrap' }}><span style={{ minWidth: 300, flex: '1 1 300px' }}>销售员名下有隔天没收回的欠款 → 他名下所有客户暂不出货（中方可对单放行）</span>
           <input type="checkbox" checked={data.find((x) => x.key === 'rep_debt_rules')?.value?.on !== false} onChange={async (e) => { try { await call(role, `select app.set_org_setting($1,$2,$3)`, [org, 'rep_debt_rules', JSON.stringify({ on: e.target.checked })]); toast(e.target.checked ? '已打开' : '已关掉'); refresh(); } catch (er) { toast(friendlyError(er), 'err'); } }} /><span className="small muted">开着</span></label>
+        <label className="row" style={{ gap: 10, flexWrap: 'wrap' }}><span style={{ minWidth: 300, flex: '1 1 300px' }}>出库那一刻客户超欠款上限 / 超账期 → 不能出库，中方在订单上放行 + 写原因才行</span>
+          <input type="checkbox" checked={data.find((x) => x.key === 'credit_gate')?.value?.on !== false} onChange={async (e) => { try { await call(role, `select app.set_org_setting($1,$2,$3)`, [org, 'credit_gate', JSON.stringify({ on: e.target.checked })]); toast(e.target.checked ? '已打开' : '已关掉'); refresh(); } catch (er) { toast(friendlyError(er), 'err'); } }} /><span className="small muted">开着</span></label>
         <label className="row" style={{ gap: 10, flexWrap: 'wrap' }}><span style={{ minWidth: 300, flex: '1 1 300px' }}>卖价低于到岸成本 → 这张单推不下去，中方批准 + 写原因才放行（亏钱拦截）</span>
           <input type="checkbox" checked={data.find((x) => x.key === 'loss_rules')?.value?.on !== false} onChange={async (e) => { try { await call(role, `select app.set_org_setting($1,$2,$3)`, [org, 'loss_rules', JSON.stringify({ ...(data.find((x) => x.key === 'loss_rules')?.value || {}), on: e.target.checked })]); toast(e.target.checked ? '已打开' : '已关掉'); refresh(); } catch (er) { toast(friendlyError(er), 'err'); } }} /><span className="small muted">开着</span></label>
         <label className="row" style={{ gap: 10, flexWrap: 'wrap' }}><span style={{ minWidth: 300, flex: '1 1 300px' }}>有型号没有成本（算不出亏不亏）→ 也要中方批才能往下走。默认关：没成本的编码还多的时候先别开</span>

@@ -7,7 +7,7 @@ import { useApp, useData, Pill, Info, Thumb } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { CustLink, DealLink, EmpLink } from './Archives.jsx';
 import { NoteModal } from '../pages/DealPanels.jsx';
-import { EVENT_LABELS, STATUS, ROLES } from '../lib/domain.js';
+import { EVENT_LABELS, STATUS, ROLES, TIERS } from '../lib/domain.js';
 import { money, qty, dt, friendlyError } from '../lib/format.js';
 
 export function MoneyUrgent() {
@@ -91,11 +91,16 @@ export function noticeText(n) {
     case 'payment_appeal': return `付款申诉：${d.note || ''}`;
     case 'cancelled': return `找货之后取消订单${d.reason ? `（${d.reason}）` : ''}`;
     case 'partial_reason': return `只发了一部分：${d.reason || ''}`;
+    case 'written_off': return `抹零 ${money(d.amount)}${d.reason ? `（${d.reason}）` : ''}`;
+    case 'bad_debt_written_off': return `坏账核销 ${money(d.amount)}${d.reason ? `（${d.reason}）` : ''}`;
+    case 'gate_released': return `中方放行出库（${d.kind === 'qty' ? '数量超过客户确认的' : '超欠款上限 / 账期'}）：${d.note || ''}`;
+    case 'tier_changed': return `${d.customer || '客户'} 档位 ${TIERS[d.from] || d.from} → ${TIERS[d.to] || d.to}`;
     case 'dup_photo': return `重复照片：「${d.where || '凭证'}」用的图已经用在 ${d.uses || '别处'}`;
     default: return EVENT_LABELS[n.kind] || n.kind;
   }
 }
-const KIND_TONE = { price_set: 'red', price_requested: 'red', price_decided: 'red', price_adjusted: 'red', shipment_voided: 'red', receipt_voided: 'red', dup_photo: 'amber' };
+// 11-18 (Frank 第 7 点): 大变动 = 红 (撤销出库 / 撤销收款 / 确认后改数量改价 / 找货后作废 / 抹零核销 / 改档位); 其余黄
+const KIND_TONE = { qty_changed: 'red', cancelled: 'red', written_off: 'red', bad_debt_written_off: 'red', tier_changed: 'red', quote_edited: 'red', price_set: 'red', price_requested: 'red', price_decided: 'red', price_adjusted: 'red', shipment_voided: 'red', receipt_voided: 'red', dup_photo: 'amber' };
 
 export function ChangeNotices() {
   const { org, role, toast, refresh } = useApp();
@@ -103,19 +108,19 @@ export function ChangeNotices() {
   const { data } = useData(() => q(`select n.id, n.kind, n.detail, n.at, n.deal_id, d.biz_no, c.id as customer_id, c.name as customer_name,
       coalesce(e.short_name, e.full_name) as by_name, to_jsonb(m.roles::text[]) as roles,
       (select coalesce(p.model, l.req_model) from app.deal_lines l left join app.products p on p.id = l.product_id where l.id::text = n.detail->>'line') as model
-    from app.change_notices n left join app.deals d on d.id = n.deal_id left join app.customers c on c.id = d.customer_id
+    from app.change_notices n left join app.deals d on d.id = n.deal_id left join app.customers c on c.id = coalesce(d.customer_id, nullif(n.detail->>'customer_id', '')::uuid)
     left join app.members m on m.user_id = n.by_user left join app.employees e on e.id = m.employee_id
     where n.org_id = $1 and n.read_at is null order by n.at desc limit 200`, [org]), [org]);
   if (role !== 'admin' || !data?.length) return null;
   const ack = async (ids) => { try { await call(role, `select app.ack_change_notices($1)`, [ids]); toast(`已阅 ${ids.length} 条`); setSel(new Set()); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
     <div className="card" style={{ marginBottom: 12 }}>
-      <div className="card-h"><h2>变更通知</h2><Pill tone="amber">{data.length} 条没看</Pill>
+      <div className="card-h"><h2>变更通知</h2>{data.some((n) => KIND_TONE[n.kind] === 'red') && <Pill tone="red">{data.filter((n) => KIND_TONE[n.kind] === 'red').length} 条大变动</Pill>}<Pill tone="amber">{data.length} 条没看</Pill>
         <Info>不按正常流程走的事都记在这里：确认后改数量、改价和审批结果、撤回、撤销出库 / 收款、拆单、重复照片…… 数量改动不用审批，只通知；看过点「已阅」。可以拿这些去跟客户、员工对。</Info>
         <span className="grow" />
         <button type="button" className="btn sm" disabled={!sel.size} onClick={() => ack([...sel])}>已阅选中的 {sel.size} 条</button>
         <button type="button" className="btn sm" onClick={() => ack(data.map((n) => n.id))}>全部已阅</button></div>
-      <Grid id="todo-notices" noTools rows={data} selectable={{ selected: sel, onChange: setSel }} columns={[
+      <Grid id="todo-notices" noTools rows={[...data].sort((a, b) => (KIND_TONE[b.kind] === 'red') - (KIND_TONE[a.kind] === 'red'))} selectable={{ selected: sel, onChange: setSel }} columns={[
         { key: 'at', label: '什么时候', w: 120, render: (n) => dt(n.at) },
         { key: 'by_name', label: '谁', w: 110, value: (n) => n.by_name || '', render: (n) => <>{n.by_name || '—'} <span className="small muted">{(n.roles || []).map((r) => ROLES[r]?.label || r).join(' / ')}</span></> },
         { key: 'biz_no', label: '订单', w: 130, render: (n) => (n.deal_id ? <DealLink id={n.deal_id} no={n.biz_no} /> : '—') },

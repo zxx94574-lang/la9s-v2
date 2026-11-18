@@ -9,7 +9,7 @@ export default function RulesPage() {
   return (
     <div className="stack">
       <div className="pagehead"><div><div className="eyebrow">Règles</div><h1>规则参数 <Info>每一条都是「数字或开关 + 一句话说明」。改一格存一格，立即生效；谁在什么时候把什么从多少改成多少，都记在操作记录里。清仓价表在「物料与定价」页底部。</Info></h1></div>
-        <span className="grow" /><button type="button" className="btn sm" onClick={() => go('pricing')}>清仓价表 ›</button></div>
+        <span className="grow" /><button type="button" className="btn sm" onClick={() => go('pricing')}>特价表（促销价）›</button></div>
       <RulesPanel />
     </div>);
 }

@@ -8,7 +8,7 @@ import { useApp, useData, DatePicker, Modal, SortList, RateInput, Info, PageGear
 import ProductDrawer from '../components/ProductDrawer.jsx';
 import { CustomerDrawer } from './Customers.jsx';
 import { STEPS } from '../lib/domain.js';
-import LineEntry, { lineTotals, finalizeLines, tierPrice } from '../components/LineEntry.jsx';
+import LineEntry, { lineTotals, finalizeLines, tierPrice, usePromos } from '../components/LineEntry.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { can, whoCan, seesPriceList } from '../lib/domain.js';
 import { LayoutGrid, setLayoutEdit, useLayoutEdit } from '../components/Layout.jsx';
@@ -75,6 +75,7 @@ export default function QuoteNew() {
 
   // 上次成交价 (11-14): 这个客户以前谈好的价, 和现在行上的价不一样就提示
   const lastPrices = useLastPrices(customer || null);
+  usePromos(customer || null);     // 这个客户生效的特价 (促销价…) → 自动成为单价
   const [histOpen, setHistOpen] = useState(false);
   if (!data) return <div className="empty">加载中…</div>;
   const cust = data.customers.find((c) => c.id === customer);
@@ -103,7 +104,7 @@ export default function QuoteNew() {
     if (zero.length) { setCellErrs(Object.fromEntries(zero.map((l) => [l.key, { qty_req: '数量不能为 0' }]))); return toast(`${zero.length} 行数量为 0（已标红）：填上数量，或选中行删掉`, 'err'); }
     // 本地先查 0 价: 有编码、没手给价、档位价为 0 → 直接标红, 不用等后端
     if (tier) {
-      const noPrice = fin.lines.filter((l) => l.product && !(Number(l.unit_price) > 0) && !(Number(l.req_price) > 0) && !(Number(l.product.prices?.[tier]) > 0));
+      const noPrice = fin.lines.filter((l) => l.product && !(Number(l.unit_price) > 0) && !(Number(l.req_price) > 0) && !(tierPrice(l, tier, null) > 0));
       if (noPrice.length) { setCellErrs(Object.fromEntries(noPrice.map((l) => [l.key, { price: `「${tier}」档没有价格` }]))); return toast(`${noPrice.length} 个型号在「${tier}」档没有价格（已标红）：${canPrice ? '在单价格子里直接给价，或' : ''}到「物料与定价」填价`, 'err'); }
     }
     setCellErrs(null);

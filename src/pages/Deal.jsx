@@ -8,6 +8,8 @@ import { AllowUnpricedModal, PricePendingBar, canAllowUnpriced } from '../compon
 import { TaskModal, DealTasks } from '../components/Tasks.jsx';
 import { useDealMargin, DealMarginChip, DealMarginCard } from '../components/Margin.jsx';
 import { DealLastPrice } from '../components/LastPrice.jsx';
+import { usePromos, useDealPromos } from '../components/LineEntry.jsx';
+import { ShipGates } from '../components/ShipGates.jsx';
 import { dealLight, stuckOf } from '../lib/domain.js';
 import React, { useEffect, useRef, useState } from 'react';
 const N = (v) => Number(v) || 0;
@@ -44,6 +46,7 @@ export default function Deal({ id }) {
   const [revert, setRevert] = useState(false);
   const [custOpen, setCustOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false); const [discOpen, setDiscOpen] = useState(false); const [unpricedOpen, setUnpricedOpen] = useState(false); const [taskOpen, setTaskOpen] = useState(false); const [holdOpen, setHoldOpen] = useState(null);
+  useDealPromos(id);
   const [logOpen, setLogOpen] = useState(false);      // 减法巡检 C3: 操作记录默认收起
   const [mOpen, setMOpen] = useState(null);           // 减法巡检 C2: 毛利默认只显示一个小块; null = 跟着「亏没亏」自动定
   const { data, error } = useData(async () => {
@@ -63,6 +66,7 @@ export default function Deal({ id }) {
     return { deal, lines, events, shipments, returns, receipts, employees, catalog, categories, credit, others, discs };
   }, [id]);
 
+  usePromos(data?.deal?.customer_id || null);
   // 下推成功 (状态变了) → 回到当前这一步, 不停在刚才点开看的那一步
   const status = data?.deal?.status;
   useEffect(() => { setView(null); }, [status]);
@@ -198,6 +202,7 @@ export default function Deal({ id }) {
       {!cancelled && <PricePendingBar deal={deal} lines={data.lines} />}
       <DealTasks deal={deal} />
       {!cancelled && <LossGate deal={deal} margin={margin} />}
+      {!cancelled && !['shipped'].includes(deal.status) && <ShipGates deal={deal} />}
       {!cancelled && <LossReview deal={deal} margin={margin} />}
       {!cancelled && dealPriceVisible(role, deal) && ['quote', 'so'].includes(curKey) && <DealLastPrice deal={deal} lines={data.lines} />}
       {(deal.split_from || deal.split_children?.length > 0) && (
@@ -285,7 +290,7 @@ export default function Deal({ id }) {
 function RevertModal({ deal, act, onClose, onDone }) {
   const [reason, setReason] = useState(NOTE_OPTIONS.revert[0]);
   return (
-    <Modal title="撤回到上一步" onClose={onClose}
+    <Modal title="撤回到上一步" risk="yellow" onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>不撤回</button>
         <button type="button" className="btn primary" disabled={!reason?.trim()} onClick={() => act('已撤回，可以修改后重新下推', `select app.revert_step($1,$2)`, [deal.id, reason]).then(onDone, () => {})}>确认撤回</button></>}>
       <div className="stack">

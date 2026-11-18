@@ -23,7 +23,8 @@ export function useToasts() {
 }
 
 // ── modal ──
-export function Modal({ title, onClose, children, footer, wide }) {
+// risk (11-18 Frank 第 7 点, 变动两级确认): 'red' = 大变动 (动钱 / 动库存 / 改客户已确认的东西) → 确认后自动通知中方; 'yellow' = 小变动, 再核对一次
+export function Modal({ title, onClose, children, footer, wide, risk }) {
   useEffect(() => {
     const k = (e) => e.key === 'Escape' && onClose?.();
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
@@ -32,6 +33,7 @@ export function Modal({ title, onClose, children, footer, wide }) {
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-label={title}>
         <div className="modal-h"><h2>{title}</h2><button className="close-x" onClick={onClose} aria-label="关闭">×</button></div>
+        {risk && <div className={`risk-strip ${risk}`}>{risk === 'red' ? '大变动：确认之后会自动通知中方（红色事件），留在记录里。' : '小变动：确认前再核对一遍。'}</div>}
         <div className="modal-b">{children}</div>
         {footer && <div className="modal-f">{footer}</div>}
       </div>

@@ -239,19 +239,20 @@ function Payroll({ staff, opts }) {
   const [attOf, setAttOf] = useState(null);         // 点打卡情况 → 该员工本月打卡明细
   const [ack, setAck] = useState(false);
   const { data } = useData(async () => {
-    const [months, head, lines, comm, rate] = await Promise.all([q(Q.payrollMonths, [org]), q(Q.payrollHeader, [org, month + '-01']), q(Q.payroll, [org, month + '-01']),
+    const [months, head, lines, comm, rate, srate] = await Promise.all([q(Q.payrollMonths, [org]), q(Q.payrollHeader, [org, month + '-01']), q(Q.payroll, [org, month + '-01']),
       q(`select employee_id, count(*) filter (where not voided)::int as ok_n, coalesce(sum(pieces) filter (where not voided), 0)::int as ok_pcs, count(*) filter (where voided)::int as void_n, coalesce(sum(pieces) filter (where voided), 0)::int as void_pcs
          from app.v_wh_commission where org_id = $1 and month = $2 group by employee_id`, [org, month]).catch(() => []),
-      q(`select value from app.org_settings where org_id = $1 and key = 'wh_commission'`, [org]).catch(() => [])]);
+      q(`select value from app.org_settings where org_id = $1 and key = 'wh_commission'`, [org]).catch(() => []),
+      q(`select value from app.org_settings where org_id = $1 and key = 'sales_comm'`, [org]).catch(() => [])]);
     // 仓库提成 (Frank 11-12): 正确出货每片 N XOF (设置里可调, 默认 5); 出错被记责任的那张单整单提成取消
-    return { months, head: head[0] || null, lines, comm: Object.fromEntries(comm.map((c) => [c.employee_id, c])), rate: Number(rate[0]?.value?.per_piece ?? 5) };
+    return { months, head: head[0] || null, lines, comm: Object.fromEntries(comm.map((c) => [c.employee_id, c])), rate: Number(rate[0]?.value?.per_piece ?? 5), srate: Number(srate[0]?.value?.per_piece ?? 17) };
   }, [org, month]);
   const byEmp = useMemo(() => Object.fromEntries(staff.map((e) => [e.id, e])), [staff]);
   if (!data) return <div className="empty">加载中…</div>;
   const h = data.head; const draft = h && h.status !== 'paid'; const admin = role === 'admin';
   const run = async (msg, sql, p) => { try { await call(role, sql, p); toast(msg); refresh(); return true; } catch (e) { toast(friendlyError(e), 'err'); return false; } };
   const fixe = (l) => Math.round(Math.min(N(l.contract_salary), N(l.contract_salary) / (h?.days_base || 25) * N(l.days_worked)));
-  const net = (l) => fixe(l) + N(l.allowance) + N(l.incentive) + N(l.prime_team) + N(l.wh_comm) - N(l.deduction);
+  const net = (l) => fixe(l) + N(l.allowance) + N(l.incentive) + N(l.prime_team) + N(l.wh_comm) + N(l.sales_comm) - N(l.deduction);
   const cost = (l) => net(l) + N(l.cnps);
   const saveLine = async (emp, patch, meta) => { try { await call(role, `select app.payroll_set_line($1,$2,$3,$4)`, [org, month + '-01', emp, JSON.stringify(patch)]); if (!meta?.batch || meta.last) { toast(meta?.batch ? `已保存 ${meta.total} 格` : '已保存'); refresh(); } } catch (e) { toast(friendlyError(e), 'err'); } };
   const editNum = (k) => (l) => (draft ? { type: 'number', value: String(N(l[k])), onChange: (v, m) => saveLine(l.employee_id, { [k]: v.replace(/[^\d.]/g, '') || '0' }, m) } : null);
@@ -277,6 +278,12 @@ function Payroll({ staff, opts }) {
       render: (l) => { const c = data.comm[l.employee_id]; const a = dev(l.wh_comm, l.wh_comm_auto);
         return <span className="row" style={{ gap: 6, justifyContent: 'flex-end' }} title={c ? `自动算：正确出货 ${c.ok_n} 张单 ${c.ok_pcs} 片 × ${data.rate} XOF；出错取消 ${c.void_n} 张单 ${c.void_pcs} 片。自动数只是依据，核对「时效与准确率」后可以手改。` : '这个月没有他复检 / 找货的出库'}>
           {N(l.wh_comm) || l.wh_comm_auto != null ? money(l.wh_comm) : ''}{c && <span className="small muted">{c.ok_pcs} 片</span>}{a != null && <Pill tone="amber">自动 {money(a)}</Pill>}</span>; } },
+    // 11-18 Frank: 销售提成每片 17 XOF, 整单付清才算; 自动带出 + 可手改 (同仓库提成). 明细看「时效与准确率 → 销售提成」.
+    { key: 'sales_comm', label: '销售提成', w: 150, type: 'money', value: (l) => N(l.sales_comm),
+      edit: (l) => (draft ? { type: 'number', value: String(N(l.sales_comm)), onChange: (v) => run('已保存', `select app.payroll_set_sales_comm($1,$2,$3,$4)`, [org, month + '-01', l.employee_id, Number(String(v).replace(/[^\d.]/g, '') || 0)]) } : null),
+      render: (l) => { const a = dev(l.sales_comm, l.sales_comm_auto);
+        return <span className="row" style={{ gap: 6, justifyContent: 'flex-end' }} title={`自动算：这个月整单付清的片数 × ${data.srate} XOF（按订单上的归属销售员；FOB 不算）。自动数只是依据，可以手改。`}>
+          {N(l.sales_comm) || N(l.sales_comm_auto) ? money(l.sales_comm) : ''}{N(l.sales_comm_auto) > 0 && <span className="small muted">{Math.round(N(l.sales_comm_auto) / (data.srate || 1))} 片</span>}{a != null && <Pill tone="amber">自动 {money(a)}</Pill>}</span>; } },
     { key: 'prime_team', label: '团队奖金', w: 90, type: 'money', value: (l) => N(l.prime_team), edit: editNum('prime_team'), render: (l) => money(l.prime_team) },
     { key: 'cnps', label: '社保（公司交）', w: 110, type: 'money', value: (l) => N(l.cnps), edit: editNum('cnps'), render: (l) => money(l.cnps) },
     { key: 'deduction', label: '扣款', w: 90, type: 'money', value: (l) => N(l.deduction), edit: editNum('deduction'), render: (l) => money(l.deduction) },
@@ -325,7 +332,7 @@ function Payroll({ staff, opts }) {
       )}
       {!h ? (
         <div className="card card-b row" style={{ gap: 10 }}>{label}还没有工资单。<span className="grow" />
-          {(admin || role === 'sales_manager') && <button type="button" className="btn primary" onClick={() => run(`${label}工资单已建好，在职员工都加进来了`, `select app.payroll_open($1,$2)`, [org, month + '-01'])}>建 {label}工资单</button>}</div>
+          {(admin || role === 'sales_manager') && <button type="button" className="btn primary" onClick={async () => { if (await run(`${label}工资单已建好，在职员工都加进来了，提成已按记录带出`, `select app.payroll_open($1,$2)`, [org, month + '-01'])) { try { await call(role, `select app.payroll_wh_comm($1,$2)`, [org, month + '-01']); await call(role, `select app.payroll_sales_comm($1,$2)`, [org, month + '-01']); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } } }}>建 {label}工资单</button>}</div>
       ) : (
         <>
           {h.reopen_count > 0 && h.status !== 'paid' && <div className="banner warn">⚠ 这个月之前已经「确认发放」过 {h.reopen_count} 次（最近一次 {dDate(h.last_confirmed_at)}，撤回原因：{h.last_reopen_reason}）。再次确认前先核实钱有没有付出去，别发两次。</div>}
@@ -344,6 +351,7 @@ function Payroll({ staff, opts }) {
               <select className="in" style={{ maxWidth: 160 }} value={dept} onChange={(e) => setDept(e.target.value)}><option value="">全部部门</option>{opts.departments.map((d) => <option key={d.v} value={d.v}>{d.l}</option>)}</select>
               {draft && selRows.length > 0 && <button type="button" className="btn sm" onClick={dropSel}>从本月去掉 {new Set(selRows.map((l) => l.employee_id)).size} 人</button>}
               {draft && <button type="button" className="btn sm" title={`按这个月的出库记录重算仓库提成（正确出货每片 ${data.rate} XOF，出错的单取消）；手改过的不覆盖`} onClick={() => run('仓库提成已按出库记录重算（手改过的没动）', `select app.payroll_wh_comm($1,$2)`, [org, month + '-01'])}>重算仓库提成</button>}
+              {draft && <button type="button" className="btn sm" title={`按这个月付清的订单重算销售提成（每片 ${data.srate} XOF，整单付清才算）；手改过的不覆盖`} onClick={() => run('销售提成已按付清的订单重算（手改过的没动）', `select app.payroll_sales_comm($1,$2)`, [org, month + '-01'])}>重算销售提成</button>}
               {draft && <button type="button" className="btn sm" onClick={() => run('已把新入职的人加进来（已有的行不动）', `select app.payroll_open($1,$2)`, [org, month + '-01'])}>加入新员工</button>}
               {draft && (selRows.length > 0
                 ? <button type="button" className="btn sm" title="只重算选中的人，按打卡天数覆盖" onClick={() => run(`已按打卡重算选中的 ${new Set(selRows.map((l) => l.employee_id)).size} 人`, `select app.payroll_refresh_auto($1,$2,$3)`, [org, month + '-01', [...new Set(selRows.map((l) => l.employee_id))]])}>按打卡重算（选中 {new Set(selRows.map((l) => l.employee_id)).size} 人）</button>
@@ -427,7 +435,7 @@ function AttendanceDrawer({ line, month, draft, onClose, onApply }) {
 function UnconfirmModal({ label, onClose, onGo }) {
   const [reason, setReason] = useState('');
   return (
-    <Modal title={`撤回 ${label}的确认发放`} onClose={onClose}
+    <Modal title={`撤回 ${label}的确认发放`} risk="red" onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={reason.trim().length < 2} onClick={() => onGo(reason.trim())}>撤回确认</button></>}>
       <div className="stack">
         <div className="banner warn small">撤回只是让这个月回到可改状态，<b>钱有没有付出去系统不知道</b>。撤回会留记录，再次确认时会提醒你核实，避免发两次。</div>

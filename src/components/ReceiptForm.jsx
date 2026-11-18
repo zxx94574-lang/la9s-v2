@@ -273,7 +273,7 @@ export function VoidReceiptModal({ rc, onClose }) {
     catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
   };
   return (
-    <Modal title={`撤销收款 ${rc.rcv_no}`} onClose={onClose}
+    <Modal title={`撤销收款 ${rc.rcv_no}`} risk="red" onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>不撤了</button><span className="grow" /><button type="button" className="btn danger" disabled={busy || !why.trim()} onClick={go}>确认撤销 {money(rc.amount, rc.currency)} {rc.currency}</button></>}>
       <div className="stack">
         <div className="hint">撤销后：这笔钱冲到各单的金额全部收回、客户总账加回去、公户认领退回「待认领」。收款单不删，标「已撤销」留记录。撤完在下面重新登记正确的金额。</div>

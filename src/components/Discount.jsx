@@ -22,7 +22,7 @@ export function DiscountModal({ deal, lines, onClose }) {
   const run = async (sql, params, msg) => { setBusy(true); try { await call(role, sql, params); toast(msg); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); } };
   const reconfirm = ['confirmed', 'reviewed'].includes(deal.status);
   if (has) return (
-    <Modal title="整单折扣" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>关闭</button><button type="button" className="btn danger" disabled={busy} onClick={() => (note.trim() ? run(`select app.undo_deal_discount($1,$2)`, [deal.id, note.trim()], '已撤销折扣，单价回到折扣前') : toast('写撤销原因', 'err'))}>撤销这次折扣</button></>}>
+    <Modal title="整单折扣" risk="red" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>关闭</button><button type="button" className="btn danger" disabled={busy} onClick={() => (note.trim() ? run(`select app.undo_deal_discount($1,$2)`, [deal.id, note.trim()], '已撤销折扣，单价回到折扣前') : toast('写撤销原因', 'err'))}>撤销这次折扣</button></>}>
       <div className="stack" style={{ gap: 8 }}>
         <div>这张单已经打过整单折扣：<b>−{money(deal.discount_amount, deal.currency)}</b>，谈好的总价 <b>{money(deal.discount_target, deal.currency)}</b>。原因：{deal.discount_note}</div>
         <FRow label="撤销原因" req><input className="in" style={{ flex: '1 1 240px', minWidth: 0 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="为什么撤销" /></FRow>
