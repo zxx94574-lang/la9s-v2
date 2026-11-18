@@ -8,7 +8,7 @@ import { toBlob } from 'html-to-image';
 import { money, qty, dDate, dt, today } from '../lib/format.js';
 import { balanceWords } from '../lib/domain.js';
 import { t } from '../lib/i18n.js';
-import { useApp, useData, Info } from './ui.jsx';
+import { useApp, useData, Info, Assumed } from './ui.jsx';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
 
@@ -112,6 +112,13 @@ function BalanceSheet({ balance: b, deal }) {
           <div><div className="k">{t('累计已付')}</div><div className="v">{money(b.total_paid, cur)}</div></div>
           <div><div className="k">{t('累计退货')}</div><div className="v">{money(b.total_returned, cur)}</div></div>
         </div>
+        {b.total_qty != null && <div className="bnote" style={{ marginTop: 8 }}>{t('累计购买数量')} <b>{qty(b.total_qty)}</b> {t('件')}</div>}
+        {/* 11-18 Frank: 最新余额 = 之前的老账 + 这张单的新账 —— 让客户一眼看明白这个数是怎么来的 */}
+        {has && <div className="beq">
+          <div><div className="k">{t('之前的老账')}</div><div className="v">{money(N(b.balance) - N(deal.due), cur)}</div></div><span className="op">＋</span>
+          <div><div className="k">{t('本单新账')}</div><div className="v">{money(deal.due, cur)}</div></div><span className="op">＝</span>
+          <div><div className="k">{t('最新余额')}</div><div className={`v ${N(b.balance) > 0 ? 'red' : 'green'}`}>{money(b.balance, cur)}</div></div>
+        </div>}
         <div className={`bbig ${w.tone}`}>
           <div className="k">{t(w.label === '预付' ? '当前客户无欠款，此为预付' : w.label)}</div>
           {w.amount > 0 && <div className="v">{money(w.amount, cur)} <small>{cur}</small></div>}
@@ -260,7 +267,7 @@ export function BalancePreview({ customerId, currency = 'XOF', deal, title = '�
   if (!data?.b) return <div className="card card-b muted small">对账单生成中…</div>;
   return (
     <div className="card">
-      <div className="card-h"><h2>{title} <Info>下面就是发给客户的那张图，实时更新</Info></h2>
+      <div className="card-h"><h2>{title} <Info>下面就是发给客户的那张图，实时更新</Info><Assumed>11-18 按你说的加了两样：「累计购买数量」和「之前的老账 ＋ 本单新账 ＝ 最新余额」。「本单新账」= 这张单还没付的部分（已经付的不算进新账）；老账是负数 = 客户之前有预付。这两点是我的理解，不对告诉我。</Assumed></h2>
         <div className="row" style={{ gap: 6 }}>{extra}<DocActions kind="balance" balance={data.b} deal={data.d} copyLabel="复制 Balance 图片（发客户群）" primary="copy" /></div></div>
       <div className="card-b doc-preview"><div className="doc-preview-in"><DocSheet kind="balance" balance={data.b} deal={data.d} /></div></div>
     </div>

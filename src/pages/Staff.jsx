@@ -8,11 +8,11 @@ import React, { useMemo, useRef, useState } from 'react';
 import AttCalendar from '../components/AttCalendar.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop , PhoneInput, phoneValid, Choice } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop , PhoneInput, phoneValid, Choice, Info, Assumed, FRow } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { ROLE_LABELS } from '../lib/domain.js';
 import { staffOptions, optLabel, SYS_ROLES } from '../lib/staffOptions.js';
-import { money, today, ymd, dDate, friendlyError } from '../lib/format.js';
+import { money, today, ymd, dDate, dt, friendlyError } from '../lib/format.js';
 import { saveFile } from '../lib/saveFile.js';
 
 const N = (v) => Number(v || 0);
@@ -214,10 +214,37 @@ export function EmpModal({ e, opts, onClose }) {
             </div>))}
         </div>
       </div>
+      {e.id && role === 'admin' && <AccountBlock empId={e.id} empNo={e.emp_no} active={e.active !== false} />}
       {e.id && role === 'admin' && <div style={{ marginTop: 12 }}><HistoryBlock hist={hist} title="修改记录" /></div>}
       {confirm && <ConfirmEdit c={confirm} title="确认修改员工档案" onBack={() => setConfirm(null)} onSave={(r) => go(r)} />}
     </Modal>
   );
+}
+
+// 11-18 (Frank 第 13 点): 工号 = 登录账号. 有工号就自动有账号位置, 默认锁住; 密码中方在这里手动输; 设了才能解锁. 只中方看得到这一块.
+function AccountBlock({ empId, empNo, active }) {
+  const { role, toast, refresh, tick } = useApp();
+  const [pw, setPw] = useState(''); const [show, setShow] = useState(false); const [busy, setBusy] = useState(false);
+  const { data } = useData(() => call(role, `select * from app.v_staff_accounts where employee_id = $1`, [empId]), [empId, tick, role]);
+  if (!data) return null;
+  const a = data[0];
+  const run = async (msg, sql, p) => { setBusy(true); try { await call(role, sql, p); toast(msg); setPw(''); refresh(); } catch (er) { toast(friendlyError(er), 'err'); } finally { setBusy(false); } };
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <div className="card-h"><h2>登录账号</h2>{!a ? <Pill tone="gray">没有工号 = 没有账号</Pill> : a.locked ? <Pill tone="red">锁着</Pill> : <Pill tone="green">已开通</Pill>}
+        <Info>工号就是登录账号。填了工号，系统自动留一个账号位置，默认锁着；你在这里输密码，再点「解锁」，这个人才登得进来。密码只能设 / 重设，存的是加密后的，谁也看不到原文。员工离职（停用）自动锁上。</Info>
+        <Assumed>现在的试用版还没有登录页（右上角切岗位）。账号、密码、锁已经真实存在数据库里；正式上线换成「工号 + 密码」登录时直接用这里设的，不用再录一遍。密码至少 6 位、连错 10 次自动锁，这两条是我定的。</Assumed></div>
+      {a ? <div className="card-b stack" style={{ gap: 10 }}>
+        <FRow label="账号"><b className="mono">{a.login}</b><span className="small muted">（= 工号，改工号这里跟着变）</span></FRow>
+        <FRow label="密码"><input className="in" type={show ? 'text' : 'password'} autoComplete="new-password" style={{ width: 200 }} placeholder={a.has_password ? '已设（输入新的 = 重设）' : '还没设，输入密码'} value={pw} onChange={(x) => setPw(x.target.value)} />
+          <button type="button" className="btn sm ghost" onClick={() => setShow(!show)}>{show ? '隐藏' : '显示'}</button>
+          <button type="button" className="btn sm primary" disabled={busy || pw.length < 6} title={pw.length < 6 ? '至少 6 位' : ''} onClick={() => run(a.has_password ? '密码已重设' : '密码已设好，账号还锁着，要用再点「解锁」', `select app.set_staff_password($1,$2)`, [empId, pw])}>{a.has_password ? '重设密码' : '设密码'}</button>
+          {a.pass_set_at && <span className="small muted">上次设：{dt(a.pass_set_at)}</span>}</FRow>
+        <FRow label="状态">{a.locked
+          ? <><span>锁着，登不进来</span><button type="button" className="btn sm" disabled={busy || !a.has_password || !active} title={!a.has_password ? '先设密码' : !active ? '已停用的员工不能解锁' : ''} onClick={() => run('已解锁，可以用工号 + 密码登录', `select app.set_staff_lock($1,false)`, [empId])}>解锁</button></>
+          : <><span>已开通{a.last_login_at ? `，上次登录 ${dt(a.last_login_at)}` : '，还没登录过'}</span><button type="button" className="btn sm danger" disabled={busy} onClick={() => run('已锁上', `select app.set_staff_lock($1,true)`, [empId])}>锁上</button></>}</FRow>
+      </div> : <div className="card-b small muted">{empNo ? '保存档案后这里会出现账号。' : '先在上面填工号并保存，这里会自动出现一个锁着的账号。'}</div>}
+    </div>);
 }
 
 // ───────── 表 2 本月工资单 (Frank 11-07 15:35 重做) ─────────

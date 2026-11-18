@@ -222,7 +222,11 @@ order by coalesce(b.balance,0) desc, c.code`;
 export const customerBalance = `
 select c.id, c.code, c.name, c.city, c.tier,
   coalesce(b.total_sold,0) as total_sold, coalesce(b.total_paid,0) as total_paid,
-  coalesce(b.total_returned,0) as total_returned, coalesce(b.total_writeoff,0) as total_writeoff, coalesce(b.balance,0) as balance
+  coalesce(b.total_returned,0) as total_returned, coalesce(b.total_writeoff,0) as total_writeoff, coalesce(b.balance,0) as balance,
+  (coalesce((select sum(sl.qty) from app.shipment_lines sl join app.shipments s on s.id = sl.shipment_id join app.deals d on d.id = s.deal_id
+              where d.customer_id = c.id and d.currency = $2 and s.voided_at is null), 0)
+   - coalesce((select sum(rl.qty) from app.return_lines rl join app.returns rt on rt.id = rl.return_id join app.deals d on d.id = rt.deal_id
+              where d.customer_id = c.id and d.currency = $2 and rt.status not in ('requested','rejected')), 0))::int as total_qty
 from app.customers c left join app.v_customer_balance b on b.customer_id = c.id and b.currency = $2
 where c.id = $1`;
 
