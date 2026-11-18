@@ -2,6 +2,7 @@
 // 公户在员工名下 → 到账先挂在账户上（不动客户欠款），中方认领到客户才冲账；热线报「客户说付了」自动找对得上的到账。
 // 持有人最多压 500 万、最长 7 天（每个账户自己设）；交款要中方确认收到才算；支出超过审批线要中方批。
 import { useControls, CONTROL_TABS, ControlPanels, ControlAlerts, RefundModal } from './CashControls.jsx';
+import PublicHeld from '../components/PublicHeld.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -135,6 +136,7 @@ export default function Cash() {
         })}
       </div>
       <ControlAlerts ctl={ctl} onGo={setTab} />
+      <PublicHeld />
       <div className="card">
         <div className="tabs">{TABS.map(([k, l, n]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}{n ? <span className="queue-n"> {n}</span> : null}</button>)}</div>
         {tab === 'open' && <Grid id="cash-open" table="cash_moves" columns={openCols} rows={unclaimed} empty="没有待认领的到账" />}

@@ -58,7 +58,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
     const [open, [bal], last, accounts, staff, [feeCfg]] = await Promise.all([
       q(Q.customerOpenDeals, [customer, acc]), q(Q.customerBalance, [customer, acc]),
       q(`select currency, account_currency, rate from app.receipts where org_id = $1 and currency <> account_currency order by created_at desc limit 20`, [org]),
-      q(`select id, name, kind, currency from app.cash_accounts where org_id = $1 and active order by name`, [org]).catch(() => []),
+      q(`select a.id, a.name, a.kind, a.currency, a.holder_employee_id, (select e.short_name from app.employees e where e.id = a.holder_employee_id) as holder from app.cash_accounts a where a.org_id = $1 and a.active order by a.name`, [org]).catch(() => []),
       q(`select id, short_name from app.employees where org_id = $1 and active order by short_name`, [org]).catch(() => []),
       q(`select value from app.org_settings where org_id = $1 and key = 'fee_rates'`, [org]).catch(() => [])]);
     return { open, bal, last, accounts, staff, feeRates: { wave: 1, ...(feeCfg?.value || {}) } };
@@ -82,9 +82,14 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
   const feeHigh = feeV > 0 && feeRate > 1.05, feeLow = feeV > 0 && feeRate < 0.95;
   const credit = N(amount) + feeV;   // 冲客户账 = 到账 (+ 我方出的手续费)
   const conv = Math.round(credit * dbRate * (acc === 'XOF' ? 1 : 100)) / (acc === 'XOF' ? 1 : 100);
-  const accOpts = (data?.accounts || []).filter((a) => a.currency === currency);
-  const accAuto = accOpts.find((a) => a.kind === method) || (accOpts.length === 1 ? accOpts[0] : null);
-  const accSel = accountId || accAuto?.id || '';
+  // 356 / 314 (Frank 11-17): 只选「收到哪个账户」—— 收款方式和币种跟着账户走, 不再单独选
+  const accAll = data?.accounts || [];
+  const accSel = accountId;
+  const accRow = accAll.find((a) => a.id === accountId) || null;
+  const methodOf = (a) => (!a ? 'cash' : a.kind === 'cash' || /^cash/i.test(a.name) ? 'cash' : /wave/i.test(a.name) ? 'wave' : a.kind === 'bank' || /银行|bank/i.test(a.name) ? 'bank' : (['cash', 'wave', 'orange', 'bank'].includes(a.kind) ? a.kind : 'other'));
+  const pickAccount = (id) => { const a = accAll.find((x) => x.id === id); setAccountId(id); if (a) { setMethod(methodOf(a)); if (a.currency !== currency) { setCurrency(a.currency); setRate(''); setRateOk(false); } if (methodOf(a) !== 'cash') { setByStaff(false); setCollector(''); } else { setFeeOn(false); setFee(''); setFeeTouched(false); } } };
+  const isPublic = (a) => !!a?.holder && /公户/.test(a.name);   // 公司收款账户 (Roland 公户 · Wave / 银行): 钱在他手里, 交回公司前算他欠公司. 别的账户有保管人不算
+  const heldBy = !byStaff && isPublic(accRow) ? accRow.holder : null;
   const dev = foreign && refRate && N(rate) > 0 ? Math.abs(N(rate) - refRate) / refRate * 100 : 0;
 
   const preview = useMemo(() => {
@@ -114,6 +119,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
     if (feeOn && method !== 'cash' && !(feeV > 0)) return toast('开了「我们承担手续费」就要填手续费；没被扣就把开关关掉', 'err');
     if (feeHigh && !feeWhy.trim()) return toast(`手续费 ${feeRate.toFixed(2)}% 高于 1%：要写原因`, 'err');
     if ((feeHigh || feeLow) && !feeOk) { setFeeOk(true); return toast(`手续费是 ${feeRate.toFixed(2)}%，${feeHigh ? '高于' : '低于'}平常的 1%。核对过再点一次「确认收款」`, 'err'); }
+    if (!accountId) return toast('选钱收到了哪个账户', 'err');
     if (!proof) return toast(method === 'cash' ? '现金也要传凭证：在客户群里说「收到现金 XX」，客户回复确认后截图传上来' : `${PAY_METHODS[method]} 收款请上传付款截图`, 'err');
     if (mode === 'specific' && !picked.length) return toast('请点选要冲的单', 'err');
     if (byStaff && !collector) return toast('员工代收：选是哪位员工收的', 'err');
@@ -124,7 +130,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
         account_id: byStaff ? null : (accSel || null), collector_employee_id: byStaff ? collector : null })]);
       toast(byStaff ? '收款已登记：客户账已冲，钱挂在员工名下（在途），交到公司再确认到账' : '收款已登记（待核对到账），客户总账已更新');
       const sum = { amount: N(amount), currency, conv, acc, hits: hits.map(([id, v]) => [nameOf(id), v]), left: preview.left };
-      setAmount(''); setProof(''); setFee(''); setFeeTouched(false); setFeeOn(false); setFeeOk(false); setFeeWhy(''); setBearer(''); setPayer(''); setByStaff(false); setCollector(''); setRate(''); setRateOk(false); setOverOk(false); setErrs(false); if (!lockDeal) setPicked([]);
+      setAmount(''); setProof(''); setFee(''); setFeeTouched(false); setFeeOn(false); setFeeOk(false); setFeeWhy(''); setBearer(''); setPayer(''); setByStaff(false); setAccountId(''); setCollector(''); setRate(''); setRateOk(false); setOverOk(false); setErrs(false); if (!lockDeal) setPicked([]);
       refresh(); onDone?.(sum);
     } catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
   };
@@ -154,23 +160,32 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
     <div className="rform">
       {!can(role, 'receipt') && <div className="card-b"><span className="lock">当前岗位不能登记收款（{whoCan('receipt')}）</span></div>}
       <div className="card-b stack">
-        <div className="rgrid">
-          <FRow label="收款日期" req><DatePicker value={date} onChange={setDate} /></FRow>
-          <FRow label="收款方式" req><Choice value={method} onChange={(k) => setMethod(k)} options={['cash', 'wave', 'orange', 'bank'].map((k) => [k, PAY_METHODS[k]])} /></FRow>
-          <FRow label="到账金额" req>
+        <div className="fgroups">
+          <div className="fgroup"><div className="fgroup-t">① 谁付的</div>
+            <div className="rgrid">
+              <FRow label="收款日期" req><DatePicker value={date} onChange={setDate} /></FRow>
+              <FRow label="付款人"><input className="in" style={{ width: 200 }} value={payer} onChange={(e) => setPayer(e.target.value)} placeholder="别人代付时写（可不填）" /></FRow>
+            </div></div>
+          <div className="fgroup"><div className="fgroup-t">② 付了多少、收到哪个账户</div>
+            <div className="rgrid">
+              <FRow label="收到哪个账户" req>
+                <Choice value={accSel} onChange={pickAccount} options={accAll.map((a) => [a.id, a.name, isPublic(a) ? `${a.currency} · 在 ${a.holder} 手里` : a.currency])} placeholder="选账户…" err={errs && !accountId} flat={false} style={{ width: 230 }} />
+                <Info>只选钱收到了哪个账户：现金、Wave 还是公司收款账户（Roland 的 Wave / 银行）。收款方式和币种跟着账户走，不用再选。<Assumed>账户清单 = 资金账户页里启用的全部账户；账户名带 Cash 算现金、带 Wave 算 Wave、银行账户算银行。</Assumed></Info>
+              </FRow>
+              <FRow label="到账金额" req>
             <input className={`in ${errs && !(N(amount) > 0) ? 'err-in' : ''}`} inputMode="decimal" style={{ width: 150, fontSize: 17, fontWeight: 700 }} value={amount} onChange={(e) => { setAmount(e.target.value.replace(/[^\d.]/g, '')); setOverOk(false); }} placeholder="0" />
-            <Choice value={currency} onChange={(v) => { setCurrency(v); setRate(''); setRateOk(false); }} options={[...new Set(['XOF', acc, 'USD', 'CNY', 'EUR'])].filter(Boolean)} flat={false} size="sm" style={{ width: 92, minWidth: 0 }} />
+            <span className="pill">{currency}</span>
             {lockDeal && defaultAmount != null && <Info>本单待付 {money(defaultAmount, acc)}，只作参考，实收请按到账手填。</Info>}
           </FRow>
-          <FRow label="凭证" req><PhotoInput value={proof} onChange={setProof} label={method === 'cash' ? '群里客户确认收到现金的截图' : '付款截图'} camera invalid={errs && !proof} />{method === 'cash' && <Info>收现金：先在客户群里说「收到现金 XX」，客户回复没问题后，把这段聊天截图传上来。</Info>}</FRow>
-          {foreign && (
+              {foreign && (
             <FRow label="汇率" req>
               <RateInput a={foreign} b={base} value={rate} onChange={(v) => { setRate(v === '' ? '' : String(v)); setRateOk(false); }} placeholder={refRate ? String(+refRate.toFixed(4)) : undefined} />
               <Info>汇率登记后锁定，以后不变。{refRate ? `参考 1 ${foreign} = ${+refRate.toFixed(3)} ${base}。` : ''}偏差 ≥10% 确认时要再点一次。</Info>
               {N(rate) > 0 && dev >= 3 && <span className={`small ${dev >= 10 ? 'red-t' : 'amber-t'}`}>偏差 {dev.toFixed(1)}%</span>}
             </FRow>
           )}
-          {method !== 'cash' && <FRow label="我们承担手续费">
+              <FRow label="凭证" req><PhotoInput value={proof} onChange={setProof} label={method === 'cash' ? '群里客户确认收到现金的截图' : '付款截图'} camera invalid={errs && !proof} />{method === 'cash' && <Info>收现金：先在客户群里说「收到现金 XX」，客户回复没问题后，把这段聊天截图传上来。</Info>}</FRow>
+              {method !== 'cash' && <FRow label="我们承担手续费">
             <Choice value={feeOn ? 'y' : 'n'} onChange={(v) => { setFeeOn(v === 'y'); setFeeOk(false); if (v !== 'y') { setFee(''); setFeeTouched(false); setFeeWhy(''); } }} options={[['n', '否'], ['y', '是']]} />
             {feeOn && <>
               <input className={`in ${feeHigh ? 'err-in' : ''}`} inputMode="decimal" style={{ width: 100 }} value={feeTouched ? fee : (feeV ? String(feeV) : '')} onChange={(e) => { setFeeTouched(true); setFeeOk(false); setFee(e.target.value.replace(/[^\d.]/g, '')); }} placeholder="0" />
@@ -182,13 +197,18 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
             <Info>客户账永远按货款全额冲。钱到账时被 Wave / 银行扣了手续费（客户付 10,000，只到 9,900）才选「是」：到账填 9,900，手续费默认按 1% 带出 100，可以改；另记一笔「办公费」支出，中方确认。客户自己多付了手续费、到账就是全额的，选「否」。现金没有手续费。</Info>
             {feeV > 0 && <div className="small muted" style={{ flexBasis: '100%' }}>客户账冲 {money(credit, currency)}（到账 {money(N(amount), currency)} + 手续费 {money(feeV, currency)}）</div>}
           </FRow>}
-          <FRow label="进哪个账户">
-            {method === 'cash' && <span className="chips"><button type="button" className={`chip ${!byStaff ? 'on' : ''}`} onClick={() => setByStaff(false)}>交到公司</button><button type="button" className={`chip ${byStaff ? 'on' : ''}`} onClick={() => setByStaff(true)}>员工代收</button></span>}
-            {byStaff ? <Choice value={collector} onChange={setCollector} options={(data.staff || []).map((e) => [e.id, e.short_name])} placeholder="选员工…" err={errs && !collector} flat={false} style={{ width: 170 }} />
-              : <Choice value={accSel} onChange={setAccountId} options={accOpts.map((a) => [a.id, a.name])} empty="（先不选账户）" flat={false} style={{ width: 190 }} />}
-            <Info>{byStaff ? '客户把现金给了员工：客户账照冲，钱挂在员工名下（在途）；员工存进 Wave 转给公司后，在「资金账户 → 员工代收」点「已交」才进账户。' : '选了账户：核对到账（或导入流水自动配对）后，这笔钱记进这个账户的流水，分类「收客户货款」。'}</Info>
-          </FRow>
-          <FRow label="付款人"><input className="in" style={{ width: 200 }} value={payer} onChange={(e) => setPayer(e.target.value)} placeholder="别人代付时写（可不填）" /></FRow>
+            </div></div>
+          <div className="fgroup"><div className="fgroup-t">③ 钱现在在谁手里</div>
+            <div className="rgrid">
+              <FRow label="在谁手里">
+                {heldBy ? <span><b>{heldBy}</b> <span className="small muted">（公司收款账户：客户账照冲，{heldBy} 交回公司之前算他欠公司）</span></span>
+                  : method === 'cash' ? <>
+                    <Choice value={byStaff ? 'staff' : 'co'} onChange={(v) => { setByStaff(v === 'staff'); if (v !== 'staff') setCollector(''); }} options={[['co', '交到公司了'], ['staff', '员工代收']]} />
+                    {byStaff && <Choice value={collector} onChange={setCollector} options={(data.staff || []).map((e) => [e.id, e.short_name])} placeholder="选员工…" err={errs && !collector} flat={false} style={{ width: 170 }} />}
+                  </> : <span>公司账户 <span className="small muted">（到账后中方在「资金账户」核对）</span></span>}
+                <Info>{byStaff ? '客户把现金给了员工：客户账照冲，钱挂在员工名下（在途）；员工交到公司后，在「资金账户 → 员工代收」点「已交」。' : '登记后是「待核对到账」：中方在「资金账户 → 待核对到账」里对着账户余额确认。'}</Info>
+              </FRow>
+            </div></div>
         </div>
         {!lockDeal && (
           <div className="field"><label>冲账方式</label>
