@@ -34,6 +34,8 @@ export function dayStatus({ day, sched, punches, appeal, joined, resigned, st })
   if (!first.ok) return { tone: 'red', text: `打卡地点不对（${localHM(first.at)}）${appeal?.status === 'pending' ? ' · 申诉中' : ''}` };
   if (lateBy > Number(st.late_absent_min ?? 120)) return { tone: 'red', text: `迟到 ${lateBy} 分钟，按缺勤${appeal?.status === 'pending' ? ' · 申诉中' : ''}` };
   if (lateBy > Number(st.grace_min ?? 10)) return { tone: 'amber', text: `迟到 ${lateBy} 分钟（${localHM(first.at)}）${appeal?.status === 'pending' ? ' · 申诉中' : ''}` };
+  const eo = punches.find((p) => p.kind === 'out' && p.early);
+  if (eo) return { tone: 'red', text: `早退（${localHM(eo.at)}${eo.early_note ? ' · ' + eo.early_note : ''}）${appeal?.status === 'pending' ? ' · 申诉中' : ''}` };
   return { tone: 'green', text: `正常（${localHM(first.at)}）` };
 }
 
@@ -55,7 +57,7 @@ export default function AttCalendar({ employeeId: fixed, pick = false, month: m0
     if (!id) return { myId, id: null, emps, st: st || {} };
     const [[e], punches, appeals] = await Promise.all([
       q(`select id, short_name, full_name, joined_on, resigned_on, work_schedule from app.employees where id = $1`, [id]),
-      q(`select a.kind, a.at, a.ok, a.late, a.distance_m, a.lat, a.lng, w.name as site from app.attendance a left join app.work_sites w on w.id = a.site_id
+      q(`select a.kind, a.at, a.ok, a.late, a.early, a.early_note, a.distance_m, a.lat, a.lng, w.name as site from app.attendance a left join app.work_sites w on w.id = a.site_id
          where a.org_id = $1 and a.employee_id = $2 and a.at >= ($3 || '-01')::date - 1 and a.at < (($3 || '-01')::date + interval '1 month' + interval '1 day') order by a.at`, [org, id, month]),
       q(`select day, status, reason, decision_note from app.attendance_appeals where org_id = $1 and employee_id = $2 and day >= ($3 || '-01')::date and day < (($3 || '-01')::date + interval '1 month')`, [org, id, month])]);
     return { myId, id, e, punches, appeals, emps, st: st || { start_time: '09:00', grace_min: 10, late_absent_min: 120 } };

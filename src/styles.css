@@ -1588,3 +1588,4 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 /* 442: 提示马上出 —— 表格里放不下的格子也不等 */
 .cell-tip.itip { pointer-events: none; z-index: 900; }
 .kpi .t { white-space: nowrap; }
+

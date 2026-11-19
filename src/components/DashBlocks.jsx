@@ -320,7 +320,8 @@ export function PeopleBlock({ from, to, label }) {
   const wd = new Date().getDay();
   const due = data.emps.filter((e) => ((e.work_schedule || {})[wd] ?? (wd === 0 ? 'off' : 'full')) !== 'off');
   const missing = due.filter((e) => !data.ins.has(e.id));
-  const bad = data.an.filter((a) => N(a.late) + N(a.missing) >= 3).sort((a, b) => N(b.late) + N(b.missing) - N(a.late) - N(a.missing));
+  const anN = (a) => N(a.late) + N(a.missing) + N(a.early);
+  const bad = data.an.filter((a) => anN(a) >= 3).sort((a, b) => anN(b) - anN(a));
   const vOf = (d) => data.visits.filter((v) => v.day === d); const custN = (l) => new Set(l.map((v) => v.customer_id)).size;
   const vP = data.visits.filter((v) => v.day >= from && v.day <= to);
   const vSel = vOf(vd === 't' ? td : yd);
@@ -359,9 +360,9 @@ export function PeopleBlock({ from, to, label }) {
         <LayoutGrid page="dash.people" blocks={cards} defaultGap={12} sub="打卡 / 拜访 / 热线" />
         {open === 'att' && <div className="mc-detail">
           <div className="dk-chips" style={{ marginBottom: 8 }}><span className="small muted">今天没打卡：</span>{missing.length ? missing.map((e) => <EmpLink key={e.id} id={e.id} name={e.short_name}><span className="dchip red">{e.short_name}</span></EmpLink>) : <span className="dchip green">都到了</span>}</div>
-          {data.lead && <Grid id="dash-att" noTools maxHeight={300} rows={bad.map((a) => ({ ...a, id: a.employee_id, n: N(a.late) + N(a.missing) }))} empty={`${label}没有人异常满 3 次 ✓`} columns={[
+          {data.lead && <Grid id="dash-att" noTools maxHeight={300} rows={bad.map((a) => ({ ...a, id: a.employee_id, n: anN(a) }))} empty={`${label}没有人异常满 3 次 ✓`} columns={[
             { key: 'emp_no', label: '工号', w: 80 }, { key: 'short_name', label: '员工', w: 160, render: (a) => <EmpLink id={a.employee_id} name={a.short_name} /> },
-            { key: 'late', label: '迟到 次', w: 90, type: 'number' }, { key: 'missing', label: '没打卡 次', w: 100, type: 'number' },
+            { key: 'late', label: '迟到 次', w: 90, type: 'number' }, { key: 'missing', label: '没打卡 次', w: 100, type: 'number' }, { key: 'early', label: '早退 次', w: 90, type: 'number' },
             { key: 'n', label: '合计 次', w: 90, type: 'number', render: (a) => <span className="pill red">{a.n}</span> }]} />}
         </div>}
         {open === 'visit' && <div className="mc-detail"><Grid id="dash-visit" noTools maxHeight={300} rows={vBy} empty={`${vd === 't' ? '今天' : '昨天'}还没有拜访记录`} columns={[

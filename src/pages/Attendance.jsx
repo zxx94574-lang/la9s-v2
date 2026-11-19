@@ -37,6 +37,7 @@ export default function Attendance() {
   const [fail, setFail] = useState(null);
   const [site, setSite] = useState(null);
   const [appeal, setAppeal] = useState(null);
+  const [early, setEarly] = useState(null);   // 450: 提前下班 → 弹窗写原因
   const admin = role === 'admin';
   const canName = ['admin', 'manager', 'sales_manager'].includes(role);
   const { data } = useData(async () => {
@@ -44,16 +45,21 @@ export default function Attendance() {
     const [mine, sites, dayRows, monthRows, [st], myAp, allAp] = await Promise.all([q(Q.attendanceMine, [org, USERS[role]]), q(Q.workSites, [org]),
       admin ? q(Q.attendanceDay, [org, day]) : [], admin ? q(Q.attendanceMonth, [org, month]) : [], q(Q.attendanceSettings, [org]),
       q(Q.myAppeals, [org, USERS[role]]), admin ? q(Q.appeals, [org, since.toISOString().slice(0, 10)]) : []]);
-    return { mine, sites, dayRows, monthRows, st, myAp, allAp };
+    const [{ ps }] = await call(role, `select app.punch_state($1) as ps`, [org]);
+    return { mine, sites, dayRows, monthRows, st, myAp, allAp, ps };
   }, [org, role, day, month]);
   if (!data) return <div className="empty">加载中…</div>;
-  const clock = async (kind, pos) => {
+  // 450: 只有一个按键. 这一下是上班还是下班, 后台按今天的状态定 (app.punch), 不按钟点.
+  const ps = data.ps || { next: 'in' };
+  const punch = async (pos, note) => {
+    if (ps.next === 'out' && ps.early && !note) { setEarly({ pos: pos || null, note: '' }); return; }
     setBusy(true); setFail(null);
     try {
       const p = pos || await locate();
-      const [{ r }] = await call(role, `select app.clock($1,$2,$3,$4,$5) as r`, [org, kind, p.lat, p.lng, p.acc]);
-      toast(r.new_site ? `已打卡 · 新地点（第一次来，等中方起名）${r.late ? ' · 迟到' : ''}` : r.ok ? `${kind === 'in' ? '上班' : '下班'}打卡成功 · ${r.site}（${r.distance} 米）${r.late ? ' · 迟到' : ''}` : `已打卡，但不在规定地点（最近：${r.site || '没设地点'} ${r.distance ?? ''} 米）`, r.ok ? undefined : 'err');
-      refresh();
+      const [{ r }] = await call(role, `select app.punch($1,$2,$3,$4,$5) as r`, [org, p.lat, p.lng, p.acc, note || null]);
+      const nm = r.kind === 'in' ? '打卡' : '下班打卡';
+      toast(r.new_site ? `已${nm} · 新地点（第一次来，等中方起名）${r.late ? ' · 迟到' : ''}` : r.ok ? `${nm}成功 · ${r.site}（${r.distance} 米）${r.late ? ' · 迟到' : ''}${r.early ? ' · 早退' : ''}` : `已${nm}，但不在规定地点（最近：${r.site || '没设地点'} ${r.distance ?? ''} 米）`, r.ok ? undefined : 'err');
+      setEarly(null); refresh();
     } catch (e) { setFail(e.message); toast(friendlyError(e), 'err'); } finally { setBusy(false); }
   };
   const todayMine = data.mine.filter((a) => dt(a.at).slice(0, 10) === today());
@@ -64,7 +70,8 @@ export default function Attendance() {
     { key: 'site_name', label: '地点', w: 170, value: (a) => `${a.site_name || '—'}${a.distance_m != null ? ` · ${a.distance_m} 米` : ''}`,
       render: (a) => <span className="row" style={{ gap: 4 }}>{a.site_name || '—'}{a.site_named === false && <Pill tone="amber">待起名</Pill>}{a.distance_m > 0 && <span className="muted small">{a.distance_m} 米</span>}</span> },
     { key: 'ok', label: '在不在', w: 90, value: (a) => (a.ok ? '在' : '不在'), render: (a) => (a.ok ? <Pill tone="green">在</Pill> : <Pill tone="red">不在</Pill>) },
-    { key: 'late', label: '迟到', w: 70, value: (a) => (a.late ? '迟到' : ''), render: (a) => a.late && <Pill tone="amber">迟到</Pill> },
+    { key: 'late', label: '迟到 / 早退', w: 100, value: (a) => (a.late ? '迟到' : a.early ? '早退' : ''), render: (a) => (a.late ? <Pill tone="amber">迟到</Pill> : a.early ? <Pill tone="red">早退</Pill> : null) },
+    { key: 'early_note', label: '早退原因', w: 160 },
     { key: 'emp_city', label: '负责城市', w: 90 },
     { key: 'usual_dist', label: '离常去点', w: 100, value: (a) => (a.usual_dist == null ? '' : `${a.usual_dist} 米`), render: (a) => (a.usual_dist == null ? <span className="muted small">—</span> : a.usual_dist > 2000 ? <Pill tone="amber">{(a.usual_dist / 1000).toFixed(1)} 公里</Pill> : `${a.usual_dist} 米`) },
     { key: 'acc', label: '定位精度', w: 90, value: (a) => (a.accuracy_m ? `±${Math.round(a.accuracy_m)} 米` : '') },
@@ -103,18 +110,18 @@ export default function Attendance() {
         <div className="portal">
           <div className="card card-b stack" style={{ textAlign: 'center', gap: 14 }}>
             <div style={{ fontSize: 34, fontWeight: 800 }}>{new Date().toTimeString().slice(0, 5)}</div>
-            <div className="row" style={{ gap: 10, justifyContent: 'center' }}>
-              <button type="button" className="btn primary lg" style={{ minWidth: 140, minHeight: 56, fontSize: 18 }} disabled={busy} onClick={() => clock('in')}>上班打卡</button>
-              <button type="button" className="btn lg" style={{ minWidth: 140, minHeight: 56, fontSize: 18 }} disabled={busy} onClick={() => clock('out')}>下班打卡</button>
-            </div>
+            {ps.next !== 'done'
+              ? <div><button type="button" className={`btn lg ${ps.next === 'in' ? 'primary' : ''}`} style={{ minWidth: 180, minHeight: 56, fontSize: 18 }} disabled={busy} onClick={() => punch()}>{ps.next === 'in' ? '打卡' : '下班打卡'}</button></div>
+              : <div className="muted small">今天的卡打完了</div>}
+            {ps.next === 'out' && ps.early && <div className="small muted">还没到下班时间（{String(ps.end_time || '').slice(0, 5)}）。现在打下班卡要写原因，会记一次早退。</div>}
             {busy && <div className="muted small">正在拿定位…</div>}
             {fail && <div className="banner warn">{fail}</div>}
             {fail && data.sites.length > 0 && <div className="small muted">演示链接里浏览器不给定位。演示用：
-              {data.sites.slice(0, 3).map((s) => <button type="button" key={s.id} className="linkbtn" onClick={() => clock('in', { lat: Number(s.lat) + 0.0002, lng: Number(s.lng), acc: 25 })}>假装在 {s.name}</button>)}</div>}
+              {data.sites.slice(0, 3).map((s) => <button type="button" key={s.id} className="linkbtn" onClick={() => punch({ lat: Number(s.lat) + 0.0002, lng: Number(s.lng), acc: 25 }, early?.note)}>假装在 {s.name}</button>)}</div>}
             <div className="stack" style={{ gap: 6, textAlign: 'left' }}>
               {todayMine.length === 0 && <div className="muted small" style={{ textAlign: 'center' }}>今天还没打卡</div>}
-              {todayMine.map((a) => <div key={a.id} className="row" style={{ gap: 8 }}><b>{a.kind === 'in' ? '上班' : '下班'}</b><span>{hm(a.at)}</span><span className="muted small">{a.site_name} {a.distance_m != null ? `${a.distance_m} 米` : ''}</span>
-                <span className="grow" />{a.ok ? <Pill tone="green">在地点</Pill> : <Pill tone="red">不在地点</Pill>}{a.late && <Pill tone="amber">迟到</Pill>}</div>)}
+              {todayMine.map((a) => <div key={a.id} className="row" style={{ gap: 8 }}><b>{a.kind === 'in' ? '打卡' : '下班'}</b><span>{hm(a.at)}</span><span className="muted small">{a.site_name} {a.distance_m != null ? `${a.distance_m} 米` : ''}</span>
+                <span className="grow" />{a.ok ? <Pill tone="green">在地点</Pill> : <Pill tone="red">不在地点</Pill>}{a.late && <Pill tone="amber">迟到</Pill>}{a.early && <Pill tone="red">早退</Pill>}</div>)}
             </div>
           </div>
           {/* 226: 我这个月的打卡日历, 点某一天看明细 / 申诉 */}
@@ -132,6 +139,10 @@ export default function Attendance() {
         tools={<>{admin && <button type="button" className="btn sm primary" onClick={() => setSite({})}>＋ 新地点</button>}{admin && <button type="button" className="btn sm" onClick={() => setSite('rules')}>打卡规则</button>}</>} /></div>}
       {site && site !== 'rules' && (admin ? <SiteModal s={site} onClose={() => setSite(null)} /> : <NameModal s={site} onClose={() => setSite(null)} />)}
       {appeal && <AppealModal onClose={() => setAppeal(null)} />}
+      {early && <Modal title="提前下班" risk="yellow" onClose={() => setEarly(null)} footer={<><button type="button" className="btn" onClick={() => setEarly(null)}>先不打</button><button type="button" className="btn primary" disabled={busy || !early.note.trim()} onClick={() => punch(early.pos, early.note.trim())}>确认下班打卡</button></>}>
+        <div className="hint">还没到下班时间（{String(ps.end_time || '').slice(0, 5)}）。可以打，但要写原因，这一天会记「早退」，算一次异常；有正当理由中方看得到。</div>
+        <div className="field"><label>原因</label><input className="in" autoFocus value={early.note} onChange={(e) => setEarly({ ...early, note: e.target.value })} placeholder="例：去医院 / 送货到客户那里直接回家" /></div>
+      </Modal>}
       {site === 'rules' && <RulesModal st={data.st} onClose={() => setSite(null)} />}
     </>
   );
