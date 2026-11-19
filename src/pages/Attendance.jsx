@@ -96,7 +96,7 @@ export default function Attendance() {
   const unnamed = data.sites.filter((s) => !s.named);
   return (
     <>
-      <div className="pagehead"><div><div className="eyebrow">Pointage</div><h1>上班打卡</h1>
+      <div className="pagehead"><div><div className="eyebrow">Pointage</div><h1>打卡</h1>
         <div className="sub">用手机打卡，要允许定位，不用拍照。销售看是不是在市场；办公室和仓库员工看是不是在仓库地址。上班时间 {data.st?.start_time?.slice(0, 5) || '08:30'}，晚 {data.st?.grace_min ?? 10} 分钟以上算迟到。</div></div></div>
       <div className="tabs" style={{ padding: 0 }}>{[['me', '我打卡'], ...(admin ? [['day', '今天'], ['month', '月汇总']] : []), ...(['admin', 'manager', 'sales_manager'].includes(role) ? [['cal', '按员工看日历']] : []), ['appeals', admin ? `申诉${data.allAp.filter((a) => a.status === 'pending').length ? ` · ${data.allAp.filter((a) => a.status === 'pending').length} 待处理` : ''}` : '我的申诉'], ...(canName ? [['sites', `工作地点${unnamed.length ? ` · ${unnamed.length} 待起名` : ''}`]] : [])].map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
       {tab === 'me' && (

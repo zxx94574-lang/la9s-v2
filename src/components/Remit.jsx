@@ -4,7 +4,7 @@
 //  记录永远保留: 不能删, 录错只能作废 + 写原因 (钱加回原账户).
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, DatePicker, MoneyIn, PhotoInput, Thumb, Assumed, Pill } from './ui.jsx';
+import { useApp, useData, Modal, DatePicker, MoneyIn, PhotoInput, Thumb, Assumed, Pill, Info } from './ui.jsx';
 import { OptChoice } from './Opts.jsx';
 import { RuleGear, useRuleValues } from './Rules.jsx';
 import Grid from './Grid.jsx';
@@ -54,7 +54,7 @@ export default function RemitCard({ accounts }) {
   return (
     <div className="card" style={{ marginBottom: 12 }} id="remit">
       <div className="card-h" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <h2>回款（汇回国内） <RuleGear anchor="remit-rules" title="回款规则" ids={['remit.diff', 'remit.days']} />
+        <h2>回款 <Info>把钱通过回款公司汇回国内。登记后马上从交出的账户里扣；到账后回来填到账。</Info> <RuleGear anchor="remit-rules" title="回款规则" ids={['remit.diff', 'remit.days']} />
           <Assumed>到账由中方跟国内确认完再填（Frank 11-19 定）。先定成只有中方能填到账 / 核对 / 作废，财务能登记回款；要放给财务填到账告诉 Claude。参考汇率没填就用记账汇率。</Assumed></h2>
         {transit.length > 0 && <Pill tone="amber">在途 {transit.length} 笔</Pill>}
         <span className="grow" />

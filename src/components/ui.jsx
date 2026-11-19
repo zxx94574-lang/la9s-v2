@@ -904,3 +904,31 @@ export function useStickyPagehead() {
     return () => { window.removeEventListener('scroll', on); window.removeEventListener('hashchange', on); clearInterval(t); };
   }, []);
 }
+
+// 442 (Frank 11-19): 鼠标放上去要马上出提示. 浏览器自带的 title 提示固定要等 1 秒多 → 全站接管:
+// 鼠标移到任何带 title / data-tip 的东西上, 立刻出我们自己的小黑框 (挂一次, 所有页面自动有). 手机不启用 (没有悬停).
+export function useInstantTips() {
+  useEffect(() => {
+    if (window.matchMedia?.('(hover: none)').matches) return undefined;
+    const tip = document.createElement('div'); tip.className = 'cell-tip itip'; tip.style.display = 'none'; document.body.appendChild(tip);
+    let cur = null;
+    const hide = () => { tip.style.display = 'none'; cur = null; };
+    const over = (e) => {
+      const el = e.target instanceof Element ? e.target.closest('[title], [data-tip]') : null;
+      if (!el || el.tagName === 'IFRAME') { if (cur && !(e.target instanceof Element && cur.contains(e.target))) hide(); return; }
+      const t = el.getAttribute('title');
+      if (t) { el.setAttribute('data-tip', t); el.removeAttribute('title'); if (!el.getAttribute('aria-label') && !el.textContent.trim()) el.setAttribute('aria-label', t); }
+      const text = el.getAttribute('data-tip'); if (!text) { hide(); return; }
+      if (cur === el && tip.style.display !== 'none') return;
+      cur = el; tip.textContent = text; tip.style.display = 'block';
+      const r = el.getBoundingClientRect(); const w = tip.offsetWidth; const h = tip.offsetHeight;
+      let top = r.bottom + 6; if (top + h > window.innerHeight - 4) top = Math.max(4, r.top - h - 6);
+      const left = Math.max(4, Math.min(window.innerWidth - w - 4, r.left + r.width / 2 - w / 2));
+      tip.style.top = `${top}px`; tip.style.left = `${left}px`;
+    };
+    const out = (e) => { if (cur && !(e.relatedTarget instanceof Element && cur.contains(e.relatedTarget))) hide(); };
+    document.addEventListener('mouseover', over, true); document.addEventListener('mouseout', out, true);
+    document.addEventListener('mousedown', hide, true); window.addEventListener('scroll', hide, true);
+    return () => { document.removeEventListener('mouseover', over, true); document.removeEventListener('mouseout', out, true); document.removeEventListener('mousedown', hide, true); window.removeEventListener('scroll', hide, true); tip.remove(); };
+  }, []);
+}

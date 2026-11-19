@@ -166,16 +166,16 @@ export default function Todo() {
   const rank = (d) => (wantDue(d) ? -1 : nextAction(d, role)?.alert?.tone === 'red' ? 0 : nextAction(d, role)?.alert ? 1 : 2);
   const tierRows = useTierCheck();
   const list = (data || []).filter((d) => todoFor(role, d)).sort((a, b) => rank(a) - rank(b));
-  // 227 (Frank 11-11): 待办分三个板块, 系统自动分 —— 红 紧急 / 黄 进行中 / 绿 不急; 中方可以手动把某张单提成紧急
+  // 227 (Frank 11-11): 待办分三个板块, 系统自动分 —— 红 紧急 / 黄 进行中 / 绿 待跟进; 中方可以手动把某张单提成紧急
   const groups = { red: [], amber: [], green: [] };
   for (const d of list) groups[todoLevel(d)].push(d);
   const urgent = async (e, d) => { e.stopPropagation(); try { await call(role, `select app.set_deal_urgent($1,$2)`, [d.id, !d.urgent]); toast(d.urgent ? '已取消紧急' : '已提成紧急'); refresh(); } catch (er) { toast(friendlyError(er), 'err'); } };
-  const SEC = [['red', '紧急', '超过 24 小时没发货、客户今天要货、中方标了紧急的'], ['amber', '进行中', '正常在走、今天该推进的'], ['green', '不急', '还没到日子的、等客户付款的、联系 3 次客户都忙的']];
+  const SEC = [['red', '紧急', '超过 24 小时没发货、客户今天要货、中方标了紧急的'], ['amber', '进行中', '正常在走、今天该推进的'], ['green', '待跟进', '还没到日子的、等客户付款的、联系 3 次客户都忙的']];
   // 11-19 Frank: 待办和经营总览一样能排序 (中方「⚙ 整理待办」: 拖顺序 / 宽度 / 隐藏, 全员一致); 没事的板块自动沉到最下面、两个一排
   const admin = role === 'admin';
   const blocks = [
     { id: 'anomaly', title: '异常的单', span: 12, render: () => <AnomalyHub /> },
-    { id: 'deals', title: '要推进的单（紧急 / 进行中 / 不急，没走完的退货算紧急）', span: 12, render: () => (
+    { id: 'deals', title: '要推进的单（紧急 / 进行中 / 待跟进，没走完的退货算紧急）', span: 12, render: () => (
       !data ? <div className="card"><div className="empty">加载中…</div></div> : <div className="stack" style={{ gap: 12 }}>
         {SEC.map(([k, label, tip]) => (
           <div key={k} className={`card todo-sec todo-${k}`}>

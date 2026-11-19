@@ -5,7 +5,6 @@ import { TierPill, useApp, useData, Pill, usePeriod, PeriodBar } from '../compon
 import Grid from '../components/Grid.jsx';
 import { money, qty, dDate } from '../lib/format.js';
 import { TIERS } from '../lib/domain.js';
-import { todoFor, todoLevel } from './Todo.jsx';
 import { LayoutGrid, setLayoutEdit, useLayoutEdit } from '../components/Layout.jsx';
 import { useDashRows, Overview, SalesSection, MoneyBlock, PeopleBlock } from '../components/DashBlocks.jsx';
 
@@ -35,12 +34,8 @@ export default function Dashboard() {
   }, [org, from, to]);
   const k = data?.k; const c = data?.cards;
   const jumpCompare = () => document.getElementById('cust-compare')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const urgent = (data?.orders || []).filter((d) => todoFor(role, d) && todoLevel(d) === 'red').length;
   const transit = (data?.fobs || []).filter((f) => ['applied', 'purchasing', 'in_transit', 'arrived', 'released'].includes(f.status));
-  const lines = [
-    ...(urgent ? [{ k: 'u', tone: 'red', to: 'todo', text: `待办里有 ${urgent} 件紧急的` }] : []),
-    ...(transit.length ? [{ k: 'f', to: 'fob', text: `FOB 在途 ${transit.length} 单 · 订金已收 ${transit.filter((f) => N(f.paid) > 0).length} 单` }] : []),
-  ];
+  const fobTransit = { n: transit.length, paid: transit.filter((f) => N(f.paid) > 0).length };   // 438: 紧急待办那行不放了 (进待办看); FOB 在途挪进 FOB 板块的小方框
   const more = !data ? [] : [
     { id: 'c_wh', title: '仓库经营', span: 3, render: () => (
       <div className="dcard">
@@ -81,16 +76,15 @@ export default function Dashboard() {
   ];
   const blocks = !data ? [] : [
     ...(admin ? [
-      { id: 'ov', title: '总览', span: 12, render: () => (rows ? <Overview rows={rows} lines={lines} /> : <div className="card card-b muted">加载中…</div>) },
+      { id: 'ov', title: '总览', span: 12, render: () => (rows ? <Overview rows={rows} /> : <div className="card card-b muted">加载中…</div>) },
       { id: 'local', title: '本地销售与毛利', span: 12, render: () => (rows ? <SalesSection kind="local" rows={rows.filter((r) => r.supply !== 'fob')} /> : null) },
-      { id: 'fob', title: 'FOB 销售与毛利', span: 12, render: () => (rows ? <SalesSection kind="fob" rows={rows.filter((r) => r.supply === 'fob')} /> : null) },
+      { id: 'fob', title: 'FOB 销售与毛利', span: 12, render: () => (rows ? <SalesSection kind="fob" rows={rows.filter((r) => r.supply === 'fob')} transit={fobTransit} /> : null) },
     ] : [
       // 员工看不到成本 / 利润: 只有销售额和件数
       { id: 'ov', title: '销售', span: 12, render: () => (
         <div className="card dash-sec"><div className="card-h"><h2>销售 <span className="muted small">已经出库的</span></h2></div>
           <div className="card-b"><div className="dk-row"><div className="dk"><div className="dk-t">销售额 <small>XOF</small></div><span className="dk-v">{money(k.sales_amount)}<small>XOF</small></span></div></div>
             <div className="dk-chips"><span className="dchip">出库 <b>{qty(k.sales_qty)}</b> 片</span><span className="dchip"><b>{k.order_count}</b> 单</span></div></div>
-          {lines.length > 0 && <div className="dk-lines">{lines.map((l) => <button type="button" key={l.k} className={l.tone || ''} onClick={() => go(l.to)}>{l.text} <span>›</span></button>)}</div>}
         </div>) }]),
     { id: 'money', title: '账款', span: 12, render: () => <MoneyBlock bal={data.bal} rc={data.rc} from={from} to={to} /> },
     { id: 'people', title: '打卡 / 拜访 / 热线', span: 12, render: () => <PeopleBlock from={from} to={to} label={P.label} /> },

@@ -2,7 +2,7 @@
 // 统一做法: 标题 → 一个大数 (带单位, 不省略) → 小方框 → 右端小实心 ▼ 展开明细 (默认收起).
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Assumed, Modal, MoneyIn, Choice } from './ui.jsx';
+import { useApp, useData, Assumed, Modal, MoneyIn, Choice, Info } from './ui.jsx';
 import { CustLink, EmpLink, DealLink, ModelLink } from './Archives.jsx';
 import { useMarginRules } from './Margin.jsx';
 import { usePublicHeld } from './PublicHeld.jsx';
@@ -17,10 +17,11 @@ const ymd = (v) => { if (!v) return ''; const x = v instanceof Date ? v : new Da
 const ls = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* */ } } };
 const useLs = (k, d) => { const [v, setV] = useState(() => ls.get(k, d)); return [v, (x) => { setV(x); ls.set(k, x); }]; };
 const CURS = ['XOF', 'CNY', 'USD'];
-const AMBER = '#E2A23B';
+const AMBER = '#8DB4EE';   // 440 (Frank 11-19): FOB 用浅蓝, 和品牌蓝同色系; 全站「本地 vs FOB」= 品牌蓝 + 浅蓝
 
 // 小实心三角: 展开 / 收起明细
-export const Fold = ({ open, onClick, label = '明细' }) => <button type="button" className={`fold-btn ${open ? 'on' : ''}`} onClick={onClick} title={open ? `收起${label}` : `展开${label}`} aria-label={open ? `收起${label}` : `展开${label}`} aria-expanded={!!open}>{open ? '▲' : '▼'}</button>;
+// 439 (Frank 11-19): 展开明细的按钮全站统一 —— 带字「明细 ▼ / 收起 ▲」, 永远在板块 / 卡片的右下角
+export const Fold = ({ open, onClick, label = '明细' }) => <button type="button" className={`fold-btn ${open ? 'on' : ''}`} onClick={onClick} aria-expanded={!!open}>{open ? '收起' : label}<i>{open ? '▲' : '▼'}</i></button>;
 const Amt = ({ v, cur, tone }) => <span className={`dk-v ${tone || ''}`}>{v == null ? '—' : money(v, cur)}<small>{cur}</small></span>;
 
 // ───────── 折算 ─────────
@@ -58,8 +59,8 @@ export function useDashRows(from, to) {
 }
 
 // ───────── 总览 (本地 + FOB 合在一起, 只算已出库的) ─────────
-export function Overview({ rows, lines }) {
-  const { go } = useApp(); const { lowPct } = useMarginRules();
+export function Overview({ rows }) {
+  const { lowPct } = useMarginRules();
   const [target, setTarget] = useLs('la9s.dash.ov.cur', 'CNY');
   const m = { target };
   const loc = total(rows.filter((r) => r.supply !== 'fob'), m), fob = total(rows.filter((r) => r.supply === 'fob'), m), all = total(rows, m);
@@ -73,7 +74,7 @@ export function Overview({ rows, lines }) {
   return (
     <div className="card dash-sec">
       <div className="card-h" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <h2>总览 <span className="muted small">本地 + FOB，只算已经出库的</span>
+        <h2>总览 <Info>本地 + FOB 合在一起，只算已经出库的。</Info>
           <Assumed>折算用「出库那天的记账汇率」（汇率与取整里改一次、记一次，从 11-19 起留历史；之前的出库都按现在这个汇率）。要用自己指定的汇率，到下面本地 / FOB 板块点「合并币种 → 统一汇率」。</Assumed></h2>
         <span className="grow" />
         <div className="seg sm">{CURS.map((c) => <button type="button" key={c} className={target === c ? 'on' : ''} onClick={() => setTarget(c)}>{c}</button>)}</div>
@@ -89,7 +90,8 @@ export function Overview({ rows, lines }) {
             <div className="dk-sub"><span><i style={{ background: 'var(--brand)' }} />本地 <Pct p={loc.pct} low={lowPct} /></span><span><i style={{ background: AMBER }} />FOB <Pct p={fob.pct} low={lowPct} /></span></div>
           </div>
         </div>
-        <div className="dk-ratio" title={`本地 ${share.toFixed(1)}% · FOB ${(100 - share).toFixed(1)}%`}><i style={{ width: `${share}%`, background: 'var(--brand)' }} /><i style={{ width: `${100 - share}%`, background: AMBER }} /></div>
+        <div className="dk-ratio-w"><div className="dk-ratio"><i style={{ width: `${share}%`, background: 'var(--brand)' }} /><i style={{ width: `${100 - share}%`, background: AMBER }} /></div>
+          <div className="dk-ratio-l"><span>本地 <b>{share.toFixed(0)}</b> %</span><span>FOB <b>{(100 - share).toFixed(0)}</b> %</span></div></div>
         <div className="dk-chips">
           <span className="dchip">本地 <b>{qty(loc.qty)}</b> 片 · <b>{loc.n}</b> 单</span>
           <span className="dchip">FOB <b>{qty(fob.qty)}</b> 片 · <b>{fob.n}</b> 单</span>
@@ -97,12 +99,11 @@ export function Overview({ rows, lines }) {
           {all.miss > 0 && <span className="dchip red">{qty(all.miss)} 片没成本，没算进毛利</span>}
         </div>
       </div>}
-      {lines?.length > 0 && <div className="dk-lines">{lines.map((l) => <button type="button" key={l.k} className={l.tone || ''} onClick={() => go(l.to)}>{l.text} <span>›</span></button>)}</div>}
     </div>);
 }
 
 // ───────── 本地 / FOB 销售与毛利 ─────────
-export function SalesSection({ kind, rows }) {
+export function SalesSection({ kind, rows, transit }) {
   const { org, go } = useApp(); const { lowPct } = useMarginRules();
   const fob = kind === 'fob';
   const groups = useMemo(() => { const g = {}; for (const r of rows) { const c = r.currency || 'XOF'; (g[c] = g[c] || new Set()).add(r.deal_id); } return CURS.filter((c) => g[c]).map((c) => [c, g[c].size]); }, [rows]);
@@ -143,7 +144,7 @@ export function SalesSection({ kind, rows }) {
         ? <span className="dk-row0"><button type="button" className="dk-exp" aria-label={exp[r.pk] ? '收起' : '展开'} onClick={(e) => { e.stopPropagation(); setExp((x) => ({ ...x, [r.pk]: !x[r.pk] })); }}>{exp[r.pk] ? '▾' : '▸'}</button>{fob ? <CustLink id={r.ref.customer_id} name={r.label} /> : <b>{r.label}</b>}</span>
         : <span className="dk-row1">{fob ? <DealLink id={r.ref.deal_id} no={r.label} /> : r.label}</span>) },
     { key: 'share', label: '占比', w: 110, sortable: false, filterable: false, value: (r) => (t.rev ? r.t.rev / t.rev * 100 : 0),
-      render: (r) => { const p = t.rev ? r.t.rev / t.rev * 100 : 0; return <span className={`dbar ${r.lvl ? 'sub' : ''}`} title={`占销售额 ${p.toFixed(1)}%`}><i style={{ width: `${Math.max(0, Math.min(100, p))}%` }} /></span>; } },
+      render: (r) => { const p = t.rev ? r.t.rev / t.rev * 100 : 0; return <span className={`dbar ${r.lvl ? 'sub' : ''}`} data-tip={`占销售额 ${p.toFixed(1)}%`}><i style={{ width: `${Math.max(0, Math.min(100, p))}%` }} /></span>; } },
     { key: 'rev', label: `销售额 ${C}`, w: 130, type: 'money', sortable: false, value: (r) => r.t.rev, render: (r) => (r.lvl ? money(r.t.rev, C) : <b>{money(r.t.rev, C)}</b>) },
     { key: 'qty', label: '销量 片', w: 90, type: 'number', sortable: false, value: (r) => r.t.qty, render: (r) => qty(r.t.qty) },
     { key: 'cost', label: `成本 ${C}`, w: 130, type: 'money', sortable: false, value: (r) => r.t.cost, render: (r) => <>{money(r.t.cost, C)}{r.t.miss > 0 && <span className="pill red" style={{ marginLeft: 4 }} title={`${qty(r.t.miss)} 片没成本，没算进成本和毛利`}>缺</span>}</> },
@@ -161,7 +162,7 @@ export function SalesSection({ kind, rows }) {
         {merge && <span className="pill blue">{merge.rates ? `统一汇率 → ${C}（${Object.entries(merge.rates).map(([k, v]) => `1 ${k} = ${v}`).join('，')}）` : `按出库日汇率合并 → ${C}`}</span>}
         {(groups.length > 1 || merge) && <button type="button" className="btn sm" onClick={() => setDlg(true)}>合并币种{merge ? ' ✓' : ''}</button>}
       </div>
-      {!rows.length ? <div className="card-b muted small">这个时间段还没有{fob ? ' FOB ' : '本地'}出库</div> : <div className="card-b">
+      {!rows.length ? <div className="card-b muted small">这个时间段还没有{fob ? ' FOB ' : '本地'}出库{fob && transit?.n > 0 && <button type="button" className="dchip" style={{ marginLeft: 10 }} onClick={() => go('fob')}>在途 <b>{transit.n}</b> 单 · 订金已收 <b>{transit.paid}</b> ›</button>}</div> : <div className="card-b">
         <div className="dk-row">
           <div className="dk"><div className="dk-t">销售额 <small>{C}</small></div><Amt v={t.rev} cur={C} /></div>
           <div className="dk"><div className="dk-t">成本 <small>{C}</small></div><Amt v={t.cost} cur={C} /></div>
@@ -170,6 +171,7 @@ export function SalesSection({ kind, rows }) {
         </div>
         <div className="dk-chips">
           <span className="dchip">出库 <b>{qty(t.qty)}</b> 片</span><span className="dchip"><b>{t.n}</b> 单</span><span className="dchip"><b>{t.c}</b> 位客户</span>
+          {fob && transit?.n > 0 && <button type="button" className="dchip" onClick={() => go('fob')}>在途 <b>{transit.n}</b> 单 · 订金已收 <b>{transit.paid}</b> ›</button>}
           {t.miss > 0 && <button type="button" className="dchip red" onClick={() => setMissOpen(true)}>{qty(t.miss)} 片没成本 · {miss.length} 个型号，去补 ›</button>}
           <span className="grow" />
           {open && !fob && <div className="seg sm">{[['category', '按种类'], ['tier', '按档位']].map(([k, l]) => <button type="button" key={k} className={dim === k ? 'on' : ''} onClick={() => { setDim(k); setExp({}); }}>{l}</button>)}</div>}
@@ -352,7 +354,7 @@ export function PeopleBlock({ from, to, label }) {
   ];
   return (
     <div className="card dash-sec">
-      <div className="card-h"><h2>打卡 · 拜访 · 热线 <span className="muted small">打卡只看今天；异常次数、合计跟上面的日期走</span></h2></div>
+      <div className="card-h"><h2>人员 <Info>打卡只看今天；异常次数、合计跟上面的日期走。</Info></h2></div>
       <div className="card-b">
         <LayoutGrid page="dash.people" blocks={cards} defaultGap={12} sub="打卡 / 拜访 / 热线" />
         {open === 'att' && <div className="mc-detail">

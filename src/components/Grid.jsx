@@ -403,7 +403,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   const [tip, setTip] = useState(null); const tipT = useRef(null); const [zoom, setZoom] = useState(null);
   const truncOf = (td) => { if (!td || td.classList.contains('rowhead')) return null; const el = td.querySelector('.cell-txt') || td; if (el.scrollWidth <= el.clientWidth + 1 && td.scrollWidth <= td.clientWidth + 1) return null; const text = (td.innerText || '').trim(); return text ? text : null; };
   const cellOver = (e) => { const td = e.target.closest?.('td[data-cc]'); clearTimeout(tipT.current); if (!td || td.classList.contains('sel-a') || td.querySelector('.shared')) { setTip(null); return; }
-    tipT.current = setTimeout(() => { const text = truncOf(td); if (!text) return setTip(null); const r = td.getBoundingClientRect(); setTip({ text, left: Math.max(8, Math.min(r.left, window.innerWidth - 368)), top: r.bottom + 4 }); }, 380); };
+    tipT.current = setTimeout(() => { const text = truncOf(td); if (!text) return setTip(null); const r = td.getBoundingClientRect(); setTip({ text, left: Math.max(8, Math.min(r.left, window.innerWidth - 368)), top: r.bottom + 4 }); }, 80); };
   const cellOut = () => { clearTimeout(tipT.current); setTip(null); };
   useEffect(() => {
     if (!sel || editing || !range || range.r0 !== range.r1 || range.c0 !== range.c1) { setZoom(null); return undefined; }

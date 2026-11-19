@@ -15,7 +15,7 @@ export const ITEMS = {
   dashboard: ['◫', '经营总览', 'work', ['admin', 'manager', 'sales_manager', 'hotline', 'picker', 'finance', 'sales']],
   todo: ['◉', '我的待办', 'work', []],
   sop: ['▣', '培训与 SOP', 'work', []],
-  attendance: ['⏱', '上班打卡', 'work', STAFF],
+  attendance: ['⏱', '打卡', 'work', STAFF],
   kpi: ['⏲', '时效与准确率', 'work', ['admin']],
   margin: ['％', '毛利分析', 'cn', ['admin']],
   rules: ['⚙', '规则参数', 'cn', ['admin']],   // 350

@@ -2,7 +2,7 @@
 // 这里直接看: 每个公户现在欠公司多少 + 每一笔 (客户、日期、金额、已交、还欠、压了几天). 交回 (交款 / 转出) 按先进先出冲最老的一笔.
 import React, { useState } from 'react';
 import { q } from '../db/client.js';
-import { useApp, useData, Pill, Assumed } from './ui.jsx';
+import { useApp, useData, Pill, Assumed, Info } from './ui.jsx';
 import { money, dDate, today } from '../lib/format.js';
 
 const N = (v) => Number(v || 0);
@@ -47,9 +47,8 @@ export default function PublicHeld({ urgentOnly }) {
   }
   return (
     <div className="card" style={{ marginBottom: 12 }}>
-      <div className="card-h"><h2>公司收款账户：谁欠公司多少</h2>
-        <Assumed>「交回」怎么对到每一笔：我按先进先出算（交回的钱先冲最老的那笔收款）。交回时到账比应交少的差额就是手续费，目前要你在交款时另记一笔办公费，系统还没自动拆。</Assumed>
-        <span className="small muted">客户付到这些账户：客户的账已经冲了，钱还在持有人手里</span></div>
+      <div className="card-h"><h2>公户欠款 <Info>客户付到公司收款账户（公户）：客户的账已经冲了，钱还在持有人手里。这里看每个持有人现在欠公司多少。</Info></h2>
+        <Assumed>「交回」怎么对到每一笔：我按先进先出算（交回的钱先冲最老的那笔收款）。交回时到账比应交少的差额就是手续费，目前要你在交款时另记一笔办公费，系统还没自动拆。</Assumed></div>
       <div className="numblocks">
         {data.map((a) => (
           <button type="button" key={a.id} className={`numblock ${a.late ? 'red' : a.total > 0 ? 'amber' : ''} ${open === a.id ? 'on' : ''}`} aria-expanded={open === a.id} onClick={() => setOpen(open === a.id ? null : a.id)}>

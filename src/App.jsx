@@ -8,7 +8,7 @@ import MarginPage from './pages/MarginPage.jsx';
 import RulesPage from './pages/RulesPage.jsx';
 import CodeReview from './pages/CodeReview.jsx';
 import { DirectiveGate } from './components/Directives.jsx';
-import { Ctx, Modal, useToasts, useOutside, Info, useStickyPagehead } from './components/ui.jsx';
+import { Ctx, Modal, useToasts, useOutside, Info, useStickyPagehead, useInstantTips } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
 import { ExportPanel, DocSettings, PermPanel } from './components/SettingsPanels.jsx';
 import { loadAllOpts } from './components/Opts.jsx';
@@ -62,6 +62,7 @@ export default function App() {
   const [boot, setBoot] = useState({ ready: false, msg: '正在启动…', err: null });
   const [org, setOrg] = useState(null);
   const [route, setRoute] = useState(parseHash);
+  useInstantTips();      // 442: 鼠标提示马上出
   useStickyPagehead();   // 426: 所有页面的表头往下滑时冻结
   const [role, setRoleState] = useState(() => store.get('la9s.role', 'admin'));
   const [tick, setTick] = useState(0);

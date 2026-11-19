@@ -75,11 +75,11 @@ export default function Inquiry({ embedded } = {}) {
       {!embedded && <div className="pagehead"><div><div className="eyebrow">Demandes</div>
         <h1>询单 <Info>询单 = 客户想要什么、还没定价。游客、开了账号的大客户、外跑销售都从这里进；中方看一眼价格、点「转成报价」才变成订单（单号 CI-…），之后流程和现在一样。销售只能给自己名下的客户建询单；价格只有中方定。</Info> <RuleGear anchor="inquiry-rules" title="询单规则" ids={['guest.low']} /></h1></div>
         <span className="grow" /><button type="button" className="btn" onClick={() => setNewP(true)}>＋ 新客户（潜客）</button></div>}
-      <div className="kpis" style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))', marginBottom: 10 }}>
+      <div className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 10 }}>
         <div className="kpi"><div className="t"><span>本月询单</span></div><b className="kpi-n">{stats.n}</b></div>
         <div className="kpi"><div className="t"><span>还没处理完</span></div><b className="kpi-n" style={{ color: stats.open ? 'var(--red)' : undefined }}>{stats.open}</b></div>
         <div className="kpi"><div className="t"><span>已转订单</span></div><b className="kpi-n">{stats.dn}</b></div>
-        <div className="kpi"><div className="t"><span>转化率</span><span>已结束的里成了多少</span></div><b className="kpi-n">{stats.rate == null ? '—' : `${stats.rate}%`}</b></div>
+        <div className="kpi"><div className="t"><span>转化率 <Info>已经结束的询单里，成了订单的占多少。</Info></span></div><b className="kpi-n">{stats.rate == null ? '—' : `${stats.rate}%`}</b></div>
       </div>
       <div className="tabs"><button type="button" className={tab === 'new' ? 'on' : ''} onClick={() => setTab('new')}>＋ 建询单</button>
         <button type="button" className={tab === 'list' ? 'on' : ''} onClick={() => setTab('list')}>询单列表 <b>{data.list.filter((i) => ['new', 'contacted'].includes(i.status)).length}</b></button></div>
