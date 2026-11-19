@@ -201,7 +201,6 @@ export function CustomerDrawer({ id, onClose }) {
             <button type="button" className="btn sm" onClick={() => setEdit('info')}>✎ 修改档案（收货人 / 电话 / 城市 / 地址{role === 'admin' ? ' / 档位' : ''}）</button>
           </div>)}
         <AccountPanel customer={c} />
-        <PortalOpts c={c} />
         <ContactsCard customerId={c.id} />
         <OwnerLog customerId={c.id} />
         <CustSincerity customerId={c.id} />
@@ -315,25 +314,6 @@ function InfoModal({ c, onClose }) {
       {confirm && <ConfirmEdit c={confirm} title="确认修改客户档案" onBack={() => setConfirm(null)} onSave={go} />}
     </Modal>
   );
-}
-
-// 393: 客户账号能看什么 (只中方调): 具体库存 / 自己的价 / 店员看不看价. 游客永远只看 有货 / 少量 / 可预订.
-function PortalOpts({ c }) {
-  const { role, toast, refresh } = useApp();
-  if (role !== 'admin' || c.status !== 'active') return null;
-  const o = c.portal_opts || {};
-  const v = { stock: o.stock ?? true, price: o.price ?? true, clerk_price: o.clerk_price ?? false };
-  const set = async (k, val) => { try { await call(role, `select app.set_portal_opts($1,$2)`, [c.id, JSON.stringify({ [k]: val })]); toast('已保存，客户账号下次打开就按这个'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
-  return (
-    <div className="pd-sec">
-      <div className="pd-h">客户账号能看什么 <span className="small muted" style={{ fontWeight: 400 }}>只对开了下单账号的客户有用；他永远看不到成本、别的档位价、别人的成交价</span>
-        <Assumed>默认：老板看具体库存 + 看自己的价；店员看库存、不看价。关掉「看具体库存」= 只显示 有货 / 少量 / 可预订。</Assumed></div>
-      <div className="kv-row">
-        <span className="row" style={{ gap: 6 }}>看具体库存片数 <Choice size="sm" value={v.stock ? 'y' : 'n'} onChange={(x) => set('stock', x === 'y')} options={[['y', '看'], ['n', '不看']]} /></span>
-        <span className="row" style={{ gap: 6 }}>老板看自己的价 <Choice size="sm" value={v.price ? 'y' : 'n'} onChange={(x) => set('price', x === 'y')} options={[['y', '看'], ['n', '不看']]} /></span>
-        <span className="row" style={{ gap: 6 }}>店员看价 <Choice size="sm" value={v.clerk_price ? 'y' : 'n'} onChange={(x) => set('clerk_price', x === 'y')} options={[['y', '看'], ['n', '不看']]} /></span>
-      </div>
-    </div>);
 }
 
 // 392: 归属历史 —— 这个客户先后由谁负责 (提成按出库那一刻的归属人算, 不受后来移交影响)

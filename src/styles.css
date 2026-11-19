@@ -1466,3 +1466,5 @@ table.t th[data-ck] { user-select: none; }
 .rule-row.click { cursor: pointer; padding: 4px 6px; border-radius: 8px; }
 .rule-row.click:hover { background: #f3f7fd; }
 .rule-unit { width: 52px; flex-shrink: 0; }
+
+.acc-perms { border-top: 1px dashed var(--line-2); margin-top: 10px; padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }

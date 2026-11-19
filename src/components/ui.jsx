@@ -525,42 +525,53 @@ export function SortList({ items, keyOf, render, onChange, gap = 6, className = 
   const [drag, setDrag] = useState(null);       // { key, dy, startY, startIdx }
   const order = useRef(items);
   order.current = items;
-  // FLIP: 每次顺序变了, 其他行从旧位置平滑滑到新位置
+  // FLIP: 每次顺序变了, 其他行从旧位置平滑滑到新位置.
+  // 11-19 修闪屏: 量位置一律用 offsetTop (不受动画里的 transform 影响); 只在顺序真的变了才做动画;
+  // 判断换不换位也按布局位置算, 不按正在动画中的位置算 (否则两行来回换 = 一闪一闪).
+  const sig = items.map((x) => String(keyOf(x))).join('|');
+  const lastSig = useRef(sig);
   React.useLayoutEffect(() => {
     const el = box.current; if (!el) return;
     const now = new Map();
-    for (const c of el.children) now.set(c.dataset.k, c.getBoundingClientRect().top);
-    for (const c of el.children) {
-      const k = c.dataset.k; if (drag && k === drag.key) continue;
-      const before = rects.current.get(k), after = now.get(k);
-      if (before != null && after != null && Math.abs(before - after) > 1) {
-        c.style.transition = 'none'; c.style.transform = `translateY(${before - after}px)`;
-        requestAnimationFrame(() => { c.style.transition = 'transform .18s ease'; c.style.transform = ''; });
+    for (const c of el.children) now.set(c.dataset.k, c.offsetTop);
+    if (lastSig.current !== sig) {
+      for (const c of el.children) {
+        const k = c.dataset.k; if (drag && k === drag.key) continue;
+        const before = rects.current.get(k), after = now.get(k);
+        if (before != null && after != null && Math.abs(before - after) > 1) {
+          c.style.transition = 'none'; c.style.transform = `translateY(${before - after}px)`;
+          void c.offsetHeight;
+          c.style.transition = 'transform .18s ease'; c.style.transform = '';
+        }
       }
+      lastSig.current = sig;
     }
     rects.current = now;
-  });
+  }, [sig]);   // eslint-disable-line react-hooks/exhaustive-deps
   const down = (e, it) => {
     if (e.button != null && e.button !== 0) return;
     if (e.target.closest('button,input,select,textarea,a,label')) return;
     e.preventDefault(); e.stopPropagation();   // 嵌套列表只拖最里面那层
     const k = String(keyOf(it));
-    setDrag({ key: k, dy: 0, startY: e.clientY });
+    let startY = e.clientY;
+    setDrag({ key: k, dy: 0, startY });
     const move = (ev) => {
       const el = box.current; if (!el) return;
-      setDrag((d) => d && { ...d, dy: ev.clientY - d.startY });
+      const dy = ev.clientY - startY;
+      setDrag((d) => d && { ...d, dy });
       const kids = [...el.children];
-      const me = kids.find((c) => c.dataset.k === k); if (!me) return;
-      const myRect = me.getBoundingClientRect(); const mid = myRect.top + myRect.height / 2;
       const cur = order.current; const i = cur.findIndex((x) => String(keyOf(x)) === k);
-      let j = i;
+      const me = kids[i]; if (!me) return;
+      const mid = me.offsetTop + me.offsetHeight / 2 + dy;
       const prev = kids[i - 1], next = kids[i + 1];
-      if (prev && mid < prev.getBoundingClientRect().top + prev.getBoundingClientRect().height / 2) j = i - 1;
-      else if (next && mid > next.getBoundingClientRect().top + next.getBoundingClientRect().height / 2) j = i + 1;
+      let j = i;
+      if (prev && mid < prev.offsetTop + prev.offsetHeight / 2) j = i - 1;
+      else if (next && mid > next.offsetTop + next.offsetHeight / 2) j = i + 1;
       if (j !== i) {
         const n = [...cur]; const [x] = n.splice(i, 1); n.splice(j, 0, x);
-        const shift = (j > i ? 1 : -1) * ((j > i ? next : prev).getBoundingClientRect().height + gap);
-        setDrag((d) => d && { ...d, startY: d.startY + shift, dy: ev.clientY - (d.startY + shift) });
+        const shift = (j > i ? 1 : -1) * ((j > i ? next : prev).offsetHeight + gap);
+        startY += shift;
+        setDrag((d) => d && { ...d, startY, dy: ev.clientY - startY });
         onChange(n);
       }
     };
@@ -568,7 +579,7 @@ export function SortList({ items, keyOf, render, onChange, gap = 6, className = 
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
   };
   return (
-    <div ref={box} className={`sortlist ${className}`} style={{ display: 'flex', flexDirection: 'column', gap }}>
+    <div ref={box} className={`sortlist ${className}`} style={{ display: "flex", flexDirection: "column", gap, position: "relative" }}>
       {items.map((it, i) => {
         const k = String(keyOf(it)); const me = drag?.key === k;
         return (
