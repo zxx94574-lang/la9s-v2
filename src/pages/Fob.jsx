@@ -2,6 +2,7 @@
 // 科特迪瓦 = 仓库控货 (到货进 FOB 仓, 我们出库); 多哥等 = 物流控货 (货在物流手上, 放货 = 通知物流放).
 // 常规 30% 订金 70% 尾款; 放货由中方人工决定, 没收齐也能放, 但要写原因.
 import React, { useState } from 'react';
+import FreeItem from '../components/FreeItem.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice, MoneyIn } from '../components/ui.jsx';
@@ -96,11 +97,13 @@ function NewFob({ onClose }) {
   const [free, setFree] = useState({ model: '', qty: '' });
   const [note, setNote] = useState('');
   if (!data) return null;
-  const add = (p) => setLines((l) => [...l, { product_id: p.id, model: p.model, category: p.category, code: p.code, qty: '' }]);
+  // 389: 选型号 = 全站标准下拉 —— 点了变绿打勾 = 已选, 再点 = 取消; 同机型不同编码 (HD / QHD) 各占一行、分别选
+  const add = (p) => setLines((l) => (l.some((x) => x.product_id === p.id) ? l : [...l, { product_id: p.id, model: p.model, category: p.category, code: p.code, variant: p.variant, qty: '' }]));
+  const picked = new Set(lines.filter((l) => l.product_id).map((l) => l.product_id));
   const go2 = async () => {
     try {
       const [{ id }] = await call(role, `select app.create_fob($1,$2,$3,$4,'XOF',$5,$6) as id`, [org, cust, country, control,
-        JSON.stringify(lines.filter((l) => Number(l.qty) > 0).map((l) => ({ product_id: l.product_id, model: l.model, qty: Number(l.qty) }))), note || null]);
+        JSON.stringify(lines.filter((l) => Number(l.qty) > 0).map((l) => ({ product_id: l.product_id, model: l.model, qty: Number(l.qty) }))), [note, ...lines.filter((l) => l.free_note).map((l) => `${l.model}：${l.free_note}`)].filter(Boolean).join('；') || null]);
       toast('FOB 申请已提交，等中方定价'); onClose(); go('fob/' + id);
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
@@ -114,17 +117,14 @@ function NewFob({ onClose }) {
             <Choice value={country} onChange={(v) => { setCountry(v); setControl(v === 'CI' ? 'warehouse' : 'logistics'); }} options={data.countries.map((c) => [c.code, `${c.code} ${c.name_zh}`])} flat={false} style={{ width: 170 }} />
             <div className="seg">{Object.entries(ctrl).map(([k, l]) => <button type="button" key={k} className={control === k ? 'on' : ''} onClick={() => setControl(k)}>{l}</button>)}</div></div></div>
         </div>
-        <ModelPicker catalog={data.catalog} categories={data.categories} onPick={add} showPrice={false} />
+        <ModelPicker catalog={data.catalog} categories={data.categories} onPick={add} picked={picked} onUnpick={(p) => setLines((l) => l.filter((x) => x.product_id !== p.id))} showPrice={false} />
         <Grid id="fob-new-lines" noTools rowKey={(l) => l._k} rows={lines.map((l, i) => ({ ...l, _k: String(i) }))} onDelete={(l, i, rs) => { const ks = new Set((rs || [l]).map((y) => y._k)); setLines((x) => x.filter((_, j) => !ks.has(String(j)))); }} empty="从上面选型号，或在下面填没编码的新货" columns={[
           { key: 'code', label: '编码', w: 90, value: (l) => l.code || '—', mono: true },
           { key: 'category', label: '种类', w: 110, value: (l) => l.category || '—' },
-          { key: 'model', label: '型号', w: 140, value: (l) => l.model, render: (l) => <ModelLink id={l.product_id} model={l.model} /> },
+          { key: 'model', label: '型号', w: 200, value: (l) => l.model, render: (l) => <><ModelLink id={l.product_id} model={l.model} />{l.variant ? <span className="pill blue" style={{ marginLeft: 6 }}>{l.variant}</span> : null}{l.free_note ? <span className="small muted"> · {l.free_note}</span> : null}</> },
           { key: 'qty', label: '数量', w: 90, fill: true, value: (l) => l.qty, edit: (l) => ({ type: 'number', value: l.qty, onChange: (v) => setLines((x) => x.map((y, j) => (j === Number(l._k) ? { ...y, qty: String(v ?? '').replace(/\D/g, '') } : y))) }) },
         ]} />
-        <div className="row" style={{ gap: 6, alignItems: 'center' }}><span className="muted small">没编码的新货</span>
-          <input className="in" placeholder="型号" style={{ maxWidth: 160 }} value={free.model} onChange={(e) => setFree({ ...free, model: e.target.value.toUpperCase() })} />
-          <MoneyIn className="in" inputMode="numeric" placeholder="数量" value={free.qty} style={{ maxWidth: 100 }} onChange={(e) => setFree({ ...free, qty: e.target.value.replace(/\D/g, '') })} />
-          <button type="button" className="btn sm" disabled={!free.model || !free.qty} onClick={() => { setLines((x) => [...x, { model: free.model, qty: free.qty }]); setFree({ model: '', qty: '' }); }}>加</button></div>
+        <FreeItem categories={data.categories} catalog={data.catalog} onAdd={(x) => setLines((l) => [...l, { model: [x.model, x.category, x.grade].filter(Boolean).join(' · '), category: x.category, qty: x.qty, free_note: x.note }])} />
         <div className="field"><label>备注</label><input className="in" value={note} onChange={(e) => setNote(e.target.value)} /></div>
       </div>
     </Modal>

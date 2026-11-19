@@ -3,6 +3,7 @@
 // 有期望发货日、预计到货日; 快到了 / 过了日子还没到, 待办里提醒.
 // 国内录金蝶采购订单时, 请在备注里写上这里的申请单号 (PR-…), 系统收货时自动对上.
 import React, { useState } from 'react';
+import FreeItem from '../components/FreeItem.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, Modal, DatePicker, Info, Choice, MoneyIn } from '../components/ui.jsx';
@@ -104,13 +105,15 @@ function EditPR({ r, onClose }) {
         </div>
         <div className="field"><label>具体描述（尺码、颜色、怎么装箱、分柜要求…）</label><textarea className="in" rows={2} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
         {f.kind !== 'supplies' && <ModelPicker catalog={data.catalog} categories={data.categories} showPrice={false}
-          onPick={(p) => setLines((l) => [...l, { product_id: p.id, item: p.model, spec: [p.category, p.variant].filter(Boolean).join(' '), qty: '' }])} />}
+          picked={new Set(lines.filter((l) => l.product_id).map((l) => l.product_id))} onUnpick={(p) => setLines((l) => l.filter((x) => x.product_id !== p.id))}
+          onPick={(p) => setLines((l) => (l.some((x) => x.product_id === p.id) ? l : [...l, { product_id: p.id, item: p.model, spec: [p.category, p.variant].filter(Boolean).join(' '), qty: '' }]))} />}
         <Grid id="pr-new-lines" noTools rowKey={(l) => l._k} rows={lines.map((l, i) => ({ ...l, _k: String(i) }))} onDelete={(l, i, rs) => { const ks = new Set((rs || [l]).map((y) => y._k)); setLines((x) => x.filter((_, j) => !ks.has(String(j)))); }} empty="从上面选型号，或在下面填没编码的货 / 物资" columns={[
           { key: 'item', label: '货 / 物资', w: 160, value: (l) => l.item, render: (l) => <b>{l.item}</b>, edit: (l) => (l.product_id ? null : { type: 'text', value: l.item, onChange: (v) => setLines((x) => x.map((y, j) => (j === Number(l._k) ? { ...y, item: v } : y))) }) },
           { key: 'spec', label: '规格', w: 160, value: (l) => l.spec || '', edit: (l) => ({ type: 'text', value: l.spec || '', onChange: (v) => setLines((x) => x.map((y, j) => (j === Number(l._k) ? { ...y, spec: v } : y))) }) },
           { key: 'qty', label: '数量', w: 90, fill: true, value: (l) => l.qty, edit: (l) => ({ type: 'number', value: l.qty, onChange: (v) => setLines((x) => x.map((y, j) => (j === Number(l._k) ? { ...y, qty: String(v ?? '').replace(/\D/g, '') } : y))) }) },
         ]} />
-        <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        {f.kind !== 'supplies' && <FreeItem categories={data.categories} catalog={data.catalog} onAdd={(x) => setLines((l) => [...l, { item: x.model, spec: [x.category, x.grade, x.note].filter(Boolean).join(' · '), qty: x.qty }])} />}
+        <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', display: f.kind === 'supplies' ? 'flex' : 'none' }}>
           <input className="in" style={{ maxWidth: 200 }} placeholder={f.kind === 'supplies' ? '物资名称（例：工服）' : '没编码的型号'} value={free.item} onChange={(e) => setFree({ ...free, item: e.target.value })} />
           <input className="in" style={{ maxWidth: 180 }} placeholder="规格（例：L 码 蓝色）" value={free.spec} onChange={(e) => setFree({ ...free, spec: e.target.value })} />
           <MoneyIn className="in" inputMode="numeric" placeholder="数量" value={free.qty} style={{ maxWidth: 90 }} onChange={(e) => setFree({ ...free, qty: e.target.value.replace(/\D/g, '') })} />

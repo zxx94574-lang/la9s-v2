@@ -62,7 +62,7 @@ export default function Inquiry({ embedded } = {}) {
           <div className="grow" style={{ maxWidth: 460 }}><CustomerSelect onlyActive={false} customers={data.customers} value={cust} onChange={setCust} /></div>
           {c && (c.status === 'active' ? <Pill tone="blue">老客户</Pill> : <Pill tone="amber">新客户：要中方定档位</Pill>)}
         </div>
-        <div className="card-b" style={{ paddingTop: 0 }}><ModelPicker catalog={data.catalog} categories={data.categories} onPick={add} showPrice={false} /></div>
+        <div className="card-b" style={{ paddingTop: 0 }}><ModelPicker catalog={data.catalog} categories={data.categories} onPick={add} picked={new Set(lines.filter((l) => l.product_id).map((l) => l.product_id))} onUnpick={(p) => setLines((l) => l.filter((x) => x.product_id !== p.id))} showPrice={false} /></div>
         <Grid id="inq-lines" noTools rowKey={(l) => l._k} rows={lines.map((l, i) => ({ ...l, _k: String(i) }))} onDelete={(l, i, rs) => { const ks = new Set((rs || [l]).map((y) => y._k)); setLines((x) => x.filter((_, j) => !ks.has(String(j)))); }} empty="上面选型号，或在下面填客户要的没编码的型号" columns={[
           { key: 'code', label: '编码', w: 90, mono: true, value: (l) => l.code || '没编码', render: (l) => l.code || <Pill tone="amber">没编码</Pill> },
           { key: 'category', label: '种类', w: 110, value: (l) => l.category || '' },

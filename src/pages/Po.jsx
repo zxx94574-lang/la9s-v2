@@ -26,11 +26,37 @@ select p.id, p.po_no, p.batch_name, p.warehouse_nos, p.purpose, p.fob_customer_c
   (select count(*) from app.po_boxes b where b.po_id = p.id)::int as boxes_n,
   (select count(*) from app.po_boxes b where b.po_id = p.id and b.status = 'received')::int as boxes_in,
   (select count(*) from app.po_lines l where l.po_id = p.id and l.product_id is null)::int as unmatched_n,
-  (select string_agg(distinct coalesce(pr.model, l.descr, l.model), ' / ') from app.po_lines l left join app.products pr on pr.id = l.product_id where l.po_id = p.id) as models
+  (select string_agg(distinct coalesce(pr.model, l.descr, l.model), ' / ') from app.po_lines l left join app.products pr on pr.id = l.product_id where l.po_id = p.id) as models,
+  (select count(*) from app.po_lines l where l.po_id = p.id)::int as lines_n,
+  (select coalesce(jsonb_agg(jsonb_build_object('id', c.id, 'code', c.code, 'name', c.name) order by c.code), '[]') from app.customers c where c.org_id = p.org_id and c.code = any(coalesce(p.fob_customer_codes, '{}'))) as fob_customers,
+  (select coalesce(jsonb_agg(jsonb_build_object('grn', r.grn_no, 'kd', r.kd_no, 'st', r.kd_status, 'at', r.created_at) order by r.created_at), '[]') from app.po_receipts r where r.po_id = p.id) as grns
 from app.purchase_orders p left join app.fob_projects f on f.id = p.fob_project_id
 where p.org_id = $1 order by coalesce(p.shipped_on, p.ordered_on, p.created_at::date) desc, p.po_no desc`;
 
+// 372 (Frank 11-18): 按明细看 —— 一个型号一行 (一张单 10 个型号 = 10 行), 看「某个型号现在在途多少」
+export const poLinesSql = `
+select l.id, p.id as po_id, p.po_no, p.batch_name, p.warehouse_nos, p.purpose, p.status, p.shipped_on, p.eta, f.fob_no, p.fob_customer_codes,
+  (select coalesce(jsonb_agg(jsonb_build_object('id', c.id, 'code', c.code, 'name', c.name) order by c.code), '[]') from app.customers c where c.org_id = p.org_id and c.code = any(coalesce(p.fob_customer_codes, '{}'))) as fob_customers,
+  l.product_id, pr.code, coalesce(pr.model, l.model) as model, coalesce(cat.name, '') as category, l.descr, l.qty, l.qty_received as received, coalesce(l.closed_qty, 0) as closed
+from app.po_lines l join app.purchase_orders p on p.id = l.po_id left join app.fob_projects f on f.id = p.fob_project_id
+left join app.products pr on pr.id = l.product_id left join app.categories cat on cat.id = pr.category_id
+where p.org_id = $1 order by coalesce(p.shipped_on, p.ordered_on, p.created_at::date) desc, p.po_no desc, pr.code`;
 const transitOf = (p) => N(p.qty) - N(p.received) - N(p.closed);
+// 372: 客户列 = 客户姓名 (档案链接) + 灰色小字编码; FOB 项目号在前
+function PoCust({ p }) {
+  const { openArchive } = useApp();
+  const cs = p.fob_customers || [];
+  if (!p.fob_no && !cs.length) return p.purpose === 'fob' && (p.fob_customer_codes || []).length ? <span className="muted small">{(p.fob_customer_codes || []).join(', ')}</span> : '';
+  return <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>{p.fob_no && <span className="mono small">{p.fob_no}</span>}{cs.map((c) => <span key={c.id}><button type="button" className="linkbtn" onClick={(e) => { e.stopPropagation(); openArchive({ kind: 'customer', id: c.id }); }}>{c.name}</button> <span className="small muted">{c.code}</span></span>)}</span>;
+}
+const custText = (p) => [p.fob_no, ...(p.fob_customers || []).map((c) => `${c.name} ${c.code}`), ...(!(p.fob_customers || []).length ? (p.fob_customer_codes || []) : [])].filter(Boolean).join(' ');
+// 377: 金蝶状态 —— 每次到货对应金蝶一张采购入库单; 系统到了货但没填金蝶入库单号的要看得见
+function kdState(p) {
+  const g = p.grns || []; const miss = g.filter((x) => !x.kd).length;
+  if (!g.length) return ['未入库', 'gray', ''];
+  if (miss) return [`${miss} 次到货没填金蝶入库单号`, 'red', g.filter((x) => x.kd).map((x) => x.kd).join(' / ')];
+  return [N(p.received) + N(p.closed) >= N(p.qty) ? '已入库' : '部分入库', N(p.received) + N(p.closed) >= N(p.qty) ? 'green' : 'amber', g.map((x) => x.kd).join(' / ')];
+}
 function poState(p) {
   if (p.status === 'closed') return N(p.closed) > 0 ? ['到齐（有差额已关）', 'green'] : ['已到齐', 'green'];
   if (N(p.received) > 0) return ['部分到货', 'amber'];
@@ -48,17 +74,19 @@ export default function PoPage() {
   const [f, setF] = useState('transit');
   const [imp, setImp] = useState(false);
   const [edit, setEdit] = useState(null);
+  const [view, setView] = useState('po');   // 按订单看 / 按明细看
   const { data } = useData(() => q(poListSql, [org]), [org]);
+  const { data: detail } = useData(() => (view === 'line' ? q(poLinesSql, [org]) : Promise.resolve(null)), [org, view]);
   if (!data) return <div className="empty">加载中…</div>;
   const rows = data.filter((p) => (f === 'transit' ? p.status !== 'closed' : f === 'done' ? p.status === 'closed' : f === 'fob' ? p.purpose === 'fob' : f === 'local' ? p.purpose !== 'fob' : true));
   const n = (k) => data.filter((p) => (k === 'transit' ? p.status !== 'closed' : k === 'done' ? p.status === 'closed' : k === 'fob' ? p.purpose === 'fob' : k === 'local' ? p.purpose !== 'fob' : true)).length;
   const cols = [
     { key: 'po_no', label: '采购单号', w: 190, render: (p) => <PoLink id={p.id} no={p.po_no} /> },
     { key: 'purpose', label: '用途', w: 90, value: (p) => PURPOSE[p.purpose || 'unknown'][0], render: (p) => <Pill tone={PURPOSE[p.purpose || 'unknown'][1]}>{PURPOSE[p.purpose || 'unknown'][0]}</Pill> },
-    { key: 'fob_no', label: 'FOB 项目 / 客户', w: 130, value: (p) => p.fob_no || (p.purpose === 'fob' ? (p.fob_customer_codes || []).join(',') : '') },
+    { key: 'fob_no', label: 'FOB 项目 / 客户', w: 220, value: custText, render: (p) => <PoCust p={p} /> },
     { key: 'batch_name', label: '需求批次', w: 200 },
     { key: 'inbound', label: '入仓号', w: 120, value: (p) => (p.warehouse_nos || []).join(' / ') },
-    { key: 'models', label: '货', w: 220 },
+    { key: 'models', label: '货', w: 150, value: (p) => p.models || '', render: (p) => (p.lines_n ? <span title={p.models}>{p.lines_n} 个型号 · 共 {qty(p.qty)} 片</span> : '') },
     { key: 'shipped_on', label: '发货日', w: 100, render: (p) => dDate(p.shipped_on) },
     { key: 'eta', label: '预计到', w: 100, render: (p) => dDate(p.eta) },
     { key: 'qty', label: '采购数', w: 90, type: 'number', render: (p) => qty(p.qty) },
@@ -66,6 +94,25 @@ export default function PoPage() {
     { key: 'boxes', label: '箱（到 / 共）', w: 110, value: (p) => p.boxes_n, render: (p) => (p.boxes_n ? `${p.boxes_in} / ${p.boxes_n}` : <span className="muted small">没有箱单</span>) },
     { key: 'status', label: '状态', w: 140, value: (p) => poState(p)[0], render: (p) => <span className="row" style={{ gap: 4 }}><Pill tone={poState(p)[1]}>{poState(p)[0]}</Pill>{p.unmatched_n > 0 && <Pill tone="red">{p.unmatched_n} 行没对上编码</Pill>}</span> },
     { key: 'source', label: '来源', w: 90, value: (p) => SOURCE[p.source] || p.source },
+    { key: 'kd', label: '金蝶状态', w: 170, value: (p) => kdState(p)[0], render: (p) => <Pill tone={kdState(p)[1]}>{kdState(p)[0]}</Pill> },
+    { key: 'kd_no', label: '金蝶采购入库单号', w: 170, value: (p) => kdState(p)[2], render: (p) => <span className="mono small">{kdState(p)[2]}</span> },
+  ];
+  const filt = (p) => (f === 'transit' ? p.status !== 'closed' : f === 'done' ? p.status === 'closed' : f === 'fob' ? p.purpose === 'fob' : f === 'local' ? p.purpose !== 'fob' : true);
+  const lineCols = [
+    { key: 'po_no', label: '采购单号', w: 190, render: (l) => <PoLink id={l.po_id} no={l.po_no} /> },
+    { key: 'purpose', label: '用途', w: 90, value: (l) => PURPOSE[l.purpose || 'unknown'][0], render: (l) => <Pill tone={PURPOSE[l.purpose || 'unknown'][1]}>{PURPOSE[l.purpose || 'unknown'][0]}</Pill> },
+    { key: 'fob_no', label: 'FOB 项目 / 客户', w: 220, value: custText, render: (l) => <PoCust p={l} /> },
+    { key: 'code', label: '编码', w: 90, mono: true, value: (l) => l.code || '' },
+    { key: 'category', label: '种类', w: 110 },
+    { key: 'model', label: '型号', w: 150, value: (l) => l.model || l.descr || '', render: (l) => (l.product_id ? <ModelLink id={l.product_id} model={l.model} /> : <span className="red-t2">{l.descr || l.model}（没对上编码）</span>) },
+    { key: 'qty', label: '采购数', w: 90, type: 'number', render: (l) => qty(l.qty) },
+    { key: 'received', label: '已到', w: 80, type: 'number', render: (l) => (N(l.received) ? qty(l.received) : '') },
+    { key: 'transit', label: '在途', w: 80, type: 'number', value: (l) => (l.status === 'closed' ? 0 : transitOf(l)), render: (l) => (l.status !== 'closed' && transitOf(l) > 0 ? <b>{qty(transitOf(l))}</b> : '') },
+    { key: 'closed', label: '没到（已关）', w: 100, type: 'number', render: (l) => (N(l.closed) ? qty(l.closed) : '') },
+    { key: 'batch_name', label: '需求批次', w: 200 },
+    { key: 'inbound', label: '入仓号', w: 120, value: (l) => (l.warehouse_nos || []).join(' / ') },
+    { key: 'shipped_on', label: '发货日', w: 100, render: (l) => dDate(l.shipped_on) },
+    { key: 'eta', label: '预计到', w: 100, render: (l) => dDate(l.eta) },
   ];
   return (
     <>
@@ -76,9 +123,14 @@ export default function PoPage() {
         {can(role, 'po_edit') && <button type="button" className="btn primary" onClick={() => setEdit({ purpose: 'local', lines: [] })}>＋ 新建采购单</button>}
       </div>
       <div className="card">
-        <Grid id="po-list" table="purchase_orders" columns={cols} rows={rows} empty="没有采购单"
+        <div className="card-h" style={{ justifyContent: 'flex-end' }}><div className="seg"><button type="button" className={view === 'po' ? 'on' : ''} onClick={() => setView('po')}>按订单看</button><button type="button" className={view === 'line' ? 'on' : ''} onClick={() => setView('line')}>按明细看</button></div></div>
+        {view === 'line' ? <Grid id="po-lines" columns={lineCols} rows={(detail || []).filter(filt)} empty={detail ? '没有明细' : '加载中…'}
+          foot={(rs) => ({ po_no: `${rs.length} 行`, qty: qty(rs.reduce((a, l) => a + N(l.qty), 0)), received: qty(rs.reduce((a, l) => a + N(l.received), 0)), transit: qty(rs.reduce((a, l) => a + (l.status === 'closed' ? 0 : transitOf(l)), 0)) })}
           tools={<div className="chips">{[['transit', '在途 / 没到齐'], ['done', '已到齐'], ['local', '本地备货'], ['fob', 'FOB'], ['all', '全部']].map(([k, l]) => (
             <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} <b>{n(k)}</b></button>))}</div>} />
+        : <Grid id="po-list" table="purchase_orders" columns={cols} rows={rows} empty="没有采购单"
+          tools={<div className="chips">{[['transit', '在途 / 没到齐'], ['done', '已到齐'], ['local', '本地备货'], ['fob', 'FOB'], ['all', '全部']].map(([k, l]) => (
+            <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} <b>{n(k)}</b></button>))}</div>} />}
       </div>
       {imp && <PackingImport onClose={() => setImp(false)} />}
       {edit && <PoForm init={edit} onClose={() => setEdit(null)} />}

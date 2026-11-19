@@ -63,6 +63,12 @@ export default function QuoteNew() {
     q(`select * from app.quote_drafts where org_id = $1 and customer_id = $2 and user_id = $3`, [org, customer, USERS[role]]).then(([d]) => { if (alive) setRestore(d || null); });
     return () => { alive = false; };
   }, [customer, org, role, draftId, openId]);
+  const { data: dinfo } = useData(async () => {
+    const [r] = await q(`select value from app.org_settings where org_id = $1 and key = 'draft_rules'`, [org]);
+    const ds = await q(`select d.*, c.name as customer_name from app.quote_drafts d join app.customers c on c.id = d.customer_id where d.org_id = $1 and d.user_id = $2 order by d.updated_at desc`, [org, USERS[role]]).catch(() => []);
+    return { min: Number(r?.value?.min_lines ?? 5), ds };
+  }, [org, role]);
+  const minLines = dinfo?.min || 5; const myDrafts = dinfo?.ds;
   // 够行数就自动存 (停手 1.5 秒后)
   useEffect(() => {
     if (!customer || restore || realLines.length < 1) return;
@@ -197,7 +203,7 @@ export default function QuoteNew() {
             </React.Fragment>))}
         </div>
         <div className="flow2-now">
-          <span>新订单 · <b>第 1 步 报价</b> <Info>选客户、选货{canPrice ? '、给价' : ''} → 保存 → 下面接着联系客户确认。报价不预占库存，确认下推找货时才预占。选了客户、填够 5 行会自动存草稿（订单总览 →「草稿」里找得到，7 天没动自动删）。</Info>{draftId && <span className="small muted"> · 草稿已自动保存</span>}</span>
+          <span>新订单 · <b>第 1 步 报价</b> <Info>选客户、选货{canPrice ? '、给价' : ''} → 保存 → 下面接着联系客户确认。报价不预占库存，确认下推找货时才预占。选了客户、填够 5 行会自动存草稿（订单总览 →「草稿」里找得到，7 天没动自动删）。</Info>{draftId ? <span className="small muted"> · 草稿已自动保存</span> : customer && realLines.length > 0 && realLines.length < minLines ? <span className="small muted"> · 还没存草稿：再加 {minLines - realLines.length} 行才会自动存</span> : null}</span>
           <span className="grow" />
           {role === 'admin' && <PageGear items={[['种类顺序（所有人同款）', () => setCatOrderOpen(true)], [edit ? '退出调整版面' : '调整版面', () => setLayoutEdit(!edit)]]} />}
         </div>
@@ -207,6 +213,13 @@ export default function QuoteNew() {
       {custOpen && cust && <CustomerDrawer id={cust.id} onClose={() => setCustOpen(false)} />}
       {catOrderOpen && <CatOrderModal categories={data.categories} onClose={() => setCatOrderOpen(false)} />}
 
+      {/* 387 (Frank 11-18): 一打开新订单就告诉他有几张草稿没做完, 不用等选到同一个客户才冒出来 */}
+      {!customer && !openId && (myDrafts || []).length > 0 && (
+        <div className="card card-b row" style={{ gap: 8, flexWrap: 'wrap', background: 'var(--amber-bg)', borderColor: '#f3d9a8' }}>
+          <span>你有 <b>{myDrafts.length}</b> 张草稿没做完：</span>
+          {myDrafts.slice(0, 6).map((d) => <button type="button" key={d.id} className="btn sm" onClick={() => applyDraft(d)}>{d.customer_name} · {d.n_lines} 行</button>)}
+          {myDrafts.length > 6 && <span className="small muted">…其余在订单总览 →「草稿」</span>}
+        </div>)}
       {restore && (
         <div className="card card-b row between" style={{ background: 'var(--amber-bg)', borderColor: '#f3d9a8' }}>
           <span>这个客户有你上次没做完的报价草稿（{restore.n_lines} 行，{String(restore.updated_at || '').slice(0, 16).replace('T', ' ')}）</span>
