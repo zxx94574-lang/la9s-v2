@@ -1468,3 +1468,30 @@ table.t th[data-ck] { user-select: none; }
 .rule-unit { width: 52px; flex-shrink: 0; }
 
 .acc-perms { border-top: 1px dashed var(--line-2); margin-top: 10px; padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+
+/* 421 (11-19): 分组 —— 组头一条浅蓝底色带, 组名加粗大一号, 合计写在对应列下面; 第一层组和组之间空一道 */
+.grid table.t tr.grp-row.d0 > td { background: #e9f0fb; border-top: 2px solid #b9cbe8; padding-top: 8px; padding-bottom: 8px; }
+.grid table.t tr.grp-row.d0:hover > td { background: #dfe9f9; }
+.grid table.t tr.grp-row > td.rowhead { color: var(--brand); font-size: 13px; }
+.grp-name { font-size: 14px; font-weight: 750; color: #0d1b2e; }
+tr.grp-row.d1 .grp-name, tr.grp-row.d2 .grp-name { font-size: 13px; }
+tr.grp-row > td.grp-sum { font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.grp-row > td.grp-sum b { font-weight: 800; color: #0d1b2e; }
+.grp-sum-l { font-size: 11px; color: var(--muted); font-weight: 500; margin-right: 6px; }
+.grid table.t tr.grp-gap > td { height: 12px; padding: 0; border: 0 !important; background: #fff !important; cursor: default; }
+.grid table.t tr.grp-gap > td.rowhead { background: #fff !important; }
+
+/* 422 (11-19): 表格每一行一样高 —— 格子里只显示一行, 放不下的省略; 悬停出小框看全、点一下这格放大 (375 那套). 不撑高整行. */
+.grid table.t tbody tr[data-row] > td:not(.editing) { height: 20px; line-height: 20px; }
+.grid table.t tbody tr[data-row] > td:not(.editing) br { display: none; }
+.grid table.t tbody tr[data-row] > td:not(.editing) > :is(div, p):not(.peek, .cell-pop, .shared-pop, .menu, .thumb-pop, .info-tip, .cell-tip) { display: inline-block; vertical-align: middle; white-space: nowrap; margin: 0 6px 0 0; }
+.grid table.t tbody tr[data-row] > td:not(.editing) :is(.row, .stack, .wrap, [style*="flex-wrap: wrap"], [style*="flex-direction: column"]):not(:is(.peek, .cell-pop, .shared-pop, .menu, .thumb-pop, .info-tip, .modal) *) { flex-wrap: nowrap !important; flex-direction: row !important; gap: 6px; white-space: nowrap; }
+.grid table.t tbody tr[data-row] > td:not(.editing) .cell-hint { display: inline; white-space: nowrap; margin-left: 6px; }
+.grid table.t tbody tr[data-row] > td:not(.editing) .thumb > img { width: 24px !important; height: 24px !important; }
+.grid table.t tbody tr[data-row] > td:not(.editing) :not(.peek, .cell-pop, .shared-pop, .menu, .thumb-pop, .info-tip, .modal, :is(.peek, .cell-pop, .shared-pop, .menu, .thumb-pop, .info-tip, .modal) *) { white-space: nowrap !important; }
+.grid table.t tbody tr[data-row] > td:not(.editing) :is(.pill, .light, .tier, .date-chip, .dev, .btn.sm) { line-height: 18px; padding-top: 1px; padding-bottom: 1px; min-height: 0; vertical-align: middle; }
+.grid table.t tr.grp-row > td.rowhead { overflow: visible; }
+.grp-float { display: none; position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: #e9f0fb; color: #0d1b2e; font-size: 13px; padding: 2px 8px; border-radius: 6px; box-shadow: 0 1px 4px #0f2a5222; pointer-events: none; text-align: left; }
+.tw.grp-past tr.grp-row > td.rowhead .grp-float { display: block; }
+.grid table.t tr.grp-row > td[colspan] { overflow: clip; }
+.grid table.t tr.grp-row .sticky-left { left: calc(var(--rh, 40px) + 10px); }

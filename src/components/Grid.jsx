@@ -219,7 +219,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
       rs.forEach((r) => { const v = gvOf(c, r); if (!m.has(v)) m.set(v, []); m.get(v).push(r); });
       const sgn = groupDefs[depth].dir === 'desc' ? -1 : 1;
       const keys = [...m.keys()].sort((x, y) => (x === '' ? 1 : y === '' ? -1 : sgn * x.localeCompare(y, 'zh-CN', { numeric: true })));
-      keys.forEach((v) => { const id = `${prefix}\u0001${v}`; seq.push({ head: { id, v, depth, rows: m.get(v), col: c } }); if (!folded.has(id)) walk(m.get(v), depth + 1, id); });
+      keys.forEach((v) => { const id = `${prefix}\u0001${v}`; seq.push({ head: { id, v, depth, rows: m.get(v), col: c, first: seq.length === 0 } }); if (!folded.has(id)) walk(m.get(v), depth + 1, id); });
     };
     walk(allShown, 0, '');
     return seq;
@@ -278,16 +278,28 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
       flash(`已导出 ${out.length} 行`);
     } catch (e) { flash('导出失败：' + String(e?.message || e).slice(0, 60)); }
   };
+  // 421 (Frank 11-19): 组头一行 = 组名 + 行数 (从第一列开始, 占到第一个有合计的列之前) + 每个有合计的数字列在自己那一列正下方 (右对齐、加粗、小字「合计」);
+  // 没有合计的列留空; 第一层的组和组之间空一道 (grp-gap). 组尾不再加合计行 (Frank 定: 只放组头).
   const groupHead = (g) => {
     const off = folded.has(g.id);
     const gkeys = new Set(groupDefs.map((d) => d.key));
-    const sums = vis.filter((c) => !gkeys.has(c.key) && footObjKeys.has(c.key) && isNumCol(c)).map((c) => [c.label, g.rows.reduce((a, r) => a + (Number(cellValue(c, r)) || 0), 0)]);
-    return (
-      <tr key={`grp:${g.id}`} className={`grp-row d${g.depth}`} onClick={() => setFolded((f) => { const n = new Set(f); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n; })}>
-        <td className="rowhead"><span className="caret">{off ? '▸' : '▾'}</span></td>
-        <td colSpan={vis.length}><span className="sticky-left grp-h" style={{ paddingLeft: g.depth * 18 }}>{groupDefs.length > 1 && <span className="small muted">{g.col.label}</span>}<b>{g.v === '' ? '（空）' : g.v}</b><span className="pill">{g.rows.length} 行</span>
-          {sums.map(([l, n]) => <span key={l} className="small muted">{l} <b>{n.toLocaleString('en-US', { maximumFractionDigits: 2 })}</b></span>)}</span></td>
+    const sumOf = (c) => g.rows.reduce((a, r) => a + (Number(cellValue(c, r)) || 0), 0);
+    const hasSum = (c) => !gkeys.has(c.key) && isNumCol(c) && (c.sum === true || (c.sum !== false && footObjKeys.has(c.key)));
+    const first = vis.findIndex(hasSum);
+    const span = first < 0 ? vis.length : Math.max(1, first);
+    const name = g.v === '' ? '（空）' : g.v;
+    const toggle = () => setFolded((f) => { const n = new Set(f); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n; });
+    const out = [];
+    if (g.depth === 0 && !g.first) out.push(<tr key={`gap:${g.id}`} className="grp-gap" aria-hidden="true"><td colSpan={vis.length + 1} /></tr>);
+    out.push(
+      <tr key={`grp:${g.id}`} className={`grp-row d${g.depth}`} onClick={toggle}>
+        <td className="rowhead"><span className="caret">{off ? '▸' : '▾'}</span><span className="grp-float"><b>{name}</b> · {g.rows.length} 行</span></td>
+        <td colSpan={span} title={`${g.col.label}：${name} · ${g.rows.length} 行`}><span className="sticky-left grp-h" style={{ paddingLeft: g.depth * 18 }}>{groupDefs.length > 1 && <span className="small muted">{g.col.label}</span>}<b className="grp-name">{name}</b><span className="pill">{g.rows.length} 行</span></span></td>
+        {first >= 0 && vis.slice(span).map((c) => (hasSum(c)
+          ? <td key={c.key} className="grp-sum" style={{ textAlign: 'right' }} title={`${name} · ${c.label}合计`}><span className="grp-sum-l">合计</span><b>{sumOf(c).toLocaleString('en-US', { maximumFractionDigits: 2 })}</b></td>
+          : <td key={c.key} />))}
       </tr>);
+    return out;
   };
   const [, setAlignTick] = useState(0);
   const setAlign = async ({ col, a }) => { const cur = gridAlign(); const next = col ? { ...cur, cols: { ...cur.cols, [`${id || 'grid'}:${col}`]: a } } : { ...cur, text: a }; try { await saveGridAlign(app.role, app.org, next); setAlignTick((x) => x + 1); app.refresh?.(); } catch (e) { flash('没存上：' + String(e?.message || e).slice(0, 40)); } };
@@ -295,9 +307,16 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   const [panel, setPanel] = useState(null);   // 筛选面板的位置
   const panelBtn = useRef(null);
   const [gpanel, setGpanel] = useState(null); const groupBtn = useRef(null);   // 分组面板
-  const openGroup = () => { const r = groupBtn.current?.getBoundingClientRect(); setPanel(null); setGpanel({ left: r ? Math.max(8, Math.min(r.left, window.innerWidth - 640)) : 16, top: r ? r.bottom + 6 : 120 }); };
+  const openGroup = () => { setPanel(null); setGpanel(anchorAt(groupBtn.current)); };
   const setGroups = (v) => { setFolded(new Set()); setGf((g) => ({ ...g, group: '', groups: v })); };
-  const openPanel = (preset) => { const r = panelBtn.current?.getBoundingClientRect(); const left = r ? Math.max(8, Math.min(r.left, window.innerWidth - 640)) : 16; const top = r ? r.bottom + 6 : 120; if (preset) setFilters((cs) => (cs.some((c) => c.key === preset.key) ? cs : [...cs.filter(condReady), newCond(preset.key, isNumCol(preset))])); else if (!filters.length) setFilters([newCond()]); setPanel({ left, top }); };
+  // 423: 从列头 ⏷ 打开 → 贴在那一列下面 (左对齐那一列), 那一列排第一个条件; 从工具栏「⏷ 筛选」打开 → 贴在按钮下面
+  const anchorAt = (el, fallback) => { const r = (el || fallback)?.getBoundingClientRect(); return r ? { left: r.left, top: r.bottom + 6, above: r.top } : { left: 16, top: 120 }; };
+  const openPanel = (preset, from) => {
+    const at = anchorAt(from?.closest?.('th') || from, panelBtn.current);
+    if (preset) setFilters((cs) => { const mine = cs.find((c) => c.key === preset.key); return [mine || newCond(preset.key, isNumCol(preset)), ...cs.filter((c) => c !== mine && condReady(c))]; });
+    else if (!filters.length) setFilters([newCond()]);
+    setGpanel(null); setPanel({ ...at, forKey: preset?.key || '' });
+  };
   const optionsOf = (c) => { const set = new Set(); for (const r of rows) for (const v of splitVals(cellValue(c, r))) set.add(v); return [...set].sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true })); };
   const filterCols = vis.concat(layout.order.filter((k) => layout.hidden.includes(k) && byKey[k]).map((k) => byKey[k])).filter((c) => c.label && c.filterable !== false);
   const toggleSort = (k) => setSort((s) => (!s || s.key !== k ? { key: k, dir: 'asc' } : s.dir === 'asc' ? { key: k, dir: 'desc' } : null));
@@ -698,6 +717,19 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
     w.addEventListener('wheel', onWheel, { passive: false });
     return () => w.removeEventListener('wheel', onWheel);
   }, []);
+  // 421: 表格往右滑到组名看不见了 → 组名浮在行号右边 (前提是那里没有合计数字, 免得盖住)
+  useEffect(() => {
+    const w = twRef.current; if (!w || !groupDefs.length) { w?.classList.remove('grp-past'); return undefined; }
+    const upd = () => {
+      const lab = w.querySelector('tr.grp-row > td:nth-child(2)'); const rh = w.querySelector('tr.grp-row > td.rowhead');
+      if (!lab || !rh) return;
+      const edge = rh.getBoundingClientRect().right; const past = lab.getBoundingClientRect().right < edge + 120;
+      const blocked = [...w.querySelectorAll('tr.grp-row:not(.grp-gap) td.grp-sum')].slice(0, 12).some((td) => { const b = td.getBoundingClientRect(); return b.right > edge && b.left < edge + 230; });
+      w.classList.toggle('grp-past', past && !blocked);
+    };
+    upd(); w.addEventListener('scroll', upd, { passive: true }); window.addEventListener('resize', upd);
+    return () => { w.removeEventListener('scroll', upd); window.removeEventListener('resize', upd); };
+  });
   const widthStyle = (c) => { const w = layout.widths[c.key]; return w ? { width: w, minWidth: w, maxWidth: w } : { minWidth: c.w, maxWidth: Math.max(c.w * 2.5, 220) }; };
 
   return (
@@ -730,8 +762,8 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
           {tools}
           {/* 减法巡检 A2 (11-17): 订单里的小表 (slimTools) 平时不摆筛选 / 搜索 / 筛选方案, 点右边 ⏷ 才展开; 有筛选在生效时一直显示 */}
           {(!slimTools || toolsOpen || nFilters > 0) && <>
-          <button type="button" ref={panelBtn} className={`btn sm gf-keep ${liveConds.length ? 'primary' : ''}`} onClick={() => (panel ? setPanel(null) : openPanel())} title={panel ? undefined : '筛选：可以叠加多个条件'}>⏷ 筛选{liveConds.length ? ` ${liveConds.length}` : ''}</button>
-          {liveConds.map((f) => <span key={f.id} className="pill blue gf-chip gf-keep" onClick={() => openPanel()} title="点开修改">{byKey[f.key].label}{f.op === 'in' ? '：' : f.op === 'not_in' ? ' 不是：' : f.op === 'empty' ? ' 为空' : f.op === 'not_empty' ? ' 不为空' : f.op === 'contains' ? ' 包含 ' : f.op === 'not_contains' ? ' 不包含 ' : { eq: ' = ', ne: ' ≠ ', gt: ' > ', lt: ' < ', between: ' 介于 ' }[f.op] || ' '}{['in', 'not_in'].includes(f.op) ? ((f.vals || []).length > 2 ? `${f.vals.length} 个` : (f.vals || []).join('、')) : ['empty', 'not_empty'].includes(f.op) ? '' : f.op === 'between' ? `${f.a}–${f.b}` : f.a}
+          <button type="button" ref={panelBtn} className={`btn sm gf-keep ${liveConds.length ? 'primary' : ''}`} onClick={(e) => (panel ? setPanel(null) : openPanel(null, e.currentTarget))} title={panel ? undefined : '筛选：可以叠加多个条件'}>⏷ 筛选{liveConds.length ? ` ${liveConds.length}` : ''}</button>
+          {liveConds.map((f) => <span key={f.id} className="pill blue gf-chip gf-keep" onClick={(e) => openPanel(byKey[f.key], e.currentTarget)} title="点开修改">{byKey[f.key].label}{f.op === 'in' ? '：' : f.op === 'not_in' ? ' 不是：' : f.op === 'empty' ? ' 为空' : f.op === 'not_empty' ? ' 不为空' : f.op === 'contains' ? ' 包含 ' : f.op === 'not_contains' ? ' 不包含 ' : { eq: ' = ', ne: ' ≠ ', gt: ' > ', lt: ' < ', between: ' 介于 ' }[f.op] || ' '}{['in', 'not_in'].includes(f.op) ? ((f.vals || []).length > 2 ? `${f.vals.length} 个` : (f.vals || []).join('、')) : ['empty', 'not_empty'].includes(f.op) ? '' : f.op === 'between' ? `${f.a}–${f.b}` : f.a}
             <button type="button" className="x-mini" title="去掉这个条件" onClick={(e) => { e.stopPropagation(); setFilters((cs) => cs.filter((c) => c.id !== f.id)); }}>×</button></span>)}
           <button type="button" ref={groupBtn} className={`btn sm gf-keep ${groupDefs.length ? 'primary' : ''}`} onClick={() => (gpanel ? setGpanel(null) : openGroup())}>▤ 分组{groupDefs.length ? `：${groupDefs.map((d) => byKey[d.key].label).join(' › ')}` : ''}</button>
           <input className="in sm gf-search" placeholder="⌕ 搜这张表（单号、名字、机型…）" value={gf.q || ''} onChange={(e) => setGf((g) => ({ ...g, q: e.target.value }))} />
@@ -787,7 +819,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
       )}
       <div className="tw" ref={twRef} style={maxHeight ? { maxHeight } : null}>
         {drag?.block && drag.x != null && <i className="col-drop" style={{ left: drag.x }} />}
-        <table className="t" ref={tableRef} onMouseOver={cellOver} onMouseLeave={cellOut}>
+        <table className="t" ref={tableRef} style={{ '--rh': `${selectable ? 64 : 40}px` }} onMouseOver={cellOver} onMouseLeave={cellOut}>
           <thead>
             <tr>
               <th className="rowhead" style={{ width: selectable ? 64 : 40 }}>{selectable ? <label className="selall" title="全选 / 全不选"><input type="checkbox" checked={allSel} onChange={() => selectable.onChange(allSel ? new Set() : new Set(shown.map(rowKey)))} />全选</label> : <span className="muted">#</span>}</th>
@@ -804,7 +836,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
                       <span className="th-label" onClick={() => !skipSort.current && c.sortable !== false && toggleSort(c.key)} title="点 = 排序；按住横着拖 = 选几列一起拖 / 隐藏 / 复制（Shift 点 = 选到这列，⌘ 点 = 加减一列）">{c.label}</span>
                       {c.sortable !== false && <span className={`sort ${sort?.key === c.key ? 'on' : ''}`} onClick={() => !skipSort.current && toggleSort(c.key)}>{sort?.key === c.key ? (sort.dir === 'asc' ? '▲' : '▼') : '⇅'}</span>}
                       {c.filterable !== false && (
-                        <button type="button" className={`funnel gf-keep ${f ? 'on' : ''}`} title="按这一列筛选" onClick={(e) => { e.stopPropagation(); openPanel(c); }}>⏷</button>
+                        <button type="button" className={`funnel gf-keep ${f ? 'on' : ''}`} title="按这一列筛选" onClick={(e) => { e.stopPropagation(); if (panel?.forKey === c.key) setPanel(null); else openPanel(c, e.currentTarget); }}>⏷</button>
                       )}
                     </span>
                     <span className="resizer" onPointerDown={(e) => startResize(e, c.key)} onDoubleClick={(e) => autoFit(e, c.key)} title="拖动调宽，双击自适应" />

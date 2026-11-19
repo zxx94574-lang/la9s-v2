@@ -1,6 +1,6 @@
 // 253 / 256 (Frank 11-12): 飞书多维表格式筛选 —— 一个筛选图标, 面板里一行一个条件 (字段 + 关系 + 值), 可叠加, 符合所有 / 任一;
 // 选值的下拉: 第一行冻结搜索框, 点一下选中、再点取消, 可多选; 条件只影响自己 (存在本机这个岗位下); 筛选方案按个人存, 中方可推公司共用
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { q, call } from '../db/client.js';
 import { useApp, useData, SortList, usePopBus, Assumed } from './ui.jsx';
@@ -18,6 +18,20 @@ function usePop(open, onClose) {
   const ref = useRef();
   useEffect(() => { if (!open) return undefined; const h = (e) => { if (ref.current && !ref.current.contains(e.target) && !e.target.closest?.('.gf-keep')) onClose(); }; const t = setTimeout(() => document.addEventListener('pointerdown', h), 0); return () => { clearTimeout(t); document.removeEventListener('pointerdown', h); }; }, [open]);   // eslint-disable-line react-hooks/exhaustive-deps
   return ref;
+}
+// 423 (Frank 11-19): 面板贴着点开它的那个东西出现 —— at = { left, top (= 触发点下沿), above (= 触发点上沿) };
+// 量出面板自己多宽多高以后: 右边放不下往左挪, 下面放不下而上面放得下就翻到上面; 都放不下就贴着下沿、限高滚动. 手机上 CSS 统一居中.
+export function usePlace(ref, at, deps = []) {
+  const [pos, setPos] = useState({ left: at.left, top: at.top, ready: false });
+  useLayoutEffect(() => {
+    const el = ref.current; if (!el) return;
+    const vw = window.innerWidth, vh = window.innerHeight, w = el.offsetWidth, h = el.scrollHeight;
+    const left = Math.max(8, Math.min(at.left, vw - w - 8));
+    let top = at.top;
+    if (top + h > vh - 8 && at.above != null && at.above - 6 - h >= 8 && at.above > vh - at.top) top = at.above - 6 - h;
+    setPos({ left, top, ready: true });
+  }, [at.left, at.top, at.above, ...deps]);   // eslint-disable-line react-hooks/exhaustive-deps
+  return { position: 'fixed', left: pos.left, top: pos.top, zIndex: 400, maxHeight: `calc(100vh - ${Math.max(8, pos.top) + 12}px)`, visibility: pos.ready ? 'visible' : 'hidden' };
 }
 // 多选值: 搜索框冻结在最上面
 export function ValuePick({ options, value = [], onChange, placeholder = '选值', tagOf }) {
@@ -42,10 +56,11 @@ export function ValuePick({ options, value = [], onChange, placeholder = '选值
 
 export function FilterPanel({ at, cols, isNum, optionsOf, conds, setConds, any, setAny, onClose, schemes }) {
   const ref = usePop(true, onClose); usePopBus(true, onClose);
+  const place = usePlace(ref, at, [conds.length]);
   const upd = (id, patch) => setConds(conds.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   const colOf = (k) => cols.find((c) => c.key === k);
   return createPortal(
-    <div className="menu gf-panel gf-keep" ref={ref} style={{ position: 'fixed', left: at.left, top: at.top, zIndex: 400, maxHeight: `calc(100vh - ${at.top + 12}px)` }} onClick={(e) => e.stopPropagation()}>
+    <div className="menu gf-panel gf-keep" ref={ref} style={place} data-for={at.forKey || undefined} onClick={(e) => e.stopPropagation()}>
       <div className="gf-head"><b>设置筛选条件</b><span className="grow" /><button type="button" className="btn sm ghost" onClick={onClose}>✕</button></div>
       <div className="gf-mode">符合以下 <select className="in sm" value={any ? 'any' : 'all'} onChange={(e) => setAny(e.target.value === 'any')}><option value="all">所有</option><option value="any">任一</option></select> 条件</div>
       <div className="gf-rows">{conds.map((f) => { const c = colOf(f.key); const num = c && isNum(c); const ops = num ? OPS_NUM : OPS_PICK; return (
@@ -105,8 +120,9 @@ export function GroupPanel({ at, cols, groups, setGroups, onClose, schemes }) {
   const ref = usePop(true, onClose); usePopBus(true, onClose);
   const used = new Set(groups.map((g) => g.key));
   const upd = (i, patch) => setGroups(groups.map((g, j) => (j === i ? { ...g, ...patch } : g)));
+  const place = usePlace(ref, at, [groups.length]);
   return createPortal(
-    <div className="menu gf-panel gf-keep" ref={ref} style={{ position: 'fixed', left: at.left, top: at.top, zIndex: 400, maxHeight: `calc(100vh - ${at.top + 12}px)` }} onClick={(e) => e.stopPropagation()}>
+    <div className="menu gf-panel gf-keep" ref={ref} style={place} onClick={(e) => e.stopPropagation()}>
       <div className="gf-head"><b>设置分组</b><Assumed>最多 {GROUP_MAX} 级（再多表格就看不清了）；每一级可以选从小到大还是从大到小排。</Assumed><span className="grow" /><button type="button" className="btn sm ghost" onClick={onClose}>✕</button></div>
       <div className="gf-mode">按下面的字段一级一级分组，上面的先分</div>
       {groups.length ? <SortList items={groups} keyOf={(g) => g.key || 'new'} onChange={setGroups} render={(g, i) => (

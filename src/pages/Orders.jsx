@@ -86,7 +86,7 @@ export default function Orders() {
     ] : []),
     // 328: 毛利只中方看 (已出库的才有; 成本出库时锁定, 事后变动已扣)
     ...(role === 'admin' ? [
-      { key: 'm_profit', label: '毛利', w: 110, type: 'number', value: (d) => margins[d.id]?.profit ?? null, render: (d) => { const m = margins[d.id]; return m && m.revKnown ? <span className={m.profit < 0 ? 'red-t2' : ''}>{money(Math.round(m.profit))}</span> : ''; } },
+      { key: 'm_profit', label: '毛利', w: 110, type: 'number', sum: true, value: (d) => margins[d.id]?.profit ?? null, render: (d) => { const m = margins[d.id]; return m && m.revKnown ? <span className={m.profit < 0 ? 'red-t2' : ''}>{money(Math.round(m.profit))}</span> : ''; } },
       { key: 'm_pct', label: '毛利率', w: 90, type: 'number', value: (d) => margins[d.id]?.pct ?? null, render: (d) => { const m = margins[d.id]; return m ? <MarginPill pct={m.pct} lowPct={mLow} missing={!m.revKnown} /> : ''; } },
     ] : []),
   ];
