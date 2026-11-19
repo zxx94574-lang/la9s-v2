@@ -6,7 +6,7 @@ import { sumMargin, MarginPill, MarginKpis, useMarginRules } from './Margin.jsx'
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import { PoLink } from '../pages/Po.jsx';
-import { TierPill, useApp, useData, Drawer, Pill, BigNum, DatePicker, Modal, Info, Bang } from './ui.jsx';
+import { TierPill, useApp, useData, Drawer, Pill, BigNum, DatePicker, Modal, Info, Bang, MoneyIn } from './ui.jsx';
 import { TIERS, can } from '../lib/domain.js';
 import Grid from './Grid.jsx';
 import { money, qty, dDate, dt, friendlyError, today } from '../lib/format.js';
@@ -247,7 +247,7 @@ function CostBlocks({ p, ps, batches, tier, priceOf, lockedOf, ed, setEd, onChan
   const floorLoss = floor != null && worst != null && floor < worst;
   const [adding, setAdding] = useState(null);
   const [bsel, setBsel] = useState(new Set());
-  const numIn = (k, w = 90) => <input className="in sm" inputMode="decimal" style={{ width: w }} value={ed[k]} onChange={(e) => setEd({ ...ed, [k]: e.target.value.replace(/[^\d.]/g, '') })} />;
+  const numIn = (k, w = 90) => <MoneyIn className="in sm" inputMode="decimal" style={{ width: w }} value={ed[k]} onChange={(e) => setEd({ ...ed, [k]: e.target.value.replace(/[^\d.]/g, '') })} />;
 
   return (
     <>
@@ -292,7 +292,7 @@ function CostBlocks({ p, ps, batches, tier, priceOf, lockedOf, ed, setEd, onChan
         <div className="pd-h">④ 各档售价 <Info>= 到岸成本 + 加价；🔒 = 一口价，不跟成本变。解锁后直接填售价 = 锁成一口价。</Info></div>
         <table className="t"><thead><tr>{TIER_ORDER.map((t) => <th key={t} style={{ textAlign: 'right' }}><TierPill tier={t} />{tier === t ? ' ←本单' : ''}</th>)}</tr></thead>
           <tbody><tr>{TIER_ORDER.map((t) => <td key={t} style={{ textAlign: 'right', fontWeight: tier === t ? 700 : 400, fontSize: 16 }}>
-            {ed ? <input className="in sm" inputMode="decimal" style={{ width: 90, textAlign: 'right' }} value={ed.prices[t]} onChange={(e) => setEd({ ...ed, prices: { ...ed.prices, [t]: e.target.value.replace(/[^\d.]/g, '') } })} />
+            {ed ? <MoneyIn className="in sm" inputMode="decimal" style={{ width: 90, textAlign: 'right' }} value={ed.prices[t]} onChange={(e) => setEd({ ...ed, prices: { ...ed.prices, [t]: e.target.value.replace(/[^\d.]/g, '') } })} />
               : priceOf(t) != null ? <>{lockedOf(t) && '🔒 '}{money(priceOf(t))}{worst != null && priceOf(t) < worst && <Bang tone="red">{`低于最贵一批的到岸成本：成本 ${money(worst)}，这个价 ${money(priceOf(t))}，每片低 ${money(worst - priceOf(t))}`}</Bang>}</> : <span className="muted">没定价</span>}</td>)}</tr></tbody></table>
         <div className="small muted" style={{ marginTop: 4 }}>{p.cost_updated_at ? `成本更新 ${dDate(p.cost_updated_at)} · ` : ''}汇率 1 XOF = {rate} RMB · 1 USD = {money(usd)} XOF（在「物料与定价 → 汇率与取整」改）</div>
       </section>
@@ -336,12 +336,12 @@ function BatchForm({ p, f, setF, role, toast, onDone }) {
     <tr className="pd-add">
       <td><input className="in sm" value={f.po_no || ''} onChange={set('po_no')} placeholder="PO…" /></td>
       <td><DatePicker value={f.ordered_on ? String(f.ordered_on).slice(0, 10) : ''} onChange={set('ordered_on')} /></td>
-      <td><input className="in sm" inputMode="numeric" value={f.qty} onChange={num('qty', /\D/g)} style={{ width: 70 }} /></td>
+      <td><MoneyIn className="in sm" inputMode="numeric" value={f.qty} onChange={num('qty', /\D/g)} style={{ width: 70 }} /></td>
       <td><span className="row" style={{ gap: 4 }}><select className="in sm" value={f.currency} onChange={set('currency')}><option value="CNY">¥</option><option value="USD">$</option><option value="XOF">XOF</option></select>
-        <input className="in sm" inputMode="decimal" value={f.unit_price} onChange={num('unit_price')} style={{ width: 80 }} /></span></td>
+        <MoneyIn className="in sm" inputMode="decimal" value={f.unit_price} onChange={num('unit_price')} style={{ width: 80 }} /></span></td>
       <td colSpan={3}><span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
-        <input className="in sm" inputMode="decimal" value={f.freight_total} onChange={num('freight_total')} placeholder="这批总运费" style={{ width: 100 }} />÷
-        <input className="in sm" inputMode="numeric" value={f.freight_pieces} onChange={num('freight_pieces', /\D/g)} placeholder="总片数" style={{ width: 80 }} />
+        <MoneyIn className="in sm" inputMode="decimal" value={f.freight_total} onChange={num('freight_total')} placeholder="这批总运费" style={{ width: 100 }} />÷
+        <MoneyIn className="in sm" inputMode="numeric" value={f.freight_pieces} onChange={num('freight_pieces', /\D/g)} placeholder="总片数" style={{ width: 80 }} />
         {per != null ? <span className="small">= 每片 <b>{money(per)}</b></span> : <span className="small muted">空 = 用默认 {p.freight_xof ?? '（没填）'}</span>}</span></td>
       <td colSpan={2}><span className="row" style={{ gap: 4 }}><button type="button" className="btn sm primary" disabled={!(Number(f.qty) > 0) || f.unit_price === ''} onClick={save}>{f.id ? '保存' : '记下'}</button><button type="button" className="btn sm ghost" onClick={() => setF(null)}>取消</button></span></td>
     </tr>

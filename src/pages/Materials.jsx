@@ -1,6 +1,7 @@
 // 物料名称管理 (待改 9 / 10, 只中方): search a keyword across models, shared models and 未建档需求,
 // rename / merge with a preview, set the brand. Codes never change, so history follows the new name automatically.
 import React, { useMemo, useState } from 'react';
+import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, Modal, OptionNote, Shared } from '../components/ui.jsx';
@@ -86,7 +87,7 @@ export default function Materials() {
             <div className="field req"><label>改成（自动大写，多个空格并成一个）</label><input className="in" autoFocus value={rename.to} onChange={(e) => setRename({ ...rename, to: e.target.value.toUpperCase() })} /></div>
             <div className="field"><label>将改动</label>
               <ul className="preview-list">{groups.map((g) => <li key={g.key}><Pill tone={g.src === 'product' ? 'blue' : 'amber'}>{g.category}</Pill> <s>{g.model}</s> → <b>{norm(rename.to) || '…'}</b>{norm(g.model) === norm(rename.to) && <span className="muted small">（不变）</span>}</li>)}</ul></div>
-            <div className="field req"><label>原因</label><OptionNote options={NOTE_OPTIONS.rename} value={rename.reason} onChange={(v) => setRename({ ...rename, reason: v })} /></div>
+            <div className="field req"><label>原因</label><OptNote optKey="note_rename" title="改名原因" options={NOTE_OPTIONS.rename} value={rename.reason} onChange={(v) => setRename({ ...rename, reason: v })} /></div>
             <div className="hint">同一种类下已经有目标名称的「物料」不能直接合并（编码不同），系统会拦下；未建档需求可以合并。每次改名都留记录。</div>
           </div>
         </Modal>

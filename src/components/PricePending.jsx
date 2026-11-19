@@ -1,7 +1,7 @@
 // 先出库、价格以后再定 (Q8③, Frank 11-16 / 11-17): 很少用、必须是急单、只中方批. 没定价不能对账; 从出库起挂在中方待办最顶上.
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, FRow, PhotoInput, Pill, Assumed } from './ui.jsx';
+import { useApp, useData, Modal, FRow, PhotoInput, Pill, Assumed, MoneyIn } from './ui.jsx';
 import { DealLink } from './Archives.jsx';
 import { money, friendlyError, dDate } from '../lib/format.js';
 
@@ -66,7 +66,7 @@ function SettleModal({ deal, lines, onClose }) {
       <div className="stack" style={{ gap: 10 }}>
         <div className="disc-prev">
           {real.map((l) => <div key={l.id} className="disc-row" style={{ alignItems: 'center' }}><span>{l.model || l.req_model} <span className="muted small">{l.category || ''}</span></span><span className="muted">{qtyOf(l)} 片 · 原 {money(l.unit_price, deal.currency)}</span>
-            <input className={`in ${errs && p[l.id] === '' ? 'err-in' : ''}`} inputMode="decimal" style={{ width: 110 }} value={p[l.id]} onChange={(e) => setP({ ...p, [l.id]: e.target.value.replace(/[^\d.]/g, '') })} placeholder="最终单价" /></div>)}
+            <MoneyIn className={`in ${errs && p[l.id] === '' ? 'err-in' : ''}`} inputMode="decimal" style={{ width: 110 }} value={p[l.id]} onChange={(e) => setP({ ...p, [l.id]: e.target.value.replace(/[^\d.]/g, '') })} placeholder="最终单价" /></div>)}
           <div className="disc-row"><b>定价后总额</b><span className="muted">原 {money(old, deal.currency)}</span><b>{money(total, deal.currency)} {deal.currency}</b></div>
         </div>
         <FRow label="怎么谈定的" req><input className="in" style={{ flex: '1 1 260px', minWidth: 0 }} value={note} onChange={(e) => setNote(e.target.value)} /></FRow>

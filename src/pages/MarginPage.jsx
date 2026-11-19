@@ -4,7 +4,7 @@
 // ③ 和金蝶对: 粘贴金蝶导出的出库成本 / 毛利表, 按编码和我们的数并排, 差额一眼看出来
 import React, { useMemo, useState } from 'react';
 import { call } from '../db/client.js';
-import { useApp, useData, DatePicker, Info } from '../components/ui.jsx';
+import { useApp, useData, DatePicker, Info, MoneyIn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { DealLink, ModelLink, CustLink } from '../components/Archives.jsx';
 import { periodRange, PERIODS, money, qty, today } from '../lib/format.js';
@@ -244,7 +244,7 @@ function KingdeeCompare({ org, role }) {
             <span className="small">我们这边取</span><DatePicker range value={range} onChange={setRange} />
             <span className="small">金蝶的钱是</span>
             <select className="in" style={{ width: 'auto' }} value={cur} onChange={(e) => setCur(e.target.value)}><option value="CNY">人民币</option><option value="XOF">西法</option></select>
-            {cur === 'CNY' && <><span className="small">1 XOF =</span><input className="in" style={{ width: 90 }} inputMode="decimal" placeholder="0.011" value={rate} onChange={(e) => setRate(e.target.value)} /><span className="small">元（用那个月的汇率）</span></>}
+            {cur === 'CNY' && <><span className="small">1 XOF =</span><MoneyIn className="in" style={{ width: 90 }} inputMode="decimal" placeholder="0.011" value={rate} onChange={(e) => setRate(e.target.value)} /><span className="small">元（用那个月的汇率）</span></>}
           </div>
           <textarea className="in" rows={5} placeholder="在这里粘贴（⌘V）" value={text} onChange={(e) => setText(e.target.value)} />
           {parsed?.error && <div className="pill red" style={{ whiteSpace: 'normal' }}>{parsed.error}</div>}

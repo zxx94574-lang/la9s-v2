@@ -1,7 +1,7 @@
 // 整单折扣 (待改 357): 中方和客户谈好一个总价 → 折扣摊进每个型号单价 (向上取整), 零头出库时自动抹掉, 应收正好 = 谈好的数.
 import React, { useState } from 'react';
 import { call } from '../db/client.js';
-import { useApp, Modal, FRow, Assumed, Choice } from './ui.jsx';
+import { useApp, Modal, FRow, Assumed, Choice, MoneyIn } from './ui.jsx';
 import { money, friendlyError } from '../lib/format.js';
 
 const N = (v) => Number(v || 0);
@@ -35,7 +35,7 @@ export function DiscountModal({ deal, lines, onClose }) {
       <div className="stack" style={{ gap: 10 }}>
         <div>现在的总价 <b>{money(total, deal.currency)}</b> {deal.currency}</div>
         <FRow label="怎么填"><Choice value={mode} onChange={(v) => { setMode(v); setVal(''); }} options={[['target', '填谈好的总价'], ['off', '填减多少']]} /></FRow>
-        <FRow label={mode === 'target' ? '谈好的总价' : '减多少'} req><input className="in" inputMode="decimal" style={{ width: 160, fontSize: 17, fontWeight: 700 }} value={val} onChange={(e) => setVal(e.target.value.replace(/[^\d.]/g, ''))} autoFocus />
+        <FRow label={mode === 'target' ? '谈好的总价' : '减多少'} req><MoneyIn className="in" inputMode="decimal" style={{ width: 160, fontSize: 17, fontWeight: 700 }} value={val} onChange={(e) => setVal(e.target.value.replace(/[^\d.]/g, ''))} autoFocus />
           <span className="small muted">{deal.currency}</span>{ok && <span className="pill amber">−{money(total - target, deal.currency)}（{((total - target) / total * 100).toFixed(1)}%）</span>}</FRow>
         <FRow label="原因" req><input className="in" style={{ flex: '1 1 240px', minWidth: 0 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="为什么给这个折扣" /></FRow>
         {ok && <div className="disc-prev">

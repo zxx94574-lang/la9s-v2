@@ -3,7 +3,7 @@
 // 卖价不低于生效清仓价的行, 不再被「会亏」拦住 (规则在 0052).
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, FRow, Info, Choice, DatePicker, Pill, Assumed } from './ui.jsx';
+import { useApp, useData, Modal, FRow, Info, Choice, DatePicker, Pill, Assumed, MoneyIn } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { ModelLink } from './Archives.jsx';
 import { money, friendlyError, today, dDate } from '../lib/format.js';
@@ -55,13 +55,13 @@ export default function ClearanceCard({ products }) {
       <div className="card-h"><h2>特价表（促销价 / 清仓价…）</h2><Pill tone={live ? 'green' : 'gray'}>{live} 条生效中</Pill>
         <Info>在这里定特价：哪个型号、什么价、从哪天到哪天、给谁、叫什么名字（促销价 / 清仓价，名字可以自己加）。生效期间：适用客户的报价<b>自动带出</b>这个价（比他的档位价低才用），行上标名字；卖价不低于它的单不会被「会亏」拦住。到期自动失效。没有特价背书的亏本价仍然要中方逐单批。</Info>
         <Assumed>多条同时生效取最低的那条；已经建好的报价不会自动改价（点「获取价格」才更新）；外币单按单上汇率折算。这三点是我按建议定的。</Assumed><span className="grow" /><button type="button" className="btn sm primary" onClick={() => setForm({ product: '', price: '', range: [td, plus(30)], scope: 'all', tiers: [], custs: [], note: '', label: '促销价' })}>＋ 加特价</button></div>
-      {data.length ? <Grid id="clearance" columns={cols} rows={data} slimTools rowActions={[{ label: '提前结束', tone: 'danger', when: (r) => state(r)[0] === '生效中' || state(r)[0] === '还没开始', run: end }]} />
+      {data.length ? <Grid id="clearance" columns={cols} rows={data} slimTools rowActions={[{ label: '提前结束', danger: true, describe: (r) => `${r.model || r.code || ''} · ${r.label || '促销价'} · ${r.price}`, warn: '结束以后这条特价马上失效（报价回到档位价），不能恢复，只能重新加一条。要结束的是：', when: (r) => state(r)[0] === '生效中' || state(r)[0] === '还没开始', run: end }]} />
         : <div className="card-b small muted">还没有特价。</div>}
       {f && <Modal title="加一条特价" onClose={() => setForm(null)} footer={<><button type="button" className="btn" onClick={() => setForm(null)}>取消</button><button type="button" className="btn primary" onClick={save}>保存，立即生效</button></>}>
         <FRow label="名称" req><OptChoice optKey="promo_names" title="特价的名称" coded={false} value={f.label} onChange={(v) => set('label', v)} options={NAMES} /></FRow>
         <FRow label="型号" req><Choice value={f.product} onChange={(v) => set('product', v)} flat={false} placeholder="选型号（可搜编码 / 型号 / 种类）" style={{ width: 320 }}
           options={(products || []).map((p) => [p.id, `${p.model} · ${p.category || ''}`, p.code])} /></FRow>
-        <FRow label="价格" req><input className="in" inputMode="numeric" style={{ width: 130 }} value={f.price} onChange={(e) => set('price', e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">XOF / 片</span></FRow>
+        <FRow label="价格" req><MoneyIn className="in" inputMode="numeric" style={{ width: 130 }} value={f.price} onChange={(e) => set('price', e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">XOF / 片</span></FRow>
         <FRow label="起止日期" req><DatePicker range value={f.range} onChange={(v) => set('range', v)} /></FRow>
         <FRow label="给谁" req><Choice value={f.scope} onChange={(v) => set('scope', v)} options={[['all', '所有客户'], ['tier', '指定档位'], ['cust', '指定客户']]} /></FRow>
         {f.scope === 'tier' && <FRow label="档位" req><span className="chips">{Object.entries(TIERS).map(([k, v]) => <button type="button" key={k} className={`chip ${f.tiers.includes(k) ? 'on' : ''}`} onClick={() => set('tiers', f.tiers.includes(k) ? f.tiers.filter((x) => x !== k) : [...f.tiers, k])}>{v}</button>)}</span></FRow>}

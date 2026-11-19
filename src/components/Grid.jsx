@@ -8,13 +8,17 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { useOutside, DateCalendar, useApp, copyToClipboard, Info, Choice } from './ui.jsx';
+import { useOutside, DateCalendar, useApp, copyToClipboard, Info, Choice, Modal } from './ui.jsx';
 import { loadTableOptions, loadRowAttrs, saveRowAttrs, customColumns } from '../lib/tableOptions.js';
 import TableOptionsModal from './TableOptions.jsx';
+import { gridAlign, colAlign, saveGridAlign } from '../lib/gridPrefs.js';
 
 const PORTAL_ROLES = new Set(['boss', 'clerk', 'guest']);
 
 const p2 = (n) => String(n).padStart(2, '0');
+// 376 (Frank 11-18): 表格里的日期一律放进一个中性色小方块 (日期在前, 时间用更浅的字跟在后面), 和旁边的数字文字分开. 空的不出方块.
+const DATE_RE = /^(\d{4}-\d{2}-\d{2}|\d{2}-\d{2})(?:[ T](\d{2}:\d{2})(?::\d{2})?)?$/;
+export const dateChip = (txt) => { const m = typeof txt === 'string' ? DATE_RE.exec(txt.trim()) : null; return m ? <span className="date-chip">{m[1]}{m[2] ? <i>{m[2]}</i> : null}</span> : txt; };
 const fmtDate = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
 
 function loadLayout(id, cols) {
@@ -34,7 +38,9 @@ const MONEY_RE = /单价|金额|价格|售价|底价|欠款|应收|实收|已收
 const QTY_RE = /数量|实存|预占|可售|已出库|已退|缺口|供货|找到|件数|行数|笔数|^需求$|复核数|可退|型号数|被问次数/;
 const kindOf = (c) => c.type || (MONEY_RE.test(c.label) ? 'money' : QTY_RE.test(c.label) ? 'number' : 'text');
 const isNumCol = (c) => kindOf(c) !== 'text';
-const alignOf = (c) => c.align || (kindOf(c) === 'money' ? 'right' : kindOf(c) === 'number' ? 'center' : 'left');
+// 374: 金额 / 价格 / 数量一律右对齐 (固定); 其余列: 公司给这一列单独设的 > 列自己写的 > 公司的文字默认
+let ALIGN_GRID = 'grid';
+const alignOf = (c) => (kindOf(c) !== 'text' ? 'right' : (colAlign(ALIGN_GRID, c.key) || c.align || gridAlign().text || 'left'));
 
 // 只写了 render、没写 value 的列 (比如询单的 实存 / 预占 / 可售): 排序和筛选用「格子里显示的字」, 数字列再转成数字
 // (11-02 Frank: 点排序没反应、筛选大于以后整张表空了, 就是这个原因)
@@ -96,7 +102,7 @@ function passes(c, row, f) {
 //  · onChange 在「保存」时才调一次 (不是每敲一个字), 页面在 onChange 里直接写库 = 改一格存一格
 //  · ⌘C 复制选中那块 (制表符表格); ⌘V 只填进选中区域: 选一格 → 从这格铺整块, 选一片 → 只填这一片, 剪贴板不够就重复铺满
 //  · Delete 清空选中的可编辑格; 点行号选整行; onReorder(fromRow, toRow) 时左侧出现 ⋮⋮ 拖动手柄
-import { FilterPanel, Schemes, newCond, condReady, splitVals } from './GridFilter.jsx';
+import { FilterPanel, GroupPanel, GROUP_MAX, Schemes, newCond, condReady, splitVals } from './GridFilter.jsx';
 const LAST_COPY = { out: '', raw: '' };   // 最近一次从表格复制的内容: out = 带行号 (给 Excel), raw = 不带 (表格内粘贴)
 
 // 拖列 / 拖行时鼠标靠近边缘自动滚 (Frank 11-13 295): 横向滚表格, 纵向滚表格自己 (有限高时) 再滚页面
@@ -119,12 +125,15 @@ function edgeScroller(box) {
   };
 }
 
-export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyProp = (r) => r.id, rowClass, onRowClick, onDelete, selectable, foot, tools, empty = '暂无数据', maxHeight, noTools,
+export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyProp = (r) => r.id, rowClass, onRowClick, onDelete, selectable: selectableProp, foot, tools, empty = '暂无数据', maxHeight, noTools,
   onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors, onShown, compactTools, slimTools, rowActions }) {
   // 行没有 id 的表 (汇总表): 退到 key / employee_id / deal_id, 免得 React 报 key 重复、选区错位
   const rowKey = (r) => rowKeyProp(r) ?? r?.key ?? r?.employee_id ?? r?.deal_id ?? r?.code;
   // ── 每张表的自定义列 (Frank 11-08): 传 table="xxx" 就自动长出「选项设置」里加的列, 值存 row_attrs ──
   const app = useApp() || {};
+  // 388 (Frank 11-18, 全站): 删了就没了的动作 (rowActions 里 danger: true) —— 必须先勾选 (不按光标在哪一行算), 再弹确认框写清楚删的是哪几条. 这种表自动带勾选列.
+  const [ownSel, setOwnSel] = useState(() => new Set()); const [dangerAsk, setDangerAsk] = useState(null);
+  const selectable = selectableProp || (rowActions?.some((a) => a.danger) ? { selected: ownSel, onChange: setOwnSel } : undefined);
   const [tbl, setTbl] = useState({ opts: null, attrs: {} });
   const [optOpen, setOptOpen] = useState(false);
   const [tblTick, setTblTick] = useState(0);
@@ -155,6 +164,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   // a column without a label (buttons / actions) gets no sort or filter
   const byKey = useMemo(() => Object.fromEntries(columns.map((c) => [c.key, c.label ? c : { ...c, sortable: false, filterable: false }])), [columns]);
   const vis = layout.order.filter((k) => !layout.hidden.includes(k) && byKey[k]).map((k) => byKey[k]);
+  ALIGN_GRID = id || 'grid';   // alignOf 是模块级小函数, 每次渲染前告诉它现在是哪张表
   const tableRef = useRef();
   const gid = 'g-' + id.replace(/[^a-z0-9]/gi, '');
 
@@ -193,27 +203,37 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
     return out;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, gf, sort, byKey, layout.rowOrder]);
-  // 333 (Frank 11-17): 飞书式分组 —— 任意一列都能当分组; 组内保持上面的筛选 / 排序; 组头显示 值 + 行数 (+ 数字列合计), 可收起. 存法同筛选 (本机这个岗位)
-  const groupCol = gf.group && byKey[gf.group] ? byKey[gf.group] : null;
+  // 333 / 362 (Frank 11-17 / 11-18): 飞书式分组 —— 任意列都能当分组, 可以多级 (最多 3 级); 组内保持上面的筛选 / 排序; 组头 = 值 + 行数 (+ 数字列小计), 可收起.
+  // 存法同筛选 (gf.groups = [{ key, dir }]; 老的 gf.group 照样认), 能存进筛选方案.
+  const groupDefs = useMemo(() => (Array.isArray(gf.groups) && gf.groups.length ? gf.groups : (gf.group ? [{ key: gf.group, dir: 'asc' }] : [])).filter((g) => g.key && byKey[g.key]).slice(0, GROUP_MAX), [gf.groups, gf.group, byKey]);
+  const groupCol = groupDefs.length ? byKey[groupDefs[0].key] : null;
   const [folded, setFolded] = useState(() => new Set());
   const gvOf = (c, r) => { const v = cellValue(c, r); return v == null || v === '' ? '' : String(v); };
-  const groups = useMemo(() => {
-    if (!groupCol) return null;
-    const m = new Map();
-    allShown.forEach((r) => { const v = gvOf(groupCol, r); if (!m.has(v)) m.set(v, []); m.get(v).push(r); });
-    const keys = [...m.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'zh-CN', { numeric: true })));
-    return keys.map((v) => ({ v, rows: m.get(v) }));
+  // seq: 按显示顺序排好的 组头 / 行; 收起的组不往下展开
+  const groupSeq = useMemo(() => {
+    if (!groupDefs.length) return null;
+    const seq = [];
+    const walk = (rs, depth, prefix) => {
+      if (depth >= groupDefs.length) { rs.forEach((r) => seq.push({ row: r })); return; }
+      const c = byKey[groupDefs[depth].key]; const m = new Map();
+      rs.forEach((r) => { const v = gvOf(c, r); if (!m.has(v)) m.set(v, []); m.get(v).push(r); });
+      const sgn = groupDefs[depth].dir === 'desc' ? -1 : 1;
+      const keys = [...m.keys()].sort((x, y) => (x === '' ? 1 : y === '' ? -1 : sgn * x.localeCompare(y, 'zh-CN', { numeric: true })));
+      keys.forEach((v) => { const id = `${prefix}\u0001${v}`; seq.push({ head: { id, v, depth, rows: m.get(v), col: c } }); if (!folded.has(id)) walk(m.get(v), depth + 1, id); });
+    };
+    walk(allShown, 0, '');
+    return seq;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allShown, groupCol]);
-  const shown = useMemo(() => (groups ? groups.flatMap((g) => (folded.has(g.v) ? [] : g.rows)) : allShown), [groups, allShown, folded]);
-  // 每个组头插在哪一行前面 (收起的组没有行, 挂到下一个展开组的第一行前; 最后剩下的挂在表尾)
+  }, [allShown, groupDefs, folded]);
+  const shown = useMemo(() => (groupSeq ? groupSeq.filter((x) => x.row).map((x) => x.row) : allShown), [groupSeq, allShown]);
+  // 每个组头插在哪一行前面 (收起的组没有行 → 挂到后面第一行前; 最后剩下的挂在表尾)
   const groupHeads = useMemo(() => {
-    if (!groups) return null;
-    const before = new Map(); let pend = []; 
-    groups.forEach((g) => { pend.push(g); if (!folded.has(g.v) && g.rows.length) { before.set(rowKey(g.rows[0]), pend); pend = []; } });
+    if (!groupSeq) return null;
+    const before = new Map(); let pend = [];
+    groupSeq.forEach((x) => { if (x.head) pend.push(x.head); else if (pend.length) { before.set(rowKey(x.row), pend); pend = []; } });
     return { before, tail: pend };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, folded]);
+  }, [groupSeq]);
   // 只在「筛出来的行」或条件真的变了才通知页面 (按内容比, 不按引用: 页面每次渲染给新数组也不会转圈)
   const shownSig = useRef('');
   useEffect(() => {
@@ -259,18 +279,24 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
     } catch (e) { flash('导出失败：' + String(e?.message || e).slice(0, 60)); }
   };
   const groupHead = (g) => {
-    const off = folded.has(g.v);
-    const sums = vis.filter((c) => c.key !== groupCol.key && footObjKeys.has(c.key) && isNumCol(c)).map((c) => [c.label, g.rows.reduce((a, r) => a + (Number(cellValue(c, r)) || 0), 0)]);
+    const off = folded.has(g.id);
+    const gkeys = new Set(groupDefs.map((d) => d.key));
+    const sums = vis.filter((c) => !gkeys.has(c.key) && footObjKeys.has(c.key) && isNumCol(c)).map((c) => [c.label, g.rows.reduce((a, r) => a + (Number(cellValue(c, r)) || 0), 0)]);
     return (
-      <tr key={`grp:${g.v}`} className="grp-row" onClick={() => setFolded((f) => { const n = new Set(f); n.has(g.v) ? n.delete(g.v) : n.add(g.v); return n; })}>
+      <tr key={`grp:${g.id}`} className={`grp-row d${g.depth}`} onClick={() => setFolded((f) => { const n = new Set(f); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n; })}>
         <td className="rowhead"><span className="caret">{off ? '▸' : '▾'}</span></td>
-        <td colSpan={vis.length}><span className="sticky-left grp-h"><b>{g.v === '' ? '（空）' : g.v}</b><span className="pill">{g.rows.length} 行</span>
+        <td colSpan={vis.length}><span className="sticky-left grp-h" style={{ paddingLeft: g.depth * 18 }}>{groupDefs.length > 1 && <span className="small muted">{g.col.label}</span>}<b>{g.v === '' ? '（空）' : g.v}</b><span className="pill">{g.rows.length} 行</span>
           {sums.map(([l, n]) => <span key={l} className="small muted">{l} <b>{n.toLocaleString('en-US', { maximumFractionDigits: 2 })}</b></span>)}</span></td>
       </tr>);
   };
+  const [, setAlignTick] = useState(0);
+  const setAlign = async ({ col, a }) => { const cur = gridAlign(); const next = col ? { ...cur, cols: { ...cur.cols, [`${id || 'grid'}:${col}`]: a } } : { ...cur, text: a }; try { await saveGridAlign(app.role, app.org, next); setAlignTick((x) => x + 1); app.refresh?.(); } catch (e) { flash('没存上：' + String(e?.message || e).slice(0, 40)); } };
   const [toolsOpen, setToolsOpen] = useState(false);   // 265: 档案里的小表, 工具栏收成一个小图标
   const [panel, setPanel] = useState(null);   // 筛选面板的位置
   const panelBtn = useRef(null);
+  const [gpanel, setGpanel] = useState(null); const groupBtn = useRef(null);   // 分组面板
+  const openGroup = () => { const r = groupBtn.current?.getBoundingClientRect(); setPanel(null); setGpanel({ left: r ? Math.max(8, Math.min(r.left, window.innerWidth - 640)) : 16, top: r ? r.bottom + 6 : 120 }); };
+  const setGroups = (v) => { setFolded(new Set()); setGf((g) => ({ ...g, group: '', groups: v })); };
   const openPanel = (preset) => { const r = panelBtn.current?.getBoundingClientRect(); const left = r ? Math.max(8, Math.min(r.left, window.innerWidth - 640)) : 16; const top = r ? r.bottom + 6 : 120; if (preset) setFilters((cs) => (cs.some((c) => c.key === preset.key) ? cs : [...cs.filter(condReady), newCond(preset.key, isNumCol(preset))])); else if (!filters.length) setFilters([newCond()]); setPanel({ left, top }); };
   const optionsOf = (c) => { const set = new Set(); for (const r of rows) for (const v of splitVals(cellValue(c, r))) set.add(v); return [...set].sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true })); };
   const filterCols = vis.concat(layout.order.filter((k) => layout.hidden.includes(k) && byKey[k]).map((k) => byKey[k])).filter((c) => c.label && c.filterable !== false);
@@ -351,6 +377,22 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   const anchor = useRef(null);
   const selecting = useRef(false);
   const range = sel && { r0: Math.min(sel.a[0], sel.b[0]), r1: Math.max(sel.a[0], sel.b[0]), c0: Math.min(sel.a[1], sel.b[1]), c1: Math.max(sel.a[1], sel.b[1]) };
+  // 375 (Frank 11-18): 内容放不下的格子 —— 悬停出小框看全; 点一下选中时只把这一格放大浮在上面 (行高不变, 别的格子不动), 选别的就收回.
+  const [tip, setTip] = useState(null); const tipT = useRef(null); const [zoom, setZoom] = useState(null);
+  const truncOf = (td) => { if (!td || td.classList.contains('rowhead')) return null; const el = td.querySelector('.cell-txt') || td; if (el.scrollWidth <= el.clientWidth + 1 && td.scrollWidth <= td.clientWidth + 1) return null; const text = (td.innerText || '').trim(); return text ? text : null; };
+  const cellOver = (e) => { const td = e.target.closest?.('td[data-cc]'); clearTimeout(tipT.current); if (!td || td.classList.contains('sel-a') || td.querySelector('.shared')) { setTip(null); return; }
+    tipT.current = setTimeout(() => { const text = truncOf(td); if (!text) return setTip(null); const r = td.getBoundingClientRect(); setTip({ text, left: Math.max(8, Math.min(r.left, window.innerWidth - 368)), top: r.bottom + 4 }); }, 380); };
+  const cellOut = () => { clearTimeout(tipT.current); setTip(null); };
+  useEffect(() => {
+    if (!sel || editing || !range || range.r0 !== range.r1 || range.c0 !== range.c1) { setZoom(null); return undefined; }
+    const td = tableRef.current?.querySelector(`td[data-cr="${range.r0}"][data-cc="${range.c0}"]`); const text = truncOf(td);
+    if (!text) { setZoom(null); return undefined; }
+    const r = td.getBoundingClientRect(); setTip(null);
+    setZoom({ text, left: Math.max(4, Math.min(r.left, window.innerWidth - Math.max(r.width, 240) - 8)), top: r.top, minWidth: r.width, minHeight: r.height });
+    const off = () => setZoom(null); window.addEventListener('scroll', off, true); window.addEventListener('resize', off);
+    return () => { window.removeEventListener('scroll', off, true); window.removeEventListener('resize', off); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel, editing]);
   const inSel = (r, c) => range && r >= range.r0 && r <= range.r1 && c >= range.c0 && c <= range.c1;
   const cellDown = (e, r, c) => {
     if (e.target.closest('input,select,textarea')) {
@@ -552,7 +594,10 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   // 删行 (Frank 11-09): 不再有行尾小叉; 勾选的行优先, 否则是点行号 / 拖出来的选区覆盖的行
   // 行操作 (Frank 11-12 「操作按钮不放格子里」): 页面给 rowActions=[{label, tone, when(row), run(row)}], 点中一行 (或只勾一行) → 表格上方出这一行能做的按钮
   const actRow = !rowActions?.length ? null : selectable?.selected?.size === 1 ? shown.find((r) => selectable.selected.has(rowKey(r))) : (range && range.r0 === range.r1 ? shown[range.r0] : null);
-  const actList = actRow ? rowActions.filter((a) => !a.when || a.when(actRow)) : [];
+  const actList = actRow ? rowActions.filter((a) => !a.danger && (!a.when || a.when(actRow))) : [];
+  const dangerActs = (rowActions || []).filter((a) => a.danger);
+  const checkedRows = selectable?.selected?.size ? shown.filter((r) => selectable.selected.has(rowKey(r))) : [];
+  const dangerBtns = dangerActs.map((a) => { const rs = checkedRows.filter((r) => !a.when || a.when(r)); return <button type="button" key={a.label} className="btn sm danger ghost" disabled={!rs.length} title={rs.length ? '' : '先在行号旁勾选要处理的行'} onClick={() => setDangerAsk({ a, rs })}>{a.label}{rs.length ? `（选中的 ${rs.length} 条）` : ''}</button>; });
   const delRows = useMemo(() => {
     if (!onDelete) return [];
     if (selectable?.selected?.size) return shown.filter((r) => selectable.selected.has(rowKey(r)));
@@ -588,6 +633,14 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   return (
     <div id={gid} className="grid" onKeyDown={onKeyDown} onPaste={onPaste}>
       <style>{dragCss}</style>
+      {gpanel && <GroupPanel at={gpanel} cols={filterCols} groups={Array.isArray(gf.groups) && gf.groups.length ? gf.groups : groupDefs} setGroups={setGroups} onClose={() => setGpanel(null)} />}
+      {tip && createPortal(<div className="cell-tip" style={{ left: tip.left, top: tip.top }}>{tip.text}</div>, document.body)}
+      {zoom && createPortal(<div className="cell-zoom" style={{ left: zoom.left, top: zoom.top, minWidth: zoom.minWidth, minHeight: zoom.minHeight }}>{zoom.text}</div>, document.body)}
+      {dangerAsk && <Modal title={`${dangerAsk.a.label}？`} risk="yellow" onClose={() => setDangerAsk(null)} footer={<><button type="button" className="btn" onClick={() => setDangerAsk(null)}>不动</button><button type="button" className="btn danger" onClick={async () => { const { a, rs } = dangerAsk; setDangerAsk(null); for (const r of rs) await a.run(r); selectable?.onChange?.(new Set()); }}>{dangerAsk.a.label} {dangerAsk.rs.length} 条</button></>}>
+        <div className="stack" style={{ gap: 6 }}><div className="small muted">{dangerAsk.a.warn || '这个动作撤不回来。要处理的是下面这几条：'}</div>
+          {dangerAsk.rs.slice(0, 12).map((r) => <div key={rowKey(r)} className="small">· {dangerAsk.a.describe ? dangerAsk.a.describe(r) : (r.name || r.biz_no || r.customer_name || r.label || rowKey(r))}</div>)}
+          {dangerAsk.rs.length > 12 && <div className="small muted">…还有 {dangerAsk.rs.length - 12} 条</div>}</div>
+      </Modal>}
       {panel && <FilterPanel at={panel} cols={filterCols} isNum={isNumCol} optionsOf={optionsOf} conds={filters} setConds={setFilters} any={gf.any} setAny={(v) => setGf((g) => ({ ...g, any: v }))} onClose={() => setPanel(null)} />}
       {optOpen && <TableOptionsModal table={table} opts={tbl.opts} builtin={baseColumns.filter((c) => c.label).map((c) => c.label)} onClose={() => setOptOpen(false)} onSaved={() => { setOptOpen(false); setTblTick((x) => x + 1); }} />}
       {noTools && onDelete && delRows.length > 0 && (
@@ -599,7 +652,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
           <span className="row-acts"><span className="small">第 {shown.indexOf(actRow) + 1} 行：</span>
             {actList.map((a) => <button type="button" key={a.label} className={`btn sm ${a.tone || 'primary'}`} onClick={() => a.run(actRow)}>{a.label}</button>)}
             {!actList.length && <span className="small muted">这一行现在没有要做的</span>}</span>
-        ) : <span className="small muted row-acts-hint">点中一行 → 这里出现能做的操作（{rowActions.map((a) => a.label).join(' / ')}）</span>}</div>)}
+        ) : <span className="small muted row-acts-hint">点中一行 → 这里出现能做的操作（{rowActions.filter((a) => !a.danger).map((a) => a.label).join(' / ')}）</span>}{dangerBtns}</div>)}
       {!noTools && compactTools && !toolsOpen && (
         <div className="grid-tools mini"><span className="grow" />{nFilters > 0 && <span className="pill blue">筛出 {shown.length}/{rows.length} 行</span>}<button type="button" className="btn sm ghost" title="筛选 / 搜索 / 显示哪些列" onClick={() => setToolsOpen(true)}>⏷ ☷</button></div>)}
       {!noTools && (!compactTools || toolsOpen) && (
@@ -607,13 +660,12 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
           {tools}
           {/* 减法巡检 A2 (11-17): 订单里的小表 (slimTools) 平时不摆筛选 / 搜索 / 筛选方案, 点右边 ⏷ 才展开; 有筛选在生效时一直显示 */}
           {(!slimTools || toolsOpen || nFilters > 0) && <>
-          <button type="button" ref={panelBtn} className={`btn sm gf-keep ${liveConds.length ? 'primary' : ''}`} onClick={() => (panel ? setPanel(null) : openPanel())} title="筛选：可以叠加多个条件">⏷ 筛选{liveConds.length ? ` ${liveConds.length}` : ''}</button>
+          <button type="button" ref={panelBtn} className={`btn sm gf-keep ${liveConds.length ? 'primary' : ''}`} onClick={() => (panel ? setPanel(null) : openPanel())} title={panel ? undefined : '筛选：可以叠加多个条件'}>⏷ 筛选{liveConds.length ? ` ${liveConds.length}` : ''}</button>
           {liveConds.map((f) => <span key={f.id} className="pill blue gf-chip gf-keep" onClick={() => openPanel()} title="点开修改">{byKey[f.key].label}{f.op === 'in' ? '：' : f.op === 'not_in' ? ' 不是：' : f.op === 'empty' ? ' 为空' : f.op === 'not_empty' ? ' 不为空' : f.op === 'contains' ? ' 包含 ' : f.op === 'not_contains' ? ' 不包含 ' : { eq: ' = ', ne: ' ≠ ', gt: ' > ', lt: ' < ', between: ' 介于 ' }[f.op] || ' '}{['in', 'not_in'].includes(f.op) ? ((f.vals || []).length > 2 ? `${f.vals.length} 个` : (f.vals || []).join('、')) : ['empty', 'not_empty'].includes(f.op) ? '' : f.op === 'between' ? `${f.a}–${f.b}` : f.a}
             <button type="button" className="x-mini" title="去掉这个条件" onClick={(e) => { e.stopPropagation(); setFilters((cs) => cs.filter((c) => c.id !== f.id)); }}>×</button></span>)}
-          <Choice size="sm" flat={false} className="gf-keep gf-group" value={groupCol ? gf.group : ''} onChange={(v) => { setFolded(new Set()); setGf((g) => ({ ...g, group: v || '' })); }} empty="不分组" placeholder="▤ 分组"
-            options={layout.order.map((k) => byKey[k]).filter((c) => c && c.label && typeof c.label === 'string').map((c) => [c.key, `按「${c.label}」分组`])} />
+          <button type="button" ref={groupBtn} className={`btn sm gf-keep ${groupDefs.length ? 'primary' : ''}`} onClick={() => (gpanel ? setGpanel(null) : openGroup())}>▤ 分组{groupDefs.length ? `：${groupDefs.map((d) => byKey[d.key].label).join(' › ')}` : ''}</button>
           <input className="in sm gf-search" placeholder="⌕ 搜这张表（单号、名字、机型…）" value={gf.q || ''} onChange={(e) => setGf((g) => ({ ...g, q: e.target.value }))} />
-          <Schemes id={id || 'grid'} current={gf} onApply={(s2) => setGf({ conds: (s2.conds || []).map((c) => ({ ...c })), any: !!s2.any, q: s2.q || '' })} />
+          <Schemes id={id || 'grid'} current={{ ...gf, groups: groupDefs }} onApply={(s2) => { setFolded(new Set()); setGf({ conds: (s2.conds || []).map((c) => ({ ...c })), any: !!s2.any, q: s2.q || '', groups: (s2.groups || []).map((g) => ({ ...g })) }); }} />
           {nFilters > 0 && <span className="pill blue">筛出 {shown.length}/{rows.length} 行</span>}
           {(nFilters > 0 || sort) && <button type="button" className="btn sm" onClick={() => { setGf({ conds: [], any: false, q: '' }); setSort(null); }} title="清掉所有筛选和排序，回到最初的样子">↺ 清空</button>}
           </>}
@@ -622,7 +674,8 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
             <span className="row-acts"><span className="small">第 {shown.indexOf(actRow) + 1} 行：</span>
               {actList.map((a) => <button type="button" key={a.label} className={`btn sm ${a.tone || 'primary'}`} onClick={() => a.run(actRow)}>{a.label}</button>)}
               {!actList.length && <span className="small muted">这一行现在没有要做的</span>}</span>
-          ) : <span className="small muted row-acts-hint">点中一行 → 这里出现能做的操作（{rowActions.map((a) => a.label).join(' / ')}）</span>)}
+          ) : <span className="small muted row-acts-hint">点中一行 → 这里出现能做的操作（{rowActions.filter((a) => !a.danger).map((a) => a.label).join(' / ')}）</span>)}
+          {dangerBtns}
           <span className="grow" />
           {msg && <span className="pill green">{msg}</span>}
           {fillTargets.length > 1 && (
@@ -645,8 +698,11 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
             {menu && (
               <div className="menu" style={{ right: 0, top: '110%' }}>
                 {layout.order.map((k) => byKey[k] && (
-                  <label key={k}><input type="checkbox" checked={!layout.hidden.includes(k)} onChange={() => toggleCol(k)} />{byKey[k].label}</label>
+                  <label key={k} className="col-mi"><input type="checkbox" checked={!layout.hidden.includes(k)} onChange={() => toggleCol(k)} /><span className="grow">{byKey[k].label}</span>
+                    {app.role === 'admin' && kindOf(byKey[k]) === 'text' && typeof byKey[k].label === 'string' && <span className="al-seg" onClick={(e) => e.preventDefault()}>{[['left', '左'], ['center', '中'], ['right', '右']].map(([a, l]) => <button type="button" key={a} className={alignOf(byKey[k]) === a ? 'on' : ''} title={`这一列${l}对齐（全公司生效）`} onClick={() => setAlign({ col: k, a })}>{l}</button>)}</span>}</label>
                 ))}
+                {app.role === 'admin' && <div className="col-mi al-all"><span className="grow small muted">所有表的文字列默认</span><span className="al-seg">{[['left', '左'], ['center', '中'], ['right', '右']].map(([a, l]) => <button type="button" key={a} className={(gridAlign().text || 'left') === a ? 'on' : ''} onClick={() => setAlign({ a })}>{l}</button>)}</span></div>}
+                <div className="small muted" style={{ padding: '2px 10px 6px', maxWidth: 260, whiteSpace: 'normal' }}>金额、价格、数量固定右对齐，不能调。</div>
                 <button type="button" className="mi" onClick={() => setLayout({ order: columns.map((c) => c.key), hidden: columns.filter((c) => c.hidden).map((c) => c.key), widths: {}, rowOrder: [] })}>↺ 恢复默认（列顺序、宽度、行顺序）</button>
               </div>
             )}
@@ -655,7 +711,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
         </div>
       )}
       <div className="tw" ref={twRef} style={maxHeight ? { maxHeight } : null}>
-        <table className="t" ref={tableRef}>
+        <table className="t" ref={tableRef} onMouseOver={cellOver} onMouseLeave={cellOut}>
           <thead>
             <tr>
               <th className="rowhead" style={{ width: selectable ? 64 : 40 }}>{selectable ? <label className="selall" title="全选 / 全不选"><input type="checkbox" checked={allSel} onChange={() => selectable.onChange(allSel ? new Set() : new Set(shown.map(rowKey)))} />全选</label> : <span className="muted">#</span>}</th>
@@ -703,7 +759,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
                         inner = <><span className="cell-txt">{(ed.options || []).find(([v]) => v === ed.value)?.[1] ?? ed.value ?? ''}</span>
                           <CellSelect options={ed.options || []} value={ed.value} td={() => tableRef.current?.querySelector(`td[data-cr="${r}"][data-cc="${ci}"]`)} onPick={(v) => commitEdit(v)} onClose={cancelEdit} initChar={editing.draft !== String(ed.value ?? '') ? editing.draft : ''} /></>;
                       } else if (type === 'date') {
-                        inner = <><span className="cell-txt">{ed.value || ''}</span>
+                        inner = <><span className="cell-txt">{dateChip(ed.value || '')}</span>
                           <CellPop td={() => tableRef.current?.querySelector(`td[data-cr="${r}"][data-cc="${ci}"]`)} onClose={cancelEdit}><DateCalendar value={ed.value || ''} onChange={(v) => commitEdit(v)} onClose={cancelEdit} /></CellPop></>;
                       } else {
                         inner = <input ref={editRef} data-r={r} data-c={ci} className={`cell-in on ${ed.invalid ? 'err' : ''}`} value={editing.draft}
@@ -712,12 +768,13 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
                       }
                     } else if (ed && !ed.disabled) {
                       const shownV = ed.type === 'select' ? ((ed.options || []).find(([v]) => v === ed.value)?.[1] ?? ed.value ?? '') : ed.display ?? (ed.type === 'number' && ed.value !== '' && ed.value != null && kindOf(c) === 'money' ? Number(ed.value).toLocaleString('en-US') : ed.value ?? '');
-                      inner = <span className={`cell-txt ${ed.invalid ? 'err' : ''}`} title={ed.title}>{shownV === '' || shownV == null ? <span className="cell-ph">{ed.placeholder || ''}</span> : shownV}</span>;
+                      inner = <span className={`cell-txt ${ed.invalid ? 'err' : ''}`} title={ed.title}>{shownV === '' || shownV == null ? <span className="cell-ph">{ed.placeholder || ''}</span> : (ed.type === 'date' ? dateChip(String(shownV)) : shownV)}</span>;
                       if (ed.hint) inner = <>{inner}<div className="cell-hint">{ed.hint}</div></>;
                     } else {
                       inner = c.render ? c.render(row, r) : c.value ? c.value(row) : row[c.key];
                       if (inner instanceof Date) inner = fmtDate(inner);
                       else if (inner !== null && typeof inner === 'object' && !React.isValidElement(inner) && !Array.isArray(inner)) inner = String(inner);
+                      if (typeof inner === 'string') inner = dateChip(inner);
                     }
                     const fillCell = c.plain ? false : ((ed && !ed.disabled) || c.fill || c.tint);   // tint = 只上底色 (一组金额列同色), plain = 能改也不上色
                     const errMsg = errors?.[k]?.[c.key] || (ed?.invalid ? (ed.title || '有问题') : null);

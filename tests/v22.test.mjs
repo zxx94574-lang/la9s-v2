@@ -15,8 +15,8 @@ test('签收必须写跟谁确认的; 电话进客户联系人, 不重复加', a
   const t = await setup(); const { d, sh } = await shipped(t);
   const at = '2026-10-27T12:00:00Z';
   await rejects(t.as(U.hotline, `select app.sign_receipt($1,'s.jpg',$2,'',' 0701','staff')`, [sh, at]), /姓名/);
-  await rejects(t.as(U.hotline, `select app.sign_receipt($1,'s.jpg',$2,'Awa','','staff')`, [sh, at]), /电话/);
-  await rejects(t.as(U.hotline, `select app.sign_receipt($1,'s.jpg',$2,'Awa','0701','x')`, [sh, at]), /老板还是店员/);
+  // 0062 (409): 电话不再强制; 身份不限定三种, 但必须选
+  await rejects(t.as(U.hotline, `select app.sign_receipt($1,'s.jpg',$2,'Awa','0701','')`, [sh, at]), /跟谁确认/);
   await t.as(U.hotline, `select app.sign_receipt($1,'s.jpg',$2,'Awa','07 01 02 03 04','staff')`, [sh, at]);
   const s = await t.one(`select confirm_name, confirm_phone, confirm_role, customer_received_at from app.shipments where id = $1`, [sh]);
   assert.equal(s.confirm_name, 'Awa'); assert.equal(s.confirm_phone, '0701020304'); assert.equal(s.confirm_role, 'staff');

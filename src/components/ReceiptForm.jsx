@@ -2,10 +2,13 @@
 // 3 modes only (待改 28) · receipt currency → the order currency at a locked rate written one way only (待改 30)
 // · live preview sentence + before/after (待改 31) · info bar next to the modes (待改 32) · orders open in a drawer (待改 34)
 import { DealLink } from './Archives.jsx';
+import { OptChoice, OptNote, OptGear, optName, optSubmit, useOptList } from './Opts.jsx';
+import { ImpactFor } from './Impact.jsx';
+const VOID_WHY = ['金额输错', '小数点输错', '客户 / 订单选错', '重复登记', '客户没付成功'];
 import React, { useEffect, useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, DatePicker, PhotoInput, Drawer, BigNum, Modal, FRow, Info, RateInput, Choice, Assumed } from './ui.jsx';
+import { useApp, useData, DatePicker, PhotoInput, Drawer, BigNum, Modal, FRow, Info, RateInput, Choice, Assumed, MoneyIn } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { can, whoCan, PAY_METHODS, balanceWords } from '../lib/domain.js';
 import { money, today, dDate, friendlyError } from '../lib/format.js';
@@ -169,11 +172,11 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
           <div className="fgroup"><div className="fgroup-t">② 付了多少、收到哪个账户</div>
             <div className="rgrid">
               <FRow label="收到哪个账户" req>
-                <Choice value={accSel} onChange={pickAccount} options={accAll.map((a) => [a.id, a.name, isPublic(a) ? `${a.currency} · 在 ${a.holder} 手里` : a.currency])} placeholder="选账户…" err={errs && !accountId} flat={false} style={{ width: 230 }} />
+                <OptChoice optKey="cash_accounts" title="资金账户" data value={accSel} onChange={pickAccount} options={accAll.map((a) => [a.id, a.name, isPublic(a) ? `${a.currency} · 在 ${a.holder} 手里` : a.currency])} placeholder="选账户…" err={errs && !accountId} flat={false} style={{ width: 230 }} />
                 <Info>只选钱收到了哪个账户：现金、Wave 还是公司收款账户（Roland 的 Wave / 银行）。收款方式和币种跟着账户走，不用再选。<Assumed>账户清单 = 资金账户页里启用的全部账户；账户名带 Cash 算现金、带 Wave 算 Wave、银行账户算银行。</Assumed></Info>
               </FRow>
               <FRow label="到账金额" req>
-            <input className={`in ${errs && !(N(amount) > 0) ? 'err-in' : ''}`} inputMode="decimal" style={{ width: 150, fontSize: 17, fontWeight: 700 }} value={amount} onChange={(e) => { setAmount(e.target.value.replace(/[^\d.]/g, '')); setOverOk(false); }} placeholder="0" />
+            <MoneyIn className={`in ${errs && !(N(amount) > 0) ? 'err-in' : ''}`} inputMode="decimal" style={{ width: 150, fontSize: 17, fontWeight: 700 }} value={amount} onChange={(e) => { setAmount(e.target.value.replace(/[^\d.]/g, '')); setOverOk(false); }} placeholder="0" />
             <span className="pill">{currency}</span>
             {lockDeal && defaultAmount != null && <Info>本单待付 {money(defaultAmount, acc)}，只作参考，实收请按到账手填。</Info>}
           </FRow>
@@ -188,7 +191,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
               {method !== 'cash' && <FRow label="我们承担手续费">
             <Choice value={feeOn ? 'y' : 'n'} onChange={(v) => { setFeeOn(v === 'y'); setFeeOk(false); if (v !== 'y') { setFee(''); setFeeTouched(false); setFeeWhy(''); } }} options={[['n', '否'], ['y', '是']]} />
             {feeOn && <>
-              <input className={`in ${feeHigh ? 'err-in' : ''}`} inputMode="decimal" style={{ width: 100 }} value={feeTouched ? fee : (feeV ? String(feeV) : '')} onChange={(e) => { setFeeTouched(true); setFeeOk(false); setFee(e.target.value.replace(/[^\d.]/g, '')); }} placeholder="0" />
+              <MoneyIn className={`in ${feeHigh ? 'err-in' : ''}`} inputMode="decimal" style={{ width: 100 }} value={feeTouched ? fee : (feeV ? String(feeV) : '')} onChange={(e) => { setFeeTouched(true); setFeeOk(false); setFee(e.target.value.replace(/[^\d.]/g, '')); }} placeholder="0" />
               <span className="small muted">{currency}</span>
               {feeV > 0 && <span className={`pill ${feeHigh ? 'red' : feeLow ? 'amber' : 'green'}`}>{feeRate.toFixed(2)}%</span>}
               <Assumed>「高于 1%」我按 1.05% 以上算、「低于 1%」按 0.95% 以下算，中间当成正常的 1%（避免取整差一两块就弹确认）。</Assumed>
@@ -204,7 +207,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
                 {heldBy ? <span><b>{heldBy}</b> <span className="small muted">（公司收款账户：客户账照冲，{heldBy} 交回公司之前算他欠公司）</span></span>
                   : method === 'cash' ? <>
                     <Choice value={byStaff ? 'staff' : 'co'} onChange={(v) => { setByStaff(v === 'staff'); if (v !== 'staff') setCollector(''); }} options={[['co', '交到公司了'], ['staff', '员工代收']]} />
-                    {byStaff && <Choice value={collector} onChange={setCollector} options={(data.staff || []).map((e) => [e.id, e.short_name])} placeholder="选员工…" err={errs && !collector} flat={false} style={{ width: 170 }} />}
+                    {byStaff && <OptChoice optKey="emp_list" title="员工名单" data value={collector} onChange={setCollector} options={(data.staff || []).map((e) => [e.id, e.short_name])} placeholder="选员工…" err={errs && !collector} flat={false} style={{ width: 170 }} />}
                   </> : <span>公司账户 <span className="small muted">（到账后中方在「资金账户」核对）</span></span>}
                 <Info>{byStaff ? '客户把现金给了员工：客户账照冲，钱挂在员工名下（在途）；员工交到公司后，在「资金账户 → 员工代收」点「已交」。' : '登记后是「待核对到账」：中方在「资金账户 → 待核对到账」里对着账户余额确认。'}</Info>
               </FRow>
@@ -266,6 +269,7 @@ export function BalanceLine({ balance, currency = 'XOF', size = 24 }) {
 export function VoidReceiptModal({ rc, onClose }) {
   const { role, toast, refresh } = useApp();
   const [why, setWhy] = useState('金额输错');
+  const { list: voidWhy } = useOptList('note_void_receipt', VOID_WHY);
   const [busy, setBusy] = useState(false);
   const go = async () => {
     setBusy(true);
@@ -277,8 +281,9 @@ export function VoidReceiptModal({ rc, onClose }) {
       footer={<><button type="button" className="btn" onClick={onClose}>不撤了</button><span className="grow" /><button type="button" className="btn danger" disabled={busy || !why.trim()} onClick={go}>确认撤销 {money(rc.amount, rc.currency)} {rc.currency}</button></>}>
       <div className="stack">
         <div className="hint">撤销后：这笔钱冲到各单的金额全部收回、客户总账加回去、公户认领退回「待认领」。收款单不删，标「已撤销」留记录。撤完在下面重新登记正确的金额。</div>
-        <div className="chips">{['金额输错', '小数点输错', '客户 / 订单选错', '重复登记', '客户没付成功'].map((x) => <button type="button" key={x} className={`chip ${why === x ? 'on' : ''}`} onClick={() => setWhy(x)}>{x}</button>)}</div>
+        <div className="chips">{voidWhy.map(([x]) => <button type="button" key={x} className={`chip ${why === x ? 'on' : ''}`} onClick={() => setWhy(x)}>{x}</button>)}<OptGear optKey="note_void_receipt" title="撤销收款的原因" options={VOID_WHY} /></div>
         <input className="in" value={why} onChange={(e) => setWhy(e.target.value)} placeholder="撤销原因（必填）" />
+        <ImpactFor customerId={rc.customer_id} cur={rc.currency} delta={N(rc.amount_base ?? rc.amount)} pending={`撤销收款 ＋${money(rc.amount, rc.currency)}（冲到各单的也一起收回）`} />
       </div>
     </Modal>
   );
@@ -326,7 +331,7 @@ export function ReallocModal({ r, onClose, onDone }) {
         <div className="hint">收款本身不动（金额、日期、凭证都不变），只改「这笔钱算在哪张单」。客户总欠款不变。</div>
         <FRow label="从" req><Choice value={from} onChange={(v) => { setFrom(v); setTo(''); }} options={froms.map((x) => [x.id, x.label])} flat={false} /></FRow>
         <FRow label="挪到" req><Choice value={to} onChange={setTo} options={tos.map((x) => [x.id, x.label])} flat={false} /></FRow>
-        <FRow label="金额" req><input className="in" inputMode="decimal" style={{ width: 140 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} />{f && <button type="button" className="btn sm ghost" onClick={() => setAmt(String(Math.min(f.max, t?.max ?? Infinity)))}>全部</button>}</FRow>
+        <FRow label="金额" req><MoneyIn className="in" inputMode="decimal" style={{ width: 140 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} />{f && <button type="button" className="btn sm ghost" onClick={() => setAmt(String(Math.min(f.max, t?.max ?? Infinity)))}>全部</button>}</FRow>
         <FRow label="原因" req><input className="in" style={{ width: '100%', maxWidth: 420 }} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例如 客户说这笔付的是另一张单" /></FRow>
       </div>
     </Modal>

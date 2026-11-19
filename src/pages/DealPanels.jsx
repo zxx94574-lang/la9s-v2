@@ -1,6 +1,6 @@
 // The panels of one deal. Each workflow step has its own panel: the action when it is the current step,
 // a read-only record once it has been pushed (待改 13). Every button calls exactly one SQL business function.
-import { OptChoice } from '../components/Opts.jsx';
+import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import PeoplePick from '../components/PeoplePick.jsx';
 import { fmtPhone, telHref } from '../lib/phone.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -11,8 +11,9 @@ import { DocActions, DocSheet, BalanceCopy, BalancePreview } from '../components
 import { BlActions } from '../components/Bl.jsx';
 import { flagAnomaly } from '../components/IssueReport.jsx';
 import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus } from '../components/ReceiptForm.jsx';
-import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip, Choice, Assumed } from '../components/ui.jsx';
-import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, PAY_METHODS, RETURN_REASONS, CONFIRM_METHODS, CHECK_RESULTS, priceLevel, getThresholds, balanceWords, TIERS } from '../lib/domain.js';
+import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip, Choice, Assumed, MoneyIn, AcctImpact } from '../components/ui.jsx';
+import { ImpactFor } from '../components/Impact.jsx';
+import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, PAY_METHODS, RETURN_REASONS, RETURN_BASES, FREIGHT_BASES, CONFIRM_METHODS, CHECK_RESULTS, priceLevel, getThresholds, balanceWords, TIERS } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, pad, ymd } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
 
@@ -122,7 +123,7 @@ export function CancelModal({ deal, act, onClose }) {
           <button type="button" className="btn primary" onClick={() => act(['picked', 'ordered', 'confirmed', 'reviewed'].includes(deal.status) ? '已作废：请把已拿出的货放回原库位（预占已释放）' : '订单已作废，预占已释放（可在「订单总览 → 已作废」恢复）', `select app.cancel_deal($1,$2)`, [deal.id, reason]).then(onClose, () => {})}>确认作废</button></>}>
         <div className="stack">
           <div className="hint">作废不是删除：单子进「已作废」列表，随时可以恢复。</div>
-          <OptionNote options={['客户不要了', '价格谈不拢', '重复下单', '其他']} value={reason} onChange={setReason} />
+          <OptNote optKey="note_cancel" title="作废原因" options={['客户不要了', '价格谈不拢', '重复下单', '没货', '其他']} value={reason} onChange={setReason} />
         </div>
       </Modal>
   );
@@ -214,7 +215,7 @@ export function ConfirmBlock({ deal, events, act, role, lines }) {
               <FRow label="确认方式" req><OptChoice optKey="confirm_methods" title="确认方式" value={method} onChange={(k) => setMethod(k)} options={Object.entries(CONFIRM_METHODS)} err={errs && !method} /></FRow>
               <FRow label="什么时候要" req><Choice value={when} onChange={(k) => setWhen(k)} options={[['today', '今天要'], ['tomorrow', '明天要'], ['date', '改天']]} err={errs && !when} />
                 {when === 'date' && <DatePicker value={date || null} onChange={setDate} label={date ? '' : '选日期'} />}</FRow>
-              <FRow label="结果"><OptionNote options={NOTE_OPTIONS.hotline} value={note} onChange={setNote} /></FRow>
+              <FRow label="结果"><OptNote optKey="note_hotline" title="确认结果" options={NOTE_OPTIONS.hotline} value={note} onChange={setNote} /></FRow>
               <FRow label="截图"><PhotoInput value={proof} onChange={setProof} label="WhatsApp 截图（可选）" /></FRow>
             </div>
             <div className="actbar">
@@ -644,7 +645,7 @@ function UnlockModal({ line, onClose, onOk }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!r?.trim()} onClick={() => onOk(r)}>解锁</button></>}>
       <div className="stack">
         <div className="hint">改完自动锁回，并记录「谁、何时、从多少改成多少、原因」。「客户不要了」= 数量改为 0，预占释放。已确认的单改完要客户重新确认。</div>
-        <OptionNote options={NOTE_OPTIONS.unlock} value={r} onChange={setR} placeholder="其他原因（必填）" />
+        <OptNote optKey="note_unlock" title="解锁改数量的原因" options={NOTE_OPTIONS.unlock} value={r} onChange={setR} placeholder="其他原因（必填）" />
       </div>
     </Modal>
   );
@@ -664,7 +665,7 @@ function PriceModal({ line, cur, onClose, onSave, request }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className={`btn ${level >= 3 ? 'danger' : 'primary'}`} disabled={disabled} onClick={() => onSave(N(p), r)}>{request ? '提交申请（等中方批）' : '确认改价'}</button></>}>
       <div className="stack">
         <div className="hint">档位价 <b>{money(line.tier_price, cur)} {cur}</b>。{request ? '价格只有中方能定：你填想要的价和原因，中方批了才生效；批之前这张单不能复制销售单、不能往下走。' : '改价只有中方能做，必须写原因；改后标记「手改」，偏离档位价超过设定比例的单会标「异价单」。'}</div>
-        <div className="field req"><label>新单价 {cur}</label><input className="in" inputMode="decimal" autoFocus value={p} onChange={(e) => { setP(e.target.value.replace(/[^\d.]/g, '')); setOk(false); }} style={{ maxWidth: 200, fontSize: 18, fontWeight: 700 }} /></div>
+        <div className="field req"><label>新单价 {cur}</label><MoneyIn className="in" inputMode="decimal" autoFocus value={p} onChange={(e) => { setP(e.target.value.replace(/[^\d.]/g, '')); setOk(false); }} style={{ maxWidth: 200, fontSize: 18, fontWeight: 700 }} /></div>
         {level === 1 && <div className="dev-box dev1">比档位价{pct < 0 ? '低' : '高'} {Math.abs(pct).toFixed(1)}%</div>}
         {level >= 2 && level < 4 && (
           <div className={`dev-box dev${level}`}>
@@ -768,7 +769,7 @@ function ShipForm({ deal, lines, shipments, act }) {
   const [items, setItems] = useState({});
   const [errs, setErrs] = useState(false);
   // 232 (Frank 11-11): 运费谁出 —— S 档默认我们出; 阿比让以外默认我们出一段 (仓库 → Adjamé 交通站); 其他默认客户出; 仓库可以改
-  const [bearer, setBearer] = useState('customer');   // 270 (Frank 11-12): 默认客户出
+  const [bearerRaw, setBearer] = useState('customer'); const bearer = optSubmit('freight_bearer', bearerRaw).base;   // 270 (Frank 11-12): 默认客户出
   const [freight, setFreight] = useState('');
   const [summary, setSummary] = useState(null);
   const left = lines.filter((l) => N(l.qty_supply) > N(l.qty_shipped));
@@ -797,7 +798,10 @@ function ShipForm({ deal, lines, shipments, act }) {
   const submit = async () => {
     const at = new Date(`${date}T${time}:00`).toISOString();
     const payload = partial ? left.map((l) => ({ line_id: l.id, qty: now(l) })).filter((x) => x.qty > 0) : null;
-    await act('已出库，客户总账已更新', `select app.ship($1,$2,$3,$4,$5,$6,$7)`, [deal.id, at, method, phone.trim(), addr.trim(), proof, payload && JSON.stringify(payload)])
+    const mth = optSubmit('ship_methods', method), bear = optSubmit('freight_bearer', bearerRaw);   // 401: ⚙ 里自己加的选项 → 后台按它挂的那一类处理, 名字另存
+    const LAST = `(select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1)`;
+    await act('已出库，客户总账已更新', `select app.ship($1,$2,$3,$4,$5,$6,$7)`, [deal.id, at, mth.base, phone.trim(), addr.trim(), proof, payload && JSON.stringify(payload)])
+      .then(() => (mth.label || bear.label ? call(role, `select app.set_opt_label('ship_method', ${LAST}, $2), app.set_opt_label('ship_freight', ${LAST}, $3)`, [deal.id, mth.label, bear.label]).catch(() => {}) : null))
       .then(() => call(role, `select app.record_ship_freight((select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1), $2, $3, $4) as mv`, [deal.id, bearer, bearer === 'customer' ? null : N(freight), proof])
         .then((r) => { if (bearer !== 'customer' && r?.[0]?.mv) window.dispatchEvent(new CustomEvent('la9s:flow', { detail: { text: `运费 ${money(N(freight))} XOF 已记一笔支出流水（本地物流费 · Wave-XOF）`, to: 'cash' } })); refresh(); }, (e) => toast('运费没记上：' + (e?.message || e), 'err')))
       .then(() => (partial && preason.trim() ? call(role, `select app.set_partial_reason((select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1), $2)`, [deal.id, preason.trim()]).then(() => refresh(), () => {}) : null))
@@ -813,8 +817,8 @@ function ShipForm({ deal, lines, shipments, act }) {
           <div className="fgroup"><div className="fgroup-t">① 发货</div>
             <div className="row" style={{ gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div className="field req grow"><label>发货方式</label>
-            <OptChoice optKey="ship_methods" title="发货方式" value={method} onChange={(k) => setMethod(k)} options={Object.entries(SHIP_METHODS)} err={errs && !method} /></div>
-              <div className="field req" style={{ width: 220 }}><label>{method.startsWith('yango') ? 'Yango 司机电话' : method === 'customer_pickup' ? '取货人电话' : '联系电话'}</label>
+            <OptChoice optKey="ship_methods" title="发货方式" bases={Object.entries(SHIP_METHODS)} value={method} onChange={(k) => setMethod(k)} options={Object.entries(SHIP_METHODS)} err={errs && !method} /></div>
+              <div className="field req" style={{ width: 220 }}><label>{optSubmit('ship_methods', method).base.startsWith('yango') ? 'Yango 司机电话' : optSubmit('ship_methods', method).base === 'customer_pickup' ? '取货人电话' : '联系电话'}</label>
             <PhoneInput value={phone} onChange={setPhone} invalid={errs && !phone.trim()} /></div>
               <div className="field req"><label>发货凭证（Yango 截图 / 现场照片）</label><PhotoInput value={proof} onChange={setProof} label="司机 / 车辆截图" invalid={errs} /></div>
             </div></div>
@@ -828,8 +832,8 @@ function ShipForm({ deal, lines, shipments, act }) {
           <div className="fgroup"><div className="fgroup-t">③ 运费</div>
             <div className="row" style={{ gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div className="field req"><label>运费谁出 <Info>默认客户出。S 档大客户：我们出。外区客户：我们只出仓库到 Adjamé 交通站这一段。选了我们出：填实际付的钱（照 Yango 截图上的价格），出库时自动记一笔支出流水（本地物流费，Wave-XOF 账户）。只进我们自己的流水，不动客户的账。</Info></label>
-            <Choice value={bearer} onChange={(k) => setBearer(k)} options={[['customer', '客户出'], ['company', '我们出'], ['company_part', '我们出一段（到交通站）']]} flat /></div>
-              {bearer !== 'customer' && <div className="field req" style={{ width: 220 }}><label>实际付了多少（照截图上的价格）</label><input className={`in ${errs && !(N(freight) > 0) ? 'err-in' : ''}`} inputMode="numeric" value={freight} onChange={(e) => setFreight(e.target.value.replace(/\D/g, ''))} placeholder="XOF" /></div>}
+            <OptChoice optKey="freight_bearer" title="运费谁出" bases={FREIGHT_BASES} value={bearerRaw} onChange={(k) => setBearer(k)} options={FREIGHT_BASES} /></div>
+              {bearer !== 'customer' && <div className="field req" style={{ width: 220 }}><label>实际付了多少（照截图上的价格）</label><MoneyIn className={`in ${errs && !(N(freight) > 0) ? 'err-in' : ''}`} inputMode="numeric" value={freight} onChange={(e) => setFreight(e.target.value.replace(/\D/g, ''))} placeholder="XOF" /></div>}
             </div></div>
         </div>
       </div>
@@ -860,7 +864,7 @@ function ShipForm({ deal, lines, shipments, act }) {
           footer={<><button type="button" className="btn" onClick={() => setSummary(null)}>再看看</button><button type="button" className="btn primary" onClick={submit}>确认出库</button></>}>
           <div className="stack">
             <div className="ship-sum">本次发 <b>{qty(thisTime)}</b> 件 · 订单共 <b>{qty(total)}</b> 件 · 剩 <b>{qty(total - shippedBefore - thisTime)}</b> 件下次发</div>
-            <div>{SHIP_METHODS[method]} · {phone} · {addr} · {date} {time}</div>
+            <div>{optName('ship_methods', method, SHIP_METHODS)} · {phone} · {addr} · {date} {time}</div>
             {summary.same && <div className="lock">⚠ 和上一批（{prev.out_no}）的{prev.contact_phone === phone.trim() ? '司机电话' : '凭证图片'}相同，确认是另一辆车 / 另一次发货？</div>}
             <div className="hint">出库后客户总账立即增加；如果客户有预付款，会自动抵扣这一单。</div>
           </div>
@@ -876,8 +880,8 @@ function FreightCell({ s, role, act }) {
   const [pay, setPay] = useState(false);
   if (!s.freight_bearer) return <span className="muted small">没填</span>;
   if (s.freight_bearer === 'customer') return <span className="pill gray">客户出</span>;
-  if (s.freight_paid_at) return <span className="row" style={{ gap: 6 }}><span className="pill green">{BEARER[s.freight_bearer]} · 已付 {money(s.freight_amount)}</span><Thumb src={s.freight_proof} size={30} label={`${s.out_no} 运费支付截图`} /></span>;
-  return (<span className="row" style={{ gap: 6 }}><span className="pill red">{BEARER[s.freight_bearer]} · 没付{s.freight_est ? ` 约 ${money(s.freight_est)}` : ''}</span>
+  if (s.freight_paid_at) return <span className="row" style={{ gap: 6 }}><span className="pill green">{optName('freight_bearer', s.freight_bearer, BEARER, s.freight_label)} · 已付 {money(s.freight_amount)}</span><Thumb src={s.freight_proof} size={30} label={`${s.out_no} 运费支付截图`} /></span>;
+  return (<span className="row" style={{ gap: 6 }}><span className="pill red">{optName('freight_bearer', s.freight_bearer, BEARER, s.freight_label)} · 没付{s.freight_est ? ` 约 ${money(s.freight_est)}` : ''}</span>
     {(can(role, 'receipt') || role === 'admin') && <button type="button" className="btn sm primary" onClick={() => setPay(true)}>付运费</button>}
     {pay && <FreightModal s={s} act={act} onClose={() => setPay(false)} />}</span>);
 }
@@ -891,8 +895,8 @@ function FreightModal({ s, act, onClose }) {
       <button type="button" className="btn primary" disabled={!ok} onClick={() => act(`运费 ${money(amt)} 已付，已记一笔本地物流费支出`, `select app.pay_ship_freight($1,$2,$3,$4)`, [s.id, account, N(amt), proof]).then(onClose, () => {})}>已付，记账</button></>}>
       <div className="stack">
         {acc && !acc.length && <div className="pill red" style={{ whiteSpace: 'normal' }}>还没有资金账户：先到「资金账户 → 账户设置」建 Wave / 现金账户</div>}
-        <FRow label="从哪个账户付" req><Choice value={account} onChange={setAccount} options={(acc || []).map((a) => [a.id, a.name])} placeholder="选账户…" flat={false} /></FRow>
-        <FRow label="实际金额" req><input className="in" inputMode="numeric" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">XOF{s.freight_est ? `（仓库填的大概 ${money(s.freight_est)}）` : ''}</span></FRow>
+        <FRow label="从哪个账户付" req><OptChoice optKey="cash_accounts" title="资金账户" data value={account} onChange={setAccount} options={(acc || []).map((a) => [a.id, a.name])} placeholder="选账户…" flat={false} /></FRow>
+        <FRow label="实际金额" req><MoneyIn className="in" inputMode="numeric" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">XOF{s.freight_est ? `（仓库填的大概 ${money(s.freight_est)}）` : ''}</span></FRow>
         <FRow label="支付截图" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="Wave / Orange 支付截图" /></div></FRow>
       </div>
     </Modal>
@@ -906,7 +910,7 @@ function ShipmentsCard({ deal, lines, shipments, act, role }) {
   const cols = [
     { key: 'out_no', label: '出库单号', w: 150, render: (s) => <span className={s.voided_at ? 'strike' : ''}><b className="mono">{s.out_no}</b></span> },
     { key: 'shipped_at', label: '发货时间', w: 130, render: (s) => dt(s.shipped_at) },
-    { key: 'method', label: '方式', w: 110, render: (s) => SHIP_METHODS[s.method] },
+    { key: 'method', label: '方式', w: 110, render: (s) => optName('ship_methods', s.method, SHIP_METHODS, s.method_label) },
     { key: 'contact_phone', label: '电话', w: 120 },
     { key: 'address', label: '地址', w: 140 },
     { key: 'qty', label: '件数', w: 60, render: (s) => qty(s.qty) },
@@ -941,7 +945,8 @@ function VoidModal({ s, onClose, onOk }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn danger" disabled={!r?.trim()} onClick={() => onOk(r)}>确认撤销这次出库</button></>}>
       <div className="stack">
         <div className="hint">不是客户退货：货没离开我们的控制，不进待检仓、不需要中方审批。撤销后重新约日期再发。</div>
-        <OptionNote options={NOTE_OPTIONS.void_ship} value={r} onChange={setR} placeholder="其他原因（必填）" />
+        <OptNote optKey="note_void_ship" title="撤销出库的原因" options={NOTE_OPTIONS.void_ship} value={r} onChange={setR} placeholder="其他原因（必填）" />
+        <ImpactFor dealId={s.deal_id} delta={-N(s.amount)} note={`撤销出库 −${money(N(s.amount))}`} />
       </div>
     </Modal>
   );
@@ -1072,9 +1077,10 @@ function BadDebtModal({ deal, act, onClose }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{!reason.trim() ? '写原因' : !proof ? '传凭证' : `金额 1 – ${money(deal.due, deal.currency)}`}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={() => act(`已核销坏账 ${money(amt, deal.currency)}`, `select app.write_off_bad_debt($1,$2,$3,$4)`, [deal.id, N(amt), reason, proof || null]).then(onClose, () => {})}>确认核销</button></>}>
       <div className="stack">
         <div className="hint">确认这笔钱收不回来才核销。核销后客户总账减少，但记录永久保留（谁、什么时候、多少、为什么），以后客户又付了照常登记收款。</div>
-        <FRow label="核销金额" req><input className="in" inputMode="decimal" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{deal.currency}，本单还欠 {money(deal.due, deal.currency)}</span></FRow>
+        <FRow label="核销金额" req><MoneyIn className="in" inputMode="decimal" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{deal.currency}，本单还欠 {money(deal.due, deal.currency)}</span></FRow>
         <FRow label="原因" req><input className="in" style={{ width: '100%', maxWidth: 420 }} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例如 客户跑路、店已关" /></FRow>
         <FRow label="凭证" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="聊天记录 / 照片" camera={false} /></div></FRow>
+        <ImpactFor dealId={deal.id} delta={-N(amt)} note={`坏账核销 −${money(N(amt), deal.currency)}`} />
       </div>
     </Modal>
   );
@@ -1084,7 +1090,7 @@ function WriteOffModal({ deal, act, onClose }) {
   return (
     <Modal title={`抹零：${deal.biz_no}`} risk="red" onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!r?.trim()} onClick={() => act('已抹零，本单结清', `select app.write_off($1,$2,$3)`, [deal.id, N(deal.due), r]).then(onClose, () => {})}>确认抹零 {money(deal.due, deal.currency)} {deal.currency}</button></>}>
-      <div className="stack"><div className="hint">只限尾差（≤ 100 XOF）；会记入客户流水，客户对账看得到。</div><OptionNote options={NOTE_OPTIONS.writeoff} value={r} onChange={setR} /></div>
+      <div className="stack"><div className="hint">只限尾差（≤ 100 XOF）；会记入客户流水，客户对账看得到。</div><OptNote optKey="note_writeoff" title="抹零原因" options={NOTE_OPTIONS.writeoff} value={r} onChange={setR} /><ImpactFor dealId={deal.id} delta={-N(deal.due)} note={`抹零 −${money(deal.due, deal.currency)}`} /></div>
     </Modal>
   );
 }
@@ -1119,7 +1125,7 @@ export function ReturnPanel({ deal, lines, returns, act, role }) {
               if (!form.reason) return toast('请选择或填写退货原因', 'err');
               if (form.type === 'other' && !form.typeNote?.trim()) { setForm({ ...form, errs: true }); return toast('选了「其他」要写清楚是什么', 'err'); }
               if (!form.photo) { setForm({ ...form, errs: true }); return toast('收到退货要拍实物照片（不是盒子）', 'err'); }
-              await act('退货已登记，等中方审批', `select app.request_return($1,$2,$3,$4,null,$5,$6)`, [deal.id, form.type, form.type === 'other' ? `其他：${form.typeNote.trim()} · ${form.reason}` : form.reason, JSON.stringify(ls), new Date(form.at).toISOString(), form.photo]).then(() => setForm(null), () => {});
+              const ty = optSubmit('return_types', form.type); await act('退货已登记，等中方审批', `select app.set_opt_label('return_reason', app.request_return($1,$2,$3,$4,null,$5,$6), $7)`, [deal.id, ty.base, form.type === 'other' ? `其他：${form.typeNote.trim()} · ${form.reason}` : form.reason, JSON.stringify(ls), new Date(form.at).toISOString(), form.photo, ty.label]).then(() => setForm(null), () => {});
             }}>提交退货申请</button></>}>
           <div className="stack">
             <div className="card card-b" style={{ background: 'var(--amber-bg)' }}><b>① 收到退货</b> <span className="small muted">收到货才做退货单；没收到不做</span>
@@ -1129,9 +1135,9 @@ export function ReturnPanel({ deal, lines, returns, act, role }) {
               </div></div>
             <b>② 退的什么、为什么</b>
             <div className="field req"><label>退货类型</label>
-              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><Choice value={form.type} onChange={(k) => setForm({ ...form, type: k })} options={Object.entries(RETURN_REASONS)} />
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><OptChoice optKey="return_types" title="退货类型" bases={RETURN_BASES} value={form.type} onChange={(k) => setForm({ ...form, type: k })} options={Object.entries(RETURN_REASONS)} />
                 {form.type === 'other' && <input className={`in ${form.errs && !form.typeNote?.trim() ? 'invalid' : ''}`} style={{ width: 260 }} autoFocus value={form.typeNote || ''} onChange={(e) => setForm({ ...form, typeNote: e.target.value })} placeholder="「其他」是什么？（必填）" />}</div></div>
-            <div className="field req"><label>具体原因</label><OptionNote options={NOTE_OPTIONS.return} value={form.reason} onChange={(v) => setForm({ ...form, reason: v })} /></div>
+            <div className="field req"><label>具体原因</label><OptNote optKey="note_return" title="退货的具体原因" options={NOTE_OPTIONS.return} value={form.reason} onChange={(v) => setForm({ ...form, reason: v })} /></div>
             <Grid id="return-form" noTools columns={[
               { key: 'code', label: '编码', w: 60 }, { key: 'category', label: '种类', w: 90 }, { key: 'model', label: '型号', w: 100, render: (l) => <ModelLink id={l.product_id} model={l.model} /> },
               { key: 'qty_shipped', label: '出库数量', w: 70, render: (l) => qty(l.qty_shipped) },
@@ -1190,7 +1196,7 @@ function ReturnRecon({ r, deal, act, role }) {
           <b>① 收到退货</b>
           <span className="small">收到时间 <b>{r.received_at ? dt(r.received_at) : '—（旧单没记）'}</b></span>
           {r.received_photo ? <Thumb src={r.received_photo} size={40} label={`${r.rt_no} 退回实物`} /> : <span className="small muted">没有实物照片</span>}
-          <span className="small muted">{RETURN_REASONS[r.reason_type]} · {r.reason} · 登记 {dt(r.requested_at)}</span>
+          <span className="small muted">{optName('return_types', r.reason_type, RETURN_REASONS, r.reason_label)} · {r.reason} · 登记 {dt(r.requested_at)}</span>
           <span className="grow" />
           <Pill tone={tone}>{st}</Pill>
           {r.status === 'requested' && (can(role, 'decide_return') ? <>
@@ -1213,11 +1219,7 @@ function ReturnRecon({ r, deal, act, role }) {
         { key: 'qty_good', label: '检验：好货回原仓', w: 120 }, { key: 'qty_scrap', label: '检验：坏货报废', w: 110 },
         { key: 'inspect', label: '', w: 170, render: (x) => (approved && N(x.qty_good) + N(x.qty_scrap) < N(x.qty) && can(role, 'inspect_return') ? <InspectButtons x={x} act={act} /> : '') },
       ]} rows={r.lines} foot={(rows) => ({ code: '合计', qty: `${qty(rows.reduce((a, x) => a + N(x.qty), 0))} 件`, amt: `${money(amt, cur)} ${cur}` })} />
-      <div className="card-b recon">
-        <div><div className="k">对本单的影响（应收）</div><div className="ba">{money(recBefore, cur)} <span className="arrow">→</span> <b>{money(recAfter, cur)}</b> {cur}</div><div className="small muted">退货 −{money(amt, cur)}</div></div>
-        <div><div className="k">客户总账（退货前 → 退货后）</div><div className="ba"><span>{balanceWords(balBefore, cur).text}</span> <span className="arrow">→</span> <b className={`${balanceWords(balAfter, cur).tone}-t2`}>{balanceWords(balAfter, cur).text}</b></div>
-          {!approved && <div className="small muted">审批通过后才生效</div>}</div>
-      </div>
+      <div className="card-b"><AcctImpact fmt={(n) => `${money(n, cur)} ${cur}`} docLabel="本单应收（退货前 → 退货后）" doc={{ before: recBefore, after: recAfter }} ledger={{ before: balBefore, after: balAfter }} note={`退货 −${money(amt, cur)}`} ledgerNote={approved ? `退货 −${money(amt, cur)}` : '审批通过后才生效'} /></div>
       {/* ③ 和客户对账: 所见即所得 + 一个按钮 (退货对账 + Balance 合一) */}
       <div className="card-b" style={{ borderTop: '1px solid var(--line-2)' }}>
         <div className="row between" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
@@ -1388,7 +1390,7 @@ function DiscModal({ s, lines, act, onClose, discs = [], role }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{why && <span className="why">{why}</span>}<button type="button" className="btn primary" disabled={!!why} onClick={go}>{fixHit ? '提交修正' : '报给中方'}</button></>}>
       <div className="stack">
         <div className="hint">原来的出库单不改。这里记下客户<b>最终</b>实际收到多少，<b>差一片也要中方处理</b>。{fixing && <> 标黄的机型之前已经处理过：直接把数改成正确的，系统只补扣或冲回<b>差的那部分</b>，之前的记录都留着。</>}</div>
-        <FRow label="类型" req><Choice value={kind} onChange={(k) => setKind(k)} options={Object.entries(DISC_KIND)} /></FRow>
+        <FRow label="类型" req><OptChoice optKey="disc_kind" title="差异类型" fixed value={kind} onChange={(k) => setKind(k)} options={Object.entries(DISC_KIND)} /></FRow>
         <Grid id="disc-lines" noTools rows={mine} rowKey={(x) => x.deal_line_id} columns={[
           { key: 'model', label: '型号', w: 150, render: (x) => <b>{x.line.model}</b> },
           { key: 'category', label: '种类', w: 90, render: (x) => x.line.category },
@@ -1439,7 +1441,7 @@ function DiscDecide({ x, s, deal, act, onClose }) {
             {['找货少数 / 拿错', '运输途中丢 / 坏', '客户自己的问题', '工厂原盒就少', '还没查清'].map((v) => <button type="button" key={v} className={`chip ${fault === v ? 'on' : ''}`} onClick={() => setFault(v)}>{v}</button>)}</div>
           <input className="in" style={{ width: '100%', maxWidth: 460 }} value={fault} onChange={(e) => setFault(e.target.value)} placeholder="写清楚是哪个环节、谁" />
           <div className="small muted">规矩：只要发错（少发 / 多发 / 发错型号），默认记复检人的责任。要算到别处，在下面「说明」里写清理由。</div></div></FRow>
-        <FRow label="货现在在哪" req><Choice value={where} onChange={(k) => setWhere(k)} options={Object.entries(DISC_WHERE)} /></FRow>
+        <FRow label="货现在在哪" req><OptChoice optKey="disc_where" title="货在哪" fixed value={where} onChange={(k) => setWhere(k)} options={Object.entries(DISC_WHERE)} /></FRow>
         {where === 'in_warehouse' && decision !== 'reject' && N(x.amount) > 0 && <div className="hint">选「还在仓库」：系统会把少发的数量加回库存。</div>}
         {decision === 'reject' && <div className="chips">{RETURN_REJECT.map((v) => <button type="button" key={v} className={`chip ${note === v ? 'on' : ''}`} onClick={() => setNote(v)}>{v}</button>)}</div>}
         {x.late && <div className="hint">签收超过 24 小时才反馈，原则上不认；要认必须在「说明」里写破例原因。</div>}
@@ -1458,7 +1460,7 @@ function ReturnDecide({ r, mode, act, onClose }) {
   return (
     <Modal title={`${mode === 'approve' ? '批准' : '驳回'}退货 ${r.rt_no}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className={`btn ${mode === 'approve' ? 'primary' : ''}`} disabled={needs && !note.trim()} onClick={go}>{mode === 'approve' ? (why ? '破例批准' : '批准') : '驳回'}</button></>}>
       <div className="stack" style={{ gap: 10 }}>
-        <div className="small">{RETURN_REASONS[r.reason_type]} · {r.reason}{r.received_at && <> · 收到 {dt(r.received_at)}</>}{r.signed_ref && <> · 签收 {dt(r.signed_ref)}</>}</div>
+        <div className="small">{optName('return_types', r.reason_type, RETURN_REASONS, r.reason_label)} · {r.reason}{r.received_at && <> · 收到 {dt(r.received_at)}</>}{r.signed_ref && <> · 签收 {dt(r.signed_ref)}</>}</div>
         {mode === 'approve' && why && <div className="hint">{why}。要批准，写清楚为什么破例（例：老板出差，货先到、只说收到没点数，回来点货才发现）。</div>}
         {mode === 'approve' && !why && <div className="small muted">批准后：货进待检仓，客户账减掉退货金额。</div>}
         {mode === 'reject' && <div className="chips">{RETURN_REJECT.map((v) => <button type="button" key={v} className={`chip ${note === v ? 'on' : ''}`} onClick={() => setNote(v)}>{v}</button>)}</div>}
@@ -1485,7 +1487,7 @@ function SignRow({ s, act, role, discs = [], lines = [], deal }) {
     <div className="signrow">
       <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
         <b className="mono">{s.out_no}</b>{s.bl_no && <span className="muted small">{s.bl_no}</span>}
-        <span className="small muted">出库 {dt(s.shipped_at)} · {SHIP_METHODS[s.method]} · {qty(s.qty)} 件</span>
+        <span className="small muted">出库 {dt(s.shipped_at)} · {optName('ship_methods', s.method, SHIP_METHODS, s.method_label)} · {qty(s.qty)} 件</span>
         {s.customer_received_at && <><Pill tone="green">已签收 {dt(s.customer_received_at)}</Pill>{s.signed_photo && <Thumb src={s.signed_photo} size={34} label={`${s.out_no} 签收凭证`} />}
           {s.confirm_name && <span className="small muted">跟 <b>{s.confirm_name}</b>（{CONFIRM_ROLE[s.confirm_role] || ''} · <a href={telHref(s.confirm_phone)}>{fmtPhone(s.confirm_phone)}</a>）确认过数量</span>}</>}
       </div>

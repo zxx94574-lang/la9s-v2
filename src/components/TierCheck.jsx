@@ -3,7 +3,7 @@
 // 只提醒, 不自动改档位. 中方两个选择: 立即确认 (以后不再提醒) / 先试一段时间 (到期再提醒)
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, FRow, Info, TierPill, Thumb, Choice } from './ui.jsx';
+import { useApp, useData, Modal, FRow, Info, TierPill, Thumb, Choice, MoneyIn } from './ui.jsx';
 import { CustLink } from './Archives.jsx';
 import { TIERS } from '../lib/domain.js';
 import { qty, dDate, today, friendlyError } from '../lib/format.js';
@@ -75,7 +75,7 @@ function TierModal({ c, onClose }) {
         <FRow label="怎么确认" req><div className="chips">
           <button type="button" className={`chip ${mode === 'confirm' ? 'on' : ''}`} onClick={() => setMode('confirm')}>立即确认（以后不再提醒）</button>
           <button type="button" className={`chip ${mode === 'trial' ? 'on' : ''}`} onClick={() => setMode('trial')}>先用这个档位试一段时间</button></div></FRow>
-        {mode === 'trial' && <FRow label="试多久"><input className="in sm" style={{ width: 60 }} inputMode="numeric" value={months} onChange={(e) => setMonths(e.target.value.replace(/\D/g, ''))} /> 个月，到期提货量还对不上就再提醒</FRow>}
+        {mode === 'trial' && <FRow label="试多久"><MoneyIn className="in sm" style={{ width: 60 }} inputMode="numeric" value={months} onChange={(e) => setMonths(e.target.value.replace(/\D/g, ''))} /> 个月，到期提货量还对不上就再提醒</FRow>}
         <FRow label="备注"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如 提供资源的特殊客户" /></FRow>
       </div>
     </Modal>

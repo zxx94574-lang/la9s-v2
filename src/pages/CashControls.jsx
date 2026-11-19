@@ -1,8 +1,10 @@
 // 资金账户 · 财务管控 (Frank 11-11 217–220): 待核对到账 / 员工代收 / 对账与盘点 / 账户互转在途 / 月结锁账 + 提醒
 // 分工制衡做成三步 (登记 → 确认到账 → 对账), 现在中方一个人也能走完; 以后招了财务在权限配置里分出去.
 import React, { useState } from 'react';
+import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
+import { ImpactFor } from '../components/Impact.jsx';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, PhotoInput, DatePicker, FRow, Info, Thumb, Choice } from '../components/ui.jsx';
+import { useApp, useData, Modal, PhotoInput, DatePicker, FRow, Info, Thumb, Choice, MoneyIn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { CustLink } from '../components/Archives.jsx';
 import { RcvStatus, verifyRcvAction } from '../components/ReceiptForm.jsx';
@@ -131,7 +133,7 @@ function HandModal({ r, acc, onClose }) {
   return (
     <Modal title={`员工交款 · ${r.rcv_no}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!account || !proof} onClick={go}>确认收到</button></>}>
       <div className="stack">
-        <FRow label="进哪个账户" req><Choice value={account} onChange={setAccount} options={opts.map((a) => [a.account_id, a.name])} /></FRow>
+        <FRow label="进哪个账户" req><OptChoice optKey="cash_accounts" title="资金账户" data value={account} onChange={setAccount} options={opts.map((a) => [a.account_id, a.name])} /></FRow>
         <FRow label="凭证" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="Wave 转账截图 / 当面交现金照片" /></div></FRow>
       </div>
     </Modal>
@@ -180,7 +182,7 @@ function CheckModal({ a, kind, onClose }) {
       <div className="stack">
         <FRow label="日期" req><DatePicker value={on} onChange={setOn} /></FRow>
         <FRow label="系统余额"><b>{money(a.balance, a.currency)} {a.currency}</b><Info>系统按流水算到今天的余额；日期选更早的，保存时按那天算。</Info></FRow>
-        <FRow label={kind === 'count' ? '实点金额' : '实际余额'} req><input className="in" inputMode="decimal" style={{ width: 160 }} value={actual} onChange={(e) => setActual(e.target.value.replace(/[^\d.-]/g, ''))} placeholder={kind === 'count' ? '数出来多少' : 'App 里显示多少'} />
+        <FRow label={kind === 'count' ? '实点金额' : '实际余额'} req><MoneyIn className="in" inputMode="decimal" style={{ width: 160 }} value={actual} onChange={(e) => setActual(e.target.value.replace(/[^\d.-]/g, ''))} placeholder={kind === 'count' ? '数出来多少' : 'App 里显示多少'} />
           {diff != null && (diff === 0 ? <span className="pill green">对上 ✓</span> : <span className="pill red">差 {money(diff)}</span>)}</FRow>
         <FRow label="原因" req={diff != null && diff !== 0}><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="有差额必须写" /></FRow>
         <FRow label={kind === 'count' ? '照片' : '余额截图'} req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label={kind === 'count' ? '现金照片' : 'App / 银行里的余额截图'} camera={kind === 'count'} /></div></FRow>
@@ -218,10 +220,10 @@ function TransferModal({ acc, onClose }) {
   return (
     <Modal title="账户互转" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!from || !to || from === to || !(N(amt) > 0) || (cross && !(N(amtIn) > 0))} onClick={go}>记下</button></>}>
       <div className="stack">
-        <FRow label="从" req><Choice value={from} onChange={setFrom} options={acc.map((a) => [a.account_id, a.name])} /></FRow>
-        <FRow label="转到" req><Choice value={to} onChange={setTo} options={acc.map((a) => [a.account_id, a.name])} /></FRow>
-        <FRow label="金额" req><input className="in" inputMode="decimal" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{A?.currency}</span></FRow>
-        {cross && <FRow label="到账金额" req><input className="in" inputMode="decimal" style={{ width: 150 }} value={amtIn} onChange={(e) => setAmtIn(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{B?.currency}（两边币种不同）</span></FRow>}
+        <FRow label="从" req><OptChoice optKey="cash_accounts" title="资金账户" data value={from} onChange={setFrom} options={acc.map((a) => [a.account_id, a.name])} /></FRow>
+        <FRow label="转到" req><OptChoice optKey="cash_accounts" title="资金账户" data value={to} onChange={setTo} options={acc.map((a) => [a.account_id, a.name])} /></FRow>
+        <FRow label="金额" req><MoneyIn className="in" inputMode="decimal" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{A?.currency}</span></FRow>
+        {cross && <FRow label="到账金额" req><MoneyIn className="in" inputMode="decimal" style={{ width: 150 }} value={amtIn} onChange={(e) => setAmtIn(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{B?.currency}（两边币种不同）</span></FRow>}
         <FRow label="日期" req><DatePicker value={on} onChange={setOn} /></FRow>
         <FRow label="说明"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如 现金存进 Wave" /></FRow>
       </div>
@@ -252,9 +254,9 @@ function ClosePanel({ ctl, classes }) {
       {admin && (
         <div className="pd-sec">
           <div className="pd-h">提醒规则 <Info>到了时间没做，「财务提醒」和铃铛里会提醒。</Info></div>
-          <FRow label="锁上个月">每月 <input className="in sm" style={{ width: 60 }} inputMode="numeric" value={rules.close_by_day} onChange={(e) => setRules({ ...rules, close_by_day: e.target.value.replace(/\D/g, '') })} /> 号前</FRow>
-          <FRow label="对账">每 <input className="in sm" style={{ width: 60 }} inputMode="numeric" value={rules.recon_every_days} onChange={(e) => setRules({ ...rules, recon_every_days: e.target.value.replace(/\D/g, '') })} /> 天一次</FRow>
-          <FRow label="现金盘点">每 <input className="in sm" style={{ width: 60 }} inputMode="numeric" value={rules.count_every_days} onChange={(e) => setRules({ ...rules, count_every_days: e.target.value.replace(/\D/g, '') })} /> 天一次</FRow>
+          <FRow label="锁上个月">每月 <MoneyIn className="in sm" style={{ width: 60 }} inputMode="numeric" value={rules.close_by_day} onChange={(e) => setRules({ ...rules, close_by_day: e.target.value.replace(/\D/g, '') })} /> 号前</FRow>
+          <FRow label="对账">每 <MoneyIn className="in sm" style={{ width: 60 }} inputMode="numeric" value={rules.recon_every_days} onChange={(e) => setRules({ ...rules, recon_every_days: e.target.value.replace(/\D/g, '') })} /> 天一次</FRow>
+          <FRow label="现金盘点">每 <MoneyIn className="in sm" style={{ width: 60 }} inputMode="numeric" value={rules.count_every_days} onChange={(e) => setRules({ ...rules, count_every_days: e.target.value.replace(/\D/g, '') })} /> 天一次</FRow>
           <div className="actbar"><button type="button" className="btn" onClick={saveRules}>保存规则</button></div>
         </div>
       )}
@@ -291,11 +293,12 @@ export function RefundModal({ acc, customers, onClose }) {
       <div className="stack">
         <div className="hint">客户多付了 / 预付不要了，把钱退回去。账户出一笔支出，客户总账加回这个数。</div>
         <FRow label="客户" req><div style={{ flex: 1, minWidth: 0 }}><CustomerSelect customers={customers} value={cust} onChange={setCust} allowCreate={false} /></div></FRow>
-        <FRow label="从哪个账户退" req><Choice value={account} onChange={setAccount} options={acc.map((a) => [a.account_id, a.name])} /></FRow>
-        <FRow label="金额" req><input className="in" inputMode="decimal" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{A?.currency}</span></FRow>
+        <FRow label="从哪个账户退" req><OptChoice optKey="cash_accounts" title="资金账户" data value={account} onChange={setAccount} options={acc.map((a) => [a.account_id, a.name])} /></FRow>
+        <FRow label="金额" req><MoneyIn className="in" inputMode="decimal" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{A?.currency}</span></FRow>
         <FRow label="日期" req><DatePicker value={on} onChange={setOn} /></FRow>
         <FRow label="原因" req><input className="in" style={{ width: '100%', maxWidth: 420 }} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例如 多付了 / 不要预付了" /></FRow>
         <FRow label="凭证" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="转账截图" camera={false} /></div></FRow>
+        {cust && <ImpactFor customerId={cust} cur={A?.currency || 'XOF'} delta={N(amt)} pending={`退款 ＋${money(N(amt), A?.currency)}（预付减少）`} />}
       </div>
     </Modal>
   );

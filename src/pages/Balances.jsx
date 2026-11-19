@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
+import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { PhotoInput, TierPill, Light, useApp, useData, Pill, Modal, OptionNote, BigNum, DatePicker, Info, Choice } from '../components/ui.jsx';
+import { PhotoInput, TierPill, Light, useApp, useData, Pill, Modal, OptionNote, BigNum, DatePicker, Info, Choice, MoneyIn } from '../components/ui.jsx';
 import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import { BalanceCopy } from '../components/Doc.jsx';
 import { DealDrawer, DealChip, BalanceLine } from '../components/ReceiptForm.jsx';
-import { TIERS, seesPrice, balanceWords, can, NOTE_OPTIONS, RETURN_REASONS } from '../lib/domain.js';
+import { TIERS, seesPrice, balanceWords, can, NOTE_OPTIONS, RETURN_REASONS, RETURN_BASES } from '../lib/domain.js';
 import { money, qty, dt, dDate, friendlyError, pad, periodRange, ymd } from '../lib/format.js';
 
 const N = (v) => Number(v || 0);
@@ -98,7 +99,7 @@ export function CustomerLedger({ id }) {
             { key: 'batch_no', label: '批次', w: 130 },
             { key: 'biz_no', label: '原订单', w: 150, render: (r) => <DealChip id={r.deal_id} no={r.biz_no} onOpen={setDrawer} /> },
             { key: 'requested_at', label: '日期', w: 100, render: (r) => dDate(r.requested_at) },
-            { key: 'reason', label: '原因', w: 140, render: (r) => `${RETURN_REASONS[r.reason_type]} · ${r.reason}` },
+            { key: 'reason', label: '原因', w: 140, render: (r) => `${optName('return_types', r.reason_type, RETURN_REASONS, r.reason_label)} · ${r.reason}` },
             { key: 'amount', label: '金额', w: 110, render: (r) => money(r.amount) },
             { key: 'status', label: '状态', w: 120, render: (r) => <Pill tone={r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'gray' : 'amber'}>{{ requested: '待审批', approved: '已批准 · 已冲账', rejected: '已驳回' }[r.status]}</Pill> },
           ]} />
@@ -141,7 +142,7 @@ function CustomerReturnModal({ customerId, name, onClose }) {
     const byDeal = {}; rows.forEach((l) => { if (N(split[l.line_id]) > 0) (byDeal[l.deal_id] ||= []).push({ line_id: l.line_id, qty: N(split[l.line_id]) }); });
     setBusy(true); let n = 0;
     try {
-      for (const [deal, ls] of Object.entries(byDeal)) { await call(role, `select app.request_return($1,$2,$3,$4,$5,$6,$7)`, [deal, type, type === 'other' ? `其他：${typeNote.trim()} · ${reason}` : reason, JSON.stringify(ls), batch, new Date(at).toISOString(), photo]); n++; }
+      for (const [deal, ls] of Object.entries(byDeal)) { const ty = optSubmit('return_types', type); await call(role, `select app.set_opt_label('return_reason', app.request_return($1,$2,$3,$4,$5,$6,$7), $8)`, [deal, ty.base, type === 'other' ? `其他：${typeNote.trim()} · ${reason}` : reason, JSON.stringify(ls), batch, new Date(at).toISOString(), photo, ty.label]); n++; }
       toast(`已提交 ${n} 张退货单（批次 ${batch}），等中方审批`); refresh(); onClose();
     } catch (e) { toast(`${n ? `已提交 ${n} 张，` : ''}${friendlyError(e)}`, 'err'); refresh(); } finally { setBusy(false); }
   };
@@ -155,7 +156,7 @@ function CustomerReturnModal({ customerId, name, onClose }) {
             <div className="field req"><label>型号</label>
               <select className="in" value={prod} onChange={(e) => { setProd(e.target.value); const rs = (data || []).filter((l) => l.product_id === e.target.value); auto(total, rs); }}>
                 <option value="">请选择</option>{products.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-            <div className="field req"><label>退货总数量</label><input className="in" inputMode="numeric" style={{ width: 120 }} value={total} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setTotal(v); auto(v); }} /></div>
+            <div className="field req"><label>退货总数量</label><MoneyIn className="in" inputMode="numeric" style={{ width: 120 }} value={total} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setTotal(v); auto(v); }} /></div>
             {prod && <span className="hint">该客户这个型号最多可退 {cap} 件</span>}
           </div>
           {prod && <Grid id="cret-split" noTools rowKey={(l) => l.line_id} rows={rows} columns={[
@@ -170,9 +171,9 @@ function CustomerReturnModal({ customerId, name, onClose }) {
             <div className="field req"><label>收到退货的时间</label><input className="in" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></div>
             <div className="field req"><label>实物照片（不是盒子）</label><PhotoInput value={photo} onChange={setPhoto} invalid={errs && !photo} label="拍退回的货" /></div>
           </div>
-          <div className="field req"><label>退货类型</label><div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><Choice value={type} onChange={(k) => setType(k)} options={Object.entries(RETURN_REASONS)} />
+          <div className="field req"><label>退货类型</label><div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><OptChoice optKey="return_types" title="退货类型" bases={RETURN_BASES} value={type} onChange={(k) => setType(k)} options={Object.entries(RETURN_REASONS)} />
             {type === 'other' && <input className={`in ${errs && !typeNote.trim() ? 'invalid' : ''}`} style={{ width: 260 }} autoFocus value={typeNote} onChange={(e) => setTypeNote(e.target.value)} placeholder="「其他」是什么？（必填）" />}</div></div>
-          <div className="field req"><label>具体原因</label><OptionNote options={NOTE_OPTIONS.return} value={reason} onChange={setReason} /></div>
+          <div className="field req"><label>具体原因</label><OptNote optKey="note_return" title="退货的具体原因" options={NOTE_OPTIONS.return} value={reason} onChange={setReason} /></div>
         </div>
       )}
     </Modal>

@@ -1,8 +1,9 @@
 // 销售拜访 (Frank 2026-10-29): 照飞书 Fiche de visite 的字段. 新店现场建潜客 (临时编码), 门店照片必拍.
 import React, { useState } from 'react';
+import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Modal, PhotoInput, DatePicker, Thumb , PhoneInput, Choice } from '../components/ui.jsx';
+import { useApp, useData, Modal, PhotoInput, DatePicker, Thumb , PhoneInput, Choice, MoneyIn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { ResultPill, FollowDate, VISIT_RESULTS } from '../components/Crm.jsx';
@@ -93,14 +94,14 @@ function VisitModal({ onClose }) {
         <div className="grid2">
           <div className="field req"><label>门店照片 Photo</label><PhotoInput value={f.photo} onChange={set('photo')} label="拍门店" invalid={!f.photo} /></div>
           <div className="field"><label>位置 Localisation</label><div className="row" style={{ gap: 6 }}><input className="in" value={f.location} onChange={set('location')} placeholder="地标 / 坐标" /><button type="button" className="btn sm" onClick={locate}>⌖ 定位</button></div></div>
-          <div className="field"><label>主营 Activité</label><Choice value={f.activity} onChange={(v) => set('activity')(v)} options={['Réparation', 'Vente détail', 'Grossiste', 'Recyclage']} empty="—" /></div>
+          <div className="field"><label>主营 Activité</label><OptChoice optKey="visit_activity" title="店铺做什么" value={f.activity} onChange={(v) => set('activity')(v)} options={['Réparation', 'Vente détail', 'Grossiste', 'Recyclage']} empty="—" /></div>
           <div className="field"><label>想要的货 Produits recherchés</label><input className="in" value={f.products_wanted} onChange={set('products_wanted')} placeholder="LCD TECNO / BATTERY …" /></div>
-          <div className="field"><label>月用量（件）Quantité / mois</label><input className="in" inputMode="numeric" value={f.monthly_qty} onChange={(e) => set('monthly_qty')(e.target.value.replace(/\D/g, ''))} style={{ maxWidth: 120 }} /></div>
+          <div className="field"><label>月用量（件）Quantité / mois</label><MoneyIn className="in" inputMode="numeric" value={f.monthly_qty} onChange={(e) => set('monthly_qty')(e.target.value.replace(/\D/g, ''))} style={{ maxWidth: 120 }} /></div>
           <div className="field"><label>现在从哪买 Fournisseur actuel</label><input className="in" value={f.buys_from} onChange={set('buys_from')} placeholder="Adjamé / 某某批发" /></div>
-          <div className="field"><label>怎么拿货 Transport</label><Choice value={f.transport} onChange={(v) => set('transport')(v)} options={['Yango moto', 'Taxi', 'Vient lui-même', 'Livreur']} empty="—" /></div>
+          <div className="field"><label>怎么拿货 Transport</label><OptChoice optKey="visit_transport" title="怎么拿货" value={f.transport} onChange={(v) => set('transport')(v)} options={['Yango moto', 'Taxi', 'Vient lui-même', 'Livreur']} empty="—" /></div>
           <div className="field"><label>附近同行 Concurrents proches</label><input className="in" value={f.nearby_suppliers} onChange={set('nearby_suppliers')} /></div>
         </div>
-        <div className="field req"><label>结果 Résultat</label><Choice value={f.result} onChange={(v) => set('result')(v)} options={VISIT_RESULTS} /></div>
+        <div className="field req"><label>结果 Résultat</label><OptChoice optKey="visit_results" title="拜访结果" value={f.result} onChange={(v) => set('result')(v)} options={VISIT_RESULTS} /></div>
         <div className="field"><label>说明 Remarque</label><input className="in" value={f.note} onChange={set('note')} /></div>
         <div className="field"><label>下次跟进</label><FollowDate value={f.next_follow_on} onChange={set('next_follow_on')} /></div>
       </div>

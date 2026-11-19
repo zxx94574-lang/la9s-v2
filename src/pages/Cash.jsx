@@ -2,11 +2,12 @@
 // 公户在员工名下 → 到账先挂在账户上（不动客户欠款），中方认领到客户才冲账；热线报「客户说付了」自动找对得上的到账。
 // 持有人最多压 500 万、最长 7 天（每个账户自己设）；交款要中方确认收到才算；支出超过审批线要中方批。
 import { useControls, CONTROL_TABS, ControlPanels, ControlAlerts, RefundModal } from './CashControls.jsx';
+import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import PublicHeld from '../components/PublicHeld.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice, MoneyIn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { can, PAY_METHODS } from '../lib/domain.js';
@@ -205,7 +206,7 @@ function ExplainModal({ m, onClose }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={as === 'expense' && !cat} onClick={go}>保存</button></>}>
       <div className="stack">
         <div className="seg">{[['expense', '是支出'], ['handover', '是交给公司的钱']].map(([v, l]) => <button type="button" key={v} className={as === v ? 'on' : ''} onClick={() => setAs(v)}>{l}</button>)}</div>
-        {as === 'expense' && <div className="field req"><label>科目</label><Choice value={cat} onChange={setCat} options={EXPENSE_CATS} /></div>}
+        {as === 'expense' && <div className="field req"><label>科目</label><OptChoice optKey="expense_cats" title="支出科目" value={cat} onChange={setCat} options={EXPENSE_CATS} /></div>}
         <div className={`field ${as === 'expense' && cat === '其他' ? 'req' : ''}`}><label>说明{as === 'expense' && cat === '其他' ? '（选了「其他」必填）' : ''}</label><input className={`in ${as === 'expense' && cat === '其他' && !note.trim() ? 'invalid' : ''}`} value={note} onChange={(e) => setNote(e.target.value)} /></div>
       </div>
     </Modal>
@@ -231,14 +232,14 @@ function MoveModal({ t, acc, onClose }) {
   return (
     <Modal title={title} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!ok} onClick={go}>保存</button></>}>
       <div className="stack">
-        <div className="field req"><label>账户</label><Choice value={f.account} onChange={(v) => set('account')(v)} options={acc.map((x) => [x.account_id, x.name])} /></div>
+        <div className="field req"><label>账户</label><OptChoice optKey="cash_accounts" title="资金账户" data value={f.account} onChange={(v) => set('account')(v)} options={acc.map((x) => [x.account_id, x.name])} /></div>
         <div className="grid2">
           <div className="field req"><label>日期</label><DatePicker value={f.date} onChange={set('date')} /></div>
-          <div className="field req"><label>金额 {a?.currency}</label><input className="in" inputMode="numeric" value={f.amount} onChange={(e) => set('amount')(e.target.value.replace(/[^\d.]/g, ''))} /></div>
+          <div className="field req"><label>金额 {a?.currency}</label><MoneyIn className="in" inputMode="numeric" value={f.amount} onChange={(e) => set('amount')(e.target.value.replace(/[^\d.]/g, ''))} /></div>
           {t === 'deposit' && <><div className="field"><label>付款人（流水上的名字）</label><input className="in" value={f.payer} onChange={set('payer')} /></div>
             <div className="field"><label>流水号</label><input className="in" value={f.ref} onChange={set('ref')} /></div></>}
         </div>
-        {t === 'expense' && <div className="field req"><label>科目</label><Choice value={f.cat} onChange={(v) => set('cat')(v)} options={EXPENSE_CATS} /></div>}
+        {t === 'expense' && <div className="field req"><label>科目</label><OptChoice optKey="expense_cats" title="支出科目" value={f.cat} onChange={(v) => set('cat')(v)} options={EXPENSE_CATS} /></div>}
         <div className="field req"><label>{t === 'handover' ? '交款凭证（转账截图 / 收条）' : t === 'expense' ? '凭证（发票 / 收条 / 转账截图）' : '凭证（到账截图）'}</label><PhotoInput value={f.proof} onChange={set('proof')} invalid={!f.proof} /></div>
         <div className={`field ${t === 'expense' && f.cat === '其他' ? 'req' : ''}`}><label>说明{t === 'expense' && f.cat === '其他' ? '（选了「其他」必填）' : ''}</label><input className={`in ${t === 'expense' && f.cat === '其他' && !f.note.trim() ? 'invalid' : ''}`} value={f.note} onChange={set('note')} /></div>
         {t === 'expense' && <div className="hint">{Number(a?.approval_over) > 0 ? `超过 ${money(a.approval_over)} 要中方批，以下直接记账。` : '目前所有支出都要中方批（审批线待中方定）。'}</div>}
@@ -263,7 +264,7 @@ function NoticeModal({ customers, onClose }) {
       <div className="stack">
         <div className="field req"><label>客户</label><CustomerSelect customers={customers} value={f.cust} onChange={set('cust')} /></div>
         <div className="grid2">
-          <div className="field req"><label>金额</label><div className="row" style={{ gap: 6 }}><input className="in" inputMode="numeric" value={f.amount} onChange={(e) => set('amount')(e.target.value.replace(/[^\d.]/g, ''))} />
+          <div className="field req"><label>金额</label><div className="row" style={{ gap: 6 }}><MoneyIn className="in" inputMode="numeric" value={f.amount} onChange={(e) => set('amount')(e.target.value.replace(/[^\d.]/g, ''))} />
             <div className="seg">{['XOF', 'CNY', 'USD'].map((c) => <button type="button" key={c} className={f.currency === c ? 'on' : ''} onClick={() => set('currency')(c)}>{c}</button>)}</div></div></div>
           <div className="field req"><label>客户说哪天付的</label><DatePicker value={f.date} onChange={set('date')} /></div>
         </div>
@@ -306,7 +307,7 @@ function ImportModal({ acc, onClose }) {
       footer={<><span className="small muted">识别到 {rows.length} 行；同一笔重复导入会自动跳过</span><span className="grow" /><button type="button" className="btn" onClick={onClose}>取消</button>
         <button type="button" className="btn primary" disabled={!account || !rows.length} onClick={go}>导入</button></>}>
       <div className="stack">
-        <div className="field req"><label>账户</label><Choice value={account} onChange={setAccount} options={acc.map((x) => [x.account_id, x.name])} /></div>
+        <div className="field req"><label>账户</label><OptChoice optKey="cash_accounts" title="资金账户" data value={account} onChange={setAccount} options={acc.map((x) => [x.account_id, x.name])} /></div>
         <div className="hint">从 Excel 复制这几列粘进来（顺序固定）：日期 ｜ 金额（进账正数，出账负数）｜ 流水号 ｜ 付款人 ｜ 摘要</div>
         <textarea className="in mono" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={'2026-10-20\t250000\tFT2610201\tKONE ADAMA\tVIREMENT\n2026-10-21\t-200000\tFT2610215\t\tRETRAIT'} />
         {rows.length > 0 && <div className="small">进账 {rows.filter((r) => r.amount > 0).length} 笔 {money(rows.filter((r) => r.amount > 0).reduce((s, r) => s + r.amount, 0))}；出账 {rows.filter((r) => r.amount < 0).length} 笔 {money(-rows.filter((r) => r.amount < 0).reduce((s, r) => s + r.amount, 0))}</div>}
@@ -341,11 +342,11 @@ function AccountModal({ acc, onClose }) {
           <div className="field req"><label>账户名</label><input className="in" value={f.name} onChange={set('name')} placeholder="公户 · 员工名" /></div>
           <div className="field"><label>类型</label><div className="seg">{Object.entries(ACC_KIND).map(([k, l]) => <button type="button" key={k} className={f.kind === k ? 'on' : ''} onClick={() => set('kind')(k)}>{l}</button>)}</div></div>
           <div className="field"><label>币种</label><Choice value={f.currency} onChange={(v) => set('currency')(v)} options={['XOF', 'CNY', 'USD']} disabled={!!cur} /></div>
-          <div className="field"><label>在谁手上 / 谁名下</label><Choice value={f.holder} onChange={(v) => set('holder')({ target: { value: v } })} options={(emps || []).map((e) => [e.id, e.short_name])} empty="—" flat={false} /></div>
-          <div className="field"><label>最多压多少（超了要马上交）</label><input className="in" inputMode="numeric" value={f.limit} onChange={(e) => set('limit')(e.target.value.replace(/\D/g, ''))} placeholder="不限" /></div>
-          <div className="field"><label>最长压几天</label><input className="in" inputMode="numeric" value={f.days} onChange={(e) => set('days')(e.target.value.replace(/\D/g, ''))} placeholder="不限" /></div>
+          <div className="field"><label>在谁手上 / 谁名下</label><OptChoice optKey="emp_list" title="员工名单" data value={f.holder} onChange={(v) => set('holder')({ target: { value: v } })} options={(emps || []).map((e) => [e.id, e.short_name])} empty="—" flat={false} /></div>
+          <div className="field"><label>最多压多少（超了要马上交）</label><MoneyIn className="in" inputMode="numeric" value={f.limit} onChange={(e) => set('limit')(e.target.value.replace(/\D/g, ''))} placeholder="不限" /></div>
+          <div className="field"><label>最长压几天</label><MoneyIn className="in" inputMode="numeric" value={f.days} onChange={(e) => set('days')(e.target.value.replace(/\D/g, ''))} placeholder="不限" /></div>
         </div>
-        <div className="field"><label>支出审批线（超过这个数要中方批；0 = 全部要批）</label><input className="in" inputMode="numeric" value={over} onChange={(e) => setOver(e.target.value.replace(/\D/g, ''))} style={{ maxWidth: 200 }} /></div>
+        <div className="field"><label>支出审批线（超过这个数要中方批；0 = 全部要批）</label><MoneyIn className="in" inputMode="numeric" value={over} onChange={(e) => setOver(e.target.value.replace(/\D/g, ''))} style={{ maxWidth: 200 }} /></div>
       </div>
     </Modal>
   );

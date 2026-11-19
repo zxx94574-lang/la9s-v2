@@ -2,6 +2,7 @@
 // the current step shows its action, a finished step shows a read-only record (待改 13).
 // Going back = 「撤回到上一步」 with a reason (待改 14); cancelled deals can be restored (待改 16).
 import DebtBanner from '../components/DebtBanner.jsx';
+import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { LossGate, LossReview } from '../components/Loss.jsx';
 import { DiscountModal, canDiscount } from '../components/Discount.jsx';
 import { AllowUnpricedModal, PricePendingBar, canAllowUnpriced } from '../components/PricePending.jsx';
@@ -296,7 +297,7 @@ function RevertModal({ deal, act, onClose, onDone }) {
       <div className="stack">
         <div className="lock">{REVERT_LABEL[deal.status]}</div>
         <div className="hint">只能一步一步往回撤；已出库的不能撤回（只能走退货或「发货失败」）。撤回会记入操作记录：谁、何时、原因。</div>
-        <div className="field req"><label>原因</label><OptionNote options={NOTE_OPTIONS.revert} value={reason} onChange={setReason} /></div>
+        <div className="field req"><label>原因</label><OptNote optKey="note_revert" title="撤回原因" options={NOTE_OPTIONS.revert} value={reason} onChange={setReason} /></div>
       </div>
     </Modal>
   );

@@ -7,7 +7,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { toBlob } from 'html-to-image';
 import { callAnon, setCustomerSession, getOrg, REAL } from '../db/client.js';
-import { useApp, useData, Pill, Modal } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, MoneyIn } from '../components/ui.jsx';
 import { friendlyError, dt } from '../lib/format.js';
 
 // 230 / 231 (Frank 11-11): 客户端只有两种 —— 有货 (绿) / 可预订 (不叫无货, 不显示少量和数量); 点了可预订的照样能下, 差的自动记进未满足需求
@@ -174,7 +174,7 @@ export function GuestShop() {
                 <div style={{ marginTop: 4 }}><Pill tone={bt}>{bl}</Pill></div></div>
               <div className="qty-step">
                 <button type="button" onClick={() => setCart((c) => ({ ...c, [p.id]: Math.max(0, Number(c[p.id] || 0) - 5) }))}>−</button>
-                <input inputMode="numeric" value={cart[p.id] || ''} placeholder="0" onChange={(e) => setCart((c) => ({ ...c, [p.id]: e.target.value.replace(/\D/g, '') }))} />
+                <MoneyIn inputMode="numeric" value={cart[p.id] || ''} placeholder="0" onChange={(e) => setCart((c) => ({ ...c, [p.id]: e.target.value.replace(/\D/g, '') }))} />
                 <button type="button" onClick={() => setCart((c) => ({ ...c, [p.id]: Number(c[p.id] || 0) + 5 }))}>＋</button>
               </div>
             </div>);
@@ -185,7 +185,7 @@ export function GuestShop() {
         <span className="small muted">没找到的型号 · Autre modèle</span>
         <select className="in" style={{ maxWidth: 140 }} value={free.category_id} onChange={(e) => setFree({ ...free, category_id: e.target.value })}><option value="">种类 · Type</option>{cats.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
         <input className="in" placeholder="型号 · Modèle" value={free.model} onChange={(e) => setFree({ ...free, model: e.target.value.toUpperCase() })} style={{ maxWidth: 160 }} />
-        <input className="in" inputMode="numeric" placeholder="数量" value={free.qty} onChange={(e) => setFree({ ...free, qty: e.target.value.replace(/\D/g, '') })} style={{ maxWidth: 80 }} />
+        <MoneyIn className="in" inputMode="numeric" placeholder="数量" value={free.qty} onChange={(e) => setFree({ ...free, qty: e.target.value.replace(/\D/g, '') })} style={{ maxWidth: 80 }} />
         <button type="button" className="btn sm" disabled={!free.model || !free.qty || !free.category_id} onClick={() => { setExtra((x) => [...x, { ...free, category: cats.find(([id]) => id === free.category_id)?.[1], qty: Number(free.qty) }]); setFree({ model: '', category_id: free.category_id, qty: '' }); }}>加入</button>
         {extra.map((x, i) => <Pill key={i} tone="blue">{x.category} {x.model} ×{x.qty}</Pill>)}
       </div>

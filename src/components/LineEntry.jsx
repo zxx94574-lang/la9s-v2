@@ -10,7 +10,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Grid from './Grid.jsx';
 import ModelPicker, { avail, StockPill } from './ModelPicker.jsx';
-import { Modal, Shared, useApp, useHistory, UndoBar, Bang, lowTip } from './ui.jsx';
+import { Modal, Shared, useApp, useHistory, UndoBar, Bang, lowTip, MoneyIn } from './ui.jsx';
 import { call } from '../db/client.js';
 import { money, qty } from '../lib/format.js';
 import { makeResolver, normModel, pasteRows, isQty } from '../lib/resolve.js';
@@ -386,7 +386,7 @@ export default function LineEntry({ id, catalog, categories, tier, lines, setLin
           <UndoBar h={h} scope={scope} />
           <span className="addrow">
             <button type="button" className="btn sm primary" onClick={addBlank} title="加空白行：填编码，或选种类 + 填机型；也可以整列粘贴">＋ 加行</button>
-            <input className="in" inputMode="numeric" value={addN} onChange={(e) => setAddN(e.target.value.replace(/\D/g, ''))} onFocus={(e) => e.target.select()} title="一次加几行，默认 1 行" aria-label="加几行" />
+            <MoneyIn className="in" inputMode="numeric" value={addN} onChange={(e) => setAddN(e.target.value.replace(/\D/g, ''))} onFocus={(e) => e.target.select()} title="一次加几行，默认 1 行" aria-label="加几行" />
             <span className="small muted">行</span>
           </span>
           {selDrafts > 0 && <select className="in" style={{ maxWidth: 170 }} value="" onChange={(e) => e.target.value && setCatSelected(e.target.value)}>
@@ -524,7 +524,7 @@ function UnmetModal({ catalog, categories, onClose, onAdd, onUseProduct }) {
         {exact && <div className="lock">这个型号已经建档（编码 {exact.code}，可售 {avail(exact)}）。<button type="button" className="btn sm" onClick={() => onUseProduct(exact)}>直接用它</button></div>}
         {!exact && similar.length > 0 && <div className="lock">有相似型号，是不是这些？{similar.map((p) => <button type="button" key={p.id} className="btn sm" style={{ margin: '4px 4px 0 0' }} onClick={() => onUseProduct(p)}>{p.model}（{p.code}）</button>)}</div>}
         {!exact && otherCat.length > 0 && <div className="hint">提示：{M} 在其他种类有货：{otherCat.map((p) => p.category).join('、')}。客户要的种类没有，就记录在这里，用于备货。</div>}
-        <div className="field"><label>③ 客户要的数量</label><input className="in" inputMode="numeric" value={n} onChange={(e) => setN(e.target.value.replace(/\D/g, ''))} placeholder="0" style={{ maxWidth: 160 }} /></div>
+        <div className="field"><label>③ 客户要的数量</label><MoneyIn className="in" inputMode="numeric" value={n} onChange={(e) => setN(e.target.value.replace(/\D/g, ''))} placeholder="0" style={{ maxWidth: 160 }} /></div>
         <div className="hint">记录后：报价单上该行单价为 0，不会出货；这条需求自动进入「未满足需求」，作为备货申请的依据。</div>
       </div>
     </Modal>

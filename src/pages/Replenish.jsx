@@ -4,7 +4,7 @@
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, PhotoInput } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, PhotoInput, MoneyIn } from '../components/ui.jsx';
 import { PoLink } from './Po.jsx';
 import Grid from '../components/Grid.jsx';
 import { can } from '../lib/domain.js';
@@ -139,7 +139,7 @@ function SettingsModal({ s, onClose }) {
   const { org, role, toast, refresh } = useApp();
   const [f, setF] = useState({ cover: String(s.cover_days), sea: String(s.sea_days), air: String(s.air_days) });
   const go = async () => { try { await call(role, `select app.set_replenish_settings($1,$2,$3,$4)`, [org, Number(f.cover), Number(f.sea), Number(f.air)]); toast('已保存'); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
-  const inp = (k, l) => <div className="field"><label>{l}</label><input className="in" inputMode="numeric" value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value.replace(/\D/g, '') })} style={{ maxWidth: 120 }} /></div>;
+  const inp = (k, l) => <div className="field"><label>{l}</label><MoneyIn className="in" inputMode="numeric" value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value.replace(/\D/g, '') })} style={{ maxWidth: 120 }} /></div>;
   return (
     <Modal title="备货天数（只中方）" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" onClick={go}>保存</button></>}>
       <div className="stack">{inp('cover', '备够几天的货')}{inp('sea', '海运到货要几天')}{inp('air', '空运到货要几天')}</div>

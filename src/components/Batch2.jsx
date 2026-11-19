@@ -1,7 +1,9 @@
 // 11-12 第 2 批: 问题库存冻结 (266) · 打电话名单 (250) · 价格调整单 (262) · 销量月对比 (252)
 import React, { useMemo, useState } from 'react';
+import { OptChoice, OptNote, OptGear, optName, optSubmit } from './Opts.jsx';
+import { ImpactFor } from './Impact.jsx';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, FRow, PhotoInput, Thumb, Info, FileDrop, Choice } from './ui.jsx';
+import { useApp, useData, Modal, FRow, PhotoInput, Thumb, Info, FileDrop, Choice, MoneyIn } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { ModelLink, CustLink, DealLink } from './Archives.jsx';
 import { money, qty, dt, dDate, friendlyError } from '../lib/format.js';
@@ -26,7 +28,7 @@ export function FreezeModal({ row, onClose }) {
       <div className="stack">
         <div className="hint">货还在原仓，实存不变、金蝶不用动；<b>可售立刻扣掉</b>，报价和找货都选不到。评估完再决定：没问题 → 解冻；有问题 → 转待检仓。</div>
         <FRow label="冻结多少" req><div className="chips"><button type="button" className={`chip ${whole ? 'on' : ''}`} onClick={() => setWhole(true)}>整个编码（已经给订单留的也不许发）</button><button type="button" className={`chip ${!whole ? 'on' : ''}`} onClick={() => setWhole(false)}>只冻一部分</button></div></FRow>
-        {!whole && <FRow label="片数" req><input className="in" style={{ width: 120 }} inputMode="numeric" value={n} onChange={(e) => setN(e.target.value.replace(/\D/g, ''))} /></FRow>}
+        {!whole && <FRow label="片数" req><MoneyIn className="in" style={{ width: 120 }} inputMode="numeric" value={n} onChange={(e) => setN(e.target.value.replace(/\D/g, ''))} /></FRow>}
         <FRow label="原因" req><input className="in" style={{ width: '100%', maxWidth: 420 }} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例如 老库存软件没升级 / 客户反馈这批有亮点" /></FRow>
         <FRow label="凭证" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="问题照片 / 客户反馈截图" /></div></FRow>
       </div>
@@ -93,9 +95,10 @@ export function PriceAdjust({ deal }) {
       {open && <Modal title={`价格调整单 · ${deal.biz_no}`} onClose={() => setOpen(false)} footer={<><button type="button" className="btn" onClick={() => setOpen(false)}>取消</button><span className="grow" />{why && <span className="why">{why}</span>}<button type="button" className="btn primary" disabled={!!why} onClick={go}>确定调整</button></>}>
         <div className="stack">
           <FRow label="方向" req><div className="chips"><button type="button" className={`chip ${dir === 'less' ? 'on' : ''}`} onClick={() => setDir('less')}>多算了 → 给客户减</button><button type="button" className={`chip ${dir === 'more' ? 'on' : ''}`} onClick={() => setDir('more')}>少算了 → 客户要补</button></div></FRow>
-          <FRow label="金额" req><input className="in" style={{ width: 160 }} inputMode="numeric" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{deal.currency}</span></FRow>
+          <FRow label="金额" req><MoneyIn className="in" style={{ width: 160 }} inputMode="numeric" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{deal.currency}</span></FRow>
           <FRow label="原因" req><input className="in" style={{ width: '100%', maxWidth: 420 }} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例如 BG6M 单价按 3,300 算成了 3,600" /></FRow>
           <FRow label="凭证" req><div className="proofbox-wrap" style={{ flex: 1 }}><PhotoInput value={proof} onChange={setProof} label="客户同意的截图" /></div></FRow>
+          <ImpactFor dealId={deal.id} delta={dir === 'less' ? -N(amt) : N(amt)} note={`价格调整 ${dir === 'less' ? '−' : '＋'}${money(N(amt), deal.currency)}`} />
           <div className="hint">金蝶那边也要补录一张对应的调整。</div>
         </div>
       </Modal>}
@@ -153,7 +156,7 @@ function AddCallList({ onClose }) {
     <Modal wide title="加一张打电话名单" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{why && <span className="why">{why}</span>}<button type="button" className="btn primary" disabled={!!why} onClick={go}>建名单（{rows.length} 人）</button></>}>
       <div className="stack">
         <FRow label="名单叫什么" req><input className="in" style={{ width: '100%', maxWidth: 380 }} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="例如 Adjamé 新店摸排 11 月" /></FRow>
-        <FRow label="给谁打"><Choice value={assignee} onChange={setAssignee} options={emps.map((e) => [e.id, e.short_name])} empty="热线（不指定）" flat={false} /></FRow>
+        <FRow label="给谁打"><OptChoice optKey="emp_list" title="员工名单" data value={assignee} onChange={setAssignee} options={emps.map((e) => [e.id, e.short_name])} empty="热线（不指定）" flat={false} /></FRow>
         <FRow label="名单" req><div className="stack" style={{ flex: 1, gap: 6 }}>
           <FileDrop accept=".xlsx,.xls,.csv,.txt" label="把 Excel / CSV 拖进来，或者直接在下面粘贴" onFiles={async (fs) => { const f = fs[0]; if (!f) return; if (/\.(csv|txt)$/i.test(f.name)) { setText(await f.text()); return; } try { const X = await import('exceljs'); const wb = new X.Workbook(); await wb.xlsx.load(await f.arrayBuffer()); const out = []; wb.worksheets[0].eachRow((r) => out.push(r.values.slice(1).map((v) => (v && typeof v === 'object' ? (v.text || v.result || '') : v ?? '')).join('\t'))); setText(out.join('\n')); } catch (e) { toast('读不了这个文件：' + (e.message || e), 'err'); } }} />
           <textarea className="in" rows={7} style={{ width: '100%', fontFamily: 'inherit' }} value={text} onChange={(e) => setText(e.target.value)} placeholder={'一行一个人，列的顺序：名字、电话、城市、备注（从 Excel 复制几列直接粘贴）\nKONE\t0711111111\tAdjamé\nBAMBA\t0722222222\tYopougon'} />

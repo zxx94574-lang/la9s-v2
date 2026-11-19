@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice, MoneyIn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import ModelPicker from '../components/ModelPicker.jsx';
@@ -123,7 +123,7 @@ function NewFob({ onClose }) {
         ]} />
         <div className="row" style={{ gap: 6, alignItems: 'center' }}><span className="muted small">没编码的新货</span>
           <input className="in" placeholder="型号" style={{ maxWidth: 160 }} value={free.model} onChange={(e) => setFree({ ...free, model: e.target.value.toUpperCase() })} />
-          <input className="in" inputMode="numeric" placeholder="数量" value={free.qty} style={{ maxWidth: 100 }} onChange={(e) => setFree({ ...free, qty: e.target.value.replace(/\D/g, '') })} />
+          <MoneyIn className="in" inputMode="numeric" placeholder="数量" value={free.qty} style={{ maxWidth: 100 }} onChange={(e) => setFree({ ...free, qty: e.target.value.replace(/\D/g, '') })} />
           <button type="button" className="btn sm" disabled={!free.model || !free.qty} onClick={() => { setLines((x) => [...x, { model: free.model, qty: free.qty }]); setFree({ model: '', qty: '' }); }}>加</button></div>
         <div className="field"><label>备注</label><input className="in" value={note} onChange={(e) => setNote(e.target.value)} /></div>
       </div>
@@ -261,7 +261,7 @@ function PayFob({ f, deposit, due, onClose, act }) {
         onClick={() => act('已登记收款', `select app.record_fob_payment($1,$2,$3,$4,$5,$6,$7)`, [f.id, v.kind, Number(v.amount), v.date, v.method, v.proof || null, v.note || null])}>保存</button></>}>
       <div className="stack">
         <div className="seg">{[['deposit', '订金'], ['balance', '尾款'], ['other', '其他']].map(([k, l]) => <button type="button" key={k} className={v.kind === k ? 'on' : ''} onClick={() => setV({ ...v, kind: k })}>{l}</button>)}</div>
-        <div className="grid2"><div className="field req"><label>金额 {f.currency}</label><input className="in" inputMode="numeric" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value.replace(/[^\d.]/g, '') })} /></div>
+        <div className="grid2"><div className="field req"><label>金额 {f.currency}</label><MoneyIn className="in" inputMode="numeric" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value.replace(/[^\d.]/g, '') })} /></div>
           <div className="field"><label>日期</label><DatePicker value={v.date} onChange={(x) => setV({ ...v, date: x })} /></div></div>
         <div className="seg">{Object.entries(PAY_METHODS).map(([k, l]) => <button type="button" key={k} className={v.method === k ? 'on' : ''} onClick={() => setV({ ...v, method: k })}>{l}</button>)}</div>
         <div className="field"><label>凭证</label><PhotoInput value={v.proof} onChange={(x) => setV({ ...v, proof: x })} /></div>

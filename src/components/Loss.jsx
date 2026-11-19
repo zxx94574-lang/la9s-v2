@@ -91,11 +91,11 @@ export function LossTodo() {
   return (
     <div className="card" style={{ marginBottom: 12, borderColor: '#e9b4ae' }}>
       <button type="button" className="card-h fold-h" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <h2>亏钱的单</h2><Pill tone="red">{data.length} 张 · 共亏 {money(Math.round(-total))}</Pill><span className="muted small">已出库、整单毛利为负、还没下结论</span><span className="grow" /><span className="caret">{open ? '▾ 收起' : '▸ 展开'}</span>
+        <h2>异常的单</h2><Pill tone="red">{data.length} 张 · 共亏 {money(Math.round(-total))}</Pill><span className="muted small">已出库、整单毛利为负、还没下结论</span><span className="grow" /><span className="caret">{open ? '▾ 收起' : '▸ 展开'}</span>
       </button>
       {open && data.map((r) => (
         <div key={r.deal_id} className="orow" style={{ gridTemplateColumns: 'auto 1fr auto' }}>
-          <span className="age red">亏</span>
+          <span className="pill red">亏</span>
           <span className="small"><DealLink id={r.deal_id} no={r.biz_no} /> · {r.customer_name} · {dDate(r.shipped_on)} 出库 · 卖 {money(Math.round(N(r.revenue)))} / 成本 {money(Math.round(N(r.cost)))}{r.approved_note ? ` · 出库前批过：${r.approved_note}` : ' · 出库前没批过'}</span>
           <b className="red-t2">−{money(Math.round(-N(r.profit)))}</b>
         </div>))}

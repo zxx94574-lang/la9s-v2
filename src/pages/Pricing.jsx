@@ -4,7 +4,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal , RateInput} from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal , RateInput, MoneyIn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import ProductDrawer from '../components/ProductDrawer.jsx';
 import ClearanceCard from '../components/Clearance.jsx';
@@ -121,7 +121,7 @@ function LockModal({ lock, onClose }) {
         <button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!(Number(p) >= 0) || p === ''} onClick={() => go(true)}>锁定一口价</button></>}>
       <div className="stack">
         <div className="hint">一口价（比如电池盖统一 700）锁定后，改成本或汇率都不会动它。</div>
-        <input className="in" inputMode="decimal" autoFocus value={p} onChange={(e) => setP(e.target.value.replace(/[^\d.]/g, ''))} style={{ maxWidth: 200, fontSize: 18 }} />
+        <MoneyIn className="in" inputMode="decimal" autoFocus value={p} onChange={(e) => setP(e.target.value.replace(/[^\d.]/g, ''))} style={{ maxWidth: 200, fontSize: 18 }} />
       </div>
     </Modal>
   );

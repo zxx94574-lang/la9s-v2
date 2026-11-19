@@ -29,9 +29,10 @@ test('热线回访：记录结果和下次跟进；仓库不能记', async () =>
   const t = await setup();
   await t.as(U.hotline, `select app.log_call($1,'spare','call','no_answer',null,'2026-11-01')`, [t.ids.camaraAbobo]);
   await t.as(U.hotline, `select app.log_call($1,'recycle','whatsapp','later','下周有货',null)`, [t.ids.camaraAbobo]);
-  await rejects(t.as(U.hotline, `select app.log_call($1,'spare','call','xx',null,null)`, [t.ids.camaraAbobo]), /check|violates/);
+  // 0062: 回访结果不再写死清单 (⚙ 里能加), 新名字照样记
+  await t.as(U.hotline, `select app.log_call($1,'spare','call','已转给老板',null,null)`, [t.ids.camaraAbobo]);
   await rejects(t.as(U.picker, `select app.log_call($1,'spare','call','busy',null,null)`, [t.ids.camaraAbobo]), /PERMISSION_DENIED/);
-  assert.equal(Number((await t.one(`select count(*) n from app.hotline_calls where customer_id=$1`, [t.ids.camaraAbobo])).n), 2);
+  assert.equal(Number((await t.one(`select count(*) n from app.hotline_calls where customer_id=$1`, [t.ids.camaraAbobo])).n), 3);
 });
 
 test('欠款预警：超上限 / 超账期只提醒；只有中方能设上限和协议', async () => {

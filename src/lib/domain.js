@@ -118,6 +118,9 @@ export const SHIP_METHODS = {
 };
 export const PAY_METHODS = { cash: '现金', wave: 'Wave', orange: 'Orange Money', bank: '银行', other: '其他' };
 export const RETURN_REASONS = { quality: '产品质量问题', customer_damage: '客户损坏', logistics: '物流损坏', other: '其他' };
+// 退货类型 / 运费谁出: 后台按固定类别处理; ⚙ 里新加的选项要选「按哪一类处理」(401 / 416)
+export const RETURN_BASES = [['quality', '算损坏（24 小时规则管）'], ['customer_damage', '客户人为损坏（原则上不认）'], ['other', '不算损坏']];
+export const FREIGHT_BASES = [['customer', '客户出'], ['company', '我们出'], ['company_part', '我们出一段（到交通站）']];
 export const TIERS = { S: 'S', WHOLESALE: 'Wholesale shop', RETAIL: 'Retail shop', REPAIR: 'Repair shop' };
 
 // preset options instead of typing (Frank: 尽量用选项代替手打)

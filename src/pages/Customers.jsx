@@ -1,13 +1,14 @@
 // 客户档案 (Frank 2026-10-29): 一个客户一张档案 —— 正式 / 潜客 / 回收 都在这里.
 // 欠款上限和账期只预警不拦截 (THOMAS 这类有协议的大客户照常出货); 档位、正式编码、上限、账期只中方改.
 import { TaskModal, CustomerTasks } from '../components/Tasks.jsx';
+import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { sumMargin, MarginPill, MarginKpis, useMarginRules } from '../components/Margin.jsx';
 import { normPhone, fmtPhone } from '../lib/phone.js';
 import { ConfirmEdit, HistoryBlock } from '../components/ProductDrawer.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker , PhoneInput, phoneValid, Info, Choice } from '../components/ui.jsx';
+import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker , PhoneInput, phoneValid, Info, Choice, MoneyIn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { CallModal, ProspectModal, ResultPill, KIND, custLabel } from '../components/Crm.jsx';
 import { AccountPanel, ACC } from '../components/Account.jsx';
@@ -191,7 +192,7 @@ function ActivateModal({ c, emps, onClose }) {
       <div className="stack">
         <div className="field req"><label>正式编码（金蝶客户编码）</label><input className="in mono" autoFocus value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} style={{ maxWidth: 200 }} /></div>
         <div className="field req"><label>档位（决定价格）</label><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} /></div>
-        <div className="field"><label>归属销售（算激励用）</label><Choice value={owner} onChange={setOwner} options={emps.map((e) => [e.id, e.short_name, e.department || ''])} empty="—" flat={false} style={{ width: 220 }} /></div>
+        <div className="field"><label>归属销售（算激励用）</label><OptChoice optKey="emp_list" title="员工名单" data value={owner} onChange={setOwner} options={emps.map((e) => [e.id, e.short_name, e.department || ''])} empty="—" flat={false} style={{ width: 220 }} /></div>
       </div>
     </Modal>
   );
@@ -213,12 +214,12 @@ function TermsModal({ c, emps, onClose }) {
       <div className="stack">
         <div className="hint">超上限或超账期只在订单、待办和这里提醒，不自动停货。空着 = 不限。</div>
         <div className="grid2">
-          <div className="field"><label>欠款上限 XOF</label><input className="in" inputMode="numeric" value={f.limit} onChange={num('limit')} placeholder="不限" /></div>
-          <div className="field"><label>账期（天）</label><div className="row" style={{ gap: 6 }}><input className="in" inputMode="numeric" value={f.days} onChange={num('days')} placeholder="不限" style={{ maxWidth: 90 }} />
+          <div className="field"><label>欠款上限 XOF</label><MoneyIn className="in" inputMode="numeric" value={f.limit} onChange={num('limit')} placeholder="不限" /></div>
+          <div className="field"><label>账期（天）</label><div className="row" style={{ gap: 6 }}><MoneyIn className="in" inputMode="numeric" value={f.days} onChange={num('days')} placeholder="不限" style={{ maxWidth: 90 }} />
             <div className="chips">{['7', '15', '30'].map((d) => <button type="button" key={d} className={`chip ${f.days === d ? 'on' : ''}`} onClick={() => setF({ ...f, days: d })}>{d}</button>)}</div></div></div>
         </div>
         <label className="row" style={{ gap: 8 }}><input type="checkbox" checked={f.agreement} onChange={(e) => setF({ ...f, agreement: e.target.checked })} />有协议的大客户（例 THOMAS）</label>
-        <div className="field"><label>归属销售</label><Choice value={f.owner} onChange={(v) => setF({ ...f, owner: v })} options={emps.map((e) => [e.id, e.short_name, e.department || ''])} empty="—" flat={false} style={{ width: 220 }} /></div>
+        <div className="field"><label>归属销售</label><OptChoice optKey="emp_list" title="员工名单" data value={f.owner} onChange={(v) => setF({ ...f, owner: v })} options={emps.map((e) => [e.id, e.short_name, e.department || ''])} empty="—" flat={false} style={{ width: 220 }} /></div>
       </div>
     </Modal>
   );

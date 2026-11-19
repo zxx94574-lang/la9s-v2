@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { q, call, REAL } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, FileDrop, Modal } from './ui.jsx';
+import { useApp, useData, Pill, FileDrop, Modal, MoneyIn } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { PERM_GROUPS, PERM_ROLES, defaultRoles } from '../lib/perm.js';
 import { ROLE_LABELS, rolesFor } from '../lib/domain.js';
@@ -80,8 +80,8 @@ export function DocSettings() {
             <textarea className="in" rows={5} defaultValue={Object.entries({ ...BL_TYPES_DEFAULT, ...(header.types || {}) }).map(([k, v]) => `${k}=${v}`).join('\n')} key={JSON.stringify(header.types || {})}
               onBlur={(e) => { const t = Object.fromEntries(e.target.value.split('\n').map((x) => x.split('=').map((y) => y.trim())).filter((x) => x[0] && x[1])); setting('doc_header_gs', { ...header, types: t }); }} /></div>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="small">大单建议打印：金额 ≥</span><input className="in" style={{ width: 120 }} inputMode="numeric" defaultValue={suggest.amount} key={`a${suggest.amount}`} onBlur={(e) => Number(e.target.value) !== Number(suggest.amount) && setting('bl_suggest', { ...suggest, amount: Number(e.target.value) || 0 })} />
-          <span className="small">XOF 或件数 ≥</span><input className="in" style={{ width: 90 }} inputMode="numeric" defaultValue={suggest.qty} key={`q${suggest.qty}`} onBlur={(e) => Number(e.target.value) !== Number(suggest.qty) && setting('bl_suggest', { ...suggest, qty: Number(e.target.value) || 0 })} />
+          <span className="small">大单建议打印：金额 ≥</span><MoneyIn className="in" style={{ width: 120 }} inputMode="numeric" defaultValue={suggest.amount} key={`a${suggest.amount}`} onBlur={(e) => Number(e.target.value) !== Number(suggest.amount) && setting('bl_suggest', { ...suggest, amount: Number(e.target.value) || 0 })} />
+          <span className="small">XOF 或件数 ≥</span><MoneyIn className="in" style={{ width: 90 }} inputMode="numeric" defaultValue={suggest.qty} key={`q${suggest.qty}`} onBlur={(e) => Number(e.target.value) !== Number(suggest.qty) && setting('bl_suggest', { ...suggest, qty: Number(e.target.value) || 0 })} />
         </div>
         <span className="hint">出库记录里每批都有「BL ×2」和「海关文件」两个按钮；到阈值的单会标「大单 · 建议打印」，小单不强制。海关文件换批次时在这里重传。</span>
       </div>
@@ -151,7 +151,7 @@ export function RulesPanel() {
       <div className="card-b stack" style={{ gap: 8 }}>
         {RULES.map(([k, f, label, d, unit]) => (
           <div key={k + f} className="row" style={{ gap: 10, flexWrap: 'wrap' }}><span style={{ minWidth: 300, flex: '1 1 300px' }}>{label}</span>
-            <input className="in" style={{ width: 90 }} inputMode="numeric" value={cur(k, f, d)} onChange={(e) => setDraft({ ...draft, [k + f]: e.target.value.replace(/[^\d.]/g, '') })} onBlur={(e) => { if (draft[k + f] != null && Number(e.target.value) > 0) save(k, f, e.target.value); }} /><span className="small muted" style={{ width: 40 }}>{unit}</span></div>))}
+            <MoneyIn className="in" style={{ width: 90 }} inputMode="numeric" value={cur(k, f, d)} onChange={(e) => setDraft({ ...draft, [k + f]: e.target.value.replace(/[^\d.]/g, '') })} onBlur={(e) => { if (draft[k + f] != null && Number(e.target.value) > 0) save(k, f, e.target.value); }} /><span className="small muted" style={{ width: 40 }}>{unit}</span></div>))}
         <label className="row" style={{ gap: 10, flexWrap: 'wrap' }}><span style={{ minWidth: 300, flex: '1 1 300px' }}>销售员名下有隔天没收回的欠款 → 他名下所有客户暂不出货（中方可对单放行）</span>
           <input type="checkbox" checked={data.find((x) => x.key === 'rep_debt_rules')?.value?.on !== false} onChange={async (e) => { try { await call(role, `select app.set_org_setting($1,$2,$3)`, [org, 'rep_debt_rules', JSON.stringify({ on: e.target.checked })]); toast(e.target.checked ? '已打开' : '已关掉'); refresh(); } catch (er) { toast(friendlyError(er), 'err'); } }} /><span className="small muted">开着</span></label>
         <label className="row" style={{ gap: 10, flexWrap: 'wrap' }}><span style={{ minWidth: 300, flex: '1 1 300px' }}>出库那一刻客户超欠款上限 / 超账期 → 不能出库，中方在订单上放行 + 写原因才行</span>

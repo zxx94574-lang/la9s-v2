@@ -1,6 +1,7 @@
 // 338 / 339 (Frank 11-17): 挂在单据上的任务 —— 任何「要人去问 / 去核对」的事, 从这张单直接派出去, 自动带单号和客户;
 // 类型: 问付款计划 (结果 = 哪天付多少 + 截图) / 对账事项 / 核对一件事 / 其他. 复用中方指令 (收到 → 完成填结果 → 中方确认).
 import React, { useState } from 'react';
+import { OptChoice, OptNote, OptGear, optName, optSubmit } from './Opts.jsx';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Modal, FRow, Choice, DatePicker, Pill, Thumb, Info } from './ui.jsx';
 import Grid from './Grid.jsx';
@@ -33,10 +34,10 @@ export function TaskModal({ deal, target, onClose }) {
   return (
     <Modal title={`派任务 · ${[tg.label, tg.customerName].filter(Boolean).join(' · ')}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={busy} onClick={go}>派出去</button></>}>
       <div className="stack" style={{ gap: 10 }}>
-        <FRow label="什么事" req><Choice value={f.type} onChange={(v) => setF((x) => ({ ...x, type: v, title: TITLES[v](who) }))} options={TASK_TYPES} /></FRow>
+        <FRow label="什么事" req><OptChoice optKey="task_types" title="任务类型" value={f.type} onChange={(v) => setF((x) => ({ ...x, type: v, title: (TITLES[v] || TITLES.other)(who) }))} options={TASK_TYPES} /></FRow>
         <FRow label="要做什么" req><input className="in" style={{ flex: '1 1 260px', minWidth: 0 }} value={f.title} onChange={(e) => set('title', e.target.value)} /></FRow>
         <FRow label="补充"><textarea className="in" rows={2} style={{ width: '100%' }} value={f.body} onChange={(e) => set('body', e.target.value)} placeholder="经过、要注意什么（可不填）" /></FRow>
-        <FRow label="交给谁" req><Choice value={f.assignee} onChange={(v) => set('assignee', v)} options={(emps || []).map((e) => [e.id, e.short_name, e.emp_no || ''])} placeholder="选员工…" flat={false} style={{ width: 200 }} /></FRow>
+        <FRow label="交给谁" req><OptChoice optKey="emp_list" title="员工名单" data value={f.assignee} onChange={(v) => set('assignee', v)} options={(emps || []).map((e) => [e.id, e.short_name, e.emp_no || ''])} placeholder="选员工…" flat={false} style={{ width: 200 }} /></FRow>
         <FRow label="期限"><DatePicker value={f.due} onChange={(v) => set('due', v)} /><input className="in" style={{ width: 84 }} value={f.time} onChange={(e) => set('time', e.target.value.replace(/[^\d:]/g, '').slice(0, 5))} placeholder="12:00" title="几点前（阿比让时间）" /><span className="small muted">前（默认明天 12:00）</span></FRow>
         <FRow label="紧急程度"><Choice value={f.urgent ? 'y' : 'n'} onChange={(v) => set('urgent', v === 'y')} options={[['n', '普通'], ['y', '紧急']]} /></FRow>
         {tg.kind === 'deal' && <FRow label="卡不卡流程"><Choice value={f.blocks ? 'y' : 'n'} onChange={(v) => set('blocks', v === 'y')} options={[['n', '不卡，照常走'], ['y', '做完才能往下走']]} flat />

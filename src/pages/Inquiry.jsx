@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill } from '../components/ui.jsx';
+import { useApp, useData, Pill, MoneyIn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import ModelPicker, { avail } from '../components/ModelPicker.jsx';
@@ -73,7 +73,7 @@ export default function Inquiry({ embedded } = {}) {
         ]} />
         <div className="card-b row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', paddingTop: 6 }}><span className="small muted">客户要的但我们没编码</span>
           <input className="in" style={{ maxWidth: 160 }} placeholder="型号" value={free.model} onChange={(e) => setFree({ ...free, model: e.target.value.toUpperCase() })} />
-          <input className="in" inputMode="numeric" placeholder="数量" value={free.qty} style={{ maxWidth: 90 }} onChange={(e) => setFree({ ...free, qty: e.target.value.replace(/\D/g, '') })} />
+          <MoneyIn className="in" inputMode="numeric" placeholder="数量" value={free.qty} style={{ maxWidth: 90 }} onChange={(e) => setFree({ ...free, qty: e.target.value.replace(/\D/g, '') })} />
           <button type="button" className="btn sm" disabled={!free.model || !free.qty} onClick={() => { setLines((x) => [...x, { model: free.model, qty: free.qty }]); setFree({ model: '', qty: '' }); }}>加</button></div>
         <div className="card-b row" style={{ gap: 8 }}>
           <input className="in grow" placeholder="备注（客户要什么时候、怎么拿货…）" value={note} onChange={(e) => setNote(e.target.value)} />

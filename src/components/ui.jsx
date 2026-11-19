@@ -7,14 +7,28 @@ import { normPhone } from '../lib/phone.js';
 export const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
 
+// 408 (Frank 11-18, 全局): 点提交有没填 / 填错的 → 自动滚到第一个标红的那一项、放在屏幕中间, 光标落进去, 轻轻闪一下.
+// 所有表单的必填都用同一批标红 class (err-in / err / invalid), 所以这里一处实现全站生效; 报错提示照样保留.
+export function focusFirstError() {
+  const scopes = [...document.querySelectorAll('.overlay .modal, .drawer')]; const scope = scopes.length ? scopes[scopes.length - 1] : document;
+  const el = [...scope.querySelectorAll('.err-in, .chip.err, .proofbox.err, .cell-in.err, .in.invalid, [aria-invalid="true"], td.cell-err')].find((e) => e.offsetParent !== null);
+  if (!el) return;
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const f = el.matches('input,textarea,button,select') ? el : el.querySelector('input,textarea,button');
+  try { f?.focus({ preventScroll: true }); } catch { /* 不能聚焦就只滚过去 */ }
+  el.classList.remove('err-flash'); void el.offsetWidth; el.classList.add('err-flash'); setTimeout(() => el.classList.remove('err-flash'), 1400);
+}
+
 // ── toast ──
 export function useToasts() {
   const [items, setItems] = useState([]);
   const push = useCallback((text, tone = 'ok') => {
     const id = Math.random();
-    setItems((x) => [...x.slice(-2), { id, text, tone }]);
+    // 408: 同一句提示同时只显示一条 (连点两次不叠两条)
+    setItems((x) => [...x.filter((i) => !(i.text === text && i.tone === tone)).slice(-2), { id, text, tone }]);
     setTimeout(() => setItems((x) => x.filter((i) => i.id !== id)), tone === 'err' ? 4200 : 2400);
     if (tone === 'err' && navigator.vibrate) navigator.vibrate(30);
+    if (tone === 'err') setTimeout(focusFirstError, 60);
   }, []);
   const view = (
     <div className="toasts">{items.map((t) => <div key={t.id} className={`toast ${t.tone}`}>{t.text}</div>)}</div>
@@ -592,7 +606,7 @@ export function PhoneInput({ value, onChange, invalid, placeholder = '例如 07 
     <span className="phone-in" style={style}>
       <input className={`in ${bad || invalid ? 'err-in' : ''}`} inputMode="tel" autoFocus={autoFocus} value={txt} placeholder={placeholder}
         onChange={(e) => setTxt(e.target.value)} onBlur={done} onKeyDown={(e) => { if (e.key === 'Enter') done(); }} />
-      {bad && <span className="why">{n.need ? `+${n.cc} 要 ${n.need} 位，现在 ${n.local.length} 位` : '位数不对'}</span>}
+      {bad && <span className="why">{n.need ? `已输 ${n.local.length} / ${n.need} 位${n.local.length > n.need ? '，多了' : ''}` : '位数不对'}</span>}
     </span>
   );
 }
@@ -637,6 +651,7 @@ export function Choice({ value, onChange, options, empty, placeholder = '请选�
   const asFlat = flat ?? (opts.length + (empty ? 1 : 0) <= 3 && opts.every((o) => o.l.length <= 12));
   const [open, setOpen] = useState(false); const [kw, setKw] = useState(''); const [hi, setHi] = useState(0); const [pos, setPos] = useState(null);
   const btn = useRef(null); const pop = useRef(null); const qin = useRef(null);
+  usePopBus(open, () => setOpen(false));
   const all = empty ? [{ v: '', l: empty, empty: true }, ...opts] : opts;
   const k = kw.trim().toLowerCase();
   const list = k ? all.filter((o) => o.l.toLowerCase().includes(k) || String(o.hint || '').toLowerCase().includes(k)) : all;
@@ -694,6 +709,7 @@ export function Choice({ value, onChange, options, empty, placeholder = '请选�
 export function MoreMenu({ items, label = '⋯ 更多', title = '更多操作' }) {
   const [open, setOpen] = useState(false);
   const ref = useOutside(open, () => setOpen(false));
+  usePopBus(open, () => setOpen(false));
   const list = (items || []).filter(Boolean);
   if (!list.length) return null;
   return (
@@ -710,6 +726,7 @@ export function MoreMenu({ items, label = '⋯ 更多', title = '更多操作' }
 export function PageGear({ items, title = '这一页的设置' }) {
   const [open, setOpen] = useState(false);
   const ref = useOutside(open, () => setOpen(false));
+  usePopBus(open, () => setOpen(false));
   const list = (items || []).filter(Boolean);
   if (!list.length) return null;
   return (
@@ -720,4 +737,106 @@ export function PageGear({ items, title = '这一页的设置' }) {
       </div>}
     </span>
   );
+}
+
+
+// ── NumInput: 全站金额 / 数量输入框 (Frank 11-18 412) ── 边输边加千分位 (300000 → 300,000), 右对齐, 光标不乱跳; 存的是纯数字.
+// decimals: XOF 0 位 (不许小数), CNY / USD 2 位; 也可以直接给 cur. value: 数字或 ''. onChange(数字 或 '').
+const groupNum = (t) => { const [a, b] = t.split('.'); return a.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (b != null ? `.${b}` : ''); };
+export function NumInput({ value, onChange, cur, decimals, invalid, className = '', style, placeholder, disabled, autoFocus, onEnter, title, width }) {
+  const d = decimals ?? (cur && cur !== 'XOF' ? 2 : 0);
+  const clean = (raw) => { let t = String(raw ?? '').replace(/[^\d.]/g, ''); if (d === 0) t = t.replace(/\./g, ''); else { const i = t.indexOf('.'); if (i >= 0) t = t.slice(0, i + 1) + t.slice(i + 1).replace(/\./g, '').slice(0, d); } return t.replace(/^0+(?=\d)/, ''); };
+  const [txt, setTxt] = useState(() => (value === '' || value == null ? '' : clean(value)));
+  const ref = useRef(null); const caret = useRef(null);
+  useEffect(() => { setTxt((t) => (value === '' || value == null ? (t === '' ? t : '') : (Number(t) === Number(value) ? t : clean(value)))); }, [value]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => { if (caret.current == null || !ref.current) return; const shown = ref.current.value; let n = caret.current, i = 0; while (i < shown.length && n > 0) { if (shown[i] !== ',') n -= 1; i += 1; } try { ref.current.setSelectionRange(i, i); } catch { /* 手机上有的键盘不让设光标 */ } caret.current = null; });
+  const type = (e) => { const raw = e.target.value; const pos = e.target.selectionStart ?? raw.length; caret.current = raw.slice(0, pos).replace(/[^\d.]/g, '').length; const t = clean(raw); setTxt(t); onChange?.(t === '' || t === '.' ? '' : Number(t)); };
+  return <input ref={ref} className={`in num-in ${invalid ? 'err-in' : ''} ${className}`} style={{ width, ...style }} inputMode={d ? 'decimal' : 'numeric'} value={groupNum(txt)} placeholder={placeholder} disabled={disabled} autoFocus={autoFocus} title={title}
+    onChange={type} onKeyDown={(e) => { if (e.key === 'Enter') onEnter?.(); }} />;
+}
+
+// ── MultiChoice: 带搜索的多选下拉 (Frank 11-18 367: 选人 / 选部门不许平铺一大片) ──
+// options: [{ v, l, hint?, group? }]; value: [v…]. 选中的显示成小标, 点 × 去掉; 点开第一行搜索 (包含即匹配, 不分大小写), 可以连着勾.
+export function MultiChoice({ value, onChange, options, placeholder = '请选择（可多选）', err, style, max }) {
+  const [open, setOpen] = useState(false); const [kw, setKw] = useState(''); const [pos, setPos] = useState(null);
+  const btn = useRef(null); const pop = useRef(null); const qin = useRef(null);
+  usePopBus(open, () => setOpen(false));
+  const vals = value || []; const opts = options || [];
+  const k = kw.trim().toLowerCase();
+  const list = k ? opts.filter((o) => `${o.l} ${o.hint || ''}`.toLowerCase().includes(k)) : opts;
+  const place = useCallback(() => { const r = btn.current?.getBoundingClientRect(); if (!r) return; const w = Math.min(Math.max(r.width, 280), window.innerWidth - 16); const below = window.innerHeight - r.bottom - 8; const up = below < 220 && r.top > below;
+    setPos({ left: Math.max(8, Math.min(r.left, window.innerWidth - 8 - w)), width: w, maxHeight: Math.max(180, Math.min(380, (up ? r.top : below) - 4)), ...(up ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }) }); }, []);
+  useLayoutEffect(() => {
+    if (!open) return undefined; place(); setKw('');
+    const t = setTimeout(() => { if (window.innerWidth > 760) qin.current?.focus(); }, 0);
+    const out = (e) => { if (!btn.current?.contains(e.target) && !pop.current?.contains(e.target)) setOpen(false); };
+    const sc = (e) => { if (!pop.current?.contains(e.target)) place(); };
+    document.addEventListener('pointerdown', out); window.addEventListener('resize', place); window.addEventListener('scroll', sc, true);
+    return () => { clearTimeout(t); document.removeEventListener('pointerdown', out); window.removeEventListener('resize', place); window.removeEventListener('scroll', sc, true); };
+  }, [open, place]);
+  useLayoutEffect(() => { if (open) place(); }, [vals.length, open, place]);
+  const toggle = (v) => { const on = vals.some((x) => sv(x) === sv(v)); if (!on && max && vals.length >= max) return; onChange(on ? vals.filter((x) => sv(x) !== sv(v)) : [...vals, v]); };
+  let lastG = null;
+  return (<>
+    <div ref={btn} role="button" tabIndex={0} className={`in multi-btn ${err && !vals.length ? 'err-in' : ''}`} style={style} aria-haspopup="listbox" aria-expanded={open}
+      onClick={(e) => { if (!e.target.closest('.multi-x')) setOpen((o) => !o); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); } if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } }}>
+      {vals.length ? vals.map((v) => { const o = opts.find((x) => sv(x.v) === sv(v)); return <span key={sv(v)} className="multi-tag">{o?.l || sv(v)}<button type="button" className="multi-x" aria-label="去掉" onClick={() => toggle(v)}>×</button></span>; }) : <span className="choice-v ph">{placeholder}</span>}
+      <span className="choice-caret">▾</span>
+    </div>
+    {open && pos && createPortal(
+      <div className="menu choice-pop" ref={pop} style={{ position: 'fixed', ...pos }} role="listbox" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } }}>
+        <input ref={qin} className="in choice-q" placeholder="搜索名字 / 工号…" value={kw} onChange={(e) => setKw(e.target.value)} />
+        <div className="choice-list">
+          {list.map((o) => { const on = vals.some((x) => sv(x) === sv(o.v)); const head = o.group && o.group !== lastG ? o.group : null; lastG = o.group || lastG; return (
+            <React.Fragment key={sv(o.v)}>
+              {head && <div className="choice-group">{head}</div>}
+              <button type="button" role="option" aria-selected={on} className={`opt ${on ? 'on picked' : ''}`} onClick={() => toggle(o.v)}>
+                <span className={`multi-box ${on ? 'on' : ''}`}>{on ? '✓' : ''}</span><span className="opt-l">{o.l}</span>{o.hint ? <span className="opt-h">{o.hint}</span> : null}
+              </button>
+            </React.Fragment>); })}
+          {!list.length && <div className="small muted" style={{ padding: 10 }}>没有匹配的</div>}
+        </div>
+        <div className="row" style={{ justifyContent: 'space-between', padding: '6px 4px 0' }}><span className="small muted">已选 {vals.length}</span><button type="button" className="btn sm primary" onClick={() => setOpen(false)}>选好了</button></div>
+      </div>, document.body)}
+  </>);
+}
+
+// ── AcctImpact: 动账的地方统一两个独立小卡片 (Frank 11-19 417) ── ① 本单 改前 → 改后 + 一行说明; ② 客户总账 改前欠款 → 改后欠款.
+// 退货 / 收货差异 / 价格调整 / 整单折扣 / 抹零 / 撤销 / 收款 / 退款 都用它. 负数欠款写成「预付」. fmt(n) = 带币种的金额.
+const owe = (n, fmt) => (n < 0 ? `预付 ${fmt(-n)}` : fmt(n));
+export function AcctImpact({ docLabel = '本单应收', doc, ledger, fmt, note, ledgerNote, style }) {
+  const Card = ({ title, a, b, sub }) => { const diff = (b ?? 0) - (a ?? 0); return (
+    <div className="impact-card">
+      <div className="impact-t">{title}</div>
+      <div className="impact-v"><span className="impact-a">{owe(a, fmt)}</span><span className="impact-arrow">→</span><b className={`impact-b ${diff > 0 ? 'up' : diff < 0 ? 'down' : ''}`}>{owe(b, fmt)}</b></div>
+      <div className="impact-s">{sub || (diff === 0 ? '没有变化' : `${diff > 0 ? '＋' : '−'}${fmt(Math.abs(diff))}`)}</div>
+    </div>); };
+  return (
+    <div className="impact" style={style}>
+      {doc && <Card title={docLabel} a={doc.before} b={doc.after} sub={note} />}
+      {ledger && <Card title="客户总账（欠款）" a={ledger.before} b={ledger.after} sub={ledgerNote} />}
+    </div>);
+}
+
+// MoneyIn: <input> 的直接替身 (412) —— 用法和原来的 input 一模一样 (value 是字符串或数字, onChange 收到的 e.target.value 是不带逗号的纯数字串),
+// 只是显示时边输边加千分位 + 右对齐. inputMode="decimal" 允许小数, 否则只收整数. 全站金额 / 数量框统一用它.
+export function MoneyIn({ value, onChange, className = '', inputMode = 'numeric', ...rest }) {
+  const dec = inputMode === 'decimal';
+  const clean = (raw) => { let t = String(raw ?? '').replace(/[^\d.]/g, ''); if (!dec) t = t.replace(/\./g, ''); else { const i = t.indexOf('.'); if (i >= 0) t = t.slice(0, i + 1) + t.slice(i + 1).replace(/\./g, ''); } return t; };
+  const ref = useRef(null); const caret = useRef(null);
+  useLayoutEffect(() => { if (caret.current == null || !ref.current) return; const shown = ref.current.value; let n = caret.current, i = 0; while (i < shown.length && n > 0) { if (shown[i] !== ',') n -= 1; i += 1; } try { ref.current.setSelectionRange(i, i); } catch { /* 有的手机键盘不让设光标 */ } caret.current = null; });
+  const type = (e) => { const raw = e.target.value; const pos = e.target.selectionStart ?? raw.length; caret.current = raw.slice(0, pos).replace(/[^\d.]/g, '').length; onChange?.({ target: { value: clean(raw) }, currentTarget: e.currentTarget }); };
+  return <input ref={ref} {...rest} className={`${className} num-in`} inputMode={inputMode} value={groupNum(clean(value))} onChange={type} />;
+}
+
+// 361 (Frank 11-18, 全站): 同一时间只开一个弹层 —— 工具栏上的筛选 / 分组 / 筛选方案 / 下拉 / 更多菜单, 点开一个, 别的自动关.
+// 弹层里面再弹的小框 (选值、日历) 不算, 不参加.
+export function usePopBus(open, close) {
+  const id = useRef(Math.random()); const fn = useRef(close); fn.current = close;
+  useEffect(() => {
+    if (!open) return undefined;
+    window.dispatchEvent(new CustomEvent('la9s:pop', { detail: id.current }));
+    const h = (e) => { if (e.detail !== id.current) fn.current?.(); };
+    window.addEventListener('la9s:pop', h); return () => window.removeEventListener('la9s:pop', h);
+  }, [open]);
 }

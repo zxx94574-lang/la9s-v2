@@ -6,7 +6,7 @@ import AttCalendar from '../components/AttCalendar.jsx';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, DatePicker, MonthPicker, Drawer } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, DatePicker, MonthPicker, Drawer, MoneyIn } from '../components/ui.jsx';
 import { staffOptions, optLabel } from '../lib/staffOptions.js';
 import { EmpLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
@@ -172,9 +172,9 @@ function RulesModal({ st, onClose }) {
       <div className="grid2">
         <div className="field"><label>上班</label><input type="time" className="in" value={f.start_time} onChange={(e) => setF({ ...f, start_time: e.target.value })} /></div>
         <div className="field"><label>下班</label><input type="time" className="in" value={f.end_time} onChange={(e) => setF({ ...f, end_time: e.target.value })} /></div>
-        <div className="field"><label>晚几分钟内不算迟到</label><input className="in" inputMode="numeric" value={f.grace_min} onChange={num('grace_min')} /></div>
-        <div className="field"><label>迟到超过几分钟按旷工（当天不算出勤）</label><input className="in" inputMode="numeric" value={f.late_absent_min} onChange={num('late_absent_min')} /></div>
-        <div className="field"><label>市场打卡多少米内算同一个地点</label><input className="in" inputMode="numeric" value={f.cluster_m} onChange={num('cluster_m')} /></div>
+        <div className="field"><label>晚几分钟内不算迟到</label><MoneyIn className="in" inputMode="numeric" value={f.grace_min} onChange={num('grace_min')} /></div>
+        <div className="field"><label>迟到超过几分钟按旷工（当天不算出勤）</label><MoneyIn className="in" inputMode="numeric" value={f.late_absent_min} onChange={num('late_absent_min')} /></div>
+        <div className="field"><label>市场打卡多少米内算同一个地点</label><MoneyIn className="in" inputMode="numeric" value={f.cluster_m} onChange={num('cluster_m')} /></div>
       </div>
       <div className="hint">工资的实到工作日 = 当月有上班打卡的天（迟到超过上面分钟数的那天不算）+ 批准的申诉天。</div>
     </Modal>

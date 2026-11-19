@@ -209,7 +209,7 @@ function DraftList({ rows }) {
   return <Grid id="quote-drafts" rows={rows} empty="没有草稿。新订单里选了客户、填够 5 行会自动存在这里；7 天没动自动删。"
     onRowClick={(d) => { try { sessionStorage.setItem(OPEN_DRAFT, d.id); } catch { /* */ } go('quote/new'); }}
     rowActions={[{ label: '接着做', run: (d) => { try { sessionStorage.setItem(OPEN_DRAFT, d.id); } catch { /* */ } go('quote/new'); } },
-      { label: '删掉草稿', tone: 'ghost', run: async (d) => { try { await call(role, `select app.delete_quote_draft($1)`, [d.id]); toast('草稿已删'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } } }]}
+      { label: '删掉草稿', danger: true, describe: (d) => `${d.customer_name} · ${d.n_lines} 行 · ${d.by_name || ''}`, warn: '草稿删了就没了，找不回来。要删的是：', run: async (d) => { try { await call(role, `select app.delete_quote_draft($1)`, [d.id]); toast('草稿已删'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } } }]}
     columns={[
       { key: 'customer_name', label: '客户', w: 200, render: (d) => <CustLink id={d.customer_id} name={d.customer_name} /> },
       { key: 'n_lines', label: '行数', w: 70, type: 'number' },

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
-import { useApp, useData, Modal, FRow, Info, PhotoInput, Thumb, DatePicker, FileDrop, Choice } from './ui.jsx';
+import { useApp, useData, Modal, FRow, Info, PhotoInput, Thumb, DatePicker, FileDrop, Choice, MoneyIn, MultiChoice } from './ui.jsx';
 import { EmpLink, DealLink } from './Archives.jsx';
 import { dt, dDate, friendlyError } from '../lib/format.js';
 
@@ -99,10 +99,10 @@ export default function DirectiveBoard() {
       {admin && (
         <div className="card todo-sec" style={{ marginBottom: 12 }}>
           <div className="card-h" style={{ flexWrap: 'wrap', gap: 8 }}><h2>我下达的指令 {issued?.open.length || 0} 条没关 <Info>员工点「完成」后，这里点「确认」才关闭；做得不行就「退回」并写哪里不行。超过 4 小时没点「收到」的标红，建议直接打电话。</Info></h2>
-            <div className="row"><button type="button" className="btn sm" onClick={() => setShowTpl(!showTpl)}>定期任务（{issued?.tpl.length || 0}）</button><button type="button" className="btn primary" onClick={() => setNw(true)}>＋ 给员工下指令</button></div></div>
+            <div className="row"><button type="button" className="btn sm" onClick={() => setShowTpl(!showTpl)}>定期任务（{issued?.tpl.length || 0}）</button><button type="button" className="btn sm" onClick={() => setNw('rec')}>＋ 定期任务</button><button type="button" className="btn primary" onClick={() => setNw(true)}>＋ 给员工下指令</button></div></div>
           {showTpl && (issued?.tpl.length ? issued.tpl.map((d) => (
             <div key={d.id} className="row between todo-row" style={{ cursor: 'default' }}><div><span className="pill blue">{REPEAT[d.repeat]}</span> <b>{d.title}</b> <span className="muted small">→ {d.assignee_name}{d.require_photo ? ' · 要拍照' : ''}</span></div>
-              <button type="button" className="btn sm" onClick={() => run('已停掉这个定期任务', `select app.stop_directive($1)`, [d.id])}>停掉</button></div>)) : <div className="card-b small muted">还没有定期任务。下指令时选「重复」就是定期任务。</div>)}
+              <button type="button" className="btn sm" onClick={() => run('已停掉这个定期任务', `select app.stop_directive($1)`, [d.id])}>停掉</button></div>)) : <div className="card-b small muted">还没有定期任务。点「＋ 定期任务」建一个（打扫卫生、整理仓库、客户回访这类）。</div>)}
           {(issued?.open || []).length === 0 ? <div className="card-b small muted">没有没关的指令</div> : issued.open.map((d) => {
             const late = d.status === 'sent' && hoursSince(d.created_at) > 4;
             return (
@@ -118,32 +118,37 @@ export default function DirectiveBoard() {
                 </div>
               </div>); })}
         </div>)}
-      {nw && <NewDirective onClose={() => setNw(false)} />}
+      {nw && <NewDirective recurring={nw === 'rec'} onClose={() => setNw(false)} />}
       {done && <DoneModal d={done} onClose={() => setDone(null)} />}
       {rej && <RejectModal d={rej} onClose={() => setRej(null)} />}
     </>
   );
 }
 
-function NewDirective({ onClose }) {
+// 367 / 368 (Frank 11-18): 「给谁」排第一、带搜索的多选下拉; 指令 = 临时下达、必须完成、没有「重复」, 只有中方手动关.
+// 定期任务 = 单独一个入口 (recurring): 多一项「多久一次」, 其余一样.
+function NewDirective({ onClose, recurring }) {
   const { org, role, toast, refresh } = useApp();
-  const { data: emps } = useData(() => q(`select id, short_name, emp_no, department from app.employees where org_id = $1 and active order by emp_no nulls last, short_name`, [org]), [org]);
-  const [f, setF] = useState({ title: '', body: '', assignee: [], urgent: false, require_photo: false, due_on: '', repeat: '', attachments: [] });
+  const { data: emps } = useData(() => q(`select id, short_name, full_name, emp_no, department from app.employees where org_id = $1 and active order by (emp_no is null), emp_no, short_name`, [org]), [org]);
+  const [f, setF] = useState({ title: '', body: '', assignee: [], urgent: false, require_photo: !!recurring, due_on: '', repeat: recurring ? 'daily' : '', attachments: [] });
+  const [errs, setErrs] = useState(false);
   const ok = f.title.trim() && f.assignee.length;
-  const go = async () => { try { for (const a of f.assignee) await call(role, `select app.issue_directive($1,$2)`, [org, JSON.stringify({ ...f, assignee: a })]); toast(`已下达给 ${f.assignee.length} 个人`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
-  const tog = (id) => setF((x) => ({ ...x, assignee: x.assignee.includes(id) ? x.assignee.filter((y) => y !== id) : [...x.assignee, id] }));
+  const go = async () => {
+    if (!ok) { setErrs(true); return toast(`还差：${[!f.assignee.length && '给谁', !f.title.trim() && '做什么'].filter(Boolean).join('、')}`, 'err'); }
+    try { for (const a of f.assignee) await call(role, `select app.issue_directive($1,$2)`, [org, JSON.stringify({ ...f, assignee: a })]); toast(recurring ? `定期任务已建，给 ${f.assignee.length} 个人` : `已下达给 ${f.assignee.length} 个人`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
-    <Modal title="给员工下指令" wide onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">还差：{[!f.title.trim() && '做什么', !f.assignee.length && '给谁'].filter(Boolean).join('、')}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={go}>下达</button></>}>
+    <Modal title={recurring ? '新建定期任务' : '给员工下指令'} wide onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><button type="button" className="btn primary" onClick={go}>{recurring ? '建好' : '下达'}</button></>}>
       <div className="stack">
-        <FRow label="做什么" req><input className="in" style={{ width: '100%' }} autoFocus value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="一句话，例如 今天下班前把 A 架盘点一遍" /></FRow>
+        <FRow label="给谁" req><MultiChoice value={f.assignee} onChange={(v) => setF({ ...f, assignee: v })} err={errs} style={{ width: '100%' }} placeholder="点开选人，可以搜工号 / 名字，可多选"
+          options={(emps || []).map((e) => ({ v: e.id, l: `${e.emp_no ? `${e.emp_no} ` : ''}${e.short_name}`, hint: [e.full_name !== e.short_name ? e.full_name : '', e.department].filter(Boolean).join(' · ') }))} /></FRow>
+        <FRow label="做什么" req><input className={`in ${errs && !f.title.trim() ? 'err-in' : ''}`} style={{ width: '100%' }} autoFocus value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder={recurring ? '一句话，例如 打扫仓库卫生' : '一句话，例如 今天下班前把 A 架盘点一遍'} /></FRow>
         <FRow label="说明"><textarea className="in" rows={2} style={{ width: '100%' }} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} placeholder="要注意什么、做到什么算完成" /></FRow>
         <FRow label="附件"><Attach value={f.attachments} onChange={(v) => setF({ ...f, attachments: v })} /></FRow>
-        <FRow label="给谁" req><div className="chips">{(emps || []).map((e) => <button type="button" key={e.id} className={`chip ${f.assignee.includes(e.id) ? 'on' : ''}`} onClick={() => tog(e.id)}>{e.emp_no ? `${e.emp_no} ` : ''}{e.short_name}</button>)}</div></FRow>
-        <FRow label="紧急程度"><div className="chips"><button type="button" className={`chip ${!f.urgent ? 'on' : ''}`} onClick={() => setF({ ...f, urgent: false })}>普通</button><button type="button" className={`chip ${f.urgent ? 'on' : ''}`} onClick={() => setF({ ...f, urgent: true })}>紧急</button></div></FRow>
-        <FRow label="结果要求"><div className="chips"><button type="button" className={`chip ${!f.require_photo ? 'on' : ''}`} onClick={() => setF({ ...f, require_photo: false })}>文字或照片都行</button><button type="button" className={`chip ${f.require_photo ? 'on' : ''}`} onClick={() => setF({ ...f, require_photo: true })}>必须拍照</button></div></FRow>
-        <FRow label="什么时候前做完"><DatePicker value={f.due_on} onChange={(v) => setF({ ...f, due_on: v })} /></FRow>
-        <FRow label="重复"><Choice value={f.repeat} onChange={(k) => setF({ ...f, repeat: k })} options={[['', '只这一次'], ['daily', '每天'], ['weekly', '每周'], ['monthly', '每月']]} /></FRow>
-        {f.repeat && <div className="hint">定期任务：系统{REPEAT[f.repeat]}自动给他生成一条（每天的周日不生成），每条都要他点收到、完成，你确认。</div>}
+        {recurring && <FRow label="多久一次" req><Choice value={f.repeat} onChange={(k) => setF({ ...f, repeat: k })} options={[['daily', '每天'], ['weekly', '每周'], ['monthly', '每月']]} /></FRow>}
+        {!recurring && <FRow label="紧急程度"><Choice value={f.urgent ? 'y' : 'n'} onChange={(v) => setF({ ...f, urgent: v === 'y' })} options={[['n', '普通'], ['y', '紧急']]} /></FRow>}
+        <FRow label="结果要求"><Choice value={f.require_photo ? 'y' : 'n'} onChange={(v) => setF({ ...f, require_photo: v === 'y' })} options={[['n', '文字或照片都行'], ['y', '必须拍照']]} /></FRow>
+        {!recurring && <FRow label="什么时候前做完"><DatePicker value={f.due_on} onChange={(v) => setF({ ...f, due_on: v })} /></FRow>}
+        <div className="hint">{recurring ? `系统${REPEAT[f.repeat] || ''}自动给他生成一条（周日不生成）；没点完成就一直挂在他的待办里，直到做完或你停掉这个定期任务。` : '一下达就必须完成：员工做完交结果，你确认才关闭；不会自己结束。'}</div>
       </div>
     </Modal>
   );
@@ -169,7 +174,7 @@ function DoneModal({ d, onClose }) {
         {plan && <FRow label="付款计划" req><div className="stack" style={{ gap: 6, flex: 1 }}>
           {rows.map((r, i) => <div key={i} className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
             <DatePicker value={r.on} onChange={(v) => setRows(rows.map((x, j) => (j === i ? { ...x, on: v } : x)))} label={r.on ? '' : '哪天付'} />
-            <input className="in" inputMode="numeric" style={{ width: 130 }} placeholder="付多少" value={r.amount} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, amount: e.target.value.replace(/\D/g, '') } : x)))} />
+            <MoneyIn className="in" inputMode="numeric" style={{ width: 130 }} placeholder="付多少" value={r.amount} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, amount: e.target.value.replace(/\D/g, '') } : x)))} />
             {rows.length > 1 && <button type="button" className="btn sm" onClick={() => setRows(rows.filter((_, j) => j !== i))}>去掉</button>}
           </div>)}
           <div><button type="button" className="btn sm" onClick={() => setRows([...rows, { on: '', amount: '' }])}>＋ 分几次付就加一行</button></div>

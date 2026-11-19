@@ -11,6 +11,8 @@ import { DirectiveGate } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
 import { ExportPanel, DocSettings, PermPanel, RulesPanel } from './components/SettingsPanels.jsx';
+import { loadAllOpts } from './components/Opts.jsx';
+import { loadGridAlign } from './lib/gridPrefs.js';
 import { ROLES, can, getThresholds, setThresholds, DEFAULT_THRESHOLDS, setPermOverride } from './lib/domain.js';
 import { t, getLang, setLang as setLangStore, LANGS } from './lib/i18n.js';
 import Dashboard from './pages/Dashboard.jsx';
@@ -119,7 +121,7 @@ export default function App() {
   useEffect(() => { if (org) q(`select value from app.org_settings where org_id = $1 and key = 'nav'`, [org]).then((r) => setNavCfg(r[0]?.value || null)); }, [org, tick]);
   // 权限配置 (11-09): 开局和每次 refresh 读一遍, can() 立即按新配置走
   const [permTick, setPermTick] = useState(0);
-  useEffect(() => { if (org) q(`select value from app.org_settings where org_id = $1 and key = 'perm_matrix'`, [org]).then((r) => { setPermOverride(r[0]?.value || {}); setPermTick((x) => x + 1); }).catch(() => {}); }, [org, tick]);
+  useEffect(() => { if (org) q(`select value from app.org_settings where org_id = $1 and key = 'perm_matrix'`, [org]).then((r) => { setPermOverride(r[0]?.value || {}); setPermTick((x) => x + 1); }).catch(() => {}); Promise.all([loadAllOpts(org), loadGridAlign(org)]).then(() => setPermTick((x) => x + 1)); }, [org, tick]);
   // 侧栏宽度: 拖右边缘 (180–380), 每个人自己的
   const dragSide = (e) => {
     e.preventDefault(); const x0 = e.clientX, w0 = sideW;

@@ -111,23 +111,44 @@ export function ChangeNotices() {
     from app.change_notices n left join app.deals d on d.id = n.deal_id left join app.customers c on c.id = coalesce(d.customer_id, nullif(n.detail->>'customer_id', '')::uuid)
     left join app.members m on m.user_id = n.by_user left join app.employees e on e.id = m.employee_id
     where n.org_id = $1 and n.read_at is null order by n.at desc limit 200`, [org]), [org]);
-  if (role !== 'admin' || !data?.length) return null;
+  // 371 (Frank 11-18): 板块永远在 (没有就显示 0 条); 已阅不是没了, 进「已阅记录」可回看; 已阅必须先勾选 (表头可全选), 没有不选就能点的「全部已阅」
+  const [hist, setHist] = useState(false);
+  const { data: read } = useData(() => (hist ? q(`select n.id, n.kind, n.detail, n.at, n.read_at, n.deal_id, d.biz_no, c.id as customer_id, c.name as customer_name,
+      coalesce(e.short_name, e.full_name) as by_name, coalesce(re.short_name, re.full_name, '中方') as read_name,
+      (select coalesce(p.model, l.req_model) from app.deal_lines l left join app.products p on p.id = l.product_id where l.id::text = n.detail->>'line') as model
+    from app.change_notices n left join app.deals d on d.id = n.deal_id left join app.customers c on c.id = coalesce(d.customer_id, nullif(n.detail->>'customer_id', '')::uuid)
+    left join app.members m on m.user_id = n.by_user left join app.employees e on e.id = m.employee_id
+    left join app.members rm on rm.user_id = n.read_by and rm.org_id = n.org_id left join app.employees re on re.id = rm.employee_id
+    where n.org_id = $1 and n.read_at is not null order by n.read_at desc limit 500`, [org]) : Promise.resolve([])), [org, hist]);
+  if (role !== 'admin') return null;
+  const list = data || [];
   const ack = async (ids) => { try { await call(role, `select app.ack_change_notices($1)`, [ids]); toast(`已阅 ${ids.length} 条`); setSel(new Set()); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
     <div className="card" style={{ marginBottom: 12 }}>
-      <div className="card-h"><h2>变更通知</h2>{data.some((n) => KIND_TONE[n.kind] === 'red') && <Pill tone="red">{data.filter((n) => KIND_TONE[n.kind] === 'red').length} 条大变动</Pill>}<Pill tone="amber">{data.length} 条没看</Pill>
-        <Info>不按正常流程走的事都记在这里：确认后改数量、改价和审批结果、撤回、撤销出库 / 收款、拆单、重复照片…… 数量改动不用审批，只通知；看过点「已阅」。可以拿这些去跟客户、员工对。</Info>
+      <div className="card-h"><h2>变更通知</h2>{list.some((n) => KIND_TONE[n.kind] === 'red') && <Pill tone="red">{list.filter((n) => KIND_TONE[n.kind] === 'red').length} 条大变动</Pill>}<Pill tone={list.length ? 'amber' : 'gray'}>{list.length} 条没看</Pill>
+        <Info>不按正常流程走的事都记在这里：确认后改数量、改价和审批结果、撤回、撤销出库 / 收款、拆单、重复照片…… 数量改动不用审批，只通知。看过的先勾选（表头可以全选）再点「已阅」；已阅的进「已阅记录」，随时能回看。</Info>
         <span className="grow" />
-        <button type="button" className="btn sm" disabled={!sel.size} onClick={() => ack([...sel])}>已阅选中的 {sel.size} 条</button>
-        <button type="button" className="btn sm" onClick={() => ack(data.map((n) => n.id))}>全部已阅</button></div>
-      <Grid id="todo-notices" noTools rows={[...data].sort((a, b) => (KIND_TONE[b.kind] === 'red') - (KIND_TONE[a.kind] === 'red'))} selectable={{ selected: sel, onChange: setSel }} columns={[
+        <button type="button" className="btn sm" disabled={!sel.size} title={sel.size ? '' : '先勾选要标已阅的（表头可以全选）'} onClick={() => ack([...sel])}>已阅选中的 {sel.size} 条</button>
+        <button type="button" className={`btn sm ${hist ? 'primary' : ''}`} onClick={() => setHist(!hist)}>已阅记录</button></div>
+      {!list.length && !hist && <div className="card-b small muted">没有没看的变更通知。</div>}
+      {hist && <Grid id="todo-notices-read" rows={read || []} empty="还没有已阅的通知" maxHeight={420} columns={[
+        { key: 'read_at', label: '什么时候阅的', w: 130, render: (n) => dt(n.read_at) },
+        { key: 'read_name', label: '谁阅的', w: 90 },
+        { key: 'at', label: '什么时候发生', w: 130, render: (n) => dt(n.at) },
+        { key: 'by_name', label: '谁做的', w: 90, value: (n) => n.by_name || '' },
+        { key: 'biz_no', label: '订单', w: 130, render: (n) => (n.deal_id ? <DealLink id={n.deal_id} no={n.biz_no} /> : '—') },
+        { key: 'customer_name', label: '客户', w: 120, render: (n) => (n.customer_id ? <CustLink id={n.customer_id} name={n.customer_name} /> : '') },
+        { key: 'kind', label: '类型', w: 110, value: (n) => EVENT_LABELS[n.kind] || (n.kind === 'dup_photo' ? '重复照片' : n.kind), render: (n) => <Pill tone="gray">{n.kind === 'dup_photo' ? '重复照片' : n.kind === 'price_decided' ? '改价审批' : n.kind === 'payment_appeal' ? '付款申诉' : EVENT_LABELS[n.kind] || n.kind}</Pill> },
+        { key: 'text', label: '改了什么', w: 420, value: noticeText, render: (n) => noticeText(n) },
+      ]} />}
+      {!hist && list.length > 0 && <>      <Grid id="todo-notices" noTools rows={[...list].sort((a, b) => (KIND_TONE[b.kind] === 'red') - (KIND_TONE[a.kind] === 'red'))} selectable={{ selected: sel, onChange: setSel }} columns={[
         { key: 'at', label: '什么时候', w: 120, render: (n) => dt(n.at) },
         { key: 'by_name', label: '谁', w: 110, value: (n) => n.by_name || '', render: (n) => <>{n.by_name || '—'} <span className="small muted">{(n.roles || []).map((r) => ROLES[r]?.label || r).join(' / ')}</span></> },
         { key: 'biz_no', label: '订单', w: 130, render: (n) => (n.deal_id ? <DealLink id={n.deal_id} no={n.biz_no} /> : '—') },
         { key: 'customer_name', label: '客户', w: 120, render: (n) => (n.customer_id ? <CustLink id={n.customer_id} name={n.customer_name} /> : '') },
         { key: 'kind', label: '类型', w: 110, value: (n) => EVENT_LABELS[n.kind] || (n.kind === 'dup_photo' ? '重复照片' : n.kind), render: (n) => <Pill tone={KIND_TONE[n.kind] || 'amber'}>{n.kind === 'dup_photo' ? '重复照片' : n.kind === 'price_decided' ? '改价审批' : n.kind === 'payment_appeal' ? '付款申诉' : EVENT_LABELS[n.kind] || n.kind}</Pill> },
         { key: 'text', label: '改了什么', w: 420, value: noticeText, render: (n) => noticeText(n) },
-      ]} />
+      ]} /></>}
     </div>
   );
 }

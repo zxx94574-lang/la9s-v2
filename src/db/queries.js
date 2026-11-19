@@ -288,7 +288,7 @@ order by last_shipped desc, d.biz_no desc`;
 
 // returns for a customer (reconciliation list)
 export const customerReturns = `
-select r.id, r.rt_no, r.batch_no, r.status, r.amount, r.reason, r.reason_type, r.requested_at, r.decided_at, d.biz_no, d.id as deal_id, d.currency
+select r.id, r.rt_no, r.batch_no, r.status, r.amount, r.reason, r.reason_type, r.reason_label, r.requested_at, r.decided_at, d.biz_no, d.id as deal_id, d.currency
 from app.returns r join app.deals d on d.id = r.deal_id where d.customer_id = $1 order by r.requested_at desc`;
 
 // cancelled = 作废 list (待改 16)

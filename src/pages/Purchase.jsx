@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, DatePicker, Info, Choice } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, DatePicker, Info, Choice, MoneyIn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import ModelPicker from '../components/ModelPicker.jsx';
 import { SimpleForm } from './Fob.jsx';
@@ -113,7 +113,7 @@ function EditPR({ r, onClose }) {
         <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <input className="in" style={{ maxWidth: 200 }} placeholder={f.kind === 'supplies' ? '物资名称（例：工服）' : '没编码的型号'} value={free.item} onChange={(e) => setFree({ ...free, item: e.target.value })} />
           <input className="in" style={{ maxWidth: 180 }} placeholder="规格（例：L 码 蓝色）" value={free.spec} onChange={(e) => setFree({ ...free, spec: e.target.value })} />
-          <input className="in" inputMode="numeric" placeholder="数量" value={free.qty} style={{ maxWidth: 90 }} onChange={(e) => setFree({ ...free, qty: e.target.value.replace(/\D/g, '') })} />
+          <MoneyIn className="in" inputMode="numeric" placeholder="数量" value={free.qty} style={{ maxWidth: 90 }} onChange={(e) => setFree({ ...free, qty: e.target.value.replace(/\D/g, '') })} />
           <button type="button" className="btn sm" disabled={!free.item || !free.qty} onClick={() => { setLines((x) => [...x, { ...free }]); setFree({ item: '', spec: '', qty: '' }); }}>加</button></div>
       </div>
     </Modal>

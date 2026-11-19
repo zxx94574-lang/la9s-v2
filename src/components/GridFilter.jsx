@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { q, call } from '../db/client.js';
-import { useApp, useData, SortList } from './ui.jsx';
+import { useApp, useData, SortList, usePopBus, Assumed } from './ui.jsx';
 import { friendlyError } from '../lib/format.js';
 
 export const OPS_PICK = [['in', '等于（其中之一）'], ['not_in', '不等于'], ['contains', '包含'], ['not_contains', '不包含'], ['empty', '为空'], ['not_empty', '不为空']];
@@ -41,7 +41,7 @@ export function ValuePick({ options, value = [], onChange, placeholder = '选值
 }
 
 export function FilterPanel({ at, cols, isNum, optionsOf, conds, setConds, any, setAny, onClose, schemes }) {
-  const ref = usePop(true, onClose);
+  const ref = usePop(true, onClose); usePopBus(true, onClose);
   const upd = (id, patch) => setConds(conds.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   const colOf = (k) => cols.find((c) => c.key === k);
   return createPortal(
@@ -67,21 +67,21 @@ export function Schemes({ id, current, onApply }) {
   const { org, role, toast, refresh } = useApp() || {};
   const key = `la9s.gs.${role}.${id}`;
   const [mine, setMine] = useState(() => { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } });
-  const [open, setOpen] = useState(false); const [name, setName] = useState(''); const [ren, setRen] = useState(null); const [at, setAt] = useState(null); const btn = useRef();
-  const ref = usePop(open, () => setOpen(false));
-  const shared = useData(async () => { if (!org) return []; const [r] = await q(`select value from app.org_settings where org_id = $1 and key = $2`, [org, 'filter_schemes:' + id]); return Array.isArray(r?.value) ? r.value.filter((s) => s.conds) : []; }, [org, id]).data || [];
+  const [open, setOpen] = useState(false); const [name, setName] = useState(''); const [ren, setRen] = useState(null); const [del, setDel] = useState(null); const [at, setAt] = useState(null); const btn = useRef();
+  const ref = usePop(open, () => setOpen(false)); usePopBus(open, () => setOpen(false));
+  const shared = useData(async () => { if (!org) return []; const [r] = await q(`select value from app.org_settings where org_id = $1 and key = $2`, [org, 'filter_schemes:' + id]); return Array.isArray(r?.value) ? r.value.filter((s) => s.conds || s.groups) : []; }, [org, id]).data || [];
   const save = (next) => { setMine(next); try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* 存不了就只在这次有效 */ } };
   const sorted = [...mine].sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0));
-  const share = async (s, on) => { try { const next = on ? [...shared.filter((x) => x.name !== s.name), { name: s.name, conds: s.conds, any: s.any, q: s.q }] : shared.filter((x) => x.name !== s.name); await call(role, `select app.set_org_setting($1,$2,$3)`, [org, 'filter_schemes:' + id, JSON.stringify(next)]); toast(on ? `「${s.name}」已推给所有人` : `已取消共用「${s.name}」`); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  const share = async (s, on) => { try { const next = on ? [...shared.filter((x) => x.name !== s.name), { name: s.name, conds: s.conds, any: s.any, q: s.q, groups: s.groups || [] }] : shared.filter((x) => x.name !== s.name); await call(role, `select app.set_org_setting($1,$2,$3)`, [org, 'filter_schemes:' + id, JSON.stringify(next)]); toast(on ? `「${s.name}」已推给所有人` : `已取消共用「${s.name}」`); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
   const show = () => { const r = btn.current.getBoundingClientRect(); setAt({ left: Math.max(8, Math.min(r.left, window.innerWidth - 348)), top: r.bottom + 4 }); setOpen(true); };
-  const has = (current.conds || []).some(condReady) || current.q;
+  const has = (current.conds || []).some(condReady) || current.q || (current.groups || []).length;
   return (<>
     <button type="button" ref={btn} className="btn sm gf-keep" onClick={() => (open ? setOpen(false) : show())}>☆ 筛选方案{mine.length + shared.length ? `（${mine.length + shared.length}）` : ''}</button>
     {open && at && createPortal(
       <div className="menu gf-schemes gf-keep" ref={ref} style={{ position: 'fixed', left: at.left, top: at.top, width: 340, zIndex: 430 }}>
         {shared.length > 0 && <><div className="gf-sub">公司共用</div>{shared.map((s) => <div key={'s' + s.name} className="row" style={{ gap: 4 }}><button type="button" className="mi grow" onClick={() => { onApply(s); setOpen(false); }}><span>🏢 {s.name}</span></button>{role === 'admin' && <button type="button" className="btn sm ghost" title="取消共用" onClick={() => share(s, false)}>✕</button>}</div>)}</>}
         <div className="gf-sub">我的方案 <span className="muted">（拖动调顺序）</span></div>
-        {!mine.length && <div className="hint" style={{ padding: 8 }}>还没有。先把筛选条件选好，再在下面起个名字存起来。</div>}
+        {!mine.length && <div className="hint" style={{ padding: 8 }}>还没有。先把筛选条件 / 分组选好，再在下面起个名字存起来；切换方案时筛选和分组一起恢复。</div>}
         <SortList items={sorted} keyOf={(s) => s.name} onChange={(next) => save(next)} render={(s) => (
           <div className="row" style={{ gap: 2, flex: 1, minWidth: 0 }}>
             {ren === s.name ? <input className="in sm" autoFocus defaultValue={s.name} style={{ flex: 1 }} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== s.name) save(mine.map((x) => (x.name === s.name ? { ...x, name: v } : x))); setRen(null); }} onKeyDown={(e) => e.key === 'Enter' && e.target.blur()} />
@@ -89,11 +89,35 @@ export function Schemes({ id, current, onApply }) {
             <button type="button" className="btn sm ghost" title={s.pin ? '取消置顶' : '置顶'} onClick={() => save(mine.map((x) => (x.name === s.name ? { ...x, pin: !x.pin } : x)))}>{s.pin ? '📌' : '📍'}</button>
             <button type="button" className="btn sm ghost" title="改名" onClick={() => setRen(s.name)}>✎</button>
             {role === 'admin' && <button type="button" className="btn sm ghost" title="推给所有人（公司共用）" onClick={() => share(s, true)}>🏢</button>}
-            <button type="button" className="btn sm ghost" title="删除" onClick={() => save(mine.filter((x) => x.name !== s.name))}>🗑</button>
+            <button type="button" className="btn sm ghost" title="删除（删了找不回来，要再点一次确认）" onClick={() => (del === s.name ? (save(mine.filter((x) => x.name !== s.name)), setDel(null)) : setDel(s.name))}>{del === s.name ? <b style={{ color: '#b42318' }}>确认删？</b> : '🗑'}</button>
           </div>)} />
         <div className="row" style={{ gap: 6, padding: '8px 6px 4px', borderTop: '1px solid var(--line-2)' }}>
-          <input className="in sm" style={{ flex: 1 }} placeholder={has ? '给现在的筛选起个名字' : '先选好筛选条件'} disabled={!has} value={name} onChange={(e) => setName(e.target.value)} />
-          <button type="button" className="btn sm primary" disabled={!has || !name.trim()} onClick={() => { save([...mine.filter((x) => x.name !== name.trim()), { name: name.trim(), conds: current.conds.filter(condReady), any: current.any, q: current.q }]); setName(''); toast?.(`已存成方案「${name.trim()}」`); }}>存成方案</button></div>
+          <input className="in sm" style={{ flex: 1 }} placeholder={has ? '给现在的筛选 / 分组起个名字' : '先选好筛选条件或分组'} disabled={!has} value={name} onChange={(e) => setName(e.target.value)} />
+          <button type="button" className="btn sm primary" disabled={!has || !name.trim()} onClick={() => { save([...mine.filter((x) => x.name !== name.trim()), { name: name.trim(), conds: (current.conds || []).filter(condReady), any: current.any, q: current.q, groups: current.groups || [] }]); setName(''); toast?.(`已存成方案「${name.trim()}」`); }}>存成方案</button></div>
       </div>, document.body)}
   </>);
+}
+
+
+// 362 (Frank 11-18): 分组面板 —— 和「设置筛选条件」同一种样子: ＋ 添加字段 → 选字段 → 一行一个字段 (多个 = 多级分组), 可删、可拖动调顺序、可选排序方向.
+export const GROUP_MAX = 3;
+export function GroupPanel({ at, cols, groups, setGroups, onClose, schemes }) {
+  const ref = usePop(true, onClose); usePopBus(true, onClose);
+  const used = new Set(groups.map((g) => g.key));
+  const upd = (i, patch) => setGroups(groups.map((g, j) => (j === i ? { ...g, ...patch } : g)));
+  return createPortal(
+    <div className="menu gf-panel gf-keep" ref={ref} style={{ position: 'fixed', left: at.left, top: at.top, zIndex: 400, maxHeight: `calc(100vh - ${at.top + 12}px)` }} onClick={(e) => e.stopPropagation()}>
+      <div className="gf-head"><b>设置分组</b><Assumed>最多 {GROUP_MAX} 级（再多表格就看不清了）；每一级可以选从小到大还是从大到小排。</Assumed><span className="grow" /><button type="button" className="btn sm ghost" onClick={onClose}>✕</button></div>
+      <div className="gf-mode">按下面的字段一级一级分组，上面的先分</div>
+      {groups.length ? <SortList items={groups} keyOf={(g) => g.key || 'new'} onChange={setGroups} render={(g, i) => (
+        <div className="gf-row grp">
+          <select className="in sm gf-col" value={g.key} onChange={(e) => upd(i, { key: e.target.value })}>
+            <option value="">选字段…</option>{cols.filter((x) => x.key === g.key || !used.has(x.key)).map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}</select>
+          <select className="in sm gf-op" value={g.dir || 'asc'} onChange={(e) => upd(i, { dir: e.target.value })}><option value="asc">从小到大 / A→Z</option><option value="desc">从大到小 / Z→A</option></select>
+          <span className="small muted">{i === 0 ? '第一级' : i === 1 ? '第二级' : '第三级'}</span>
+          <button type="button" className="gf-x" title="去掉这一级分组" onClick={() => setGroups(groups.filter((_, j) => j !== i))}>✕</button>
+        </div>)} /> : <div className="hint">现在没有分组。点「＋ 添加字段」选一列，表格就按这一列分成一组一组，组头显示行数和小计。</div>}
+      <div className="gf-foot"><button type="button" className="btn sm" disabled={groups.length >= GROUP_MAX || groups.some((g) => !g.key)} onClick={() => setGroups([...groups, { key: '', dir: 'asc' }])}>＋ 添加字段</button>
+        {groups.length > 0 && <button type="button" className="btn sm ghost" onClick={() => setGroups([])}>不分组</button>}<span className="grow" />{schemes}</div>
+    </div>, document.body);
 }
