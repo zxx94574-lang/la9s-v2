@@ -61,7 +61,8 @@ select d.id, d.biz_no, d.quote_no, d.pick_no, d.so_no, d.kind, d.status, d.curre
   (select max(e.at) from app.deal_events e where e.deal_id = d.id and e.action = 'sales_order_created') as so_sent_at,
   (select count(*) from app.deal_lines hl join app.stock_holds h on h.stock_item_id = hl.stock_item_id and h.status = 'active' and h.whole where hl.deal_id = d.id)::int as frozen_n,
   (select coalesce(sum(rd.amount), 0) from app.receipt_discrepancies rd where rd.deal_id = d.id and rd.decision = 'credit') as disc_credit,
-  (select short_name from app.employees oe where oe.id = d.owner_employee_id) as owner_name
+  (select short_name from app.employees oe where oe.id = d.owner_employee_id) as owner_name,
+  d.pick_assignee_employee_id, (select short_name from app.employees ae where ae.id = d.pick_assignee_employee_id) as pick_assignee_name
 from app.deals d
 join app.customers c on c.id = d.customer_id
 join app.v_deal_totals t on t.deal_id = d.id

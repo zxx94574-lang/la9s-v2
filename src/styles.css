@@ -1331,3 +1331,49 @@ tr.grp-row.d1 > td { background: #f7f9fc; } tr.grp-row.d2 > td { background: #fb
 .acc-block-t { display: flex; align-items: baseline; gap: 10px; font-size: 13px; font-weight: 650; color: var(--brand); margin: 2px 2px 6px; flex-wrap: wrap; }
 .acc-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 10px; }
 .acc-card.dragging { opacity: .45; }
+/* 398 / 399: 打勾找货 (手机一只手) */
+.assign-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--line-2); background: #f6f9fc; }
+.assign-bar.todo { background: var(--red-bg); }
+.ticks { padding: 10px 12px 14px; }
+.ticks-top { position: sticky; top: var(--ticks-top, 0px); z-index: 5; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fff; padding: 8px 2px; border-bottom: 1px solid var(--line-2); margin-bottom: 8px; }
+.ticks-prog { flex: 1 1 100%; height: 6px; border-radius: 99px; background: #e8edf5; overflow: hidden; }
+.ticks-prog i { display: block; height: 100%; background: #16a34a; transition: width .25s ease; }
+.tick-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: 0 8px; border: 1.5px solid var(--line); border-radius: 12px; margin-bottom: 8px; background: #fff; transition: background .2s, border-color .2s, opacity .2s; }
+.tick-row.done { background: #f0fdf4; border-color: #86efac; }
+.tick-row.busy { opacity: .6; }
+.tick-main { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 60px; padding: 8px 6px 8px 12px; border: 0; background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; border-radius: 12px; min-width: 0; }
+.tick-main:active { transform: scale(.99); }
+.tick-box { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #c3cad6; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; color: #fff; }
+.tick-row.done .tick-box { background: #16a34a; border-color: #16a34a; }
+.tick-info { display: flex; flex-direction: column; min-width: 0; }
+.tick-model { font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tick-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tick-bin { display: flex; flex-direction: column; align-items: flex-end; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.tick-bin b { font-size: 16px; color: var(--brand); }
+.tick-qty { display: inline-flex; align-items: center; gap: 4px; padding: 6px 8px 6px 0; }
+.tick-qty .step { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-size: 22px; font-weight: 700; color: var(--brand); cursor: pointer; }
+.tick-qty .step:disabled { color: #c3cad6; cursor: default; }
+.tick-qty .num { min-width: 64px; height: 44px; border: 0; background: none; font: inherit; font-size: 20px; font-weight: 800; cursor: pointer; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.tick-qty .num small { font-size: 11px; font-weight: 500; color: var(--muted); }
+.tick-row.short .tick-qty .num { color: #b45309; }
+.tick-why { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 12px 10px; }
+.tick-why .chip { min-height: 38px; }
+.ticks-foot { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.ticks-submit { min-height: 52px; margin-left: auto; }
+@media (max-width: 760px) {
+  .tick-row { grid-template-columns: 1fr; }
+  .tick-qty { justify-content: flex-end; padding: 0 10px 8px; }
+  .ticks-foot { position: sticky; bottom: 0; background: #fff; margin: 12px -12px -14px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); box-shadow: 0 -6px 16px #0f2a5214; z-index: 6; }
+  .ticks-submit { width: 100%; }
+}
+.kv-row { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 13px; }
+.tick-qty .step { flex: 0 0 44px; padding: 0; }
+.split-row { cursor: default; } .split-row input.num-in { width: 84px; height: auto; }
+/* 403 / 404: 复检数量不对的行 */
+.fix-list { display: flex; flex-direction: column; gap: 8px; }
+.fix-row { border: 1.5px solid #f3b6ae; border-radius: 10px; padding: 8px 10px; background: #fff8f7; }
+.fix-row.ok { border-color: #b7e3c6; background: #f6fcf8; }
+.fix-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.fix-b { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tick-qty .step { width: 46px !important; min-width: 46px; max-width: 46px; flex: 0 0 46px; }
+@media (max-width: 760px) { .ticks-foot { bottom: calc(62px + env(safe-area-inset-bottom)); } .tick-qty .step { width: 52px !important; min-width: 52px; max-width: 52px; flex-basis: 52px; height: 48px; } .tick-qty .num { min-width: 84px; } }

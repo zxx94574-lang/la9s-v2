@@ -202,8 +202,8 @@ export function stuckOf(d) {
     return '① 待联系客户确认';
   }
   if (s === 'hotline_ok') return '② 待下推找货';
-  if (s === 'picking') return '② 找货 · 初检中';
-  if (s === 'picked') return '③ 待出销售订单';
+  if (s === 'picking') return d.pick_assignee_employee_id ? `② 找货中${d.pick_assignee_name ? ` · ${d.pick_assignee_name}` : ''}` : '② 等安排找货';
+  if (s === 'picked') return '③ 待出销售订单（老单）';
   if (s === 'ordered') return '③ 等客户确认销售单';
   if (s === 'confirmed') return '④ 待复检打包';
   if (s === 'reviewed') return '④ 待出库';

@@ -1,6 +1,7 @@
 // 客户档案 (Frank 2026-10-29): 一个客户一张档案 —— 正式 / 潜客 / 回收 都在这里.
 // 欠款上限和账期只预警不拦截 (THOMAS 这类有协议的大客户照常出货); 档位、正式编码、上限、账期只中方改.
 import { TaskModal, CustomerTasks } from '../components/Tasks.jsx';
+import { ContactsCard } from '../components/Contacts.jsx';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { sumMargin, MarginPill, MarginKpis, useMarginRules } from '../components/Margin.jsx';
 import { normPhone, fmtPhone } from '../lib/phone.js';
@@ -8,7 +9,7 @@ import { ConfirmEdit, HistoryBlock } from '../components/ProductDrawer.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker , PhoneInput, phoneValid, Info, Choice, MoneyIn } from '../components/ui.jsx';
+import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker , PhoneInput, phoneValid, Info, Choice, MoneyIn, Assumed } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { CallModal, ProspectModal, ResultPill, KIND, custLabel } from '../components/Crm.jsx';
 import { AccountPanel, ACC } from '../components/Account.jsx';
@@ -157,6 +158,8 @@ export function CustomerDrawer({ id, onClose }) {
             <button type="button" className="btn sm" onClick={() => setEdit('info')}>✎ 修改档案（收货人 / 电话 / 城市 / 地址{role === 'admin' ? ' / 档位' : ''}）</button>
           </div>)}
         <AccountPanel customer={c} />
+        <ContactsCard customerId={c.id} />
+        <CustSincerity customerId={c.id} />
         {role === 'admin' && c.status === 'active' && <CustMargin customerId={c.id} />}
         {role === 'admin' && <CustHistory c={c} />}
         <h3 style={{ margin: '8px 0 0' }}>联系记录 <span className="muted small">{contacts.length} 次</span></h3>
@@ -317,6 +320,48 @@ function CustHistory({ c }) {
   const { org, role, tick } = useApp();
   const { data } = useData(() => call(role, `select * from app.archive_history($1,'customer',$2)`, [org, c.id]).catch(() => []), [org, role, c.id, tick]);
   return <HistoryBlock hist={data || []} title="修改记录" />;
+}
+
+// 396 (Frank 11-18): 下单诚意 —— 凡是「客户不要了」的动作都汇在这里: 作废的单 (原因)、拆出去以后没再要的、确认后又改少的、退货. 和实际成交放一起看.
+function CustSincerity({ customerId }) {
+  const { tick, org } = useApp();
+  const [months, setMonths] = useState(3);
+  const { data } = useData(async () => {
+    const since = new Date(); since.setMonth(since.getMonth() - months); const from = since.toISOString().slice(0, 10);
+    const [x] = await q(`select
+        count(*) filter (where d.kind = 'normal')::int as n_all,
+        count(*) filter (where d.status = 'cancelled')::int as n_cancel,
+        count(*) filter (where d.status = 'cancelled' and d.split_from is not null)::int as n_split_cancel,
+        count(*) filter (where d.status in ('ordered','confirmed','reviewed','partial','shipped'))::int as n_done,
+        coalesce(sum((select sum(l.qty_req) from app.deal_lines l where l.deal_id = d.id)) filter (where d.status = 'cancelled'), 0)::int as q_cancel,
+        coalesce(sum((select sum(l.qty_req * l.unit_price) from app.deal_lines l where l.deal_id = d.id)) filter (where d.status = 'cancelled'), 0) as amt_cancel
+      from app.deals d where d.customer_id = $1 and d.created_at >= $2::date`, [customerId, from]);
+    const why = await q(`select coalesce(nullif(e.detail->>'reason', ''), '没写原因') as reason, count(*)::int as n from app.deal_events e join app.deals d on d.id = e.deal_id
+      where d.customer_id = $1 and e.action = 'cancelled' and e.at >= $2::date and d.status = 'cancelled' group by 1 order by 2 desc`, [customerId, from]);
+    const [y] = await q(`select count(*) filter (where e.action = 'qty_changed' and (e.detail->>'to')::numeric < (e.detail->>'from')::numeric)::int as n_less,
+        (select count(*) from app.returns r join app.deals d2 on d2.id = r.deal_id where d2.customer_id = $1 and r.requested_at >= $2::date)::int as n_ret
+      from app.deal_events e join app.deals d on d.id = e.deal_id where d.customer_id = $1 and e.at >= $2::date`, [customerId, from]);
+    const [r] = await q(`select value from app.org_settings where org_id = $1 and key = 'sincerity_rules'`, [org]);
+    return { ...x, ...y, why, warn: Number(r?.value?.warn_pct ?? 30), bad: Number(r?.value?.bad_pct ?? 50) };
+  }, [customerId, months, tick, org]);
+  if (!data) return null;
+  const pct = data.n_all ? Math.round((data.n_cancel / data.n_all) * 100) : 0;
+  const tone = data.n_all >= 3 && pct >= data.bad ? 'red' : data.n_all >= 3 && pct >= data.warn ? 'amber' : 'green';
+  return (
+    <div className="pd-sec">
+      <div className="pd-h">下单诚意 <span className="small muted" style={{ fontWeight: 400 }}>他下的单里有多少最后没要</span>
+        <Assumed>作废率到 30% 标黄、到 50% 标红（下了 3 张单以上才标）；这两条线以后可以放进规则参数里调。只是给你判断用，不自动限制他下单。</Assumed>
+        <span className="grow" /><Choice size="sm" value={months} onChange={setMonths} options={[[1, '近 1 个月'], [3, '近 3 个月'], [12, '近 1 年']]} /></div>
+      <div className="kv-row">
+        <span>下单 <b>{data.n_all}</b> 张</span><span>成了 <b>{data.n_done}</b> 张</span>
+        <span>作废 <b>{data.n_cancel}</b> 张{data.n_cancel > 0 ? `（${qty(data.q_cancel)} 片 · ${money(data.amt_cancel)}）` : ''}</span>
+        <span className={`pill ${tone}`}>作废率 {pct}%</span>
+        {data.n_split_cancel > 0 && <span>拆单后没再要 <b>{data.n_split_cancel}</b> 张</span>}
+        {data.n_less > 0 && <span>确认后又改少 <b>{data.n_less}</b> 次</span>}
+        {data.n_ret > 0 && <span>退货 <b>{data.n_ret}</b> 次</span>}
+      </div>
+      {data.why.length > 0 && <div className="small muted" style={{ marginTop: 4 }}>作废原因：{data.why.map((w) => `${w.reason} ×${w.n}`).join('、')}</div>}
+    </div>);
 }
 
 // 328: 这个客户的毛利 (只中方): 全部 + 按种类

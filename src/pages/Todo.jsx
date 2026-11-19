@@ -14,7 +14,7 @@ import { money, dt, dDate, today, friendlyError } from '../lib/format.js';
 const NEXT = {
   quoted: { roles: ['hotline', 'manager'], what: '联系客户确认，确认后下推找货' },
   hotline_ok: { roles: ['manager', 'hotline'], what: '客户已确认，下推找货（预占库存）' },
-  picking: { roles: ['picker'], what: '按找货单找货（只集中放一堆，不打包），拍照，填实际供货，提交初检' },
+  picking: { roles: ['picker', 'manager', 'sales'], what: '主管先派人；被派的人按找货单逐行打勾（只集中放一堆，不打包），拍照提交，销售订单自动生成' },
   picked: { roles: ['manager'], what: '生成销售订单（定价）' },
   ordered: { roles: ['hotline'], what: '把销售订单发客户，确认后点「客户确认」' },
   confirmed: { roles: ['manager'], what: '复检抽检 + 打包，上传打包照片' },
@@ -74,6 +74,7 @@ export function todoLevel(d) {
   if (d.status === 'ordered' && d.so_sent_at && Date.now() - new Date(d.so_sent_at).getTime() > 864e5) return 'red';
   if (Number(d.appeal_n || 0) > 0 || Number(d.price_req_n || 0) > 0) return 'red';   // 付款申诉 / 改价等中方批 = 卡单
   if (quoteLate(d)) return 'red';   // 报价建好超过 5 分钟热线还没点开
+  if (d.status === 'picking' && !d.pick_assignee_employee_id) return 'red';   // 398: 等主管安排谁去找货 = 卡单
   if (Number(d.busy_n) >= 3 && ['quoted', 'hotline_ok'].includes(d.status)) return 'green';     // 联系 3 次都忙 = 这单没那么重要
   if (d.want_on && dDate(d.want_on) > td && !['shipped', 'cancelled'].includes(d.status)) return 'green';   // 客户约了明天以后
   if (d.status === 'confirmed' && d.planned_ship_date && dDate(d.planned_ship_date) > td) return 'green';   // 约定发货日还没到
