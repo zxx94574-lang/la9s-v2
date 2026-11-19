@@ -1,3 +1,4 @@
+import { RuleGear } from '../components/Rules.jsx';
 import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 import React, { useMemo, useState } from 'react';
 import { sumMargin, MarginPill, useMarginRules } from '../components/Margin.jsx';
@@ -72,7 +73,7 @@ export default function Orders() {
     { key: 'light', label: '订单状态', w: 96, value: (d) => LIGHT_LABEL[dealLight(d)], render: (d) => <Light v={dealLight(d)} /> },
     { key: 'stuck', label: '卡在哪一步', w: 170, value: (d) => stuckOf(d), render: (d) => <span className="small">{stuckOf(d)}</span> },
     { key: 'odd', label: '异价', w: 70, hidden: true, value: (d) => (d.odd_price ? '异价单' : '正常') },
-    { key: 'status', label: '单据阶段', w: 150, value: (d) => (d.status === 'quoted' && d.tier_pending ? '等中方定档' : STATUS[d.status].label) + (d.odd_price ? ' 异价单' : ''), render: (d) => <>{d.status === 'quoted' && d.tier_pending ? <Pill tone="red">等中方定档</Pill> : <Pill tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Pill>}{d.odd_price && <Pill tone="amber" title="有行的单价偏离档位价超过设定比例（设置 → 规则参数）。原因和中方备注在操作记录里。">异价单</Pill>}{Number(d.price_req_n) > 0 && <Pill tone="red">改价待批</Pill>}{d.approval === 'pending' && d.status === 'quoted' && <Pill tone="amber">等审批</Pill>}{d.approval === 'rejected' && <Pill tone="red">没批</Pill>}
+    { key: 'status', label: '单据阶段', w: 150, value: (d) => (d.status === 'quoted' && d.tier_pending ? '等中方定档' : STATUS[d.status].label) + (d.odd_price ? ' 异价单' : ''), render: (d) => <>{d.status === 'quoted' && d.tier_pending ? <Pill tone="red">等中方定档</Pill> : <Pill tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Pill>}{d.odd_price && <Pill tone="amber" title="有行的单价偏离档位价超过设定比例（比例在「物料与定价」标题旁 ⚙ 里改）。原因和中方备注在操作记录里。">异价单</Pill>}{Number(d.price_req_n) > 0 && <Pill tone="red">改价待批</Pill>}{d.approval === 'pending' && d.status === 'quoted' && <Pill tone="amber">等审批</Pill>}{d.approval === 'rejected' && <Pill tone="red">没批</Pill>}
       {d.planned_ship_date && ['confirmed', 'reviewed', 'partial'].includes(d.status) && dDate(d.planned_ship_date) <= today() && <Pill tone={dDate(d.planned_ship_date) < today() ? 'red' : 'amber'}>{dDate(d.planned_ship_date) < today() ? '过期未出库' : '今天该出库'}</Pill>}</> },
     { key: 'cats', label: '种类', w: 130, value: (d) => catsOf.get(d.id) || '', render: (d) => <span className="small">{catsOf.get(d.id) || ''}</span> },
     { key: 'models', label: '机型', w: 220, value: (d) => d.models || '', render: (d) => <span className="small" title={d.models || ''}>{d.models || ''}</span> },
@@ -129,6 +130,7 @@ export default function Orders() {
         <div className="row light-bar">
           {[['', '全部'], ['active', '进行中'], ['draft', '草稿'], ['done', '已完成'], ['cancelled', '已取消']].map(([k, l]) => (
             <button type="button" key={k || 'all'} className={`chip ${light === k ? 'on' : ''}`} onClick={() => setLight(k)}>{k === 'draft' ? <span className="pill amber">草稿</span> : k ? <Light v={k} /> : l} <b>{k === 'draft' ? drafts.length : k ? counts[k] : (data || []).length}</b></button>))}
+          <RuleGear anchor="orders-drafts" title="草稿规则" ids={['draft.lines', 'draft.days']} />
         </div>
         {light === 'draft' ? <DraftList rows={drafts} /> : mode === 'models' ? (
           <>

@@ -2,6 +2,7 @@
 // ① 已出货: 任意组合细分 (档位 / 种类 / 型号 / 客户 / 销售员 / 月份 / 本地 · FOB), 下面明细表的筛选会同时作用到上面的汇总和交叉表
 // ② 库存毛利: 四个档位各算一列 + 按最近 3 个月各档实际出货占比加权 (数据不够就写「数据不足」, 不硬凑)
 // ③ 和金蝶对: 粘贴金蝶导出的出库成本 / 毛利表, 按编码和我们的数并排, 差额一眼看出来
+import { RuleGear } from '../components/Rules.jsx';
 import React, { useMemo, useState } from 'react';
 import { call } from '../db/client.js';
 import { useApp, useData, DatePicker, Info, MoneyIn } from '../components/ui.jsx';
@@ -33,7 +34,7 @@ export default function MarginPage() {
   if (role !== 'admin') return <div className="card"><div className="card-b muted">只有中方能看毛利。</div></div>;
   return (
     <>
-      <div className="pagehead"><div><div className="eyebrow">Marge brute</div><h1 tabIndex={0}>毛利分析</h1>
+      <div className="pagehead"><div><div className="eyebrow">Marge brute</div><h1 tabIndex={0}>毛利分析 <RuleGear anchor="margin-rules" title="毛利 / 亏钱规则" ids={['margin.low', 'loss.on', 'loss.nocost']} /></h1>
         <Info>只有中方看得到。成本在出库那一刻锁定（当时的到岸成本，含物流）；退货、收货差异冲减、抹零 / 核销、价格调整、我们出的运费、我们承担的收款手续费都扣掉。毛利率 = 利润 ÷ 销售额，所有汇总都是加权（先把钱加起来再除），没有成本的行不算进毛利率。</Info></div></div>
       <div className="tabs" style={{ marginBottom: 12 }}>
         {[['sold', '已出货毛利'], ['stock', '库存毛利'], ['kd', '和金蝶对毛利']].map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}

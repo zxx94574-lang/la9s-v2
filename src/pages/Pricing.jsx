@@ -1,6 +1,7 @@
 // 物料与定价 (中方): the 飞书 Material Information formula, kept in the system.
 // 到岸成本 = round(人民币成本 ÷ 汇率 + 运费, 百位); S / Wholesale / Retail / Repair = 到岸 + 各档 FEE.
 // Edit cost / freight / FEE in the grid (columns highlighted), save → prices recomputed; a locked tier price (一口价) is never overwritten.
+import { RuleGear } from '../components/Rules.jsx';
 import React, { useMemo, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -85,7 +86,7 @@ export default function Pricing() {
   const missing = data.rows.filter((r) => r.rmb_cost == null).length;
   return (
     <>
-      <div className="pagehead"><div><div className="eyebrow">Articles & prix</div><h1>物料与定价</h1>
+      <div className="pagehead"><div><div className="eyebrow">Articles & prix</div><h1>物料与定价 <RuleGear anchor="pricing-rules" title="定价规则" ids={['price.odd', 'price.cny']} /></h1>
         <div className="sub">规则照飞书 Material Information：到岸成本 = 人民币成本 ÷ {rate} + 运费，取整到 {step}；四档价 = 到岸成本 + 各档 FEE。改成本、运费、FEE 后保存，价格自动重算；锁定的一口价不跟公式走。</div></div>
         {admin && <button type="button" className="btn" onClick={() => setRates({ rate: String(s.rmb_per_xof), fob: String(s.rmb_per_xof_fob), round: String(s.round_to), usd: String(s.xof_per_usd ?? 600) })}>汇率与取整</button>}
       </div>

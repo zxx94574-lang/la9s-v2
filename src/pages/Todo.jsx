@@ -1,6 +1,7 @@
 import { PurchaseTodo } from './Po.jsx';
+import { LayoutGrid, setLayoutEdit, useLayoutEdit } from '../components/Layout.jsx';
 import { DealLink, CustLink } from '../components/Archives.jsx';
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, Info } from '../components/ui.jsx';
@@ -122,6 +123,7 @@ export function OverdueBar({ orders, go, compact }) {
 export default function Todo() {
   const { org, role, go, toast, refresh, tick } = useApp();
   const { data } = useData(() => q(Q.orders, [org, '2000-01-01', '2999-12-31']), [org, tick]);
+  const layEdit = useLayoutEdit();
   // 非订单的待办: 今天要回访的客户 (热线 / 销售), 待认领到账 + 待批交款支出 (中方)
   const { data: extra } = useData(async () => {
     const [[f]] = await Promise.all([q(`select
@@ -168,32 +170,17 @@ export default function Todo() {
   for (const d of list) groups[todoLevel(d)].push(d);
   const urgent = async (e, d) => { e.stopPropagation(); try { await call(role, `select app.set_deal_urgent($1,$2)`, [d.id, !d.urgent]); toast(d.urgent ? '已取消紧急' : '已提成紧急'); refresh(); } catch (er) { toast(friendlyError(er), 'err'); } };
   const SEC = [['red', '紧急', '超过 24 小时没发货、客户今天要货、中方标了紧急的'], ['amber', '进行中', '正常在走、今天该推进的'], ['green', '不急', '还没到日子的、等客户付款的、联系 3 次客户都忙的']];
-  return (
-    <>
-      <div className="pagehead"><div><div className="eyebrow">Mes tâches</div><h1 tabIndex={0}>我的待办</h1>
-        <div className="sub">当前岗位：<b>{ROLES[role].label}</b>。下推一步，单子就自动出现在下一个人的待办里。</div></div></div>
-      <AnomalyHub />
-      <Always title="答应付款的日子过了，钱没到"><PlanTodo /></Always>
-      <Always title="公司收款账户：压款超期"><PublicHeld urgentOnly /></Always>
-      <Always title="任务总表"><TaskBoard /></Always>
-      <Always title="钱的事（付款申诉 / 员工代收超期 / 账对不上）"><MoneyUrgent /></Always>
-      <Always title="询单"><InquiryTodo /></Always>
-      <AddonTodo />
-      <DirectiveBoard />
-      {['admin', 'manager', 'sales_manager'].includes(role) && <Always title="员工上报的问题"><IssueList /></Always>}
-      <ChangeNotices />
-      {['admin', 'manager', 'cn_support'].includes(role) && <Always title="采购与到货"><PurchaseTodo /></Always>}
-      {['admin', 'manager'].includes(role) && <Always title="冻结的库存"><HoldsCard compact /></Always>}
-      {role === 'admin' && <Always title="客户档位要核对"><TierCheck rows={tierRows} /></Always>}
-      {role === 'admin' && <Always title="客户拿货量变化"><VolumeShift /></Always>}
-      {['admin', 'manager', 'sales_manager', 'hotline', 'finance'].includes(role) && <Always title="退货没走完"><OpenReturns /></Always>}
-      {extras.length > 0 && <div className="card" style={{ marginBottom: 12 }}>{extras.map(([to, text]) => (
-        <div key={text} className="row between" style={{ padding: '12px 18px', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }} onClick={() => go(to)}><b>{text}</b><span className="muted">›</span></div>))}</div>}
-      {!data ? <div className="card"><div className="empty">加载中…</div></div> : list.length === 0 ? <div className="card"><div className="empty">没有待办 ✓<br /><span className="small">右上角可以切换岗位，看其他人的待办</span></div></div> :
-        SEC.map(([k, label, tip]) => (
-          <div key={k} className={`card todo-sec todo-${k}`} style={{ marginBottom: 12 }}>
+  // 11-19 Frank: 待办和经营总览一样能排序 (中方「⚙ 整理待办」: 拖顺序 / 宽度 / 隐藏, 全员一致); 没事的板块自动沉到最下面、两个一排
+  const admin = role === 'admin';
+  const blocks = [
+    { id: 'anomaly', title: '异常的单', span: 12, render: () => <AnomalyHub /> },
+    { id: 'deals', title: '要推进的单（紧急 / 进行中 / 不急，没走完的退货算紧急）', span: 12, render: () => (
+      !data ? <div className="card"><div className="empty">加载中…</div></div> : <div className="stack" style={{ gap: 12 }}>
+        {SEC.map(([k, label, tip]) => (
+          <div key={k} className={`card todo-sec todo-${k}`}>
             <div className="card-h"><h2><span className={`pill ${k}`}>{label}</span> {groups[k].length} 单 <Info>{tip}</Info></h2></div>
-            {groups[k].length === 0 ? <div className="empty small" style={{ padding: 14 }}>没有</div> : groups[k].map((d) => {
+            {k === 'red' && <OpenReturns />}
+            {groups[k].length === 0 ? (k === 'red' ? null : <div className="empty small" style={{ padding: 14 }}>没有</div>) : groups[k].map((d) => {
               const n = nextAction(d, role); const o = overdueOf(d);
               return (
                 <div key={d.id} className="row between todo-row" onClick={() => go('deal/' + d.id)}>
@@ -208,24 +195,60 @@ export default function Todo() {
             })}
           </div>
         ))}
+      </div>) },
+    { id: 'follow', title: '钱和任务要跟进的', span: 12, render: () => (
+      <Merged title="钱和任务要跟进的" tip="付款计划过期没收够、公司收款账户压款超期、收款问题（付款申诉 / 员工代收超期 / 账对不上）、派下去的任务——都并在这一块，哪样有事哪样出来"><PlanTodo /><PublicHeld urgentOnly /><MoneyUrgent /><TaskBoard /></Merged>) },
+    { id: 'directives', title: '中方指令 / 定期任务', span: 12, render: () => <DirectiveBoard /> },
+    { id: 'notices', title: '变更通知', span: 12, render: () => <ChangeNotices /> },
+    { id: 'inquiry', title: '询单', span: 12, render: () => <Always title="询单"><InquiryTodo /></Always> },
+    { id: 'addons', title: '追加的货', span: 12, render: () => <AddonTodo /> },
+    ['admin', 'manager', 'sales_manager'].includes(role) && { id: 'issues', title: '员工上报的问题', span: 12, render: () => <Always title="员工上报的问题"><IssueList /></Always> },
+    ['admin', 'manager', 'cn_support'].includes(role) && { id: 'purchase', title: '采购与到货', span: 12, render: () => <Always title="采购与到货"><PurchaseTodo /></Always> },
+    ['admin', 'manager'].includes(role) && { id: 'holds', title: '冻结的库存', span: 12, render: () => <Always title="冻结的库存"><HoldsCard compact /></Always> },
+    admin && { id: 'tier', title: '客户档位要核对', span: 12, render: () => <Always title="客户档位要核对"><TierCheck rows={tierRows} /></Always> },
+    admin && { id: 'volume', title: '客户拿货量变化', span: 12, render: () => <Always title="客户拿货量变化"><VolumeShift /></Always> },
+    extras.length > 0 && { id: 'extras', title: '其他提醒', span: 12, render: () => <div className="card">{extras.map(([to, text]) => (
+      <div key={text} className="row between" style={{ padding: '12px 18px', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }} onClick={() => go(to)}><b>{text}</b><span className="muted">›</span></div>))}</div> },
+  ].filter(Boolean);
+  return (
+    <>
+      <div className="pagehead"><div><div className="eyebrow">Mes tâches</div><h1 tabIndex={0}>我的待办</h1>
+        <div className="sub">当前岗位：<b>{ROLES[role].label}</b>。下推一步，单子就自动出现在下一个人的待办里。<span className="muted">没事的板块自动排到最下面。</span></div></div>
+        {admin && <div className="row"><button type="button" className={`btn sm ${layEdit ? 'primary' : ''}`} onClick={() => setLayoutEdit(!layEdit)} title="待办里有哪些板块、谁在前、多宽">⚙ 整理待办</button></div>}</div>
+      <LayoutGrid page="todo" blocks={blocks} className={layEdit ? '' : 'sink-empty'} defaultGap={12} />
     </>
   );
 }
 
+// 11-19 Frank: 杂项合成一块 —— 一张卡片, 里面哪样有事哪样出来; 全没事 = 一行「0 条」(和别的空板块一样沉到最下面)
+function Merged({ title, tip, children }) {
+  const ref = useRef(null); const [n, setN] = useState(-1);
+  useLayoutEffect(() => {
+    const el = ref.current; if (!el) return undefined;
+    const chk = () => setN(el.childElementCount);
+    chk(); const mo = new MutationObserver(chk); mo.observe(el, { childList: true }); return () => mo.disconnect();
+  }, []);
+  return (<>
+    <div className="card" style={n === 0 ? { display: 'none' } : null}>
+      <div className="card-h"><h2>{title} <Info>{tip}</Info></h2></div>
+      <div ref={ref} className="todo-merge">{children}</div>
+    </div>
+    {n === 0 && <div className="card todo-empty"><b>{title}</b><span className="pill gray">0 条</span><span className="small muted">没有</span></div>}
+  </>);
+}
+
 // 11-09 Frank 第 21 条: 退货没走完 (没批 / 没检验 / 没对账) 一直挂待办
 function OpenReturns() {
-  const { org, go } = useApp();
+  const { org, role } = useApp();
   const { data } = useData(() => q(Q.openReturns, [org]), [org]);
-  if (!data?.length) return null;
-  const P = { decide: ['等中方审批', 'amber'], inspect: ['待检验（好货 / 坏货）', 'amber'], reconcile: ['待和客户对账', 'blue'] };
-  return (
-    <div className="card" style={{ marginBottom: 12 }}>
-      <div className="row between" style={{ padding: '10px 18px', borderBottom: '1px solid var(--line-2)' }}><b>↩ 没走完的退货 {data.length} 张</b></div>
-      {data.map((r) => (
-        <div key={r.id} className="row between" style={{ padding: '8px 18px', borderBottom: '1px solid var(--line-2)', gap: 10 }}>
-          <span><b><DealLink id={r.deal_id} no={r.rt_no} /></b> · {r.customer_name} <span className="muted small">原单 {r.biz_no} · 收货 {r.received_at ? dt(r.received_at) : dt(r.requested_at)}</span></span>
-          <Pill tone={P[r.pending]?.[1] || 'gray'}>{P[r.pending]?.[0] || r.pending}</Pill>
-        </div>))}
-    </div>
-  );
+  if (!data?.length || !['admin', 'manager', 'sales_manager', 'hotline', 'finance'].includes(role)) return null;
+  const P = { decide: ['退货等中方审批', 'amber'], inspect: ['退货待检验（好货 / 坏货）', 'amber'], reconcile: ['退货待和客户对账', 'blue'] };
+  return data.map((r) => (
+    <div key={r.id} className="row between todo-row" style={{ cursor: 'default' }}>
+      <div className="stack" style={{ gap: 3, minWidth: 0 }}>
+        <div><span className="pill red">↩ 退货没走完</span> <b style={{ fontSize: 15 }}>{r.customer_name}</b></div>
+        <div className="small muted"><DealLink id={r.deal_id} no={r.rt_no} /> · 原单 {r.biz_no} · 收货 {r.received_at ? dt(r.received_at) : dt(r.requested_at)}</div>
+      </div>
+      <Pill tone={P[r.pending]?.[1] || 'gray'}>{P[r.pending]?.[0] || r.pending}</Pill>
+    </div>));
 }

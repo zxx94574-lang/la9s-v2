@@ -26,7 +26,7 @@ const SPANS = [3, 4, 6, 8, 12];
 const Ctx = createContext(null);
 
 // blocks: [{ id, title, span (默认宽度), render: () => node, locked (不能隐藏), hidden (默认隐藏) }]
-export function LayoutGrid({ page, blocks, defaultGap = 16 }) {
+export function LayoutGrid({ page, blocks, defaultGap = 16, className = '' }) {
   const { org, role, toast, tick } = useApp();
   const edit = useLayoutEdit();
   const [saved, setSaved] = useState(undefined);   // undefined = 加载中
@@ -80,7 +80,7 @@ export function LayoutGrid({ page, blocks, defaultGap = 16 }) {
             : <button type="button" className="btn sm" disabled={!!draft} title={draft ? '先保存' : ''} onClick={() => save({ ...cfg, order, locked: true }, '已锁定为正式版')}>锁定为正式版</button>}
           <button type="button" className="btn sm ghost" onClick={() => setLayoutEdit(false)}>退出编辑</button>
         </div>)}
-      <div className="lay-grid" style={{ gap }}>
+      <div className={`lay-grid ${className}`} style={{ gap }}>
         {visible.map((b) => {
           const span = spanOf(b); const hid = hiddenOf(b); const i = order.indexOf(b.id);
           return (

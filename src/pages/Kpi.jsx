@@ -1,5 +1,6 @@
 // 241 (Frank 11-11): 时效与准确率 —— 先只显示、不考核; 跑 2–4 周看到真实的中位数再定线
 // 每张单按步骤分段计时 (只算上班时间), 谁的时间算谁的; 等客户的时间单独算; 速度和准确率成对看
+import { RuleGear } from '../components/Rules.jsx';
 import SalesComm from '../components/SalesComm.jsx';
 import HotlineKpi from '../components/HotlineKpi.jsx';
 import React, { useMemo, useState } from 'react';
@@ -120,7 +121,7 @@ export default function Kpi() {
         </div>
       </div>
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-h"><h2>每一步用了多久、达标了多少 <Info>达标率才是能评判的数；中位数 = 一般多久；「最慢 10%」= 十张单里最慢的那张要多久。最慢的单只当线索，点下面的单号进去看卡在哪。等客户的两段不算员工的。</Info></h2></div>
+        <div className="card-h"><h2>每一步用了多久、达标了多少 <Info>达标率才是能评判的数；中位数 = 一般多久；「最慢 10%」= 十张单里最慢的那张要多久。最慢的单只当线索，点下面的单号进去看卡在哪。等客户的两段不算员工的。</Info> <RuleGear anchor="kpi-targets" title="时效目标" ids={['kpi.s0', 'kpi.s1', 'kpi.s2', 'kpi.s4', 'kpi.s5']} /></h2></div>
         <Grid id="kpi-seg" noTools rows={segRows} rowKey={(r) => r.key} columns={[
           { key: 'name', label: '这一段', w: 230, render: (r) => <b>{r.name}</b> },
           { key: 'owner', label: '算谁的', w: 100, render: (r) => <span className={`pill ${r.owner.startsWith('客户') ? 'gray' : 'blue'}`}>{r.owner}</span> },
@@ -138,7 +139,7 @@ export default function Kpi() {
             <div className="chips">{segRows.filter((r) => r.target && r.late.length).map((r) => <button type="button" key={r.key} className={`chip ${lateSeg === r.key ? 'on' : ''}`} onClick={() => setLateSeg(lateSeg === r.key ? null : r.key)}>{r.name.split(' → ')[1] || r.name} {r.late.length}</button>)}</div>
             {segRows.every((r) => !r.target || !r.late.length) && <span className="small muted">没有超时的单 ✓</span>}</div>
           {lateSeg != null && segRows[lateSeg] && <div style={{ marginTop: 6 }}>{segRows[lateSeg].late.slice(0, 30).map((x) => <div key={x.id} className="todo-line"><DealLink id={x.id} no={x.no} /><span>{x.customer}</span><span className="small muted">{x.lines} 个型号</span><span className="grow" /><b className="red-t2">{fmtMin(x.m)}</b><span className="small muted">目标 {fmtMin(segRows[lateSeg].target)}</span></div>)}</div>}
-          <div className="small muted" style={{ marginTop: 8 }}>达标率 = 这一段在目标时限内做完的单 ÷ 这一段做完的单。目标在「规则参数」里调。系统量的是「点按钮的时间」；现在员工还没在系统里干活，数字只当参考，不考核。<Assumed>目标先按 报价确认 30 分钟、找货初检 2 小时、出销售单 30 分钟、复检打包 1 小时、出库 1 小时 定的；客户确认、签收、对账是客户的时间，不设目标。不到 10 单的数字灰掉。</Assumed></div>
+          <div className="small muted" style={{ marginTop: 8 }}>达标率 = 这一段在目标时限内做完的单 ÷ 这一段做完的单。目标点上面标题旁的 ⚙ 改。系统量的是「点按钮的时间」；现在员工还没在系统里干活，数字只当参考，不考核。<Assumed>目标先按 报价确认 30 分钟、找货初检 2 小时、出销售单 30 分钟、复检打包 1 小时、出库 1 小时 定的；客户确认、签收、对账是客户的时间，不设目标。不到 10 单的数字灰掉。</Assumed></div>
         </div>
       </div>
       <div className="card" style={{ marginBottom: 12 }}>
@@ -153,7 +154,7 @@ export default function Kpi() {
         ]} />
       </div>
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-h"><h2>中方指令：几点下的、几点收到、几点完成</h2><Info>规定下达后 5 分钟内点「收到」（只算上班时间）。超时的那几条，系统查了他那几分钟有没有在系统里操作订单：有 = 当时在忙；没有 = 没在看。</Info></div>
+        <div className="card-h"><h2>中方指令：几点下的、几点收到、几点完成 <RuleGear anchor="kpi-dir" title="指令规则" ids={['dir.ack']} /></h2><Info>规定下达后 5 分钟内点「收到」（只算上班时间）。超时的那几条，系统查了他那几分钟有没有在系统里操作订单：有 = 当时在忙；没有 = 没在看。</Info></div>
         <Grid id="kpi-dir" rows={calc.dirPeople} empty="这段时间没有下过指令" columns={[
           { key: 'emp_no', label: '工号', w: 80 }, { key: 'name', label: '谁', w: 120, render: (r) => <b>{r.name}</b> },
           { key: 'n', label: '收到几条', w: 90, type: 'number' },
@@ -175,7 +176,7 @@ export default function Kpi() {
       <HotlineKpi from={from} to={to} />
       <SalesComm from={from} to={to} />
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-h"><h2>仓库准确绩效 · 提成（正确出货每片 {data.rate} XOF）</h2><Info>按出库的片数算给这张单的复核人（没有复核人就给找货人）。这张单被记了发错的责任（少发 / 多发 / 发错型号），整张单的提成取消，下面列出是哪几张。月底算工资照这张表。每片多少钱在「设置 → 规则参数」里可调。</Info></div>
+        <div className="card-h"><h2>仓库准确绩效 · 提成（正确出货每片 {data.rate} XOF） <RuleGear anchor="kpi-wh" title="仓库提成" ids={['wh.comm']} /></h2><Info>按出库的片数算给这张单的复核人（没有复核人就给找货人）。这张单被记了发错的责任（少发 / 多发 / 发错型号），整张单的提成取消，下面列出是哪几张。月底算工资照这张表。每片多少钱在「设置 → 规则参数」里可调。</Info></div>
         <Grid id="kpi-com" rows={calc.comPeople} empty="这段时间没有出库" columns={[
           { key: 'emp_no', label: '工号', w: 80 }, { key: 'name', label: '谁', w: 120, render: (r) => <b>{r.name}</b> },
           { key: 'deals', label: '经手几单', w: 90, type: 'number' }, { key: 'pieces', label: '出库片数', w: 100, type: 'number', render: (r) => qtyf(r.pieces) },

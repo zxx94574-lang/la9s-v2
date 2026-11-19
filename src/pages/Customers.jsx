@@ -1,5 +1,6 @@
 // 客户档案 (Frank 2026-10-29): 一个客户一张档案 —— 正式 / 潜客 / 回收 都在这里.
 // 欠款上限和账期只预警不拦截 (THOMAS 这类有协议的大客户照常出货); 档位、正式编码、上限、账期只中方改.
+import { RuleGear } from '../components/Rules.jsx';
 import { TaskModal, CustomerTasks } from '../components/Tasks.jsx';
 import { ContactsCard } from '../components/Contacts.jsx';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
@@ -101,7 +102,7 @@ export default function Customers() {
   const n = (k) => data.rows.filter(match[k]).length;
   return (
     <>
-      <div className="pagehead"><div><div className="eyebrow">Fiches clients</div><h1>客户档案</h1>
+      <div className="pagehead"><div><div className="eyebrow">Fiches clients</div><h1>客户档案 <RuleGear anchor="cust-rules" title="欠款 / 拿货量规则" ids={['credit.on', 'rep.on', 'vol.pct']} /></h1>
         <div className="sub">正式客户、潜客、回收客户都在这里。欠款超上限或超账期只提醒，不自动停货；档位、正式编码、上限和账期只有中方能改。</div></div>
         {can(role, 'prospect') && <button type="button" className="btn primary" onClick={() => setNewP(true)}>＋ 新潜客</button>}
       </div>

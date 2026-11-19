@@ -1,6 +1,7 @@
 // 资金账户 / 公户 (Frank 2026-10-29)
 // 公户在员工名下 → 到账先挂在账户上（不动客户欠款），中方认领到客户才冲账；热线报「客户说付了」自动找对得上的到账。
 // 持有人最多压 500 万、最长 7 天（每个账户自己设）；交款要中方确认收到才算；支出超过审批线要中方批。
+import { RuleGear } from '../components/Rules.jsx';
 import { useControls, CONTROL_TABS, ControlPanels, ControlAlerts, RefundModal } from './CashControls.jsx';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import PublicHeld from '../components/PublicHeld.jsx';
@@ -115,7 +116,7 @@ export default function Cash() {
   const TABS = [['open', '待认领到账', unclaimed.length], ['pending', '待中方处理', pending.length], ['notices', '付款通知', openNotices.length], ['moves', '账户流水', null], ...CONTROL_TABS(ctl)];
   return (
     <>
-      <div className="pagehead"><div><div className="eyebrow">Comptes de trésorerie</div><h1>资金账户</h1>
+      <div className="pagehead"><div><div className="eyebrow">Comptes de trésorerie</div><h1>资金账户 <RuleGear anchor="cash-rules" title="资金规则" ids={['cash.held', 'freight.acct']} /></h1>
         <div className="sub">到账先挂在账户上，不动客户欠款；中方认领到客户才冲账。持有人压款超上限或超天数会标红；交款要中方确认收到才算交了。</div></div>
         <div className="row" style={{ gap: 6 }}>
           {notice && <button type="button" className="btn" onClick={() => setModal({ t: 'notice' })}>客户说付了</button>}

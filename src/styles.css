@@ -1449,3 +1449,20 @@ tr.grp-row.d1 > td { background: #f7f9fc; } tr.grp-row.d2 > td { background: #fb
 table.t th.col-sel { background: #d3e3ff !important; box-shadow: inset 0 -3px 0 var(--brand); }
 table.t th[data-ck] { user-select: none; }
 .col-drop { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: var(--brand); z-index: 8; pointer-events: none; border-radius: 2px; }
+
+/* 11-19 待办: 没事的板块沉到最下面、两个一排; 合并板块里的小卡片去掉外框 */
+.lay-grid.sink-empty > .lay-block:has(> .todo-empty) { order: 9; grid-column: span 6 !important; }
+@media (max-width: 760px) { .lay-grid.sink-empty > .lay-block:has(> .todo-empty) { grid-column: span 12 !important; } }
+.lay-grid > .lay-block > .card, .lay-grid > .lay-block .todo-empty { margin-bottom: 0 !important; }
+.lay-block:empty { display: none; }
+.todo-merge > .card { border: 0 !important; box-shadow: none !important; border-radius: 0 !important; margin: 0 !important; border-top: 1px solid var(--line-2) !important; }
+.todo-merge > .card > .card-h h2 { font-size: 14px; }
+/* 规则 ⚙ 就地改 */
+.rule-gear { position: relative; display: inline-flex; vertical-align: middle; margin-left: 6px; }
+.gear-btn.on { color: var(--brand); border-color: var(--brand); background: #eef4fd; }
+.rule-pop { position: fixed; z-index: 60; max-height: 70vh; overflow: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px #0f2a5226; padding: 14px; font-size: 13px; font-weight: 400; color: var(--ink); text-align: left; white-space: normal; }
+.rule-row { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+.rule-row .grow { min-width: 0; overflow-wrap: anywhere; }
+.rule-row.click { cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+.rule-row.click:hover { background: #f3f7fd; }
+.rule-unit { width: 52px; flex-shrink: 0; }

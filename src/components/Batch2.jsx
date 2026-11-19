@@ -1,4 +1,5 @@
 // 11-12 第 2 批: 问题库存冻结 (266) · 打电话名单 (250) · 价格调整单 (262) · 销量月对比 (252)
+import { RuleGear } from './Rules.jsx';
 import React, { useMemo, useState } from 'react';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from './Opts.jsx';
 import { ImpactFor } from './Impact.jsx';
@@ -183,7 +184,7 @@ export function VolumeShift() {
   const mo = (k) => { const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - k); return `${d.getUTCMonth() + 1} 月`; };
   return (
     <div className="card" style={{ marginBottom: 12 }}>
-      <div className="card-h"><h2>提货量变化大的客户</h2><span className="pill amber">{data.rows.length} 个 · 着重跟进</span>
+      <div className="card-h"><h2>提货量变化大的客户 <RuleGear title="提货量变化" ids={['vol.pct']} /></h2><span className="pill amber">{data.rows.length} 个 · 着重跟进</span>
         <Info>每月初自动对比上两个整月（{mo(2)} 和 {mo(1)}）的出库片数，涨或跌超过 {data.pct}% 的列在这里。跌得多的去问问原因，涨得多的看要不要调档位。这条线在「设置 → 规则参数」里可以调。</Info></div>
       <Grid id="vol-shift" noTools rows={data.rows} columns={[
         { key: 'name', label: '客户', w: 180, render: (r) => <CustLink id={r.id} name={r.name} /> },

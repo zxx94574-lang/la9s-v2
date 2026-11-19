@@ -2,6 +2,7 @@
 // 游客 / 客户账号 / 外跑销售 → 询单 (IQ-年月日-序号, 不带价) → 中方看一眼定价、转成报价 → 通知建单的人 → 后面流程不变.
 // 这个页面: 员工建询单 (销售只列自己名下的客户) + 询单列表 (中方: 转成报价; 大家: 标已联系 / 没成交).
 // 游客和客户账号用的是同一个询单表, 入口在 Guest.jsx / Portal.jsx.
+import { RuleGear } from '../components/Rules.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -72,7 +73,7 @@ export default function Inquiry({ embedded } = {}) {
   return (
     <>
       {!embedded && <div className="pagehead"><div><div className="eyebrow">Demandes</div>
-        <h1>询单 <Info>询单 = 客户想要什么、还没定价。游客、开了账号的大客户、外跑销售都从这里进；中方看一眼价格、点「转成报价」才变成订单（单号 CI-…），之后流程和现在一样。销售只能给自己名下的客户建询单；价格只有中方定。</Info></h1></div>
+        <h1>询单 <Info>询单 = 客户想要什么、还没定价。游客、开了账号的大客户、外跑销售都从这里进；中方看一眼价格、点「转成报价」才变成订单（单号 CI-…），之后流程和现在一样。销售只能给自己名下的客户建询单；价格只有中方定。</Info> <RuleGear anchor="inquiry-rules" title="询单规则" ids={['guest.low']} /></h1></div>
         <span className="grow" /><button type="button" className="btn" onClick={() => setNewP(true)}>＋ 新客户（潜客）</button></div>}
       <div className="kpis" style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))', marginBottom: 10 }}>
         <div className="kpi"><div className="t"><span>本月询单</span></div><b className="kpi-n">{stats.n}</b></div>

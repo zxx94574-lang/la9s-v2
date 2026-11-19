@@ -1,5 +1,6 @@
 // 227 ② (Frank 11-05 定稿): 中方指令 —— 中方给员工下达任务; 员工必须自己点「收到」、做完自己点「完成」并填结果 (文字 / 照片); 中方确认才关闭
 // 没点「收到」的: 打开系统强制弹窗; 超过 4 小时 (可设) 没点收到 → 在中方待办里标红, 由中方打电话
+import { RuleGear } from './Rules.jsx';
 import React, { useEffect, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
@@ -130,7 +131,7 @@ export default function DirectiveBoard() {
         </div>)}
       {admin && (
         <div className="card todo-sec" style={{ marginBottom: 12 }}>
-          <div className="card-h" style={{ flexWrap: 'wrap', gap: 8 }}><h2>我下达的指令 {openDir.length} 条没关 <Info>临时下达、必须完成。员工点「完成」后，这里点「确认」才关闭；做得不行就「退回」并写哪里不行。超过 4 小时没点「收到」的标红，建议直接打电话。下给部门的：全员都会收到，按你选的汇报人交结果。</Info></h2>
+          <div className="card-h" style={{ flexWrap: 'wrap', gap: 8 }}><h2>我下达的指令 {openDir.length} 条没关 <Info>临时下达、必须完成。员工点「完成」后，这里点「确认」才关闭；做得不行就「退回」并写哪里不行。超过 4 小时没点「收到」的标红，建议直接打电话。下给部门的：全员都会收到，按你选的汇报人交结果。</Info> <RuleGear title="指令规则" ids={['dir.ack']} /></h2>
             <div className="row"><button type="button" className="btn primary" onClick={() => setNw(true)}>＋ 给员工下指令</button></div></div>
           {openDir.length === 0 ? <div className="card-b small muted">没有没关的指令</div> : openDir.map(issuedRow)}
         </div>)}

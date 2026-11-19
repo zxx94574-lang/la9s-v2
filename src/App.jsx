@@ -10,7 +10,7 @@ import CodeReview from './pages/CodeReview.jsx';
 import { DirectiveGate } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
-import { ExportPanel, DocSettings, PermPanel, RulesPanel } from './components/SettingsPanels.jsx';
+import { ExportPanel, DocSettings, PermPanel } from './components/SettingsPanels.jsx';
 import { loadAllOpts } from './components/Opts.jsx';
 import { loadGridAlign } from './lib/gridPrefs.js';
 import { ROLES, can, getThresholds, setThresholds, DEFAULT_THRESHOLDS, setPermOverride } from './lib/domain.js';
@@ -355,7 +355,7 @@ export default function App() {
             </div>
             {role === 'admin' && <LayoutSwitch onDone={() => setSettings(false)} />}
             <Thresholds role={role} toast={toast} />
-            <RulesPanel />
+            {role === 'admin' && <div className="field"><label>规则参数</label><div className="row" style={{ gap: 8 }}><span className="hint grow">每条规则都在用到它的那一页旁边的 ⚙ 里改（例：时效目标在「时效与准确率」）。总表只列出来、点了跳过去。</span><button type="button" className="btn sm" onClick={() => { setSettings(false); go('rules'); }}>看总表 ›</button></div></div>}
             <PermPanel />
             <ExportPanel />
             <DocSettings />

@@ -1,3 +1,4 @@
+import { RuleGear } from '../components/Rules.jsx';
 import { showDone } from '../components/Done.jsx';
 import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 // The panels of one deal. Each workflow step has its own panel: the action when it is the current step,
@@ -416,7 +417,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
   if (hold && !early) {
     return (
       <div className="card">
-        <div className="card-h"><h2>复检 + 打包 <Info>约定发货日还没到的单不提前打包：客户第二天可能加货。到了那天再从头检到尾。</Info></h2>
+        <div className="card-h"><h2>复检 + 打包 <Info>约定发货日还没到的单不提前打包：客户第二天可能加货。到了那天再从头检到尾。</Info> <RuleGear title="必抽检的线" ids={['check.qty', 'check.price', 'check.total']} /></h2>
           <span className="pill amber">约 {dDate(deal.planned_ship_date)} 发货 · 先不打包</span></div>
         <div className="card-b stack">
           {deal.staged_at ? (
@@ -442,7 +443,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
   }
   return (
     <div className="card" ref={scope}>
-      <div className="card-h"><h2>复检 + 打包 <Info>客户确认后由主管抽检、打包；打完包出发货文件，再出库</Info></h2>
+      <div className="card-h"><h2>复检 + 打包 <Info>客户确认后由主管抽检、打包；打完包出发货文件，再出库</Info> <RuleGear title="必抽检的线" ids={['check.qty', 'check.price', 'check.total']} /></h2>
         <div className="row">{reviewing ? <UndoBar h={h} scope={scope} /> : <Who e={e} />}</div></div>
       {reviewing && can(role, 'review_pick') ? (
         <div className="card-b ticks">
@@ -506,7 +507,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
               <button type="button" className="btn primary lg" onClick={submit}>复检打包完成 →</button>
             </div>
           ) : <Blocked action="review_pick" />}
-          <div className="hint" style={{ marginTop: 8 }}>不用每盒拆：红色「必抽检」的行必须抽 2–3 盒并选结果，黄色「建议」的行最好也抽。<Assumed>必抽检现在只在这个界面上拦，后台没有硬拦；三个门槛（100 片 / 单价 5,000 / 一行 50 万）在设置 → 规则参数里调。</Assumed>「实点数」和该有的不一样 → 在上面当场处理（放回 / 补上 / 少发）；最终打包数系统算，出库就按它，不能再改。少发的单子会退回热线，只让客户重新确认变动的行。</div>
+          <div className="hint" style={{ marginTop: 8 }}>不用每盒拆：红色「必抽检」的行必须抽 2–3 盒并选结果，黄色「建议」的行最好也抽。<Assumed>必抽检现在只在这个界面上拦，后台没有硬拦；三个门槛（100 片 / 单价 5,000 / 一行 50 万）点「复检 + 打包」标题旁的 ⚙ 改。</Assumed>「实点数」和该有的不一样 → 在上面当场处理（放回 / 补上 / 少发）；最终打包数系统算，出库就按它，不能再改。少发的单子会退回热线，只让客户重新确认变动的行。</div>
         </div>
       ) : deal.reviewer_name && (
         <div className="card-b row" style={{ borderTop: '1px solid var(--line-2)', gap: 16 }}>
@@ -1047,7 +1048,7 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
   return (
     <>
       <div className="card">
-        <div className="card-h"><h2>本单收款</h2>
+        <div className="card-h"><h2>本单收款 <RuleGear title="抹零上限" ids={['wo.max']} /></h2>
           <div className="row">
             {can(role, 'write_off') && N(deal.due) > 0 && N(deal.due) <= (cur === 'XOF' ? 100 : 1) && <button type="button" className="btn" onClick={() => setWo(true)}>抹零 {money(deal.due, cur)}</button>}
             {role === 'admin' && N(deal.due) > (cur === 'XOF' ? 100 : 1) && <button type="button" className="btn soft-red" onClick={() => setBad(true)}>坏账核销</button>}
@@ -1394,7 +1395,7 @@ export function SignPanel({ deal, shipments, events, act, role, others, discs = 
   return (
     <>
       <div className="card">
-        <div className="card-h"><h2>① 客户签收 <Info>出库后打电话或发 WhatsApp 问客户收到货没有；客户发了照片就传照片，没有就传 WhatsApp 聊天截图或通话截图。签收后接着做下面的 ② 和客户对账。</Info></h2>
+        <div className="card-h"><h2>① 客户签收 <Info>出库后打电话或发 WhatsApp 问客户收到货没有；客户发了照片就传照片，没有就传 WhatsApp 聊天截图或通话截图。签收后接着做下面的 ② 和客户对账。</Info> <RuleGear title="收货差异时限" ids={['disc.hours']} /></h2>
           {unsigned.length ? <span className={`pill ${unsigned.length < live.length ? 'amber' : 'red'}`}>还有 {unsigned.length} 批没签收</span> : live.length ? <span className="pill green">已签收</span> : <span className="muted small">还没出库</span>}</div>
         <div className="card-b two">
           <CustomerInfo deal={deal} />
