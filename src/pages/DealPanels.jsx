@@ -1014,7 +1014,7 @@ function ShipmentsCard({ deal, lines, shipments, act, role }) {
       <div className="card-h"><h2>出库记录</h2></div>
       {justVoided && <div className="card-b lock">已撤销出库。如果已经把这笔的 Balance 发给客户，请到「签收 · 对账」重新复制一张发过去。</div>}
       <Grid id="deal-shipments" slimTools table="shipments" columns={cols} rows={shipments} rowClass={(s) => (s.voided_at ? 'voided' : '')} />
-      <div className="card-b hint">发货文件：「BL ×2」生成编号并打印两张（一张仓库备案、一张客户签字），「海关文件」打开设置里上传的固定 PDF；大单（金额或件数到设置的阈值）会提示建议打印，小单不强制。客户签字后拍照挂上就是发货证明。「发货失败 / 退回」只用于货没到客户手上（Yango 去不了、改期、我方隔天发）：货回原仓位并重新预占、应收冲回、订单回到待出库，作废的出库单留痕。客户签收后只能走退货。金蝶写入暂未接入。</div>
+      <div className="card-b hint">发货文件：「BL」点开预览、预览里打印（一次两张：仓库联留底、客户联给客户签字），「海关文件」同样先预览再打印（设置里上传的固定 PDF；大单（金额或件数到设置的阈值）会提示建议打印，小单不强制。客户签字后拍照挂上就是发货证明。「发货失败 / 退回」只用于货没到客户手上（Yango 去不了、改期、我方隔天发）：货回原仓位并重新预占、应收冲回、订单回到待出库，作废的出库单留痕。客户签收后只能走退货。金蝶写入暂未接入。</div>
       {voiding && <VoidModal s={voiding} onClose={() => setVoiding(null)} onOk={(r) => act(`${voiding.out_no} 已撤销，货已回库并重新预占`, `select app.void_shipment($1,$2)`, [voiding.id, r]).then(() => { setVoiding(null); setJustVoided(true); }, () => {})} />}
     </div>
   );
@@ -1381,7 +1381,7 @@ function DocsBlock({ deal, lines, role }) {
             <BlActions shipment={pseudo} deal={deal} lines={lines} pending />
           </div>
         ) : <div className="hint">{deal.status === 'shipped' ? '全部出库完。每批的 BL / 海关文件在下面出库记录里可以重打。' : '复检打包完成后，这里出 BL ×2 和海关文件。'}</div>}
-        <div className="hint">「BL ×2」= 一张仓库备案、一张客户签字（客户签字那张拍照回传，在「签收 · 对账」步挂上）；「海关文件」= 设置里上传的固定 PDF。大单（金额或件数到设置的阈值）会提示建议打印，小单不强制。</div>
+        <div className="hint">「BL」点开预览再打印，一次两张 = 一张仓库备案、一张客户签字（客户签字那张拍照回传，在「签收 · 对账」步挂上）；「海关文件」= 设置里上传的固定 PDF。大单（金额或件数到设置的阈值）会提示建议打印，小单不强制。</div>
       </div>
     </div>
   );

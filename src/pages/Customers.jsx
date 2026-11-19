@@ -14,7 +14,8 @@ import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPick
 import Grid from '../components/Grid.jsx';
 import { CallModal, ProspectModal, ResultPill, KIND, custLabel } from '../components/Crm.jsx';
 import { AccountPanel, ACC } from '../components/Account.jsx';
-import { can, seesPrice, TIERS } from '../lib/domain.js';
+import { can, seesPrice, TIERS, STATUS } from '../lib/domain.js';
+import { DealLink, EmpLink } from '../components/Archives.jsx';
 import { money, qty, dDate, dt, today, friendlyError } from '../lib/format.js';
 import { SUPPLY, customerOptions, optLabel, selOpts } from '../lib/customerOptions.js';
 import { optTag } from '../lib/tableOptions.js';
@@ -115,6 +116,31 @@ export default function Customers() {
   );
 }
 
+// 343: 档案知道「从哪来」—— 现在开着的是哪张订单 (网址 #/deal/<id>)
+export const fromDealId = () => { const m = String(window.location.hash).match(/deal\/([0-9a-f-]{36})/); return m ? m[1] : null; };
+// 客户档案: 这个客户的单 (全部, 最近 12 张); 从某张单点开的 → 那张打「本单」排最前; 单号都能点
+function CustDeals({ customerId, fromDeal }) {
+  const { role } = useApp();
+  const price = seesPrice(role);
+  const { data } = useData(() => q(`select d.id, d.biz_no, d.status, d.created_at, d.currency, t.shipped_amount, t.due,
+      (select coalesce(sum(coalesce(nullif(l.qty_supply, 0), l.qty_req)), 0)::int from app.deal_lines l where l.deal_id = d.id) as qty,
+      (select count(*)::int from app.deals x where x.customer_id = d.customer_id and x.kind <> 'opening') as total
+    from app.deals d left join app.v_deal_due t on t.deal_id = d.id where d.customer_id = $1 and d.kind <> 'opening' order by (d.id = $2) desc, d.created_at desc limit 12`, [customerId, fromDeal]), [customerId, fromDeal]);
+  if (!data?.length) return null;
+  return (
+    <div className="pd-sec">
+      <div className="pd-h">这个客户的单 <span className="small muted" style={{ fontWeight: 400 }}>共 {data[0].total} 张{data[0].total > 12 ? '，这里列最近 12 张' : ''}</span></div>
+      {data.map((d) => (
+        <div key={d.id} className={`todo-line ${d.id === fromDeal ? 'this-doc' : ''}`}>
+          {d.id === fromDeal && <span className="pill blue">本单</span>}
+          <DealLink id={d.id} no={d.biz_no} /><span className="small muted">{dDate(d.created_at)}</span>
+          <span className={`pill ${STATUS[d.status]?.tone || 'gray'}`}>{STATUS[d.status]?.label || d.status}</span>
+          <span className="grow" /><span className="small">{qty(d.qty)} 片</span>
+          {price && <span className="small">{Number(d.shipped_amount) > 0 ? `出库 ${money(d.shipped_amount, d.currency)}` : ''}{Number(d.due) > 0 ? <b className="red-t2"> · 还欠 {money(d.due, d.currency)}</b> : ''}</span>}
+        </div>))}
+    </div>);
+}
+
 export function CustomerDrawer({ id, onClose }) {
   const [taskOpen, setTaskOpen] = useState(false);
   const { org, role, go } = useApp();
@@ -128,8 +154,10 @@ export function CustomerDrawer({ id, onClose }) {
   const { c, contacts } = data;
   const price = seesPrice(role);
   const warn = creditWarn(c);
+  const ownerPhone = (data.emps || []).find((e) => e.id === c.owner_employee_id)?.phone;
+  const fromDeal = fromDealId();   // 从哪张单点开的 (档案永远是总览, 只是把这张单标出来、排最前)
   return (
-    <Drawer title={custLabel(c)} onClose={onClose}
+    <Drawer title={<span className="arch-title"><span className="mono">{c.code || `${c.temp_code}（临时）`}</span><i>·</i><span>{c.name}</span><i>·</i><TierPill tier={c.tier} empty="档位没定" /></span>} onClose={onClose}
       actions={<>{['admin', 'manager', 'sales_manager', 'hotline'].includes(role) && <button type="button" className="btn sm" onClick={() => setEdit('info')} title="解锁修改：保存前列出改了什么并自检">✎ 修改</button>}{can(role, 'prospect') && <button type="button" className="btn sm" onClick={() => setCallOpen(true)}>☎ 记回访</button>}
         {c.status === 'active' && can(role, 'quote') && <button type="button" className="btn sm" onClick={() => go('quote/new')}>＋ 报价</button>}
         {c.status === 'active' && price && <button type="button" className="btn sm" onClick={() => go('customer/' + c.id)}>总账</button>}
@@ -138,23 +166,33 @@ export function CustomerDrawer({ id, onClose }) {
         {taskOpen && <TaskModal target={{ kind: 'customer', id: c.id, label: c.code || c.temp_code || c.name, customerName: c.name, ownerId: c.owner_employee_id }} onClose={() => setTaskOpen(false)} />}
         <CustomerTasks customerId={c.id} />
         {warn.length > 0 && <div className="banner warn">{warn.join('；')}{c.has_agreement ? '。有协议客户，照常出货，只提醒。' : '。只提醒，不自动停货；要不要继续给货由中方定。'}</div>}
-        <div className="row" style={{ gap: 14, alignItems: 'flex-start' }}>
-          {c.shop_photo && <Thumb src={c.shop_photo} size={84} label="门店照片" />}
-          <dl className="facts grow">
-            <dt>编码</dt><dd className="mono">{c.code || `${c.temp_code}（临时）`}</dd>
-            <dt>状态</dt><dd>{c.status === 'prospect' ? <Pill tone="amber">潜客</Pill> : c.status === 'active' ? <Pill tone="green">正式</Pill> : <Pill>停用</Pill>} {KIND[c.kind]}{c.recycle_type ? ` · ${c.recycle_type}` : ''}</dd>
-            <dt>档位</dt><dd><TierPill tier={c.tier} empty="—（中方定）" /> · {SUPPLY[c.supply] || SUPPLY.local}</dd>
-            <dt>收货人</dt><dd>{c.contact_name || '—'}</dd>
-            <dt>电话</dt><dd>{fmtPhone(c.phone) || '—'}</dd>
-            <dt>地址</dt><dd>{c.address || '—'}</dd>
-            <dt>城市 / 市场</dt><dd>{[c.city, c.market, c.zone].filter(Boolean).join(' · ') || '—'}</dd>
-            <dt>店铺</dt><dd>{[c.shop_type, c.monthly_qty ? `月用量约 ${c.monthly_qty}` : null].filter(Boolean).join(' · ') || '—'}</dd>
-            <dt>归属销售员</dt><dd>{c.owner || '—'}</dd>
-            {price && <><dt>欠款</dt><dd><b>{money(c.balance || 0)}</b>{c.oldest_days ? <span className="muted small">　最老一笔 {c.oldest_days} 天</span> : null}</dd>
-              <dt>上限 / 账期</dt><dd>{c.credit_limit != null ? money(c.credit_limit) : '不限'} / {c.credit_days != null ? `${c.credit_days} 天` : '不限'}{c.has_agreement && <> <Pill tone="gray">有协议</Pill></>}</dd></>}
-            {c.note && <><dt>备注</dt><dd>{c.note}</dd></>}
-          </dl>
+        {/* 343 (Frank 11-17): 左右对半 —— 左 = 客户自己的信息, 右 = 我们给他定的; 窄屏自动变上下 */}
+        <div className="arch-2">
+          <div className="arch-col">
+            <div className="arch-h">客户自己的信息</div>
+            <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
+              {c.shop_photo && <Thumb src={c.shop_photo} size={72} label="门店照片" />}
+              <dl className="facts grow">
+                <dt>城市 / 市场</dt><dd>{[c.city, c.market, c.zone].filter(Boolean).join(' · ') || '—'}</dd>
+                <dt>店铺</dt><dd>{[c.shop_type, c.monthly_qty ? `月用量约 ${c.monthly_qty}` : null].filter(Boolean).join(' · ') || '—'}</dd>
+                <dt>客户电话</dt><dd>{fmtPhone(c.phone) || '—'}</dd>
+                <dt>收货人</dt><dd>{c.contact_name || '—'}</dd>
+                <dt>收货地址</dt><dd>{c.address || '—'}</dd>
+              </dl>
+            </div>
+          </div>
+          <div className="arch-col">
+            <div className="arch-h">我们给他定的</div>
+            <dl className="facts">
+              <dt>客户类别</dt><dd>{c.status === 'prospect' ? <Pill tone="amber">潜客</Pill> : c.status === 'active' ? <Pill tone="green">正式</Pill> : <Pill>停用</Pill>} {SUPPLY[c.supply] || SUPPLY.local} · {KIND[c.kind]}{c.recycle_type ? ` · ${c.recycle_type}` : ''}</dd>
+              <dt>归属销售员</dt><dd>{c.owner_employee_id ? <EmpLink id={c.owner_employee_id} name={c.owner} /> : '—（待认领）'}{ownerPhone ? <span className="muted small">　{fmtPhone(ownerPhone)}</span> : null}</dd>
+              {price && <><dt>欠款</dt><dd><b className={Number(c.balance) > 0 ? 'red-t2' : ''}>{Number(c.balance) < 0 ? `预付 ${money(-c.balance)}` : money(c.balance || 0)}</b>{c.oldest_days ? <span className="muted small">　最老一笔 {c.oldest_days} 天</span> : null}</dd>
+                <dt>上限 / 账期</dt><dd>{c.credit_limit != null ? money(c.credit_limit) : '不限'} / {c.credit_days != null ? `${c.credit_days} 天` : '不限'}{c.has_agreement && <> <Pill tone="gray">有协议</Pill></>}{c.block_on_debt && <> <Pill tone="red">有欠款不出货</Pill></>}</dd></>}
+              <dt>备注</dt><dd>{c.note || '—'}</dd>
+            </dl>
+          </div>
         </div>
+        <CustDeals customerId={c.id} fromDeal={fromDeal} />
         {can(role, 'customer_terms') && (
           <div className="row" style={{ gap: 8 }}>
             {c.status === 'prospect' && <button type="button" className="btn primary sm" onClick={() => setEdit('activate')}>转正式客户（给编码 + 档位）</button>}

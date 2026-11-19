@@ -28,7 +28,7 @@ export function blRows(shipment, lines, types) {
     .map((x, i) => ({ n: String(i + 1).padStart(2, '0'), type: blType(x.l.category, types), model: asciiOnly(x.l.model) || x.l.model || '', qty: x.qty }));
 }
 
-export function BlSheet({ shipment, deal, lines, header = GS_DEFAULT, logo }) {
+export function BlSheet({ shipment, deal, lines, header = GS_DEFAULT, logo, copy }) {
   const rows = blRows(shipment, lines, header.types);
   const total = rows.reduce((a, r) => a + Number(r.qty), 0);
   const city = deal.city || '';
@@ -51,6 +51,7 @@ export function BlSheet({ shipment, deal, lines, header = GS_DEFAULT, logo }) {
       <div className="bl-tot"><span>Total des quantites renseignees</span><span>{fmtQty(total)} pieces</span></div>
       <div className="bl-sig"><div><h4>LIVRE PAR</h4><p>Nom : ______________________</p><p>Date, signature et cachet : _________________</p></div>
         <div><h4>RECU PAR</h4><p>Nom : ______________________</p><p>Date, signature et cachet : _________________</p></div></div>
+      {copy && <div className="bl-copy">{copy}</div>}
       <div className="bl-ft">{logo ? <img src={logo} alt="" /> : <b>{header.name}</b>}<span>{String(header.footer || '').split('\n').map((l, i) => <React.Fragment key={i}>{i > 0 && <br />}{l}</React.Fragment>)}</span></div>
     </div>
   );
@@ -65,6 +66,8 @@ export function BlActions({ shipment, deal, lines, compact, pending }) {
   const [preview, setPreview] = useState(false);
   const [sign, setSign] = useState('');
   const [signing, setSigning] = useState(false);
+  const [pdf, setPdf] = useState(null);   // { name, pages: [dataUrl], blob } | { loading: true }
+  const [pdfPrint, setPdfPrint] = useState(false);
   const { data } = useData(async () => {
     const [[hdr], [logo], [customs], [sug]] = await Promise.all([
       q(`select value from app.org_settings where org_id = $1 and key = 'doc_header_gs'`, [org]),
@@ -87,6 +90,19 @@ export function BlActions({ shipment, deal, lines, compact, pending }) {
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
   // 海关文件: 设置里上传的优先; 真实数据版没上传时用随版本带的 QUITTANCE (Frank 11-07 发的那份)
+  // 351 (Frank 11-17): 海关文件 = 预览 + 打印, 不下载. PDF 在页面里用 pdf.js 画成图, 点「打印」直接出打印对话框; 画不出来才退回老办法 (新标签页 / 给文件)
+  const showPdf = async (blob, name) => {
+    setPdf({ loading: true, name });
+    try {
+      const lib = await import('pdfjs-dist');
+      if (!lib.GlobalWorkerOptions.workerPort) { const W = (await import('pdfjs-dist/build/pdf.worker.min.mjs?worker&inline')).default; lib.GlobalWorkerOptions.workerPort = new W(); }
+      const doc = await lib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise; const pages = [];
+      for (let i = 1; i <= doc.numPages; i++) { const pg = await doc.getPage(i); const vp = pg.getViewport({ scale: 1.6 }); const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
+        await pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise; pages.push(cv.toDataURL('image/jpeg', 0.85)); }
+      setPdf({ name, pages, blob });
+    } catch (e) { console.warn('pdf preview failed', e); setPdf(null); openPdf(blob, name); }
+  };
+  const printPdf = () => { setPdfPrint(true); setTimeout(() => { try { window.print(); } catch { toast('这个页面不允许打印，请用电脑浏览器打开', 'err'); } setPdfPrint(false); }, 120); };
   const openPdf = async (blob, name) => {
     const w = window.open(URL.createObjectURL(blob), '_blank');
     if (w) return toast('海关文件已在新标签页打开，在那里点打印（⌘P）');
@@ -99,9 +115,9 @@ export function BlActions({ shipment, deal, lines, compact, pending }) {
       const [f] = await q(Q.orgFileData, [org, 'customs']);
       if (f) {
         const bin = atob(f.data); const arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        return openPdf(new Blob([arr], { type: f.mime || 'application/pdf' }), f.name);
+        return showPdf(new Blob([arr], { type: f.mime || 'application/pdf' }), f.name);
       }
-      if (REAL) { toast('正在打开海关文件…'); const res = await fetch('./quittance.pdf'); if (!res.ok) throw new Error('海关文件没带上，请在 设置 → 随货附件 上传'); return openPdf(new Blob([await res.arrayBuffer()], { type: 'application/pdf' }), 'QUITTANCE_POUR_TOUTE_LIVRAISON.pdf'); }
+      if (REAL) { const res = await fetch('./quittance.pdf'); if (!res.ok) throw new Error('海关文件没带上，请在 设置 → 随货附件 上传'); return showPdf(new Blob([await res.arrayBuffer()], { type: 'application/pdf' }), 'QUITTANCE_POUR_TOUTE_LIVRAISON.pdf'); }
       if (role === 'admin') { toast('还没上传海关文件：选一个 PDF，上传后直接打开'); fileRef.current?.click(); }
       else toast('还没上传海关文件：请中方在 设置 → 随货附件 上传', 'err');
     } catch (e) { toast(e.message?.startsWith('海关') ? e.message : friendlyError(e), 'err'); }
@@ -121,21 +137,27 @@ export function BlActions({ shipment, deal, lines, compact, pending }) {
   return (
     <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
       {big && !shipment.bl_printed_at && <Pill tone="amber" title={`金额 ≥ ${Number(data.suggest.amount).toLocaleString()} 或件数 ≥ ${data.suggest.qty}：建议打印发货文件随货走`}>大单 · 建议打印</Pill>}
-      <button type="button" className={`btn ${pending ? '' : 'sm'}`} onClick={() => setPreview(true)} title="先看一眼 BL 打出来长什么样（看到的就是打出来的）">👁 预览 BL</button>
+      <button type="button" className={`btn ${pending ? '' : 'sm'} ${pending || (big && !shipment.bl_printed_at) ? 'primary' : ''}`} onClick={() => setPreview(true)} title="点开预览；预览里点「打印」，一次打两张（仓库联 + 客户联）">BL{shipment.bl_printed_at ? ' · 已打' : ''}</button>
       {preview && <Modal wide title={`BL 预览${shipment.bl_no ? ' · ' + shipment.bl_no : '（编号在点打印时才生成）'}`} onClose={() => setPreview(false)}
-        footer={<><span className="grow" /><button type="button" className="btn" onClick={() => setPreview(false)}>关闭</button><button type="button" className="btn primary" onClick={() => { setPreview(false); printBl(); }}>🖨 打印 BL ×2</button></>}>
-        <div className="bl-preview"><BlSheet shipment={shipment} deal={deal} lines={lines} header={data.header} logo={data.logo} /></div>
+        footer={<><span className="small muted">一次打两张：仓库联留底，客户联给客户签字。看到的就是打出来的。</span><span className="grow" /><button type="button" className="btn" onClick={() => setPreview(false)}>关闭</button><button type="button" className="btn primary" onClick={() => { setPreview(false); printBl(); }}>🖨 打印（2 张）</button></>}>
+        <div className="bl-preview"><BlSheet shipment={shipment} deal={deal} lines={lines} header={data.header} logo={data.logo} copy="EXEMPLAIRE ENTREPOT" /></div>
+        <div className="small muted" style={{ textAlign: 'center', margin: '8px 0' }}>第 2 张一样，页脚标「EXEMPLAIRE CLIENT」（客户联）</div>
       </Modal>}
-      <button type="button" className={`btn ${pending ? '' : 'sm'} ${pending || (big && !shipment.bl_printed_at) ? 'primary' : ''}`} onClick={printBl} title="打印两张：一张仓库备案，一张客户签字">🖨 BL ×2{shipment.bl_no ? '' : '（生成编号）'}</button>
-      <button type="button" className={`btn ${pending ? '' : 'sm'}`} onClick={printCustoms} title={data.customs ? `${data.customs.name} · ${Math.round(data.customs.bytes / 1024)} KB` : REAL ? 'QUITTANCE（随版本自带）' : '还没上传：点一下选 PDF 上传'}>🖨 海关文件{data.customs || REAL ? '' : '（未上传，点击上传）'}</button>
+      <button type="button" className={`btn ${pending ? '' : 'sm'}`} onClick={printCustoms} title={data.customs ? `${data.customs.name} · ${Math.round(data.customs.bytes / 1024)} KB` : REAL ? 'QUITTANCE（随版本自带）' : '还没上传：点一下选 PDF 上传'}>海关文件{data.customs || REAL ? '' : '（未上传，点击上传）'}</button>
+      {pdf && <Modal wide title={`海关文件预览 · ${pdf.name || ''}`} onClose={() => setPdf(null)}
+        footer={<><span className="small muted">{pdf.pages ? `共 ${pdf.pages.length} 页` : ''}</span><span className="grow" /><button type="button" className="btn" onClick={() => setPdf(null)}>关闭</button><button type="button" className="btn primary" disabled={!pdf.pages} onClick={printPdf}>🖨 打印</button></>}>
+        {pdf.loading ? <div className="small muted" style={{ padding: 30, textAlign: 'center' }}>正在打开海关文件…</div>
+          : <div className="pdf-preview">{pdf.pages.map((src, i) => <img key={i} src={src} alt={`第 ${i + 1} 页`} />)}</div>}
+      </Modal>}
+      {pdf?.pages && createPortal(<div className={`docwrap ${pdfPrint ? 'print-root' : ''}`}><div className="pdf-print">{pdf.pages.map((src, i) => <img key={i} src={src} alt="" />)}</div></div>, document.body)}
       <input ref={fileRef} type="file" accept="application/pdf,.pdf" style={{ display: 'none' }} onChange={(e) => { uploadCustoms(e.target.files?.[0]); e.target.value = ''; }} />
       {pending ? null : shipment.signed_photo ? <Thumb src={shipment.signed_photo} size={30} label={`${shipment.bl_no || shipment.out_no} 客户签字`} />
         : signing ? <span className="row" style={{ gap: 4 }}><PhotoInput value={sign} onChange={setSign} label="签字照片" /><button type="button" className="btn sm primary" disabled={!sign} onClick={saveSign}>挂上</button><button type="button" className="btn sm ghost" onClick={() => setSigning(false)}>×</button></span>
           : <button type="button" className="btn sm" onClick={() => setSigning(true)} title="客户在 BL 上签字后拍照回传，作为发货证明">＋ 签收照片</button>}
       {!compact && shipment.bl_no && <span className="mono small muted">{shipment.bl_no}</span>}
       {createPortal(<div className={`docwrap ${printing ? 'print-root' : ''}`} ref={ref}>
-        <BlSheet shipment={shipment} deal={deal} lines={lines} header={data.header} logo={data.logo} />
-        <BlSheet shipment={shipment} deal={deal} lines={lines} header={data.header} logo={data.logo} />
+        <BlSheet shipment={shipment} deal={deal} lines={lines} header={data.header} logo={data.logo} copy="EXEMPLAIRE ENTREPOT" />
+        <BlSheet shipment={shipment} deal={deal} lines={lines} header={data.header} logo={data.logo} copy="EXEMPLAIRE CLIENT" />
       </div>, document.body)}
     </span>
   );

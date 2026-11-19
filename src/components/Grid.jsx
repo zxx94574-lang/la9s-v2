@@ -411,6 +411,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
       return;
     }
     if (e.shiftKey && sel) setSel({ a: sel.a, b: [r, c] }); else setSel({ a: [r, c], b: [r, c] });
+    if (colSel.size) setColSel(new Set());
     anchor.current = [r, c];
     selecting.current = true;
   };
@@ -450,7 +451,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !editing && undo.length + redo.length > 0 && tableRef.current?.isConnected && !e.target.closest?.('input,textarea,select,[contenteditable]')) {
         e.preventDefault(); if (e.shiftKey) doRedo(); else doUndo(); return;
       }
-      if (e.key === 'Escape' && !editing) setSel(null);
+      if (e.key === 'Escape' && !editing) { setSel(null); setColSel((c) => (c.size ? new Set() : c)); }
       if (!sel || editing || !tableRef.current?.isConnected || e.target.closest?.('input,textarea,select,[contenteditable]')) return;
       if (e.key === 'Enter' || (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey)) {
         const [r, c] = sel.a;
@@ -503,10 +504,78 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   })() : [];
   const [fillVal, setFillVal] = useState('');
 
+  // ── 342 多列选中 (Frank 11-17): 在表头上按住左键横着拖 = 选一片列; Shift 点 = 选到这一列; ⌘/Ctrl 点 = 加 / 减一列.
+  //    选中的列: 一起拖 (拖其中任意一列的 ⠿) / 一起隐藏 / ⌘C 一起复制 (连着的列). Esc 或点任意格子取消.
+  const [colSel, setColSel] = useState(() => new Set());
+  const colAnchor = useRef(null), skipSort = useRef(false);
+  const selectCols = (keys) => {
+    const set = new Set(keys); setColSel(set);
+    const idx = vis.map((c, i) => (set.has(c.key) ? i : -1)).filter((i) => i >= 0);
+    const contiguous = idx.length && idx[idx.length - 1] - idx[0] === idx.length - 1;
+    if (contiguous && shown.length) { setSel({ a: [0, idx[0]], b: [shown.length - 1, idx[idx.length - 1]] }); anchor.current = [0, idx[0]]; } else setSel(null);
+  };
+  const headDown = (e, key) => {
+    if (e.button !== 0 || e.target.closest('.grip,.funnel,.resizer')) return;
+    const keys = vis.map((c) => c.key), i0 = keys.indexOf(key);
+    if (e.shiftKey && colAnchor.current && keys.includes(colAnchor.current)) {
+      const a = keys.indexOf(colAnchor.current); skipSort.current = true; e.preventDefault();
+      selectCols(keys.slice(Math.min(a, i0), Math.max(a, i0) + 1)); return;
+    }
+    if (e.metaKey || e.ctrlKey) {
+      skipSort.current = true; e.preventDefault(); colAnchor.current = key;
+      const n = new Set(colSel); if (n.has(key)) n.delete(key); else n.add(key); selectCols([...n]); return;
+    }
+    if (e.pointerType === 'touch') return;   // 手机上横着划 = 滚动表格, 不选列
+    skipSort.current = false;
+    let moved = false;
+    const move = (ev) => {
+      const th = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('th[data-ck]');
+      if (!th || !tableRef.current?.contains(th)) return;
+      const i1 = keys.indexOf(th.dataset.ck); if (i1 < 0) return;
+      if (!moved && i1 === i0) return;
+      moved = true; skipSort.current = true; colAnchor.current = key;
+      selectCols(keys.slice(Math.min(i0, i1), Math.max(i0, i1) + 1));
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); if (!moved) colAnchor.current = key; setTimeout(() => { skipSort.current = false; }, 0); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  };
+  const hideCols = () => { const ks = [...colSel]; setLayout((l) => ({ ...l, hidden: [...new Set([...l.hidden, ...ks])] })); setColSel(new Set()); setSel(null); flash(`已隐藏 ${ks.length} 列（在「☷ 列」里可以再打开）`); };
+
   // ── column drag with live neighbour shifting ──
   const [drag, setDrag] = useState(null);
+  const startBlockDrag = (e) => {
+    // 一次拖一整块: 选中的列跟着鼠标走, 蓝色竖线 = 放下的位置
+    const ths = [...tableRef.current.querySelectorAll('thead th[data-ck]')];
+    const rects = ths.map((th) => th.getBoundingClientRect());
+    const keys = vis.map((c) => c.key);
+    const x0 = e.clientX; const box = tableRef.current.parentElement, sl0 = box.scrollLeft;
+    const tLeft = tableRef.current.getBoundingClientRect().left;
+    const es = edgeScroller(box);
+    let state = { block: true, keys: keys.filter((k) => colSel.has(k)), dx: 0, at: null, x: null };
+    setDrag(state);
+    const move = (ev) => {
+      es.update(ev, { y: false });
+      const sc = box.scrollLeft - sl0, px = ev.clientX + sc;
+      let at = keys.length;   // 插到第几列前面 (按原来的列序)
+      for (let i = 0; i < keys.length; i++) if (px < rects[i].left + rects[i].width / 2) { at = i; break; }
+      const edge = at < keys.length ? rects[at].left : rects[keys.length - 1].right;
+      state = { ...state, dx: ev.clientX - x0 + sc, at, x: edge - tLeft };
+      setDrag(state);
+    };
+    const up = () => {
+      es.stop(); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+      if (state.at != null) {
+        const blk = state.keys, before = keys.slice(0, state.at).filter((k) => !blk.includes(k)), after = keys.slice(state.at).filter((k) => !blk.includes(k));
+        const next = [...before, ...blk, ...after];
+        if (next.join() !== keys.join()) { setLayout((l) => ({ ...l, order: [...next, ...l.order.filter((x) => !next.includes(x))] })); if (navigator.vibrate) navigator.vibrate(8); }
+      }
+      setDrag(null);
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  };
   const startDrag = (e, key) => {
     e.preventDefault(); e.stopPropagation();
+    if (colSel.size > 1 && colSel.has(key)) return startBlockDrag(e);
     const ths = [...tableRef.current.querySelectorAll('thead th[data-ck]')];
     const widths = ths.map((th) => th.getBoundingClientRect().width);
     const lefts = ths.map((th) => th.getBoundingClientRect().left);
@@ -544,6 +613,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   };
   const dragCss = useMemo(() => {
     if (!drag) return '';
+    if (drag.block) return drag.keys.map((k) => `#${gid} [data-ck="${k}"]{transform:translateX(${drag.dx}px);transition:none;position:relative;z-index:6;background:#e3ecf9!important;opacity:.92}`).join('\n');
     const { from, to, dx, widths } = drag;
     const rules = [`#${gid} [data-ck]{transition:transform .22s cubic-bezier(.2,.8,.2,1)}`];
     vis.forEach((c, i) => {
@@ -688,6 +758,11 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
           {(undo.length > 0 || redo.length > 0) && <span className="row" style={{ gap: 4 }}>
             <button type="button" className="btn sm" disabled={!undo.length} onClick={doUndo} title="⌘Z · 一步一步退回到最开始">↶ 撤销{undo.length ? ` ${undo.length}` : ''}</button>
             <button type="button" className="btn sm" disabled={!redo.length} onClick={doRedo} title="⌘⇧Z">↷ 重做</button></span>}
+          {colSel.size > 0 && <span className="row colsel-bar" style={{ gap: 4 }}>
+            <span className="pill blue">选中 {colSel.size} 列</span>
+            {colSel.size > 1 && <span className="small muted hide-m">拖其中一列的 ⠿ = 整块一起挪</span>}
+            <button type="button" className="btn sm" onClick={hideCols}>隐藏这{colSel.size > 1 ? ' ' + colSel.size + ' ' : ''}列</button>
+            <button type="button" className="btn sm ghost" onClick={() => { setColSel(new Set()); setSel(null); }}>取消</button></span>}
           {sel && <button type="button" className="btn sm" onClick={async () => { const n = await copySel(true); flash(n < 0 ? '浏览器不让复制' : `已复制 ${n} 行（含表头）`); }}>复制所选</button>}
           {onDelete && delRows.length > 0 && <button type="button" className="btn sm danger" title="删掉选中的行（勾选的行，或点行号选中的行）；删错了可撤销" onClick={() => { const rs = delRows; setSel(null); if (selectable?.onChange) selectable.onChange(new Set()); onDelete(rs[0], shown.indexOf(rs[0]), rs); }}>🗑 删 {delRows.length} 行</button>}
           {vis.some(isFill) && <span className="hide-m"><Info>这张表可以像 Excel 一样用：⌘/Ctrl+V 粘贴整列 · ⌘/Ctrl+D 向下填充 · ⌘Z 撤销 · 拖表头边线调宽、双击自适应。</Info></span>}
@@ -711,6 +786,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
         </div>
       )}
       <div className="tw" ref={twRef} style={maxHeight ? { maxHeight } : null}>
+        {drag?.block && drag.x != null && <i className="col-drop" style={{ left: drag.x }} />}
         <table className="t" ref={tableRef} onMouseOver={cellOver} onMouseLeave={cellOut}>
           <thead>
             <tr>
@@ -720,12 +796,13 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
                 const f = liveConds.some((x) => x.key === c.key);
                 return (
                   <th key={c.key} data-ck={c.key} style={{ ...widthStyle(c), textAlign: alignOf(c) }}
-                    className={`${fill || c.tint ? 'fill-col' : ''} ${activeCol === c.key ? 'fill-active' : ''}`}>
+                    onPointerDown={(e) => headDown(e, c.key)}
+                    className={`${fill || c.tint ? 'fill-col' : ''} ${activeCol === c.key ? 'fill-active' : ''} ${colSel.has(c.key) ? 'col-sel' : ''}`}>
                     <span className="th-inner" style={{ justifyContent: alignOf(c) === 'right' ? 'flex-end' : alignOf(c) === 'center' ? 'center' : 'flex-start' }}>
                       <span className="grip" onPointerDown={(e) => startDrag(e, c.key)} title="拖动调整列顺序">⠿</span>
                       {fill && <span className="pen" title="这一列要填">✎</span>}
-                      <span className="th-label" onClick={() => c.sortable !== false && toggleSort(c.key)} title="点击排序">{c.label}</span>
-                      {c.sortable !== false && <span className={`sort ${sort?.key === c.key ? 'on' : ''}`} onClick={() => toggleSort(c.key)}>{sort?.key === c.key ? (sort.dir === 'asc' ? '▲' : '▼') : '⇅'}</span>}
+                      <span className="th-label" onClick={() => !skipSort.current && c.sortable !== false && toggleSort(c.key)} title="点 = 排序；按住横着拖 = 选几列一起拖 / 隐藏 / 复制（Shift 点 = 选到这列，⌘ 点 = 加减一列）">{c.label}</span>
+                      {c.sortable !== false && <span className={`sort ${sort?.key === c.key ? 'on' : ''}`} onClick={() => !skipSort.current && toggleSort(c.key)}>{sort?.key === c.key ? (sort.dir === 'asc' ? '▲' : '▼') : '⇅'}</span>}
                       {c.filterable !== false && (
                         <button type="button" className={`funnel gf-keep ${f ? 'on' : ''}`} title="按这一列筛选" onClick={(e) => { e.stopPropagation(); openPanel(c); }}>⏷</button>
                       )}

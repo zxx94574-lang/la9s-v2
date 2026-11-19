@@ -10,9 +10,11 @@ import { PoLink } from '../pages/Po.jsx';
 import { TierPill, useApp, useData, Drawer, Pill, BigNum, DatePicker, Modal, Info, Bang, MoneyIn } from './ui.jsx';
 import { TIERS, can } from '../lib/domain.js';
 import Grid from './Grid.jsx';
+import { DealLink } from './Archives.jsx';
 import { money, qty, dDate, dt, friendlyError, today } from '../lib/format.js';
 
 const N = (v) => Number(v || 0);
+const fromDeal0 = () => { const m = String(window.location.hash).match(/deal\/([0-9a-f-]{36})/); return m ? m[1] : null; };   // 343: 从哪张单点开的
 const FEE = { S: 'fee_s', WHOLESALE: 'fee_a', RETAIL: 'fee_b', REPAIR: 'fee_c' };
 const TIER_ORDER = ['S', 'WHOLESALE', 'RETAIL', 'REPAIR'];
 const ceilTo = (v, s) => Math.ceil(v / s) * s;
@@ -183,7 +185,8 @@ export default function ProductDrawer({ product, tier, onClose }) {
         {seeAll && data?.recent?.length > 0 && (
           <section className="pd-sec">
             <div className="pd-h">最近成交（出库）</div>
-            <Grid id="pd-recent" compactTools rows={data.recent} rowKey={(x) => String(x.created_at) + x.customer + x.qty_supply} columns={[
+            <Grid id="pd-recent" compactTools rows={[...data.recent].sort((x, y) => (y.deal_id === fromDeal0()) - (x.deal_id === fromDeal0()))} rowKey={(x) => String(x.created_at) + x.customer + x.qty_supply} columns={[
+              { key: 'biz_no', label: '订单', w: 190, value: (x) => x.biz_no, render: (x) => <>{x.deal_id === fromDeal0() && <span className="pill blue" style={{ marginRight: 4 }}>本单</span>}<DealLink id={x.deal_id} no={x.biz_no} /></> },
               { key: 'created_at', label: '日期', w: 110, value: (x) => dDate(x.created_at) }, { key: 'customer', label: '客户', w: 170 },
               { key: 'tier', label: '档', w: 110, value: (x) => TIERS[x.tier] || '', render: (x) => <TierPill tier={x.tier} /> },
               { key: 'qty_supply', label: '数量', w: 90, type: 'number', render: (x) => qty(x.qty_supply) }, { key: 'unit_price', label: '单价', w: 100, type: 'number', render: (x) => money(x.unit_price) }]} />
