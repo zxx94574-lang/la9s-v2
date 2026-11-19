@@ -7,6 +7,7 @@ import { sumMargin, MarginPill, MarginKpis, useMarginRules } from '../components
 import { normPhone, fmtPhone } from '../lib/phone.js';
 import { ConfirmEdit, HistoryBlock } from '../components/ProductDrawer.jsx';
 import React, { useMemo, useState } from 'react';
+import { useShare, SHARE_RANGES, shareRange, ShareNote } from '../components/SalesStats.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker , PhoneInput, phoneValid, Info, Choice, MoneyIn, Assumed } from '../components/ui.jsx';
@@ -34,6 +35,7 @@ export default function Customers() {
   const [tab, setTab] = useState('all');
   const [open, setOpen] = useState(null);
   const [newP, setNewP] = useState(false);
+  const [shareK, setShareK] = useState('month'); const [sf, st] = shareRange(shareK); const share = useShare(sf, st);   // 383 订单占比
   const { data } = useData(async () => {
     const [rows, accs, emps, [optRow]] = await Promise.all([q(Q.customerProfiles, [org]), role === 'admin' ? q(Q.customerAccounts, [org]) : [], q(Q.employees, [org]),
       q(`select value from app.org_settings where org_id = $1 and key = 'customer_options'`, [org])]);
@@ -82,6 +84,8 @@ export default function Customers() {
       edit: (c) => (canEdit ? { type: 'select', value: c.owner_employee_id || '', options: [['', '（无归属）'], ...data.emps.map((e) => [e.id, e.short_name])], onChange: (v, m) => saveCell(c, 'owner_employee_id', v, m) } : null) },
     ...(role === 'admin' ? [{ key: 'acc', label: '下单账号', w: 150, value: (c) => (c.acc ? `${ACC[c.acc.status][0]} ${c.acc.login}` : '没开账号'),
       render: (c) => (c.acc ? <span className="row" style={{ gap: 4 }}><Pill tone={ACC[c.acc.status][1]}>{ACC[c.acc.status][0]}</Pill><span className="mono small">{c.acc.login}</span>{Number(c.acc.unacked) > 0 && <Pill tone="amber">改了密码</Pill>}</span> : <span className="muted small">没开</span>) }] : []),
+    ...(price ? [{ key: 'share_amt', label: `订单占比（${SHARE_RANGES.find((x) => x[0] === shareK)[1]}）`, w: 130, type: 'number', value: (c) => (share[c.id] ? Number(share[c.id].amt_share) * 100 : null), render: (c) => (share[c.id] ? <b>{(Number(share[c.id].amt_share) * 100).toFixed(1)}%</b> : '') },
+      { key: 'share_qty', label: '片数占比', w: 90, type: 'number', value: (c) => (share[c.id] ? Number(share[c.id].qty_share) * 100 : null), render: (c) => (share[c.id] ? `${(Number(share[c.id].qty_share) * 100).toFixed(1)}%` : '') }] : []),
     ...(price ? [{ key: 'balance', label: '欠款 XOF', w: 110, value: (c) => Number(c.balance || 0), render: (c) => (Number(c.balance) ? money(c.balance) : '—') },
       { key: 'warn', label: '预警', w: 170, value: (c) => creditWarn(c).join(' / '),
         render: (c) => { const w = creditWarn(c); return w.length ? <span className="row" style={{ gap: 4 }}>{w.map((x) => <Pill key={x} tone="red">{x}</Pill>)}{c.has_agreement && <Pill tone="gray">有协议</Pill>}</span> : c.has_agreement ? <Pill tone="gray">有协议</Pill> : ''; } }] : []),
@@ -102,7 +106,7 @@ export default function Customers() {
       </div>
       <div className="card">
         <div className="tabs">{TABS.filter(([k]) => (price || !['warn', 'byowner'].includes(k)) && (k !== 'opts' || role === 'admin')).map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l} {!['byowner', 'opts'].includes(k) && <span className="muted small">{n(k)}</span>}</button>)}</div>
-        {tab === 'byowner' ? <ByOwner /> : tab === 'opts' ? <CustomerOptionsEditor opts={O} /> : <Grid id="customers2" table="customers" columns={cols} rows={rows} onRowClick={(c) => setOpen(c.id)} empty="这一类没有客户"
+        {tab === 'byowner' ? <ByOwner /> : tab === 'opts' ? <CustomerOptionsEditor opts={O} /> : <Grid id="customers2" table="customers" columns={cols} rows={rows} onRowClick={(c) => setOpen(c.id)} empty="这一类没有客户" tools={seesPrice(role) ? <><span className="small muted">订单占比看</span><Choice size="sm" flat={false} width={120} value={shareK} onChange={setShareK} options={SHARE_RANGES} /><ShareNote /></> : null}
           tools={canEdit ? <span className="hint">点一下选格子，再点一下改，改完自动保存；行号旁 ↗ 打开客户抽屉。城市 / 店铺类型 / 跟进状态等选项在「选项设置」里加，表头漏斗按它筛。</span> : null} />}
       </div>
       {open && <CustomerDrawer id={open} onClose={() => setOpen(null)} />}

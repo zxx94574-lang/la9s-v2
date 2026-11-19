@@ -1399,3 +1399,17 @@ tr.grp-row.d1 > td { background: #f7f9fc; } tr.grp-row.d2 > td { background: #fb
 /* 371 固定板块的空态: 一行 */
 .todo-empty { display: flex; align-items: center; gap: 8px; padding: 9px 18px; margin-bottom: 8px; font-size: 13px; color: var(--muted, #6b7686); }
 .todo-empty b { color: var(--ink, #1c2430); font-weight: 650; }
+
+.kpi-btn { text-align: left; font: inherit; color: inherit; width: 100%; padding: 12px 14px; border-radius: 12px; }
+.kpi-btn .v { font-size: 24px; }
+
+/* 384 物料销量柱状图 */
+.sales-bars { display: flex; align-items: flex-end; gap: 4px; overflow-x: auto; padding: 6px 0 2px; }
+.sales-bar { flex: 1 0 34px; max-width: 64px; display: flex; flex-direction: column; align-items: center; gap: 2px; background: none; border: 0; padding: 2px 0; cursor: pointer; font: inherit; border-radius: 6px; }
+.sales-bar .n { font-size: 11px; font-weight: 650; }
+.sales-bar .col { height: 90px; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.sales-bar .col i { width: 70%; background: var(--brand); border-radius: 3px 3px 0 0; display: flex; align-items: flex-end; overflow: hidden; }
+.sales-bar .col em { width: 100%; background: #b9c7de; display: block; }
+.sales-bar .l { font-size: 10.5px; color: var(--muted, #6b7686); white-space: nowrap; }
+.sales-bar.on, .sales-bar:hover { background: #eaf1fc; }
+.sales-detail { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 10px; }

@@ -4,6 +4,7 @@
 //   档案里直接改: 「✎ 修改」解锁一次 → 改几项 → 保存前列出 改前 → 改后 + 自检 (低于成本红 / 运费没填黄 / 档位倒挂黄 / 改动太大黄) → 确认后存 + 留记录, 自动锁回
 import { sumMargin, MarginPill, MarginKpis, useMarginRules } from './Margin.jsx';
 import React, { useState } from 'react';
+import { ProductSales } from './SalesStats.jsx';
 import { q, call } from '../db/client.js';
 import { PoLink } from '../pages/Po.jsx';
 import { TierPill, useApp, useData, Drawer, Pill, BigNum, DatePicker, Modal, Info, Bang, MoneyIn } from './ui.jsx';
@@ -188,6 +189,7 @@ export default function ProductDrawer({ product, tier, onClose }) {
               { key: 'qty_supply', label: '数量', w: 90, type: 'number', render: (x) => qty(x.qty_supply) }, { key: 'unit_price', label: '单价', w: 100, type: 'number', render: (x) => money(x.unit_price) }]} />
           </section>
         )}
+        {product?.id && role !== 'picker' && <ProductSales productId={product.id} />}
         {role === 'admin' && product?.id && <ProductMargin productId={product.id} />}
         {seeAll && data && <HistoryBlock hist={data.hist} />}
       </div>

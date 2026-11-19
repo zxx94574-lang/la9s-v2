@@ -31,6 +31,7 @@ import { MoneyUrgent, ChangeNotices } from '../components/Batch3.jsx';
 import { InquiryTodo } from './Inquiry.jsx';
 import { AddonTodo } from '../components/Addons.jsx';
 import { AnomalyHub, Always } from '../components/Anomalies.jsx';
+import { useKdTodoCount } from '../components/KdRecon.jsx';
 import { LossTodo } from '../components/Loss.jsx';
 import PublicHeld from '../components/PublicHeld.jsx';
 import { PricePendingTodo } from '../components/PricePending.jsx';
@@ -140,6 +141,7 @@ export default function Todo() {
       (select count(*) from app.deals d where d.org_id = $1 and d.source = 'guest' and d.status = 'quoted') as guest_new`, [org])]);
     return f;
   }, [org]);
+  const kdTodo = useKdTodoCount();
   const extras = [
     ['hotline', 'sales', 'manager', 'admin'].includes(role) && Number(extra?.follow) > 0 && ['hotline', `☎ 今天要回访 ${extra.follow} 位客户（约好今天或已过期的）`],
     role === 'admin' && Number(extra?.cash) > 0 && ['cash', `₣ 资金账户有 ${extra.cash} 笔要中方处理（认领到账 / 确认交款 / 批支出）`],
@@ -152,7 +154,7 @@ export default function Todo() {
     ['finance', 'manager'].includes(role) && Number(extra?.grn_ready) > 0 && ['kingdee', `⇆ ${extra.grn_ready} 张收货单要录金蝶采购入库`],
     role === 'admin' && Number(extra?.fob_price) > 0 && ['fob', `◷ ${extra.fob_price} 个 FOB 申请等中方定价`],
     role === 'admin' && Number(extra?.fob_release) > 0 && ['fob', `◷ ${extra.fob_release} 个 FOB 已到货，等中方决定放货`],
-    ['finance', 'manager'].includes(role) && Number(extra?.kd_ready) > 0 && ['kingdee', `⇆ ${extra.kd_ready} 张出库单客户已签收，要录金蝶`],
+    ['finance', 'manager', 'admin'].includes(role) && kdTodo > 0 && ['kingdee', `⇆ 还没录金蝶 ${kdTodo} 张（出库 / 入库 / 其他出入库 / 收款）`],
     ['manager', 'admin'].includes(role) && Number(extra?.kd_audit) > 0 && ['kingdee', `⇆ ${extra.kd_audit} 张金蝶单已提交，等审核`],
   ].filter(Boolean);
   // 客户要货日期到了 (今天或已过) 的排最前 (Frank 11-07: 明天要的到明天自动前移)

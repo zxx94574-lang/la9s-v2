@@ -14,9 +14,10 @@ import { ModelLink, CustLink, EmpLink , DealLink} from '../components/Archives.j
 const ST = { await_receipt: ['待客户签收', 'gray'], ready: ['待录金蝶', 'amber'], saved: ['已保存', 'blue'], submitted: ['已提交 · 待审核', 'blue'], synced: ['已审核', 'green'], error: ['出错', 'red'], void: ['已撤销出库', 'gray'] };
 const WH = { 'CI LA MATERIAL WH': 'LA', 'CI 9S MATERIAL WH': '9S', 'CI LA FOB MATERIAL WH': 'FOB', 'CI PENDING LIABILITY WH': 'PENDING', 'CI DEFECTIVE WH-LA': 'SCRAP', 'CI DEFECTIVE WH-9S': 'SCRAP', 'CI PCBA RECYCLE WH': 'RECYCLE', 'CI CHIP RECYCLE WH': 'RECYCLE' };
 
+import { KdAll, KdRecon } from '../components/KdRecon.jsx';
 export default function Kingdee() {
   const { org, role, toast, refresh, go } = useApp();
-  const [tab, setTab] = useState('queue');
+  const [tab, setTab] = useState('all');
   const [f, setF] = useState('ready');
   const [m, setM] = useState(null);
   const [asOf, setAsOf] = useState(null);
@@ -60,13 +61,17 @@ export default function Kingdee() {
       <div className="pagehead"><div><div className="eyebrow">Synchronisation Kingdee</div><h1>金蝶同步</h1>
         <div className="sub">客户签收后才录金蝶：保存（填金蝶单号）→ 提交 → 审核，三步分开，提交和审核不能是同一个人。金蝶接口还没开，现在是系统列出要录的明细、人在金蝶里录完回来点步骤。</div></div></div>
       <div className="card">
-        <div className="tabs"><button type="button" className={tab === 'queue' ? 'on' : ''} onClick={() => setTab('queue')}>出库单录金蝶 <span className="queue-n">{counts.ready || ''}</span></button>
+        <div className="tabs"><button type="button" className={tab === 'all' ? 'on' : ''} onClick={() => setTab('all')}>待录金蝶（总表）</button>
+          <button type="button" className={tab === 'queue' ? 'on' : ''} onClick={() => setTab('queue')}>出库单录金蝶 <span className="queue-n">{counts.ready || ''}</span></button>
           <button type="button" className={tab === 'grn' ? 'on' : ''} onClick={() => setTab('grn')}>采购入库 <span className="queue-n">{data.grn.filter((g) => g.kd_status === 'ready').length || ''}</span></button>
           <button type="button" className={tab === 'misc' ? 'on' : ''} onClick={() => setTab('misc')}>其他出入库 / 调拨 / 退货</button>
-          <button type="button" className={tab === 'stock' ? 'on' : ''} onClick={() => setTab('stock')}>库存对账</button></div>
+          <button type="button" className={tab === 'stock' ? 'on' : ''} onClick={() => setTab('stock')}>库存快照</button>
+          {['admin', 'finance'].includes(role) && <button type="button" className={tab === 'recon' ? 'on' : ''} onClick={() => setTab('recon')}>和金蝶对账</button>}</div>
+        {tab === 'all' && <div className="card-b"><KdAll /></div>}
+        {tab === 'recon' && <div className="card-b"><KdRecon /></div>}
         {tab === 'grn' && <GrnList rows={data.grn} />}
         {tab === 'misc' && <MiscList />}
-        {tab === 'grn' || tab === 'misc' ? null : tab === 'queue' ? (
+        {['grn', 'misc', 'all', 'recon'].includes(tab) ? null : tab === 'queue' ? (
           <Grid id="kd-queue" table="kingdee_outbox" columns={cols} rows={rows} onRowClick={(r) => go('deal/' + r.deal_id)} empty="没有"
             tools={<div className="chips">{[['ready', '待录'], ['saved', '已保存'], ['submitted', '待审核'], ['synced', '已审核'], ['await_receipt', '待签收'], ['', '全部']].map(([k, l]) =>
               <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} {k ? counts[k] : data.rows.length}</button>)}</div>} />
