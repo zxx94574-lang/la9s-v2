@@ -14,7 +14,7 @@ export default function PublicHeld({ urgentOnly }) {
   const { data } = useData(async () => {
     if (!['admin', 'finance'].includes(role)) return null;
     const accs = await q(`select a.id, a.name, a.currency, a.hold_days, a.hold_limit, e.short_name as holder from app.cash_accounts a join app.employees e on e.id = a.holder_employee_id
-      where a.org_id = $1 and a.active and a.name like '%公户%' order by a.name`, [org]);
+      where a.org_id = $1 and a.active and a.is_public order by a.sort nulls last, a.name`, [org]);
     if (!accs.length) return [];
     const moves = await q(`select m.id, m.account_id, m.amount, m.on_date, m.kind, m.payer, app.move_sign(m) as sign, c.name as customer
       from app.cash_moves m left join app.customers c on c.id = m.customer_id where m.account_id = any($1::uuid[]) order by m.on_date, m.created_at`, [accs.map((a) => a.id)]);

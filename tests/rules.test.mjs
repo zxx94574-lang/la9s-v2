@@ -85,7 +85,8 @@ test('找货：找货人和照片必填；少于预占必须写原因并释放�
   await rejects(t.as(U.picker, `select app.submit_pick($1,$2,'p.jpg',$3)`, [deal, t.ids.picker, JSON.stringify([{ line_id: l.id, qty: 101, reason: 'x' }])]), /不能超过预占/);
   await t.as(U.picker, `select app.submit_pick($1,$2,'p.jpg',$3)`, [deal, t.ids.picker, JSON.stringify([{ line_id: l.id, qty: 90, reason: '货架只剩90' }])]);
   assert.equal((await t.stockOf(t.ids.stLA_cover)).qty_reserved, 90);
-  assert.equal(await t.status(deal), 'picked');
+  assert.equal(await t.status(deal), 'ordered', '0064: 初检提交后销售订单自动生成');
+  assert.ok((await t.one(`select so_no from app.deals where id = $1`, [deal])).so_no);
 });
 
 test('改价只有中方；批量取价不覆盖手改价；手改价下推需二次确认', async () => {
@@ -103,9 +104,9 @@ test('改价只有中方；批量取价不覆盖手改价；手改价下推需�
   assert.deepEqual(ls.map((l) => Number(l.unit_price)), [3000, 9999]);
   await t.as(U.manager, `select app.start_picking($1)`, [deal]);
   await t.as(U.picker, `select app.submit_pick($1,$2,'p.jpg','[]')`, [deal, t.ids.picker]);
-  await rejects(t.as(U.manager, `select app.create_sales_order($1,false)`, [deal]), /CONFIRM_REQUIRED/);
-  const so = await t.val(U.manager, `select app.create_sales_order($1,true)`, [deal]);
-  assert.match(so, /^SO-CI-\d{4}-0001$/);
+  // 0064: 销售订单自动生成; 老入口再调一次直接返回同一个单号 (手改价的二次确认改在界面上、客户确认之前提示)
+  const so = await t.val(U.manager, `select app.create_sales_order($1,false)`, [deal]);
+  assert.match(so, /-O$/);
 });
 
 test('不能跳步：报价不能直接出库', async () => {

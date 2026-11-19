@@ -126,17 +126,18 @@ test('预付自动抵扣：先付 1000 记预付，出库 550 时自动冲掉，
   assert.equal(await t.balance(t.ids.camaraAbobo), -450);
 });
 
-test('单价 0：未经中方改价不能出销售订单；中方注明赠品后可以', async () => {
+test('单价 0：销售订单自动生成 (0064)；未经中方改价客户不能确认；中方注明赠品后可以', async () => {
   const t = await setup();
   const d = await quote(t, t.ids.camaraAbobo, [{ product_id: t.ids.bg6mCover, qty_req: 2 }]);
   await t.as(U.manager, `select app.start_picking($1)`, [d]);
   await t.as(U.picker, `select app.submit_pick($1,$2,'p.jpg','[]')`, [d, t.ids.picker]);
   await t.db.query(`update app.deal_lines set unit_price = 0 where deal_id = $1`, [d]);
-  await rejects(t.as(U.manager, `select app.create_sales_order($1,true)`, [d]), /单价为 0/);
+  assert.equal(await t.status(d), 'ordered', '初检一提交销售订单就自动生成');
+  await rejects(t.as(U.hotline, `select app.customer_confirm($1,null,'whatsapp','c.jpg')`, [d]), /单价为 0/);
   const [l] = await t.lines(d);
   await t.as(U.admin, `select app.set_line_price($1,0,'赠品')`, [l.id]);
-  await t.as(U.manager, `select app.create_sales_order($1,true)`, [d]);
-  assert.equal(await t.status(d), 'ordered');
+  await t.as(U.hotline, `select app.customer_confirm($1,null,'whatsapp','c.jpg')`, [d]);
+  assert.equal(await t.status(d), 'confirmed');
 });
 
 test('退货批次、机型改名合并（只中方）、抹零上限', async () => {

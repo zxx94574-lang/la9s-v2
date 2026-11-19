@@ -7,7 +7,7 @@ import PublicHeld from '../components/PublicHeld.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice, MoneyIn } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice, MoneyIn, Info } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { can, PAY_METHODS } from '../lib/domain.js';
@@ -27,10 +27,20 @@ export default function Cash() {
   const [tab, setTab] = useState('open');
   const [range, setRange] = useState(() => periodRange('month'));
   const [modal, setModal] = useState(null);
+  const [dragAcc, setDragAcc] = useState(null);
+  const dropAcc = async (target) => {
+    const ids = data.acc.map((a) => a.account_id); const from = ids.indexOf(dragAcc), to = ids.indexOf(target); setDragAcc(null);
+    if (from < 0 || to < 0 || from === to) return;
+    ids.splice(to, 0, ids.splice(from, 1)[0]);
+    try { for (let i = 0; i < ids.length; i += 1) await call(role, `select app.set_cash_account_opts($1,$2)`, [ids[i], JSON.stringify({ sort: i + 1 })]); refresh(); } catch (e) { toast(friendlyError(e), 'err'); }
+  };
   const { data } = useData(async () => {
-    const [acc, open, notices, moves, customers, [cls]] = await Promise.all([q(Q.cashHoldings, [org]), q(Q.cashOpen, [org]), q(Q.paymentNotices, [org]),
-      q(Q.cashMoves, [org, range[0], range[1]]), q(Q.customers, [org]), q(`select value from app.org_settings where org_id = $1 and key = 'cash_classes'`, [org])]);
-    return { acc, open, notices, moves, customers, classes: { ...CASH_CLASSES, ...(cls?.value || {}) } };
+    const [accAll, open, notices, moves, customers, [cls], pend] = await Promise.all([q(Q.cashHoldings, [org]), q(Q.cashOpen, [org]), q(Q.paymentNotices, [org]),
+      q(Q.cashMoves, [org, range[0], range[1]]), q(Q.customers, [org]), q(`select value from app.org_settings where org_id = $1 and key = 'cash_classes'`, [org]),
+      call(role, `select * from app.cash_pending($1)`, [org]).catch(() => [])]);
+    const pmap = Object.fromEntries((pend || []).map((x) => [x.account_id, x]));
+    const acc = accAll.filter((a) => a.active !== false).map((a) => ({ ...a, pend_n: pmap[a.account_id]?.n || 0, pend_amount: Number(pmap[a.account_id]?.amount || 0) }));
+    return { acc, accAll, open, notices, moves, customers, classes: { ...CASH_CLASSES, ...(cls?.value || {}) } };
   }, [org, range[0], range[1]]);
   const ctl = useControls();   // 220: 待核对到账 / 员工代收 / 对账盘点 / 月结 / 在途
   const custName = useMemo(() => Object.fromEntries((data?.customers || []).map((c) => [c.id, `${c.code || c.temp_code} ${c.name}`])), [data]);
@@ -117,25 +127,33 @@ export default function Cash() {
           {dec && <button type="button" className="btn" onClick={() => setModal({ t: 'account' })}>账户设置</button>}
         </div>
       </div>
-      <div className="kpis" style={{ gridTemplateColumns: `repeat(${Math.min(Math.max(data.acc.length, 1), 4)}, minmax(0,1fr))` }}>
-        {data.acc.length === 0 && <div className="card card-b muted">还没有账户。中方点「账户设置」先建公户。</div>}
-        {data.acc.map((a) => {
-          const held = a.oldest_held_on ? Math.floor((Date.now() - new Date(a.oldest_held_on).getTime()) / 864e5) : 0;
-          return (
-            <div key={a.account_id} className={`kpi ${a.over_limit || a.over_days ? 'bad' : ''}`} style={{ cursor: 'default' }}>
-              <div className="t"><span>{a.name}</span><span className="small muted">{ACC_KIND[a.kind]}</span></div>
-              <BigNum size={26}>{money(a.balance, a.currency)}</BigNum>
-              <div className="small muted">{a.holder ? `在 ${a.holder} 手上` : '—'}{a.hold_limit ? ` · 上限 ${money(a.hold_limit, a.currency)}` : ''}{a.hold_days ? ` · 最长 ${a.hold_days} 天` : ''}</div>
-              <div className="row" style={{ gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-                {a.over_limit && <Pill tone="red">超上限 {money(a.balance - a.hold_limit, a.currency)}，要马上交</Pill>}
-                {a.over_days && <Pill tone="red">最早一笔压了 {held} 天</Pill>}
-                {!a.over_days && Number(a.balance) > 0 && a.oldest_held_on && <Pill tone="gray">最早一笔 {held} 天</Pill>}
-                {Number(a.unclaimed_n) > 0 && <Pill tone="amber">{a.unclaimed_n} 笔待认领 {money(a.unclaimed_amount, a.currency)}</Pill>}
-                {Number(a.handover_pending) > 0 && <Pill tone="blue">交款待确认 {money(a.handover_pending, a.currency)}</Pill>}
-              </div>
-            </div>);
-        })}
-      </div>
+      {data.acc.length === 0 && <div className="card card-b muted">还没有账户。中方点「账户设置」先建。</div>}
+      {/* 414 (Frank 11-18): 自有账户 / 公户分两块; 卡片可以拖动换位置 (只中方, 顺序全公司一样); 待核对的收款在卡片上看得见 */}
+      {[['own', '公司自有账户', data.acc.filter((a) => !a.is_public)], ['pub', '公户（钱在个人手里，算他欠公司）', data.acc.filter((a) => a.is_public)]].map(([gk, gt, list]) => (list.length > 0 || gk === 'own') && (
+        <div key={gk} className="acc-block">
+          <div className="acc-block-t">{gt}<span className="small muted">{list.length} 个{dec ? ' · 按住卡片可以拖动换位置' : ''}</span></div>
+          <div className="acc-cards">
+            {list.map((a) => {
+              const held = a.oldest_held_on ? Math.floor((Date.now() - new Date(a.oldest_held_on).getTime()) / 864e5) : 0;
+              return (
+                <div key={a.account_id} className={`kpi acc-card ${a.over_limit || a.over_days ? 'bad' : ''} ${dragAcc === a.account_id ? 'dragging' : ''}`} style={{ cursor: dec ? 'grab' : 'default' }}
+                  draggable={dec} onDragStart={() => setDragAcc(a.account_id)} onDragEnd={() => setDragAcc(null)} onDragOver={(e) => { if (dragAcc && dragAcc !== a.account_id) e.preventDefault(); }} onDrop={() => dropAcc(a.account_id)}>
+                  <div className="t"><span>{a.name}</span><span>{ACC_KIND[a.kind]}{Number(a.fee_pct) > 0 ? ` · 手续费 ${Number(a.fee_pct)}%` : ''}</span></div>
+                  <BigNum size={26}>{money(a.balance, a.currency)}</BigNum>
+                  <div className="small muted">{a.is_public ? `${a.holder || '—'} 欠公司（已核对的）` : a.holder ? `在 ${a.holder} 手上` : '余额'}{a.hold_limit ? ` · 上限 ${money(a.hold_limit, a.currency)}` : ''}{a.hold_days ? ` · 最长 ${a.hold_days} 天` : ''}</div>
+                  <div className="row" style={{ gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                    {a.pend_n > 0 && <Pill tone="amber">待核对 {a.pend_n} 笔 · {money(a.pend_amount, a.currency)}</Pill>}
+                    {a.over_limit && <Pill tone="red">超上限 {money(a.balance - a.hold_limit, a.currency)}，要马上交</Pill>}
+                    {a.over_days && <Pill tone="red">最早一笔压了 {held} 天</Pill>}
+                    {!a.over_days && Number(a.balance) > 0 && a.oldest_held_on && <Pill tone="gray">最早一笔 {held} 天</Pill>}
+                    {Number(a.unclaimed_n) > 0 && <Pill tone="amber">{a.unclaimed_n} 笔待认领 {money(a.unclaimed_amount, a.currency)}</Pill>}
+                    {Number(a.handover_pending) > 0 && <Pill tone="blue">交款待确认 {money(a.handover_pending, a.currency)}</Pill>}
+                  </div>
+                </div>);
+            })}
+            {!list.length && <div className="small muted" style={{ padding: 8 }}>没有</div>}
+          </div>
+        </div>))}
       <ControlAlerts ctl={ctl} onGo={setTab} />
       <PublicHeld />
       <div className="card">
@@ -154,7 +172,7 @@ export default function Cash() {
       {modal?.t === 'notice' && <NoticeModal customers={data.customers} onClose={() => setModal(null)} />}
       {modal?.t === 'import' && <ImportModal acc={data.acc} onClose={() => setModal(null)} />}
       {modal?.t === 'refund' && <RefundModal acc={data.acc} customers={data.customers} onClose={() => setModal(null)} />}
-      {modal?.t === 'account' && <AccountModal acc={data.acc} onClose={() => setModal(null)} />}
+      {modal?.t === 'account' && <AccountModal acc={data.accAll} onClose={() => setModal(null)} />}
     </>
   );
 }
@@ -316,6 +334,8 @@ function ImportModal({ acc, onClose }) {
   );
 }
 
+// 415 (Frank 11-18): 账户设置 —— 新增 / 改名 / 停用; 类型、是不是公户、在谁手上、手续费率都是明确的设置 (系统不再按名字猜);
+// 改名之前先告诉人会影响什么, 确认了才改, 留改名记录.
 function AccountModal({ acc, onClose }) {
   const { org, role, toast, refresh } = useApp();
   const { data: emps } = useData(() => q(Q.employees, [org]), [org]);
@@ -323,31 +343,53 @@ function AccountModal({ acc, onClose }) {
   const cur = acc.find((a) => a.account_id === sel);
   const [f, setF] = useState(() => init(cur));
   const [over, setOver] = useState(String(Number(acc[0]?.approval_over || 0)));
-  function init(a) { return { name: a?.name || '', kind: a?.kind || 'bank', currency: a?.currency || 'XOF', holder: a?.holder_employee_id || '', limit: a?.hold_limit != null ? String(Number(a.hold_limit)) : '5000000', days: a?.hold_days != null ? String(a.hold_days) : '7' }; }
+  const [ask, setAsk] = useState(null);
+  function init(a) { return { name: a?.name || '', kind: a?.kind || 'bank', currency: a?.currency || 'XOF', holder: a?.holder_employee_id || '', limit: a?.hold_limit != null ? String(Number(a.hold_limit)) : '', days: a?.hold_days != null ? String(a.hold_days) : '', is_public: !!a?.is_public, fee: a ? String(Number(a.fee_pct || 0)) : '0', active: a ? a.active !== false : true }; }
   const pick = (id) => { setSel(id); setF(init(acc.find((a) => a.account_id === id))); };
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v?.target ? v.target.value : v }));
-  const go = async () => {
+  const save = async () => {
     try {
-      await call(role, `select app.upsert_cash_account($1,$2,$3,$4,$5,$6,$7,$8)`, [org, cur ? sel : null, f.name, f.kind, f.currency, f.holder || null, f.limit === '' ? null : Number(f.limit), f.days === '' ? null : Number(f.days)]);
+      const [{ id }] = await call(role, `select app.upsert_cash_account($1,$2,$3,$4,$5,$6,$7,$8) as id`, [org, cur ? sel : null, f.name, f.kind, f.currency, f.holder || null, f.limit === '' ? null : Number(f.limit), f.days === '' ? null : Number(f.days)]);
+      await call(role, `select app.set_cash_account_opts($1,$2)`, [id || sel, JSON.stringify({ is_public: f.is_public, fee_pct: f.fee === '' ? 0 : Number(f.fee), active: f.active })]);
       await call(role, `select app.set_cash_settings($1,$2,3)`, [org, Number(over || 0)]);
       toast('已保存'); refresh(); onClose();
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
+  const go = async () => {
+    if (!f.name.trim()) return toast('账户名必填', 'err');
+    if (f.is_public && !f.holder) return toast('公户要选「在谁手上」', 'err');
+    const renamed = cur && f.name.trim() !== cur.name, stopped = cur && cur.active !== false && !f.active;
+    if (renamed || stopped) {
+      try { const [{ u }] = await call(role, `select app.cash_account_usage($1) as u`, [sel]); setAsk({ u, renamed, stopped }); } catch (e) { toast(friendlyError(e), 'err'); }
+      return;
+    }
+    save();
+  };
   return (
-    <Modal title="账户设置（只中方）" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!f.name.trim()} onClick={go}>保存</button></>}>
+    <Modal title="账户设置（只中方）" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" onClick={go}>保存</button></>}>
       <div className="stack">
-        <div className="chips">{acc.map((a) => <button type="button" key={a.account_id} className={`chip ${sel === a.account_id ? 'on' : ''}`} onClick={() => pick(a.account_id)}>{a.name}</button>)}
+        <div className="chips">{acc.map((a) => <button type="button" key={a.account_id} className={`chip ${sel === a.account_id ? 'on' : ''}`} onClick={() => pick(a.account_id)}>{a.name}{a.active === false ? '（停用）' : ''}</button>)}
           <button type="button" className={`chip ${sel === 'new' ? 'on' : ''}`} onClick={() => pick('new')}>＋ 新账户</button></div>
         <div className="grid2">
-          <div className="field req"><label>账户名</label><input className="in" value={f.name} onChange={set('name')} placeholder="公户 · 员工名" /></div>
-          <div className="field"><label>类型</label><div className="seg">{Object.entries(ACC_KIND).map(([k, l]) => <button type="button" key={k} className={f.kind === k ? 'on' : ''} onClick={() => set('kind')(k)}>{l}</button>)}</div></div>
+          <div className="field req"><label>账户名</label><input className={`in ${!f.name.trim() ? 'err-in' : ''}`} value={f.name} onChange={set('name')} placeholder="例如 Orange-XOF" /></div>
+          <div className="field"><label>类型 <Info>收款方式、有没有手续费、是不是现金都按这里走，和账户叫什么名字无关。</Info></label><Choice value={f.kind} onChange={(v) => { set('kind')(v); if (!cur) set('fee')(['wave', 'orange'].includes(v) ? '1' : '0'); }} options={Object.entries(ACC_KIND)} flat={false} /></div>
           <div className="field"><label>币种</label><Choice value={f.currency} onChange={(v) => set('currency')(v)} options={['XOF', 'CNY', 'USD']} disabled={!!cur} /></div>
-          <div className="field"><label>在谁手上 / 谁名下</label><OptChoice optKey="emp_list" title="员工名单" data value={f.holder} onChange={(v) => set('holder')({ target: { value: v } })} options={(emps || []).map((e) => [e.id, e.short_name])} empty="—" flat={false} /></div>
+          <div className="field"><label>手续费率 %（没有填 0）</label><MoneyIn className="in" inputMode="decimal" style={{ maxWidth: 110 }} value={f.fee} onChange={(e) => set('fee')(e.target.value)} /></div>
+          <div className="field"><label>是不是公户 <Info>公户 = 开在个人名下、替公司收钱的账户（Roland 的 Wave / 银行）。客户付到这里：客户的账照冲，但钱在他手里，交回公司之前算他欠公司。</Info></label><Choice value={f.is_public ? 'y' : 'n'} onChange={(v) => set('is_public')(v === 'y')} options={[['n', '公司自己的'], ['y', '公户（在个人手里）']]} /></div>
+          <div className="field"><label>在谁手上 / 谁名下</label><OptChoice optKey="emp_list" title="员工名单" data value={f.holder} onChange={(v) => set('holder')({ target: { value: v } })} options={(emps || []).map((e) => [e.id, e.short_name])} empty="—" flat={false} err={f.is_public && !f.holder} /></div>
           <div className="field"><label>最多压多少（超了要马上交）</label><MoneyIn className="in" inputMode="numeric" value={f.limit} onChange={(e) => set('limit')(e.target.value.replace(/\D/g, ''))} placeholder="不限" /></div>
           <div className="field"><label>最长压几天</label><MoneyIn className="in" inputMode="numeric" value={f.days} onChange={(e) => set('days')(e.target.value.replace(/\D/g, ''))} placeholder="不限" /></div>
+          {cur && <div className="field"><label>还用不用</label><Choice value={f.active ? 'y' : 'n'} onChange={(v) => set('active')(v === 'y')} options={[['y', '在用'], ['n', '停用（不再出现在下拉里，流水保留）']]} /></div>}
         </div>
         <div className="field"><label>支出审批线（超过这个数要中方批；0 = 全部要批）</label><MoneyIn className="in" inputMode="numeric" value={over} onChange={(e) => setOver(e.target.value.replace(/\D/g, ''))} style={{ maxWidth: 200 }} /></div>
       </div>
+      {ask && <Modal title={ask.renamed ? `把「${cur.name}」改名成「${f.name.trim()}」？` : `停用「${cur.name}」？`} risk="yellow" onClose={() => setAsk(null)} footer={<><button type="button" className="btn" onClick={() => setAsk(null)}>不改了</button><button type="button" className="btn primary" onClick={() => { setAsk(null); save(); }}>{ask.renamed ? '确认改名' : '确认停用'}</button></>}>
+        <div className="stack" style={{ gap: 6 }}>
+          <div>这个账户现在有 <b>{ask.u.moves}</b> 笔流水、<b>{ask.u.receipts}</b> 笔收款{ask.u.pending ? <>（其中 <b>{ask.u.pending}</b> 笔还没核对到账）</> : null}。</div>
+          {ask.renamed && <div className="small">改名以后：收款表单、流水、对账、公户欠款这些地方显示的名字一起变成新名字；<b>金额和历史一笔都不动</b>。{ask.u.freight ? '「运费从哪个账户出」的规则现在指着这个账户，会自动跟着改成新名字。' : ''}改名会留一条记录（旧名 → 新名、谁、什么时候）。</div>}
+          {ask.stopped && <div className="small">停用以后：收款 / 支出的下拉里不再出现它；流水和余额保留，随时可以改回「在用」。{ask.u.pending ? '还有没核对的收款，建议先核对完再停。' : ''}</div>}
+        </div>
+      </Modal>}
     </Modal>
   );
 }

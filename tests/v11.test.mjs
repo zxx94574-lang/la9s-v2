@@ -7,7 +7,7 @@ const wave = (t) => t.val(U.admin, `select app.upsert_cash_account($1,null,'Wave
 const rc = (t, who, p) => t.val(who, `select app.record_receipt2($1,$2)`, [t.ids.org, JSON.stringify({ customer_id: t.ids.camaraAbobo, received_on: new Date().toISOString().slice(0, 10), currency: 'XOF', method: 'wave', mode: 'oldest', proof: 'x.jpg', ...p })]);
 const bal = (t, a) => t.val(U.admin, `select app.account_balance($1)`, [a]).then(Number);
 
-test('手续费我方出: 冲客户账 = 到账 + 手续费; 确认到账后账户进到账金额、记一笔手续费支出', async () => {
+test('手续费我方出: 冲客户账 = 客户付的; 确认到账后账户净额 = 到账 (0063: 存客户付的、再扣手续费, 不再扣两次)', async () => {
   const t = await setup(); const a = await wave(t);
   const d = await t.toConfirmed(t.ids.camaraAbobo, [{ product_id: t.ids.bg6mCover, qty_req: 10 }]); await t.shipAll(d);
   const before = await t.balance(t.ids.camaraAbobo);
@@ -16,7 +16,7 @@ test('手续费我方出: 冲客户账 = 到账 + 手续费; 确认到账后账�
   assert.equal(await bal(t, a), 0, '没确认到账前账户不动');
   await rejects(t.as(U.finance, `select app.verify_receipt($1)`, [id]), /不能自己确认/);
   await t.as(U.admin, `select app.verify_receipt($1)`, [id]);
-  assert.equal(await bal(t, a), 9900 - 100);
+  assert.equal(await bal(t, a), 9900);
   const r = await t.one(`select verify_status, fee_bearer from app.receipts where id=$1`, [id]);
   assert.equal(r.verify_status, 'verified');
 });

@@ -391,9 +391,10 @@ order by v.at desc`;
 
 // ── 0010 资金账户 / 公户 ──
 export const cashHoldings = `
-select h.*, e.short_name as holder, (select expense_approval_over from app.cash_settings s where s.org_id = h.org_id) as approval_over
-from app.v_cash_holding h left join app.employees e on e.id = h.holder_employee_id
-where h.org_id = $1 order by h.kind, h.name`;
+select h.*, e.short_name as holder, (select expense_approval_over from app.cash_settings s where s.org_id = h.org_id) as approval_over,
+  ca.is_public, ca.fee_pct, ca.sort, ca.active
+from app.v_cash_holding h join app.cash_accounts ca on ca.id = h.account_id left join app.employees e on e.id = h.holder_employee_id
+where h.org_id = $1 order by ca.sort nulls last, h.kind, h.name`;
 
 export const cashMoves = `
 select m.id, m.account_id, a.name as account, a.currency, m.kind, m.amount, m.on_date, m.status, m.payer, m.ref, m.category, m.proof, m.note,

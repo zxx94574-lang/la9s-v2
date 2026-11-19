@@ -10,7 +10,7 @@ import LineEntry, { newKey, finalizeLines, tierPrice, PromoTag } from '../compon
 import { DocActions, DocSheet, BalanceCopy, BalancePreview } from '../components/Doc.jsx';
 import { BlActions } from '../components/Bl.jsx';
 import { flagAnomaly } from '../components/IssueReport.jsx';
-import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus } from '../components/ReceiptForm.jsx';
+import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus , ReceiptDone } from '../components/ReceiptForm.jsx';
 import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip, Choice, Assumed, MoneyIn, AcctImpact } from '../components/ui.jsx';
 import { ImpactFor } from '../components/Impact.jsx';
 import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, PAY_METHODS, RETURN_REASONS, RETURN_BASES, FREIGHT_BASES, CONFIRM_METHODS, CHECK_RESULTS, priceLevel, getThresholds, balanceWords, TIERS } from '../lib/domain.js';
@@ -999,7 +999,7 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
           <ReceiptForm customer={deal.customer_id} accountCurrency={cur} lockDeal={deal.id} defaultAmount={N(deal.due)} compact onDone={setDone} />
         </div>
       )}
-      {done && <div className="card card-b" style={{ background: 'var(--green-bg)' }}>✓ 已登记 {money(done.amount, done.currency)} {done.currency}{done.hits.map(([n, v]) => ` → ${n} ${money(v, done.acc)}`).join('')}{done.left > 0 && `，剩 ${money(done.left, done.acc)} 记为预付`}。下面的 Balance 已更新，复制发给客户。</div>}
+      {done && <><ReceiptDone sum={done} onClose={() => setDone(null)} /><div className="small muted" style={{ margin: '4px 2px 10px' }}>下面的 Balance 已更新，复制发给客户。</div></>}
       <BalancePreview customerId={deal.customer_id} currency={cur} deal={deal} title={`客户最新 Balance · ${deal.customer_name}`} />
       {wo && <WriteOffModal deal={deal} act={act} onClose={() => setWo(false)} />}
       {bad && <BadDebtModal deal={deal} act={act} onClose={() => setBad(false)} />}

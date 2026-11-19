@@ -247,6 +247,11 @@ export async function seedDemo(db) {
   const accBank = await val(USERS.admin, `select app.upsert_cash_account($1,null,'公户 · Mariam','bank','XOF',$2,5000000,7)`, [org, E.mariam]);
   await val(USERS.admin, `select app.upsert_cash_account($1,null,'Wave 收款','wave','XOF',$2,2000000,3)`, [org, E.awa]);
   await val(USERS.admin, `select app.upsert_cash_account($1,null,'门店现金','cash','XOF',$2,1000000,2)`, [org, E.abowa]);
+  // 0063: 公户 (钱在个人手里) 和手续费率是账户上的明确设置
+  const accPubWave = await val(USERS.admin, `select app.upsert_cash_account($1,null,'公户 · Mariam · Wave','wave','XOF',$2,5000000,7)`, [org, E.mariam]);
+  await val(USERS.admin, `select app.set_cash_account_opts($1,'{"is_public":true,"fee_pct":1}')`, [accPubWave]);
+  await val(USERS.admin, `select app.set_cash_account_opts($1,'{"is_public":true}')`, [accBank]);
+  await db.query(`update app.cash_accounts set fee_pct = 1 where org_id = $1 and kind = 'wave'`, [org]);
   const dd = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
   await as(USERS.finance, `select app.import_statement($1,$2)`, [accBank, JSON.stringify([
     { date: dd(9), amount: 1800000, ref: 'DEMO-FT01', payer: 'SOUMAHORO', desc: 'VIREMENT' },

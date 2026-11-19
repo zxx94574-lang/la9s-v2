@@ -8,7 +8,7 @@ import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { BalanceCopy } from '../components/Doc.jsx';
-import ReceiptForm, { DealDrawer, DealChip, BalanceLine, VoidReceiptModal, RcvStatus, rcvState, ReallocModal, verifyRcvAction } from '../components/ReceiptForm.jsx';
+import ReceiptForm, { DealDrawer, DealChip, BalanceLine, VoidReceiptModal, RcvStatus, rcvState, ReallocModal, verifyRcvAction , ReceiptDone } from '../components/ReceiptForm.jsx';
 import { can, PAY_METHODS } from '../lib/domain.js';
 import { money, dDate, friendlyError, periodRange } from '../lib/format.js';
 
@@ -94,12 +94,7 @@ export default function Receipts({ preset }) {
             </div>
             {tab === 'open' ? <ReceiptForm key={customer + acc} customer={customer} accountCurrency={acc} onDone={setDone} />
               : <Grid id="rcv-settled" columns={settledCols} rows={data.settled || []} rowKey={(d) => d.deal_id} empty="还没有已结清的订单" />}
-            {done && (
-              <div className="card-b row between" style={{ background: 'var(--green-bg)' }}>
-                <span>✓ 已登记 {money(done.amount, done.currency)} {done.currency}{done.hits.map(([n, v]) => ` → ${n} ${money(v, done.acc)}`).join('')}{done.left > 0 && `，剩 ${money(done.left, done.acc)} 记为预付`}</span>
-                <BalanceCopy customerId={customer} currency={acc} label="复制 Balance 图片" primary />
-              </div>
-            )}
+            {done && <div className="card-b stack" style={{ gap: 8 }}><ReceiptDone sum={done} onClose={() => setDone(null)} /><div className="row" style={{ justifyContent: 'flex-end' }}><BalanceCopy customerId={customer} currency={acc} label="复制 Balance 图片" primary /></div></div>}
           </>
         )}
         {!customer && <div className="card-b hint">先选客户：下面会列出这个客户未结清 / 已结清的订单，直接在这里收款冲账。</div>}

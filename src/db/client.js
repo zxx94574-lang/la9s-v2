@@ -159,6 +159,12 @@ async function applyPacks(onProgress) {
     if (f) await db.exec(f[1]);
     await db.query(`insert into public.demo_meta values ('acc:0048','1') on conflict (k) do nothing`);
   }
+  // 0063: 新装的库里上面这些账户是在迁移之后才建的 → 补一次「是不是公户 / 手续费率」(只补一次, 之后以账户设置里填的为准)
+  if (!(await db.query(`select 1 from public.demo_meta where k = 'acc:0063'`)).rows.length) {
+    await db.query(`update app.cash_accounts set is_public = true where holder_employee_id is not null and name like '%公户%' and not is_public`);
+    await db.query(`update app.cash_accounts set fee_pct = 1 where kind in ('wave','orange') and fee_pct = 0`);
+    await db.query(`insert into public.demo_meta values ('acc:0063','1') on conflict (k) do nothing`);
+  }
   for (const [name, url, fn] of PACKS) {
     let pack = null;
     try { const r = await fetch(url, { cache: 'no-store' }); if (r.ok) pack = await r.json(); } catch { /* 没有这个包 */ }
