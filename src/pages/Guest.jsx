@@ -11,7 +11,8 @@ import { useApp, useData, Pill, Modal, MoneyIn } from '../components/ui.jsx';
 import { friendlyError, dt } from '../lib/format.js';
 
 // 230 / 231 (Frank 11-11): 客户端只有两种 —— 有货 (绿) / 可预订 (不叫无货, 不显示少量和数量); 点了可预订的照样能下, 差的自动记进未满足需求
-const BAND = { ok: ['有货 · En stock', 'green'], low: ['有货 · En stock', 'green'], none: ['可预订 · Sur commande', 'amber'] };
+// 393: 游客只看 有货 / 少量 / 可预订 (在途有货), 不给数量和价格. 「少量」的线在规则参数里 (默认低于 50 片)
+const BAND = { ok: ['有货 · En stock', 'green'], low: ['少量 · Stock limité', 'amber'], preorder: ['可预订 · Sur commande', 'blue'], none: ['暂时没货 · Rupture', 'gray'] };
 const T = (zh, fr) => <>{zh}<span className="fr"> · {fr}</span></>;
 
 function Shell({ children, sub }) {
@@ -115,7 +116,7 @@ export function GuestShop() {
   const { toast } = useApp();
   const org = getOrg();
   const { data } = useData(async () => {
-    const [sales, cat] = await Promise.all([callAnon(`select * from app.guest_sales($1)`, [org]), callAnon(`select * from app.guest_catalog($1) order by cat_sort, model`, [org])]);
+    const [sales, cat] = await Promise.all([callAnon(`select * from app.guest_sales($1)`, [org]), callAnon(`select * from app.inquiry_catalog($1) order by cat_sort, model`, [org])]);
     return { sales, cat };
   }, [org]);
   const [salesId, setSalesId] = useState(() => { try { return localStorage.getItem('la9s.guest.sales') || ''; } catch { return ''; } });
@@ -131,7 +132,7 @@ export function GuestShop() {
   if (!data) return <Shell sub="Visiteur · 游客"><div className="empty">加载中…</div></Shell>;
   const t = text.trim().toUpperCase();
   const list = data.cat.filter((p) => (!cat || p.category_id === cat) && (!t || p.model.includes(t) || String(p.code).includes(t) || (p.shared_models || []).some((s) => s.includes(t))))
-    .sort((a, b) => ({ ok: 0, low: 1, none: 2 }[a.band] ?? 3) - ({ ok: 0, low: 1, none: 2 }[b.band] ?? 3)).slice(0, 80);   // 230: 有货的排前面, 可预订的沉底
+    .sort((a, b) => ({ ok: 0, low: 1, preorder: 2, none: 3 }[a.band] ?? 4) - ({ ok: 0, low: 1, preorder: 2, none: 3 }[b.band] ?? 4)).slice(0, 80);   // 230: 有货的排前面, 可预订的沉底
   const byId = Object.fromEntries(data.cat.map((p) => [p.id, p]));
   const items = Object.entries(cart).filter(([, n]) => Number(n) > 0).map(([id, n]) => ({ p: byId[id], qty: Number(n) }));
   const n = items.length + extra.length;
@@ -150,7 +151,7 @@ export function GuestShop() {
   };
   if (done) return (
     <Shell sub="Visiteur · 游客"><div className="gcard"><h2 style={{ marginTop: 0 }}>✓ 已收到 · Reçu</h2>
-      <p>询价单号 <b className="mono">{done}</b>。我们的热线会尽快用你留的电话 / WhatsApp 联系你报价。</p>
+      <p>询单号 <b className="mono" style={{ fontSize: 20 }}>{done}</b></p><p>请记下这个号。我们会尽快用你留的电话 / WhatsApp 联系你报价；你也可以把这个号发给销售员。</p>
       <p className="muted small">Notre équipe vous contactera rapidement par téléphone / WhatsApp.</p>
       <button type="button" className="btn" onClick={() => { setDone(null); setCart({}); setExtra([]); }}>再问一单</button></div></Shell>);
   return (
@@ -219,7 +220,7 @@ function SubmitModal({ org, salesId, lines, onClose, onDone }) {
   const go = async () => {
     setErr(true); if (!ok) return;
     try {
-      const [{ no }] = await callAnon(`select app.guest_inquiry($1,$2,$3,$4) as no`, [org, JSON.stringify({ ...f, sales_id: salesId || null }), JSON.stringify(lines), f.note]);
+      const [{ no }] = await callAnon(`select app.guest_inquiry2($1,$2,$3,$4) as no`, [org, JSON.stringify({ ...f, sales_id: salesId || null }), JSON.stringify(lines), f.note]);
       onDone(no);
     } catch (e) { toast(friendlyError(e), 'err'); }
   };

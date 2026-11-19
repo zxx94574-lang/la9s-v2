@@ -12,8 +12,8 @@ import { balanceWords } from '../lib/domain.js';
 import { money, dDate, dt, friendlyError } from '../lib/format.js';
 
 // 230 / 231 (Frank 11-11): 客户端只有两种 —— 有货 (绿) / 可预订 (不叫无货, 不显示少量和数量); 点了可预订的照样能下, 差的自动记进未满足需求
-const BAND = { ok: ['有货 · En stock', 'green'], low: ['有货 · En stock', 'green'], none: ['可预订 · Sur commande', 'amber'] };
-const PSTATUS = { quoted: '已收到，等热线确认 · Reçue', hotline_ok: '已确认，排队备货 · Confirmée', picking: '备货中 · En préparation', picked: '备货中 · En préparation',
+const BAND = { ok: ['有货 · En stock', 'green'], low: ['少量 · Stock limité', 'amber'], preorder: ['可预订 · Sur commande', 'blue'], none: ['暂时没货 · Rupture', 'gray'] };
+const PSTATUS = { quoted: '已报价，等确认 · Devis prêt', hotline_ok: '已确认，排队备货 · Confirmée', picking: '备货中 · En préparation', picked: '备货中 · En préparation',
   ordered: '销售单已出，请确认 · À confirmer', confirmed: '已确认，打包中 · Emballage', reviewed: '已打包，待发货 · Prête', partial: '部分已发货 · Livrée en partie', shipped: '已发货 · Livrée' };
 const SOSTATUS = { submitted: ['待老板处理', 'amber'], accepted: ['老板自己发', 'blue'], rejected: ['已拒绝', 'gray'], forwarded: ['已转给 LA&9S', 'blue'], delivered: ['已送达', 'green'] };
 
@@ -32,28 +32,30 @@ export function PortalShop() {
   const [free, setFree] = useState({ model: '', qty: '' });
   const [extra, setExtra] = useState([]);
   const [note, setNote] = useState('');
-  const { data } = useData(async () => (me?.customer_id ? q(Q.portalCatalog, [me.customer_id]) : []), [me?.customer_id]);
+  // 393: 开了账号的客户 —— 中方给他开了「看具体库存」就显示片数, 开了「看价格」就显示他自己的价 (只有他这一档); 没开的只看 有货 / 少量 / 可预订
+  const { data } = useData(async () => (me?.customer_id ? call(role, `select * from app.inquiry_catalog($1) order by cat_sort, model`, [me.hq_org]).then((rs) => rs.map((p) => ({ ...p, shared_models: p.shared_models || [], code: String(p.code || '') }))) : []), [me?.customer_id, role]);
   const cats = useMemo(() => [...new Map((data || []).map((p) => [p.category_id, p.category])).entries()], [data]);
   if (!me) return <div className="empty">加载中…</div>;
   if (!me.customer_id) return <div className="card card-b">这个账号还没有对上客户。</div>;
   const t = text.trim().toUpperCase();
   const list = (data || []).filter((p) => (!cat || p.category_id === cat) && (!t || p.model.includes(t) || p.code.includes(t) || p.shared_models.some((s) => s.includes(t))))
-    .sort((a, b) => ({ ok: 0, low: 1, none: 2 }[a.band] ?? 3) - ({ ok: 0, low: 1, none: 2 }[b.band] ?? 3)).slice(0, 60);   // 230: 有货的排前面, 可预订的沉底
+    .sort((a, b) => ({ ok: 0, low: 1, preorder: 2, none: 3 }[a.band] ?? 4) - ({ ok: 0, low: 1, preorder: 2, none: 3 }[b.band] ?? 4)).slice(0, 60);   // 230: 有货的排前面, 可预订的沉底
   const byId = Object.fromEntries((data || []).map((p) => [p.id, p]));
   const items = Object.entries(cart).filter(([, n]) => Number(n) > 0);
   const n = items.length + extra.length;
   const submit = async () => {
     const lines = [...items.map(([id, qty]) => ({ product_id: id, model: byId[id].model, category: byId[id].category, qty: Number(qty) })), ...extra];
     try {
-      if (role === 'boss') await call(role, `select app.portal_order($1,$2)`, [JSON.stringify(lines), note]);
+      let no = '';
+      if (role === 'boss') { const catId = (name) => cats.find(([, n2]) => n2 === name)?.[0]; [{ no }] = await call(role, `select app.portal_inquiry($1,$2) as no`, [JSON.stringify(lines.map((l) => (l.product_id ? { product_id: l.product_id, qty: l.qty } : { model: l.model, category_id: catId(l.category), qty: l.qty }))), note]); }
       else await call(role, `select app.store_order($1,$2)`, [JSON.stringify(lines), note]);
-      toast(role === 'boss' ? '已发给 LA&9S，热线会确认数量和价格' : '已发给老板'); setCart({}); setExtra([]); setNote(''); refresh(); go('p/orders');
+      toast(role === 'boss' ? `询单 ${no} 已发给 LA&9S，定好价会给你报价` : '已发给老板'); setCart({}); setExtra([]); setNote(''); refresh(); go('p/orders');
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
   return (
     <div className="portal">
       <div className="pagehead"><div><div className="eyebrow">{role === 'boss' ? 'Commander à LA&9S' : 'Commander à mon patron'}</div><h1>下单</h1>
-        <div className="sub">{role === 'boss' ? '选型号和数量发给 LA&9S，热线会确认数量和价格，价格以报价单为准。' : '向老板下单，老板有货自己发，没货转给 LA&9S。'}</div></div></div>
+        <div className="sub">{role === 'boss' ? '选型号和数量发给 LA&9S（这是询单，不是订单）；我们定好价给你报价，价格以报价单为准。' : '向老板下单，老板有货自己发，没货转给 LA&9S。'}</div></div></div>
       <div className="card card-b stack" style={{ gap: 10 }}>
         <input className="in" placeholder="⌕ 型号 / 编码 · Modèle" value={text} onChange={(e) => setText(e.target.value)} />
         <div className="chips"><button type="button" className={`chip ${!cat ? 'on' : ''}`} onClick={() => setCat('')}>全部</button>
@@ -65,7 +67,7 @@ export function PortalShop() {
           return (
             <div key={p.id} className={`pitem ${Number(cart[p.id]) > 0 ? 'on' : ''}`}>
               <div className="grow"><b>{p.model}</b><div className="small muted">{p.category} · {p.code}</div>
-                <div className="row" style={{ gap: 4, marginTop: 4 }}><Pill tone={bt}>{bl}</Pill>{p.coming && <Pill tone="blue">在途 · En route</Pill>}</div></div>
+                <div className="row" style={{ gap: 4, marginTop: 4, flexWrap: 'wrap' }}>{p.avail != null ? <Pill tone={Number(p.avail) > 0 ? 'green' : 'gray'}>{Number(p.avail) > 0 ? `有货 ${Number(p.avail).toLocaleString('en-US')} 片` : '暂时没货'}</Pill> : <Pill tone={bt}>{bl}</Pill>}{Number(p.transit) > 0 && <Pill tone="blue">可预订 {Number(p.transit).toLocaleString('en-US')} 片</Pill>}{p.price != null && <span className="small">你的价 <b>{Number(p.price).toLocaleString('en-US')}</b></span>}</div></div>
               <div className="qty-step">
                 <button type="button" onClick={() => setCart((c) => ({ ...c, [p.id]: Math.max(0, Number(c[p.id] || 0) - 5) }))}>−</button>
                 <MoneyIn inputMode="numeric" value={cart[p.id] || ''} placeholder="0" onChange={(e) => setCart((c) => ({ ...c, [p.id]: e.target.value.replace(/\D/g, '') }))} />

@@ -506,7 +506,7 @@ const PriceTag = ({ l, cur }) => {
   if (!level || role !== 'admin') return null;
   return <span className={`dev dev${level}`} title={`档位价 ${money(l.tier_price, cur)}`}>{pct < 0 ? '低' : '高'} {Math.abs(pct).toFixed(0)}%</span>;
 };
-export function SoPanel({ deal, lines, catalog, categories, act, role, events }) {
+export function SoPanel({ deal, lines, catalog, categories, act, role, events, openAddon }) {
   const { toast } = useApp();
   const [sel, setSel] = useState(new Set());
   const [priceLine, setPriceLine] = useState(null);
@@ -574,7 +574,7 @@ export function SoPanel({ deal, lines, catalog, categories, act, role, events })
         {/* 209: 改单类 (追加货 / 获取价格) 在左, 往外发的在右 */}
         <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
           <h2>销售订单 <span className="muted small mono">{deal.so_no || '（初检后生成）'}</span> <Info>出了单把图发群，下面接客户确认</Info></h2>
-          {canAdd && <button type="button" className="btn" onClick={() => setAdding([])}>＋ 出库前追加货</button>}
+          {openAddon && <button type="button" className="btn" onClick={openAddon}>＋ 出库前追加货</button>}
         </div>
         <div className="row">
           {deal.so_no && price && (locked ? <span className="why">{pend.length ? '先「提交改动」，才能复制销售单' : '改价等中方批完，才能复制销售单'}</span> : <DocActions kind="so" deal={deal} lines={lines} copyLabel="复制销售单图片" primary="copy" />)}

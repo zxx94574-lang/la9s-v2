@@ -158,7 +158,9 @@ export function CustomerDrawer({ id, onClose }) {
             <button type="button" className="btn sm" onClick={() => setEdit('info')}>✎ 修改档案（收货人 / 电话 / 城市 / 地址{role === 'admin' ? ' / 档位' : ''}）</button>
           </div>)}
         <AccountPanel customer={c} />
+        <PortalOpts c={c} />
         <ContactsCard customerId={c.id} />
+        <OwnerLog customerId={c.id} />
         <CustSincerity customerId={c.id} />
         {role === 'admin' && c.status === 'active' && <CustMargin customerId={c.id} />}
         {role === 'admin' && <CustHistory c={c} />}
@@ -272,9 +274,67 @@ function InfoModal({ c, onClose }) {
   );
 }
 
+// 393: 客户账号能看什么 (只中方调): 具体库存 / 自己的价 / 店员看不看价. 游客永远只看 有货 / 少量 / 可预订.
+function PortalOpts({ c }) {
+  const { role, toast, refresh } = useApp();
+  if (role !== 'admin' || c.status !== 'active') return null;
+  const o = c.portal_opts || {};
+  const v = { stock: o.stock ?? true, price: o.price ?? true, clerk_price: o.clerk_price ?? false };
+  const set = async (k, val) => { try { await call(role, `select app.set_portal_opts($1,$2)`, [c.id, JSON.stringify({ [k]: val })]); toast('已保存，客户账号下次打开就按这个'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (
+    <div className="pd-sec">
+      <div className="pd-h">客户账号能看什么 <span className="small muted" style={{ fontWeight: 400 }}>只对开了下单账号的客户有用；他永远看不到成本、别的档位价、别人的成交价</span>
+        <Assumed>默认：老板看具体库存 + 看自己的价；店员看库存、不看价。关掉「看具体库存」= 只显示 有货 / 少量 / 可预订。</Assumed></div>
+      <div className="kv-row">
+        <span className="row" style={{ gap: 6 }}>看具体库存片数 <Choice size="sm" value={v.stock ? 'y' : 'n'} onChange={(x) => set('stock', x === 'y')} options={[['y', '看'], ['n', '不看']]} /></span>
+        <span className="row" style={{ gap: 6 }}>老板看自己的价 <Choice size="sm" value={v.price ? 'y' : 'n'} onChange={(x) => set('price', x === 'y')} options={[['y', '看'], ['n', '不看']]} /></span>
+        <span className="row" style={{ gap: 6 }}>店员看价 <Choice size="sm" value={v.clerk_price ? 'y' : 'n'} onChange={(x) => set('clerk_price', x === 'y')} options={[['y', '看'], ['n', '不看']]} /></span>
+      </div>
+    </div>);
+}
+
+// 392: 归属历史 —— 这个客户先后由谁负责 (提成按出库那一刻的归属人算, 不受后来移交影响)
+function OwnerLog({ customerId }) {
+  const { tick } = useApp();
+  const { data } = useData(() => q(`select l.at, l.note, f.short_name as from_name, t.short_name as to_name from app.customer_owner_log l left join app.employees f on f.id = l.from_employee_id left join app.employees t on t.id = l.to_employee_id where l.customer_id = $1 order by l.at desc limit 20`, [customerId]), [customerId, tick]);
+  if (!data?.length) return null;
+  return (<div className="pd-sec"><div className="pd-h">归属历史</div>
+    {data.map((l, i) => <div key={i} className="small">· {dt(l.at)}：{l.from_name || '没有归属'} → <b>{l.to_name || '待认领'}</b>{l.note ? <span className="muted">（{l.note}）</span> : null}</div>)}</div>);
+}
+
+// 392: 一键移交 —— 把某个销售名下的客户 (全部 / 勾选的) 转给另一个人; 不选接手人 = 放进「待认领」
+function TransferModal({ emps, onClose }) {
+  const { org, role, toast, refresh } = useApp();
+  const [from, setFrom] = useState(''); const [to, setTo] = useState(''); const [note, setNote] = useState(''); const [sel, setSel] = useState(new Set()); const [all, setAll] = useState(true);
+  const { data: list } = useData(() => (from ? q(`select c.id, coalesce(c.code, c.temp_code) as code, c.name, c.city, c.tier, c.status from app.customers c where c.org_id = $1 and c.owner_employee_id = $2 order by c.code`, [org, from]) : Promise.resolve([])), [org, from]);
+  const n = all ? (list || []).length : sel.size;
+  const go = async () => {
+    if (!from) return toast('选从谁名下移交', 'err');
+    if (!n) return toast('没有要移交的客户', 'err');
+    try { const [{ n: done }] = await call(role, `select app.transfer_customers($1,$2,$3,$4,$5) as n`, [org, from, to || null, all ? null : [...sel], note || null]); toast(`已移交 ${done} 个客户`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); }
+  };
+  const opts = (emps || []).filter((e) => e.active !== false).map((e) => [e.id, e.short_name, e.emp_no || '']);
+  return (
+    <Modal wide title="移交客户" risk="yellow" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><button type="button" className="btn primary" onClick={go}>移交 {n} 个客户</button></>}>
+      <div className="stack" style={{ minHeight: 380 }}>
+        <div className="row" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div className="field req"><label>从谁名下</label><OptChoice optKey="emp_list" title="员工名单" data value={from} onChange={(v) => { setFrom(v); setSel(new Set()); }} options={(emps || []).map((e) => [e.id, `${e.short_name}${e.active === false ? '（已停用）' : ''}`, e.emp_no || ''])} flat={false} placeholder="选员工…" width={200} /></div>
+          <div className="field"><label>交给谁</label><OptChoice optKey="emp_list" title="员工名单" data value={to} onChange={setTo} options={opts.filter(([id]) => id !== from)} flat={false} empty="先不给人（放进待认领）" width={230} /></div>
+          <div className="field grow"><label>说明</label><input className="in" value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如 Koffi 离职 / 调去负责 Yopougon" /></div>
+        </div>
+        {from && <><div className="row" style={{ gap: 8 }}><Choice value={all ? 'all' : 'pick'} onChange={(v) => setAll(v === 'all')} options={[['all', `名下全部（${(list || []).length} 个）`], ['pick', '只移交勾选的']]} /></div>
+          <Grid id="transfer-list" noTools rows={list || []} maxHeight={300} empty="他名下没有客户" selectable={all ? undefined : { selected: sel, onChange: setSel }} columns={[
+            { key: 'code', label: '编码', w: 90, mono: true }, { key: 'name', label: '客户', w: 200 }, { key: 'city', label: '城市', w: 110 }, { key: 'tier', label: '档位', w: 110 }, { key: 'status', label: '状态', w: 80, value: (c) => (c.status === 'active' ? '正式' : '潜客') }]} /></>}
+        <div className="hint">移交以后：客户的归属销售换人，没结束的询单跟着走；<b>已经出库的单提成不变</b>（按出库那一刻的归属人算）。每个客户的档案里会留一条归属历史。</div>
+      </div>
+    </Modal>);
+}
+
 // 按销售员月汇总: 归属按出库当时的单据归属 (激励口径, 不随后来调换变)
 function ByOwner() {
-  const { org } = useApp();
+  const { org, role } = useApp();
+  const [xfer, setXfer] = useState(false);
+  const { data: emps } = useData(() => q(`select id, short_name, emp_no, active from app.employees where org_id = $1 order by active desc, (emp_no is null), emp_no, short_name`, [org]), [org]);
   const [month, setMonth] = useState(today().slice(0, 7));
   const { data } = useData(() => q(Q.salesByOwner, [org, month + '-01']), [org, month]);
   const cols = [
@@ -289,7 +349,9 @@ function ByOwner() {
   return <Grid id="salesByOwner" columns={cols} rows={data || []} empty="这个月还没有出库"
     foot={(rs) => ({ owner: `${rs.length} 人`, qty: rs.reduce((a, r) => a + Number(r.qty || 0), 0), amount: money(rs.reduce((a, r) => a + Number(r.amount || 0), 0)) })}
     tools={<><MonthPicker value={month} onChange={setMonth} label="月份" />
-      <span className="hint">归属按出库当时的单据归属算（激励口径），后来把客户划给别人不影响历史。</span></>} />;
+      {role === 'admin' && <button type="button" className="btn sm" onClick={() => setXfer(true)}>⇄ 移交客户</button>}
+      <span className="hint">归属按出库当时的单据归属算（激励口径），后来把客户划给别人不影响历史。</span>
+      {xfer && <TransferModal emps={emps} onClose={() => setXfer(false)} />}</>} />;
 }
 
 // 客户资料的选项 (Frank 11-08): 城市 / 市场 / 店铺类型 / 跟进状态 的可选项, 以及中方自己加的列 (例「种类」) —— 保存后客户表自动多一列单选, 表头漏斗能按它筛

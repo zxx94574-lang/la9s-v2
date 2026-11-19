@@ -156,7 +156,7 @@ export default function App() {
           const last = Math.max(remindRef.current[d.id] ?? new Date(d.created_at).getTime(), busyAt);
           if (now - last >= iv) { due.push(d); remindRef.current[d.id] = now; }
         }
-        if (due.length) toast(`☎ ${due.length} 张报价等热线确认：${due.slice(0, 3).map((d) => d.customer_name).join('、')}${due.length > 3 ? '…' : ''}（打开「待办」处理）`, 'err');
+        if (due.length) toast(`☎ ${due.length} 张报价等确认客户：${due.slice(0, 3).map((d) => d.customer_name).join('、')}${due.length > 3 ? '…' : ''}（打开「待办」处理）`, 'err');
       } catch { /* 数据库还没好 */ }
     };
     check(); const t = setInterval(check, 60e3); return () => clearInterval(t);

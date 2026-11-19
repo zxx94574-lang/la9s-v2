@@ -352,7 +352,7 @@ export const priceSettings = `select * from app.price_settings where org_id = $1
 // 客户档案总表: 档案 + 欠款 + 预警 + 最近联系 + 下次跟进
 export const customerProfiles = `
 select c.id, c.code, c.temp_code, c.name, c.city, c.tier, c.status, c.phone, c.contact_name, c.address, c.owner_employee_id, c.kind, c.market, c.zone, c.shop_type, c.supply, c.follow_status, c.attrs, c.monthly_qty,
-  c.recycle_type, c.interested, c.source, c.credit_limit, c.credit_days, c.has_agreement, c.owner_employee_id, c.shop_photo, c.note, c.block_on_debt,
+  c.recycle_type, c.interested, c.source, c.credit_limit, c.credit_days, c.has_agreement, c.owner_employee_id, c.shop_photo, c.note, c.block_on_debt, c.portal_opts,
   e.short_name as owner, cr.balance, cr.oldest_days, cr.over_limit, cr.over_days,
   greatest((select max(at) from app.hotline_calls h where h.customer_id = c.id), (select max(at) from app.visits v where v.customer_id = c.id)) as last_contact,
   (select max(d.created_at) from app.deals d where d.customer_id = c.id and d.status <> 'cancelled') as last_deal,

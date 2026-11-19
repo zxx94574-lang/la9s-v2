@@ -117,7 +117,7 @@ export default function Orders() {
       <div className="tabs" style={{ marginBottom: 0 }}>
         <button type="button" className={tab === 'all' ? 'on' : ''} onClick={() => setTab('all')}>订单</button>
         <button type="button" className={tab === 'ship' ? 'on' : ''} onClick={() => setTab('ship')}>出库单 / BL</button>
-        {can(role, 'inquiry') && <button type="button" className={tab === 'inq' ? 'on' : ''} onClick={() => setTab('inq')}>询单审批</button>}
+        {can(role, 'inquiry') && <button type="button" className={tab === 'inq' ? 'on' : ''} onClick={() => setTab('inq')}>询单</button>}
         <button type="button" className={tab === 'void' ? 'on' : ''} onClick={() => setTab('void')}>已作废 <span className="muted">{voided.length}</span></button>
       </div>
       {tab === 'ship' ? <ShipmentsList from={from} to={to} /> : tab === 'void' ? <VoidedList rows={voided} /> : tab === 'inq' ? <Inquiry embedded /> : <div className="card">

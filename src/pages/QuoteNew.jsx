@@ -32,7 +32,7 @@ export default function QuoteNew() {
   }, [org]);
 
   const [date, setDate] = useState(today());
-  const [customer, setCustomer] = useState('');
+  const [customer, setCustomer] = useState(() => { try { const v = sessionStorage.getItem('la9s.quote.customer'); sessionStorage.removeItem('la9s.quote.customer'); return v || ''; } catch { return ''; } });   // 402: 已出库的单「客户还要加货 → 开新单」带客户过来
   const [currency, setCurrency] = useState('XOF');
   const [fxIn, setFxIn] = useState('');   // 外币报价: 汇率每张单手填 (1 CNY / USD = ? XOF), 不自动带
   const fx = currency !== 'XOF' && Number(fxIn) > 0 ? Number(fxIn) : null;

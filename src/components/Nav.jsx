@@ -23,6 +23,7 @@ export const ITEMS = {
   //   // 350 (Frank 11-17): 所有阈值 / 开关单独一页
   // 11-09 Frank 第 8 条: 「新建询单 / 报价」「销售询单」不再是独立页; 建单 = 订单总览「＋ 新订单」, 询单审批 = 订单总览页签
   orders: ['≡', '订单总览', 'sales', []],
+  inquiry: ['？', '询单', 'sales', ['admin', 'manager', 'sales_manager', 'hotline', 'sales']],   // 391: 没有定价权的人的前门
   fob: ['◷', 'FOB 项目', 'sales', ['admin', 'manager', 'hotline', 'sales', 'finance']],
   customers: ['♧', '客户档案', 'cust', ['admin', 'manager', 'hotline', 'sales', 'finance']],
   hotline: ['☎', '热线回访', 'cust', ['admin', 'manager', 'hotline', 'sales']],

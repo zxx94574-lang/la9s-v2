@@ -28,6 +28,8 @@ export function shipAlert(d) {
 }
 import { HoldsCard, VolumeShift } from '../components/Batch2.jsx';
 import { MoneyUrgent, ChangeNotices } from '../components/Batch3.jsx';
+import { InquiryTodo } from './Inquiry.jsx';
+import { AddonTodo } from '../components/Addons.jsx';
 import { LossTodo } from '../components/Loss.jsx';
 import PublicHeld from '../components/PublicHeld.jsx';
 import { PricePendingTodo } from '../components/PricePending.jsx';
@@ -173,6 +175,8 @@ export default function Todo() {
       <TaskBoard />
       <LossTodo />
       <MoneyUrgent />
+      <InquiryTodo />
+      <AddonTodo />
       <DirectiveBoard />
       {['admin', 'manager', 'sales_manager'].includes(role) && <IssueList />}
       <ChangeNotices />

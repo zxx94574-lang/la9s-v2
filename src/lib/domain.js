@@ -3,7 +3,7 @@
 export const ROLES = {
   admin: { label: '中方', desc: '全部权限，唯一能改价、认领冲账、审批退货和支出' },
   manager: { label: '仓库主管', desc: '下推找货、出销售订单、复检打包、出库' },
-  hotline: { label: '热线', desc: '接单报价、热线确认、客户确认、回访、发起退货' },
+  hotline: { label: '热线', desc: '接单报价、确认客户、客户确认销售单、回访、发起退货' },
   picker: { label: '库管员', desc: '找货单、初拣（实际供货 + 照片）；看不到价格' },
   sales: { label: '销售', desc: '外出拜访、建潜客、记回访；看得到价格，不能改价' },
   sales_manager: { label: '销售主管', desc: '销售员能做的都能做（询单、拜访、回访、FOB 申请）；价格和钱的审批还是中方' },
@@ -15,14 +15,14 @@ export const ROLES = {
 
 const P = {
   quote: ['manager', 'hotline'],
-  hotline_confirm: ['hotline', 'manager', 'sales_manager'],
-  start_picking: ['manager', 'hotline', 'sales_manager'],
+  hotline_confirm: ['hotline', 'manager', 'sales_manager', 'sales'],   // 391: 销售对自己名下的客户也能确认 (后台卡「只能动自己名下的」)
+  start_picking: ['manager', 'hotline', 'sales_manager', 'sales'],
   submit_pick: ['picker', 'manager'],
   review_pick: ['manager'],
   set_price: [],
   sales_order: ['manager'],
   add_lines: ['manager'],
-  customer_confirm: ['hotline', 'manager'],
+  customer_confirm: ['hotline', 'manager', 'sales'],
   ship: ['manager'],
   mark_received: ['hotline', 'manager'],
   balance_confirm: ['hotline', 'manager', 'sales_manager', 'finance'],
@@ -43,7 +43,7 @@ const P = {
   payment_notice: ['hotline', 'finance', 'manager', 'sales'],   // 客户说付了 (挂截图)           // 档位、正式编码、欠款上限、账期、协议：只中方
   import_data: [],
   receive_po: ['manager'],      // 采购到货入库              // 数据导入：只中方
-  inquiry: ['sales', 'hotline', 'manager'],
+  inquiry: ['sales', 'sales_manager', 'hotline', 'manager'],
   purchase_request: ['manager', 'finance', 'hotline', 'sales', 'picker'],
   purchase_advance: ['manager', 'finance', 'cn_support'],
   po_edit: ['manager', 'cn_support'],          // 11-13: 建 / 改采购单、导入箱单、对上编码 (国内为主)
@@ -173,7 +173,7 @@ export const EVENT_LABELS = {
   price_decided: '中方审批改价', payment_appeal: '付款申诉', payment_appeal_decided: '中方处理付款申诉',
   debt_released: '中方放行（欠款）', gate_released: '中方放行出库', tier_changed: '改客户档位', fx_set: '设定汇率', price_requested: '员工申请改价',
   hotline_busy: '客户忙，稍后再联系', bl_issued: '出 BL 编号', customer_received: '客户签收', balance_confirmed: '客户确认对账', deal_split: '拆单：一部分拆到新单', partial_reason: '只发一部分的原因', split_created: '从原单拆出', issue_reported: '⚠ 上报问题', issue_closed: '✓ 中方处理了上报',
-  quote_created: '创建报价', quote_edited: '修改报价', price_set: '中方改价', hotline_confirmed: '热线确认',
+  quote_created: '创建报价', quote_edited: '修改报价', price_set: '中方改价', hotline_confirmed: '确认客户',
   picking_started: '下推找货单（预占库存）', pick_submitted: '初拣完成', pick_reviewed: '主管复检打包',
   sales_order_created: '生成销售订单', lines_added: '出库前追加货', customer_confirmed: '客户确认',
   shipped: '出库', cancelled: '作废（取消）', return_requested: '发起退货', return_approved: '退货审批通过', receipt_voided: '撤销收款', return_reconciled: '退货对账完成',

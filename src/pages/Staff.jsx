@@ -158,7 +158,7 @@ export function EmpModal({ e, opts, onClose }) {
       if (b < 0) checks.push({ tone: 'red', msg: `${LABEL[k]}不能是负数` });
       else if (a > 0 && Math.abs(b - a) / a > 0.1) checks.push({ tone: 'amber', msg: `${LABEL[k]}从 ${a.toLocaleString('en-US')} 改到 ${b.toLocaleString('en-US')}，变动超过 10%` });
     }
-    if (f0.active && !f.active) checks.push({ tone: 'amber', msg: '改成离职：名下客户要重新分配，未完成的单要转给主管' });
+    if (f0.active && !f.active) checks.push({ tone: 'amber', msg: '改成离职：名下客户不会自动换人。保存后去「客户档案 → 按销售员 → ⇄ 移交客户」一次转给接手的人（不选人 = 放进待认领）' });
     setConfirm({ rows: rows.length ? rows : [['证件照', '—', `新加 ${queued.length} 张`]], checks });
   };
   const go = async (reason) => {

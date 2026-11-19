@@ -12,6 +12,7 @@ import { DealLastPrice } from '../components/LastPrice.jsx';
 import { usePromos, useDealPromos } from '../components/LineEntry.jsx';
 import { ShipGates } from '../components/ShipGates.jsx';
 import { dealLight, stuckOf } from '../lib/domain.js';
+import { useAddons, AddonBranch, AddonPanel, AddonStartModal, canStartAddon, addonOpen, ADDON_STATUS } from '../components/Addons.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 const N = (v) => Number(v) || 0;
 import { q, call } from '../db/client.js';
@@ -48,6 +49,9 @@ export default function Deal({ id }) {
   const [custOpen, setCustOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false); const [discOpen, setDiscOpen] = useState(false); const [unpricedOpen, setUnpricedOpen] = useState(false); const [taskOpen, setTaskOpen] = useState(false); const [holdOpen, setHoldOpen] = useState(null);
   useDealPromos(id);
+  const addons = useAddons(id); const [addonNew, setAddonNew] = useState(false);
+  // 从待办「追加的货」点进来 → 直接停在那一批
+  useEffect(() => { try { const a = sessionStorage.getItem('la9s.addon'); if (a && addons.some((x) => x.id === a)) { sessionStorage.removeItem('la9s.addon'); setView('addon:' + a); } } catch { /* */ } }, [addons]);
   const [logOpen, setLogOpen] = useState(false);      // 减法巡检 C3: 操作记录默认收起
   const [mOpen, setMOpen] = useState(null);           // 减法巡检 C2: 毛利默认只显示一个小块; null = 跟着「亏没亏」自动定
   const { data, error } = useData(async () => {
@@ -70,7 +74,7 @@ export default function Deal({ id }) {
   usePromos(data?.deal?.customer_id || null);
   // 下推成功 (状态变了) → 回到当前这一步, 不停在刚才点开看的那一步
   const status = data?.deal?.status;
-  useEffect(() => { setView(null); }, [status]);
+  useEffect(() => { setView((v) => (String(v || '').startsWith('addon:') ? v : null)); }, [status]);
   // 268 (Frank 11-12): 流程条吸顶, 往下滑后缩成一行 (只留「卡在哪 + 上报 / 撤回」), 回到顶部恢复完整; 高度用 margin 补回去, 页面不跳
   const sentRef = useRef(null); const stepsRef = useRef(null);
   const [stuck, setStuck] = useState(false); const [stepsH, setStepsH] = useState(0);
@@ -110,7 +114,9 @@ export default function Deal({ id }) {
     try { const r = await call(asRole, sql, params); toast(okMsg); refresh(); return r; }
     catch (e) { toast(friendlyError(e), 'err'); throw e; }
   };
-  const ctx = { ...data, act, role, setView, readOnly };
+  const isAddon = String(curKey).startsWith('addon:'); const addonCur = isAddon ? addons.find((a) => 'addon:' + a.id === curKey) : null;
+  const addonOk = canStartAddon(deal, role, data.shipments);
+  const ctx = { ...data, act, role, setView, readOnly, openAddon: addonOk ? () => setAddonNew(true) : null, addons };
 
   const docOf = (k) => ({
     quote: deal.quote_no, pick: deal.pick_no, so: deal.so_no, ship: live[0]?.out_no || deal.reviewer_name,
@@ -154,16 +160,19 @@ export default function Deal({ id }) {
             </>
           )}
         </div>
+        <AddonBranch deal={deal} addons={addons} curKey={curKey} setView={setView} mainLabel={STATUS[deal.status]?.label} />
         <div className="flow2-now" ref={stepsRef}>
           <Light v={dealLight(deal)} />
           <span>卡在：<b>{stuckOf(deal)}</b>{!cancelled && dealLight(deal) !== 'done' && nextLabel && <span className="muted"> · 下一步：{nextLabel}</span>}</span>
           {(overdue || dueToday) && <span className={`pill ${overdue ? 'red' : 'amber'}`}>约定 {dDate(deal.planned_ship_date)} 发货{overdue ? ' · 已过期未出库' : ' · 今天该出库'}</span>}
           <span className="grow" />
-          {!atNow && !cancelled && curKey !== 'return' && <><span className="pill gray">回看已完成的步骤 · 只读</span><button type="button" className="btn sm" onClick={() => setView(null)}>回到当前步 →</button></>}
+          {!atNow && !cancelled && curKey !== 'return' && !isAddon && <><span className="pill gray">回看已完成的步骤 · 只读</span><button type="button" className="btn sm" onClick={() => setView(null)}>回到当前步 →</button></>}
           {atNow && !cancelled && <IssueButton deal={deal} step={STEPS[Math.min(current, STEPS.length - 1)]?.key} />}
           {!cancelled && <MoreMenu items={[
             atNow && REVERT_LABEL[deal.status] && can(role, 'revert') && ['↶ 撤回到上一步', () => setRevert(true)],
             canDiscount(deal, role) && [deal.discount_amount != null ? '整单折扣（已打，查看 / 撤销）' : '整单折扣…', () => setDiscOpen(true)],
+            addonOk && ['＋ 出库前追加货…', () => setAddonNew(true)],
+            !addonOk && ['partial', 'shipped'].includes(deal.status) && ['客户还要加货 → 开新单', () => { try { sessionStorage.setItem('la9s.quote.customer', deal.customer_id); } catch { /* */ } nav('quote/new'); }],
             role === 'admin' && ['派任务（问付款计划 / 核对…）', () => setTaskOpen(true)],
             canAllowUnpriced(deal, role) && ['先出库、价格以后定…', () => setUnpricedOpen(true)],
             role === 'admin' && !deal.ship_hold && !['shipped', 'cancelled'].includes(deal.status) && ['先别出库（卡住出库）…', () => setHoldOpen('hold')],
@@ -233,6 +242,9 @@ export default function Deal({ id }) {
       {cancelled && <div className="lock" style={{ marginBottom: 12 }}>这张单已作废（取消），预占的库存已释放。作废不是删除：点上面的「恢复这张单」可以恢复为报价。</div>}
       {readOnly && !cancelled && <div className="readonly-bar">🔒 这一步已下推，只读。要修改请先撤回到上一步（在上面「⋯ 更多」里，主管 / 中方，需选原因）。</div>}
       {curKey === 'quote' && <><QuotePanel {...ctx} />{!cancelled && <ConfirmBlock {...ctx} />}</>}
+      {addons.some(addonOpen) && !isAddon && !cancelled && <div className="banner info row" style={{ marginBottom: 12, gap: 8, flexWrap: 'wrap' }}><span>这张单还有 <b>{addons.filter(addonOpen).length} 批追加的货</b>没走完：{addons.filter(addonOpen).map((a) => `3.${a.no} ${ADDON_STATUS[a.status][0]}`).join('、')}。可以等它一起出库，也可以先出已经好的那批。</span><span className="grow" />{addons.filter(addonOpen).map((a) => <button type="button" key={a.id} className="btn sm" onClick={() => setView('addon:' + a.id)}>看 3.{a.no} →</button>)}</div>}
+      {addonCur && <AddonPanel deal={deal} addon={addonCur} employees={data.employees} />}
+      {addonNew && <AddonStartModal deal={deal} catalog={data.catalog} categories={data.categories} onClose={() => setAddonNew(false)} onDone={(aid) => setView('addon:' + aid)} />}
       {curKey === 'pick' && <PickPanel {...ctx} />}
       {curKey === 'so' && <><SoPanel {...ctx} />{deal.so_no && <ConfirmPanel {...ctx} />}</>}
       {curKey === 'ship' && <ShipStepPanel {...ctx} />}
