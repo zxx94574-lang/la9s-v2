@@ -5,10 +5,11 @@ import { RuleGear } from '../components/Rules.jsx';
 import { useControls, CONTROL_TABS, ControlPanels, ControlAlerts, RefundModal } from './CashControls.jsx';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import PublicHeld from '../components/PublicHeld.jsx';
+import RemitCard from '../components/Remit.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice, MoneyIn, Info } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice, MoneyIn, Info, usePeriod, PeriodBar } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { can, PAY_METHODS } from '../lib/domain.js';
@@ -26,7 +27,7 @@ const ACC_KIND = { bank: '银行公户', cash: '现金', wave: 'Wave', orange: '
 export default function Cash() {
   const { org, role, toast, refresh } = useApp();
   const [tab, setTab] = useState('open');
-  const [range, setRange] = useState(() => periodRange('month'));
+  const P = usePeriod('cash'); const range = [P.from, P.to];
   const [modal, setModal] = useState(null);
   const [dragAcc, setDragAcc] = useState(null);
   const dropAcc = async (target) => {
@@ -118,7 +119,7 @@ export default function Cash() {
     <>
       <div className="pagehead"><div><div className="eyebrow">Comptes de trésorerie</div><h1>资金账户 <RuleGear anchor="cash-rules" title="资金规则" ids={['cash.held', 'freight.acct']} /></h1>
         <div className="sub">到账先挂在账户上，不动客户欠款；中方认领到客户才冲账。持有人压款超上限或超天数会标红；交款要中方确认收到才算交了。</div></div>
-        <div className="row" style={{ gap: 6 }}>
+        <PeriodBar p={P}>
           {notice && <button type="button" className="btn" onClick={() => setModal({ t: 'notice' })}>客户说付了</button>}
           {reg && <><button type="button" className="btn" onClick={() => setModal({ t: 'deposit' })}>＋ 登记到账</button>
             <button type="button" className="btn" onClick={() => setModal({ t: 'expense' })}>登记支出</button>
@@ -126,7 +127,7 @@ export default function Cash() {
             <button type="button" className="btn" onClick={() => setModal({ t: 'import' })}>导入流水</button></>}
           {role === 'admin' && <button type="button" className="btn" onClick={() => setModal({ t: 'refund' })}>退款给客户</button>}
           {dec && <button type="button" className="btn" onClick={() => setModal({ t: 'account' })}>账户设置</button>}
-        </div>
+        </PeriodBar>
       </div>
       {data.acc.length === 0 && <div className="card card-b muted">还没有账户。中方点「账户设置」先建。</div>}
       {/* 414 (Frank 11-18): 自有账户 / 公户分两块; 卡片可以拖动换位置 (只中方, 顺序全公司一样); 待核对的收款在卡片上看得见 */}
@@ -157,12 +158,13 @@ export default function Cash() {
         </div>))}
       <ControlAlerts ctl={ctl} onGo={setTab} />
       <PublicHeld />
+      <RemitCard accounts={data.acc} />
       <div className="card">
         <div className="tabs">{TABS.map(([k, l, n]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}{n ? <span className="queue-n"> {n}</span> : null}</button>)}</div>
         {tab === 'open' && <Grid id="cash-open" table="cash_moves" columns={openCols} rows={unclaimed} empty="没有待认领的到账" />}
         {tab === 'pending' && <Grid id="cash-pending" table="cash_moves" columns={pendCols} rows={pending} empty="没有要中方处理的交款 / 支出" />}
         {tab === 'notices' && <Grid id="cash-notices" table="payment_notices" columns={noticeCols} rows={data.notices} empty="没有付款通知" />}
-        {tab === 'moves' && <Grid id="cash-moves" table="cash_moves" columns={moveCols} rows={data.moves} tools={<DatePicker range value={range} onChange={setRange} />} empty="这段时间没有流水" />}
+        {tab === 'moves' && <Grid id="cash-moves" table="cash_moves" columns={moveCols} rows={data.moves} empty="这段时间没有流水" />}
         <ControlPanels tab={tab} ctl={ctl} acc={data.acc} classes={data.classes} />
       </div>
       {modal?.t === 'claim' && <ClaimModal m={modal.m} customers={data.customers} notices={openNotices} onClose={() => setModal(null)} />}

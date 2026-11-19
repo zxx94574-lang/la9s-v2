@@ -26,7 +26,8 @@ const SPANS = [3, 4, 6, 8, 12];
 const Ctx = createContext(null);
 
 // blocks: [{ id, title, span (默认宽度), render: () => node, locked (不能隐藏), hidden (默认隐藏) }]
-export function LayoutGrid({ page, blocks, defaultGap = 16, className = '' }) {
+// sub = 套在大板块里面的小板块组 (例: 账款里的四张卡): 编辑条不吸顶, 写明是哪一组
+export function LayoutGrid({ page, blocks, defaultGap = 16, className = '', sub }) {
   const { org, role, toast, tick } = useApp();
   const edit = useLayoutEdit();
   const [saved, setSaved] = useState(undefined);   // undefined = 加载中
@@ -67,8 +68,8 @@ export function LayoutGrid({ page, blocks, defaultGap = 16, className = '' }) {
   return (
     <Ctx.Provider value={{ page }}>
       {edit && (
-        <div className="lay-bar">
-          <b>布局编辑 · {page}</b>
+        <div className={`lay-bar ${sub ? 'sub' : ''}`}>
+          <b>{sub ? `「${sub}」里面的顺序` : `布局编辑 · ${page}`}</b>
           {locked ? <span className="pill green">已锁定为正式版</span> : <span className="small">拖板块标题条换位置；点宽度数字调宽（12 = 整行）；手机端会自动重排</span>}
           <span className="grow" />
           {!locked && <label className="small row" style={{ gap: 6 }}>板块间距
@@ -78,7 +79,7 @@ export function LayoutGrid({ page, blocks, defaultGap = 16, className = '' }) {
           {locked
             ? <button type="button" className="btn sm" onClick={() => save({ ...saved, locked: false }, '已解锁，可以再改')}>解锁</button>
             : <button type="button" className="btn sm" disabled={!!draft} title={draft ? '先保存' : ''} onClick={() => save({ ...cfg, order, locked: true }, '已锁定为正式版')}>锁定为正式版</button>}
-          <button type="button" className="btn sm ghost" onClick={() => setLayoutEdit(false)}>退出编辑</button>
+          {!sub && <button type="button" className="btn sm ghost" onClick={() => setLayoutEdit(false)}>退出编辑</button>}
         </div>)}
       <div className={`lay-grid ${className}`} style={{ gap }}>
         {visible.map((b) => {

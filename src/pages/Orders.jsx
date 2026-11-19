@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { sumMargin, MarginPill, useMarginRules } from '../components/Margin.jsx';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { TierPill, Light, useApp, useData, Pill, DatePicker, useOutside } from '../components/ui.jsx';
+import { TierPill, Light, useApp, useData, Pill, DatePicker, useOutside, usePeriod, PeriodBar } from '../components/ui.jsx';
 import { call } from '../db/client.js';
 import { friendlyError, dDate, today } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink, DealLink, setPeekHighlight } from '../components/Archives.jsx';
@@ -23,9 +23,9 @@ export default function Orders() {
   const { org, go, role } = useApp();
   // 看板上点某个颜色跳过来: 带时间段 + 灯色 (一次性)
   const [jump] = useState(() => { try { const j = JSON.parse(sessionStorage.getItem('la9s.orders.jump')); sessionStorage.removeItem('la9s.orders.jump'); return j; } catch { return null; } });
-  const [period, setPeriod] = useState(jump ? 'custom' : 'year');
-  const [custom, setCustom] = useState(jump ? [jump.from, jump.to] : periodRange('month'));
-  const [from, to] = period === 'custom' ? custom : periodRange(period);
+  const P = usePeriod('orders', 'year', jump ? { period: 'custom', custom: [jump.from, jump.to] } : null);
+  const { period, custom, setPeriod, setCustom } = P;
+  const { from, to } = P;
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [tier, setTier] = useState('');
@@ -109,11 +109,10 @@ export default function Orders() {
   return (
     <>
       <div className="pagehead">
-        <div><div className="eyebrow">Commandes</div><h1>订单总览</h1><div className="sub">{from} — {to} · 一行一个业务号，点开看完整工作流</div></div>
+        <div><div className="eyebrow">Commandes</div><h1>订单总览</h1><div className="sub">一行一个业务号，点开看完整工作流</div></div>
         <div className="row">
           {can(role, 'quote') || can(role, 'inquiry') ? <button type="button" className="btn primary lg" onClick={() => go('quote/new')}>＋ 新订单</button> : null}
-          <div className="seg">{PERIODS.map(([k, l]) => <button type="button" key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
-          {period === 'custom' && <DatePicker range value={custom} onChange={setCustom} align="right" />}
+          <PeriodBar p={P} />
         </div>
       </div>
       <div className="tabs" style={{ marginBottom: 0 }}>

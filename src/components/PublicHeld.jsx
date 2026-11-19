@@ -8,9 +8,9 @@ import { money, dDate, today } from '../lib/format.js';
 const N = (v) => Number(v || 0);
 const days = (d) => Math.max(0, Math.round((new Date(today()) - new Date(dDate(d))) / 864e5));
 
-export default function PublicHeld({ urgentOnly }) {
+// 435: 经营总览「Roland 手里的钱」也用这一份数
+export function usePublicHeld() {
   const { org, role, tick } = useApp();
-  const [open, setOpen] = useState(null);
   const { data } = useData(async () => {
     if (!['admin', 'finance'].includes(role)) return null;
     const accs = await q(`select a.id, a.name, a.currency, a.hold_days, a.hold_limit, e.short_name as holder from app.cash_accounts a join app.employees e on e.id = a.holder_employee_id
@@ -27,6 +27,12 @@ export default function PublicHeld({ urgentOnly }) {
       return { ...a, rows, owing, total: owing.reduce((s, r) => s + r.left, 0), oldest, late: a.hold_days != null && oldest > N(a.hold_days) };
     });
   }, [org, role, tick]);
+  return data;
+}
+
+export default function PublicHeld({ urgentOnly }) {
+  const [open, setOpen] = useState(null);
+  const data = usePublicHeld();
   if (!data?.length) return null;
   // 待办页只在有人压款超期时出现 (317: 压款超 N 天进中方紧急待办)
   if (urgentOnly) {

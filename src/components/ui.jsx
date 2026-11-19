@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ymd, today, pad } from '../lib/format.js';
+import { ymd, today, pad, periodRange, PERIODS } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
 import { normPhone } from '../lib/phone.js';
 
@@ -853,4 +853,54 @@ export function usePopBus(open, close) {
     const h = (e) => { if (e.detail !== id.current) fn.current?.(); };
     window.addEventListener('la9s:pop', h); return () => window.removeEventListener('la9s:pop', h);
   }, [open]);
+}
+
+
+// 426 / 427 (Frank 11-19, 全站): 页面的日期大筛选 —— 本日 / 本周 / 本月 / 本季度 / 本年度 / 自定义, 旁边永远写出真实的起止日期和天数.
+// usePeriod(页面名): 选了什么记在本机 (每页各记各的); <PeriodBar p={…} /> 放进 .pagehead 右边, 表头冻结以后也一直看得到.
+const pstore = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* */ } } };
+export function usePeriod(key, def = 'month', init = null) {
+  const [period, setP] = useState(() => init?.period || pstore.get(`la9s.period.${key}`, def));
+  const [custom, setC] = useState(() => init?.custom || pstore.get(`la9s.period.${key}.custom`, [today(), today()]));
+  const setPeriod = (v) => { setP(v); pstore.set(`la9s.period.${key}`, v); };
+  const setCustom = (v) => { setC(v); pstore.set(`la9s.period.${key}.custom`, v); };
+  const [from, to] = period === 'custom' ? custom : periodRange(period);
+  const label = PERIODS.find((x) => x[0] === period)?.[1] || '';
+  return { period, setPeriod, custom, setCustom, from, to, label };
+}
+export const rangeText = (from, to) => {
+  const n = Math.round((new Date(to) - new Date(from)) / 864e5) + 1;
+  const sameY = String(from).slice(0, 4) === String(to).slice(0, 4) && String(to).slice(0, 4) === String(new Date().getFullYear());
+  const f = (d) => (sameY ? String(d).slice(5) : d);
+  return from === to ? `${f(from)} · 1 天` : `${f(from)} → ${f(to)} · ${n} 天`;
+};
+export function PeriodBar({ p, children }) {
+  return (
+    <div className="row period-bar">
+      {children}
+      <span className="period-range" title="现在看的是这段时间">{rangeText(p.from, p.to)}</span>
+      <div className="seg">{PERIODS.map(([k, l]) => <button type="button" key={k} className={p.period === k ? 'on' : ''} onClick={() => p.setPeriod(k)}>{l}</button>)}</div>
+      {p.period === 'custom' && <DatePicker range value={p.custom} onChange={p.setCustom} align="right" />}
+    </div>);
+}
+
+// 426: 每一页的表头 (.pagehead) 往下滑时冻结在顶栏下面. 滑下去以后: 小字那行收起、标题小一号, 右边 (日期 / 按钮) 整块不动.
+// 在 App 里挂一次 useStickyPagehead(), 所有页面自动有; 表头变矮的那一截用 margin 补回去, 页面内容不跳.
+export function useStickyPagehead() {
+  useEffect(() => {
+    let stuck = false; let el = null; let pad0 = 0;
+    const on = () => {
+      const cur = document.querySelector('.content > .pagehead, .content .pagehead');
+      if (cur !== el) { if (el) { el.classList.remove('stuck'); el.style.marginBottom = ''; } el = cur; stuck = false; }
+      if (!el) return;
+      const y = window.scrollY;
+      if (!stuck && y > 36) {
+        const h0 = el.offsetHeight; el.classList.add('stuck'); const h1 = el.offsetHeight;
+        pad0 = Math.max(0, h0 - h1); el.style.marginBottom = `calc(var(--ph-mb, 12px) + ${pad0}px)`; stuck = true;
+      } else if (stuck && y < 6) { el.classList.remove('stuck'); el.style.marginBottom = ''; stuck = false; }
+    };
+    window.addEventListener('scroll', on, { passive: true }); window.addEventListener('hashchange', on);
+    const t = setInterval(on, 600);   // 换页 / 数据出来以后表头换了一个, 重新认一下
+    return () => { window.removeEventListener('scroll', on); window.removeEventListener('hashchange', on); clearInterval(t); };
+  }, []);
 }

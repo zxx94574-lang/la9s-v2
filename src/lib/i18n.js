@@ -10,7 +10,7 @@ const D = {
   // navigation
   '工作台': ['Workspace', 'Espace de travail'], '经营总览': ['Dashboard', 'Tableau de bord'], '我的待办': ['My tasks', 'Mes tâches'],
   '销售主链': ['Sales', 'Ventes'], '新建询单 / 报价': ['New quote', 'Nouveau devis'], '订单总览': ['Orders', 'Commandes'],
-  '客户': ['Customers', 'Clients'], '客户档案': ['Customer files', 'Fiches clients'], '热线回访': ['Hotline follow-up', 'Suivi hotline'], '销售拜访': ['Sales visits', 'Visites commerciales'],
+  '客户': ['Customers', 'Clients'], '客户档案': ['Customer files', 'Fiches clients'], '热线回访': ['Hotline follow-up', 'Suivi hotline'], '销售拜访': ['Sales visits', 'Visites commerciales'], '客户拜访': ['Customer visits', 'Visites clients'],
   '财务': ['Finance', 'Finance'], '收款与冲账': ['Receipts', 'Encaissements'], '客户总账 Balance': ['Customer balance', 'Balance clients'], '资金账户': ['Cash accounts', 'Comptes de trésorerie'],
   '仓库': ['Warehouse', 'Entrepôt'], '库存（实存/预占/可售）': ['Stock', 'Stock'], '未满足需求': ['Unmet demand', 'Demande non servie'], '备货看板': ['Replenishment', 'Réassort'],
   '物料名称管理（中方）': ['Item names (admin)', 'Noms des articles (admin)'], '物料与定价': ['Items & pricing', 'Articles et prix'], '数据导入': ['Data import', 'Import de données'],

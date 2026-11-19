@@ -1495,3 +1495,80 @@ tr.grp-row > td.grp-sum b { font-weight: 800; color: #0d1b2e; }
 .tw.grp-past tr.grp-row > td.rowhead .grp-float { display: block; }
 .grid table.t tr.grp-row > td[colspan] { overflow: clip; }
 .grid table.t tr.grp-row .sticky-left { left: calc(var(--rh, 40px) + 10px); }
+
+/* 426 / 427 (11-19): 表头冻结 —— 场景 + 页面名称 + 日期筛选 一起钉在顶栏下面; 滑下去 (.stuck) 只收起小字那行、标题小一号, 右边不动 */
+.content .pagehead { position: sticky; top: 60px; z-index: 25; background: var(--bg); margin: -8px -24px 12px; padding: 8px 24px; align-items: center; --ph-mb: 12px; transition: box-shadow .15s; }
+.content .pagehead.stuck { box-shadow: 0 6px 12px -8px #0f2a5233; border-bottom: 1px solid var(--line); }
+.content .pagehead h1 { transition: font-size .15s; }
+.content .pagehead.stuck .eyebrow { display: none; }
+.content .pagehead.stuck h1 { font-size: 18px; margin: 0; }
+.drawer .pagehead, .modal .pagehead { position: static; margin: 2px 0 12px; padding: 0; }
+.period-bar { gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.period-range { font-size: 12.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lay-bar { top: 124px; }
+@media (max-width: 760px) {
+  .content .pagehead { top: 50px; margin: -6px -10px 8px; padding: 6px 10px; }
+  .content .pagehead h1 { font-size: 18px; }
+}
+
+/* 432 (11-19): 表格格子左右间距可调 (公司设置: 紧 / 标准 / 松) */
+.grid table.t th:not(.rowhead), .grid table.t td:not(.rowhead):not(.editing) { padding-left: var(--cell-px, 10px); padding-right: var(--cell-px, 10px); }
+/* 430 (11-19): 选中几格 → 下方小浮条 (平均值 · 计数 · 求和) */
+.sel-stats { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 380; display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 7px 14px; font-size: 13px; color: var(--muted); box-shadow: 0 8px 24px #0f2a5226; white-space: nowrap; pointer-events: none; }
+.sel-stats b { color: var(--ink); font-weight: 650; font-variant-numeric: tabular-nums; }
+.sel-stats i { width: 1px; height: 14px; background: var(--line); }
+@media (max-width: 760px) { .sel-stats { bottom: 84px; } }
+.lay-bar.sub { position: static; margin-bottom: 8px; }
+
+/* ───────── 426–437 (Frank 11-19) 经营总览: 大数卡 / 小方框 / 小实心三角 / 数据条 ───────── */
+.green-t { color: var(--green); }
+.dash-sec > .card-h h2 { color: var(--brand); }
+.dk-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.dk { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; background: #fff; }
+.dk-t, .mc-t > button:first-child { color: var(--brand); font-weight: 700; font-size: 14px; }
+.dk-t small { color: var(--brand); font-weight: 600; font-size: 12px; opacity: .8; }
+.dk-v { display: block; font-size: clamp(20px, 2.1vw, 28px); font-weight: 780; letter-spacing: -.6px; font-variant-numeric: tabular-nums; margin: 6px 0 2px; overflow-wrap: anywhere; line-height: 1.15; }
+.dk-v small { font-size: 12px; color: var(--brand); font-weight: 600; letter-spacing: 0; margin-left: 5px; }
+.dk-v.muted { font-size: 18px; }
+.dk-sub { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.dk-sub span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; } .dk-sub b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.dk-sub i, .dk-ratio i { display: inline-block; } .dk-sub i { width: 8px; height: 8px; border-radius: 2px; }
+.dk-ratio { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 12px 0 2px; background: var(--line-2); } .dk-ratio i { height: 100%; }
+.dk-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.dchip { display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); background: #f6f8fb; border-radius: 6px; padding: 2px 8px; font-size: 12px; color: var(--muted); white-space: nowrap; font: inherit; font-size: 12px; }
+.dchip b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.dchip.red { background: var(--red-bg); border-color: transparent; color: var(--red); } .dchip.red b { color: var(--red); }
+.dchip.green { background: var(--green-bg, #e6f6ec); border-color: transparent; color: var(--green); } .dchip.green b { color: var(--green); }
+.dchip.amber { background: #fff4dc; border-color: transparent; color: #b26a00; } .dchip.amber b { color: #b26a00; }
+button.dchip { cursor: pointer; }
+.fold-btn { border: 0; background: none; color: var(--brand); font-size: 12px; line-height: 1; padding: 6px 8px; margin: -4px -6px -4px 0; cursor: pointer; border-radius: 6px; }
+.fold-btn:hover, .fold-btn.on { background: var(--brand-soft); }
+.dk-lines { border-top: 1px solid var(--line-2); display: flex; flex-wrap: wrap; }
+.dk-lines button { flex: 1 1 260px; text-align: left; border: 0; background: none; padding: 10px 18px; font: inherit; font-size: 13px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; color: var(--ink); }
+.dk-lines button + button { border-left: 1px solid var(--line-2); } .dk-lines button.red { color: var(--red); font-weight: 600; } .dk-lines button:hover { background: #f6f8fb; }
+.dbar { display: inline-block; width: 100%; min-width: 40px; height: 8px; border-radius: 4px; background: var(--line-2); overflow: hidden; vertical-align: middle; }
+.dbar i { display: block; height: 100%; background: var(--brand); border-radius: 4px; } .dbar.sub i { background: #8fb0e8; }
+.dk-exp { border: 0; background: none; color: var(--brand); cursor: pointer; padding: 0 6px 0 0; font-size: 12px; }
+.dk-row1 { padding-left: 22px; color: var(--muted); } tr.dk-child td { background: #fafbfd; }
+.mcard { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; height: 100%; background: #fff; min-width: 0; } .mcard.on { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+.mc-t { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; } .mc-t button { border: 0; background: none; padding: 0; cursor: pointer; font: inherit; }
+.mc-t .mc-sum { color: var(--muted); font-size: 12px; font-weight: 500; } .mc-t .mc-sum:hover { color: var(--brand); }
+.tog2 { display: inline-flex; gap: 8px; } .tog2 button { color: #9aa3b2; font-size: 12px; font-weight: 600; } .tog2 button.on { color: var(--brand); font-size: 14px; font-weight: 780; }
+.two-n { display: flex; gap: 18px; align-items: baseline; margin: 6px 0 2px; flex-wrap: wrap; }
+.two-n button { border: 0; background: none; padding: 0; cursor: pointer; font: inherit; color: #9aa3b2; display: inline-flex; align-items: baseline; gap: 4px; }
+.two-n button b { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; } .two-n button small { font-size: 12px; }
+.two-n button.on { color: var(--brand); } .two-n button.on b { font-size: clamp(22px, 2.1vw, 28px); font-weight: 780; }
+.mc-detail { margin-top: 12px; }
+.acc-bars { display: grid; gap: 6px; margin-bottom: 10px; } .acc-bars > div { display: grid; grid-template-columns: minmax(90px, 160px) minmax(40px, 1fr) auto; gap: 10px; align-items: center; font-size: 13px; }
+.acc-bars b { font-variant-numeric: tabular-nums; }
+tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
+@media (max-width: 760px) { .dk-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .dk, .mcard { padding: 10px; } .dk-lines button + button { border-left: 0; border-top: 1px solid var(--line-2); } }
+.dash-sec .lay-grid { align-items: stretch; margin-bottom: 0; } .dash-sec .lay-grid > .lay-block { display: flex; flex-direction: column; } .dash-sec .lay-grid > .lay-block > .mcard { flex: 1; }
+/* 426: 冻结时页头再压一压 —— 说明文字收起, 按钮缩小; 手机上时间段那排左右滑 */
+.content .pagehead.stuck .sub { display: none; }
+.content .pagehead.stuck .btn { padding: 5px 10px; font-size: 12.5px; min-height: 0; }
+.content .pagehead.stuck .seg button { padding: 4px 10px; font-size: 12.5px; }
+.period-bar { max-width: 100%; min-width: 0; } .period-bar .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; } .period-bar .seg button { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 760px) { .content .pagehead { flex-wrap: wrap; } .content .pagehead > div:first-child { min-width: 0; } .period-bar { width: 100%; justify-content: flex-start; } .period-bar .btn { flex: 0 0 auto; } }
+@media (max-width: 760px) { .period-bar .period-range { order: -2; } .period-bar .seg { order: -1; flex: 0 0 auto; max-width: none; overflow: visible; } .period-bar .seg button { padding: 5px 8px; font-size: 12px; } }
+@media (max-width: 760px) { .period-bar { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; align-items: center; } .period-bar > * { flex: 0 0 auto; } }

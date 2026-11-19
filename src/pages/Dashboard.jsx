@@ -1,20 +1,15 @@
-import React, { useMemo, useState } from 'react';
-import { sumMargin, MarginKpis, useMarginRules } from '../components/Margin.jsx';
-import { q, call } from '../db/client.js';
+import React, { useState } from 'react';
+import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { TierPill, Light, Info, useApp, useData, DatePicker, Pill, useOutside } from '../components/ui.jsx';
-import { ModelLink, CustLink, EmpLink , DealLink} from '../components/Archives.jsx';
+import { TierPill, useApp, useData, Pill, usePeriod, PeriodBar } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
-import { money, qty, dt, dDate, periodRange, PERIODS, today } from '../lib/format.js';
-import { SHIP_METHODS, PAY_METHODS, TIERS, STATUS, dealLight, stuckOf } from '../lib/domain.js';
-import { balanceWords } from '../lib/domain.js';
-import { todoFor, todoLevel, overdueOf } from './Todo.jsx';
-import { DEFAULT_SCHEDULE } from '../components/AttCalendar.jsx';
+import { money, qty, dDate } from '../lib/format.js';
+import { TIERS } from '../lib/domain.js';
+import { todoFor, todoLevel } from './Todo.jsx';
 import { LayoutGrid, setLayoutEdit, useLayoutEdit } from '../components/Layout.jsx';
+import { useDashRows, Overview, SalesSection, MoneyBlock, PeopleBlock } from '../components/DashBlocks.jsx';
 
 const N = (v) => Number(v || 0);
-// 本地日期 (阿比让 = UTC)
-const ymd = (v) => { if (!v) return ''; const x = v instanceof Date ? v : new Date(v); return isNaN(x) ? String(v).slice(0, 10) : x.toISOString().slice(0, 10); };
 const shift = (d, days) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + days); return x.toISOString().slice(0, 10); };
 function prevRange(from, to) { const len = Math.round((new Date(to) - new Date(from)) / 864e5) + 1; return [shift(from, -len), shift(from, -1)]; }
 function Delta({ cur, prev, money: isMoney }) {
@@ -25,93 +20,26 @@ function Delta({ cur, prev, money: isMoney }) {
   return <span className={pct >= 0 ? 'up' : 'down'}>{pct >= 0 ? '▲' : '▼'} {Math.abs(pct)}%<span className="muted">（上一期 {isMoney ? money(prev) : prev}）</span></span>;
 }
 
-const store = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* */ } } };
-
+// 426–437 (Frank 11-19): 经营总览重做 —— 紧急待办一行 → 总览 → 本地 → FOB → 账款 → 人 → 更多. 大板块和板块里的小卡片顺序中方可调 (437).
 export default function Dashboard() {
   const { org, go, role } = useApp();
-  const [period, setPeriodS] = useState(() => store.get('la9s.dash.period', 'month'));
-  const [custom, setCustom] = useState(() => store.get('la9s.dash.custom', [today(), today()]));
-  const [panel, setPanelS] = useState(() => store.get('la9s.dash.panel', 'sales'));
-  const setPeriod = (p) => { setPeriodS(p); store.set('la9s.dash.period', p); };
-  const setPanel = (p) => { setPanelS(p); store.set('la9s.dash.panel', p); };
-  const [from, to] = period === 'custom' ? custom : periodRange(period);
-
+  const P = usePeriod('dash'); const { from, to } = P;
   const [pf, pt] = prevRange(from, to);
   const edit = useLayoutEdit();
+  const admin = role === 'admin';
+  const rows = useDashRows(from, to);
   const { data } = useData(async () => {
-    const [k] = await q(Q.dashboard, [org, from, to]);
-    const [sales, wh, rc, bal, orders, [cards], cmp] = await Promise.all([q(Q.dashSales, [org, from, to]), q(Q.dashWarehouse, [org, from, to]),
-      q(Q.receipts, [org, from, to]), q(Q.balances, [org]), q(Q.orders, [org, '2000-01-01', '2999-12-31']), q(Q.dashCards, [org, from, to, pf, pt]), q(Q.customerCompare, [org])]);
-    const [emps, ins, [vc], [hc]] = await Promise.all([
-      q(`select id, short_name, work_schedule from app.employees where org_id = $1 and active and (joined_on is null or joined_on <= current_date)`, [org]),
-      q(`select distinct employee_id from app.attendance where org_id = $1 and kind = 'in' and (at at time zone 'Africa/Abidjan')::date = (now() at time zone 'Africa/Abidjan')::date`, [org]),
-      q(`select count(distinct customer_id) filter (where (at at time zone 'Africa/Abidjan')::date = (now() at time zone 'Africa/Abidjan')::date)::int as t,
-           count(distinct customer_id) filter (where (at at time zone 'Africa/Abidjan')::date = (now() at time zone 'Africa/Abidjan')::date - 1)::int as y,
-           count(*) filter (where at >= date_trunc('month', now()))::int as m from app.visits where org_id = $1`, [org]),
-      q(`select count(*)::int as total, count(*) filter (where result not in ('no_answer','busy'))::int as ok from app.hotline_calls
-         where org_id = $1 and channel = 'call' and (at at time zone 'Africa/Abidjan')::date = (now() at time zone 'Africa/Abidjan')::date`, [org])]);
-    const wd = new Date().getDay(); const due = emps.filter((e) => ({ ...DEFAULT_SCHEDULE, ...(e.work_schedule || {}) })[wd] !== 'off');
-    const inSet = new Set(ins.map((x) => x.employee_id));
-    const people = { off: due.length === 0, due, in: due.filter((e) => inSet.has(e.id)), missing: due.filter((e) => !inSet.has(e.id)).map((e) => e.short_name),
-      visit_today: vc?.t || 0, visit_yday: vc?.y || 0, visit_month: vc?.m || 0, call_total: hc?.total || 0, call_ok: hc?.ok || 0, call_fail: (hc?.total || 0) - (hc?.ok || 0) };
-    return { k, sales, wh, rc, bal, orders, cards, cmp, people };
+    const [[k], rc, bal, orders, [cards], cmp, fobs] = await Promise.all([q(Q.dashboard, [org, from, to]), q(Q.receipts, [org, from, to]), q(Q.balances, [org]),
+      q(Q.orders, [org, '2000-01-01', '2999-12-31']), q(Q.dashCards, [org, from, to, pf, pt]), q(Q.customerCompare, [org]), q(Q.fobList, [org]).catch(() => [])]);
+    return { k, rc, bal, orders, cards, cmp, fobs };
   }, [org, from, to]);
-
   const k = data?.k; const c = data?.cards;
-  const periodLabel = PERIODS.find((p) => p[0] === period)[1];
-  const lightN = { active: 0, done: 0, cancelled: 0 };
-  for (const d of (data?.orders || [])) { const cd = ymd(d.created_at); if (cd >= from && cd <= to) lightN[dealLight(d)] += 1; }
   const jumpCompare = () => document.getElementById('cust-compare')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const blocks = !data ? [] : [
-    // 224 (Frank 11-11): 总览每块只回答一个问题, 细节点进去看 —— ① 要处理的单 (原来的红条 + 订单状态 + 待办列表合一) ② 销售 ③ 钱 ④ 打卡 ⑤ 拜访 ⑥ 热线
-    { id: 'todo', title: '要处理的单', span: 12, render: () => <TodoBlock orders={data.orders} role={role} go={go} lightN={lightN} from={from} to={to} /> },
-    { id: 'sales', title: '销售', span: 6, render: () => (
-      <div className="card">
-        <button type="button" className="kpi flat" onClick={() => go('orders')}>
-          <div className="t"><span>销售（出库金额）· {periodLabel}</span><span>↗</span></div>
-          <div className="v">{money(k.sales_amount)}<small>XOF</small></div>
-          <div className="f"><span>出库 <b>{qty(k.sales_qty)}</b> 件 · <b>{k.order_count}</b> 单</span><Delta cur={c.sales} prev={c.sales_prev} money /></div>
-        </button>
-        <Trend rows={data.sales} from={from} to={to} bare />
-      </div>) },
-    { id: 'money', title: '应收与收款', span: 6, render: () => (
-      <div className="card">
-        <button type="button" className="kpi flat" onClick={() => go('balances')}>
-          <div className="t"><span>应收账款（全部历史）</span><span>欠款明细 →</span></div>
-          <div className="v" style={{ color: N(k.debt_total) > 0 ? 'var(--red)' : undefined }}>{money(k.debt_total)}<small>XOF</small></div>
-          <div className="f"><span><b>{k.debtor_count}</b> 位客户欠款</span></div>
-        </button>
-        <button type="button" className="kpi flat" style={{ borderTop: '1px solid var(--line-2)' }} onClick={() => go('receipts')}>
-          <div className="t"><span>收款 · {periodLabel}</span><span>收款明细 →</span></div>
-          <div className="v">{money(k.receipts_amount)}<small>XOF</small></div>
-          <div className="f"><span><b>{data.rc.length}</b> 笔 · 来自 <b>{new Set(data.rc.filter((r) => !r.voided_at).map((r) => r.customer_id || r.customer_name)).size}</b> 位客户</span></div>
-        </button>
-      </div>) },
-    ...(role === 'admin' ? [{ id: 'margin', title: '已出货毛利（只中方）', span: 12, render: () => <DashMargin from={from} to={to} periodLabel={periodLabel} go={go} /> }] : []),
-    { id: 'att', title: '今天打卡', span: 4, render: () => (
-      <div className="card card-b mini" onClick={() => go('attendance')} role="button" tabIndex={0}>
-        <div className="pd-h">今天打卡</div>
-        {data.people.off ? <div className="muted">今天休息</div> : <>
-          <div className="mini-v"><b>{data.people.in.length}</b> 人已打卡 <span className="muted small">/ 应到 {data.people.due.length}</span></div>
-          {data.people.missing.length ? <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}><span className="small muted">没打卡：</span>{data.people.missing.map((n) => <span key={n} className="pill red">{n}</span>)}</div> : <span className="pill green">都到了</span>}</>}
-      </div>) },
-    { id: 'visit', title: '销售拜访', span: 4, render: () => (
-      <div className="card card-b mini" onClick={() => go('visits')} role="button" tabIndex={0}>
-        <div className="pd-h">销售拜访</div>
-        <div className="mini-v">今天 <b>{data.people.visit_today}</b> 家 <span className="muted">· 昨天 <b>{data.people.visit_yday}</b> 家</span></div>
-        <div className="small muted">本月合计 {data.people.visit_month} 家</div>
-      </div>) },
-    { id: 'hot', title: '热线电话', span: 4, render: () => (
-      <div className="card card-b mini" onClick={() => go('hotline')} role="button" tabIndex={0}>
-        <div className="pd-h">热线电话</div>
-        <div className="mini-v">今天打了 <b>{data.people.call_total}</b> 个</div>
-        <div className="row" style={{ gap: 6 }}><span className="pill green">拨通 {data.people.call_ok}</span><span className={`pill ${data.people.call_fail ? 'amber' : 'gray'}`}>没通 {data.people.call_fail}</span></div>
-      </div>) },
-    { id: 'more', title: '更多（仓库 / 销售工作 / 热线 / 客户）', span: 12, render: () => (
-      <details className="more-box"><summary>更多：仓库 · 销售工作 · 热线 · 客户对比</summary>
-        <div className="more-grid">{more.map((m) => <React.Fragment key={m.id}>{m.render()}</React.Fragment>)}</div>
-        <div style={{ marginTop: 12 }}><CustomerCompare rows={data.cmp} go={go} /></div>
-      </details>) },
+  const urgent = (data?.orders || []).filter((d) => todoFor(role, d) && todoLevel(d) === 'red').length;
+  const transit = (data?.fobs || []).filter((f) => ['applied', 'purchasing', 'in_transit', 'arrived', 'released'].includes(f.status));
+  const lines = [
+    ...(urgent ? [{ k: 'u', tone: 'red', to: 'todo', text: `待办里有 ${urgent} 件紧急的` }] : []),
+    ...(transit.length ? [{ k: 'f', to: 'fob', text: `FOB 在途 ${transit.length} 单 · 订金已收 ${transit.filter((f) => N(f.paid) > 0).length} 单` }] : []),
   ];
   const more = !data ? [] : [
     { id: 'c_wh', title: '仓库经营', span: 3, render: () => (
@@ -151,23 +79,36 @@ export default function Dashboard() {
           {N(c.cust_down) + N(c.cust_silent) ? `⚠ 掉量 ≥30%：${c.cust_down} 位 · 30 天没下单：${c.cust_silent} 位 →` : '✓ 没有掉量的老客户'}</button></div>
       </div>) },
   ];
+  const blocks = !data ? [] : [
+    ...(admin ? [
+      { id: 'ov', title: '总览', span: 12, render: () => (rows ? <Overview rows={rows} lines={lines} /> : <div className="card card-b muted">加载中…</div>) },
+      { id: 'local', title: '本地销售与毛利', span: 12, render: () => (rows ? <SalesSection kind="local" rows={rows.filter((r) => r.supply !== 'fob')} /> : null) },
+      { id: 'fob', title: 'FOB 销售与毛利', span: 12, render: () => (rows ? <SalesSection kind="fob" rows={rows.filter((r) => r.supply === 'fob')} /> : null) },
+    ] : [
+      // 员工看不到成本 / 利润: 只有销售额和件数
+      { id: 'ov', title: '销售', span: 12, render: () => (
+        <div className="card dash-sec"><div className="card-h"><h2>销售 <span className="muted small">已经出库的</span></h2></div>
+          <div className="card-b"><div className="dk-row"><div className="dk"><div className="dk-t">销售额 <small>XOF</small></div><span className="dk-v">{money(k.sales_amount)}<small>XOF</small></span></div></div>
+            <div className="dk-chips"><span className="dchip">出库 <b>{qty(k.sales_qty)}</b> 片</span><span className="dchip"><b>{k.order_count}</b> 单</span></div></div>
+          {lines.length > 0 && <div className="dk-lines">{lines.map((l) => <button type="button" key={l.k} className={l.tone || ''} onClick={() => go(l.to)}>{l.text} <span>›</span></button>)}</div>}
+        </div>) }]),
+    { id: 'money', title: '账款', span: 12, render: () => <MoneyBlock bal={data.bal} rc={data.rc} from={from} to={to} /> },
+    { id: 'people', title: '打卡 / 拜访 / 热线', span: 12, render: () => <PeopleBlock from={from} to={to} label={P.label} /> },
+    { id: 'more', title: '更多（仓库 / 销售工作 / 热线 / 客户）', span: 12, render: () => (
+      <details className="more-box"><summary>更多：仓库 · 销售工作 · 热线 · 客户对比</summary>
+        <div className="more-grid">{more.map((m) => <React.Fragment key={m.id}>{m.render()}</React.Fragment>)}</div>
+        <div style={{ marginTop: 12 }}><CustomerCompare rows={data.cmp} go={go} /></div>
+      </details>) },
+  ];
   return (
     <>
       <div className="pagehead">
-        <div>
-          <div className="eyebrow">LA&9S / Votre partenaire</div>
-          <h1>经营总览</h1>
-          <div className="sub">{from === to ? from : `${from} — ${to}`} · {periodLabel}<span className="muted">（对比上一期 {pf} — {pt}）</span></div>
-        </div>
-        <div className="row">
-          <div className="seg">
-            {PERIODS.map(([key, label]) => <button type="button" key={key} className={period === key ? 'on' : ''} onClick={() => setPeriod(key)}>{label}</button>)}
-          </div>
-          {period === 'custom' && <DatePicker range value={custom} align="right" onChange={(v) => { setCustom(v); store.set('la9s.dash.custom', v); }} />}
-          {role === 'admin' && <button type="button" className={`btn sm ${edit ? 'primary' : ''}`} onClick={() => setLayoutEdit(!edit)} title="选看板上出现哪些模块、顺序、宽度">⚙ 配置看板</button>}
-        </div>
+        <div><div className="eyebrow">LA&9S / Votre partenaire</div><h1>经营总览</h1></div>
+        <PeriodBar p={P}>
+          {admin && <button type="button" className={`btn sm ${edit ? 'primary' : ''}`} onClick={() => setLayoutEdit(!edit)} title="大板块和板块里小卡片的顺序、宽度、显示不显示（全员一样）">⚙ 配置看板</button>}
+        </PeriodBar>
       </div>
-      {!data ? <div className="empty">加载中…</div> : <LayoutGrid page="dashboard" blocks={blocks} />}
+      {!data ? <div className="empty">加载中…</div> : <LayoutGrid page="dash" blocks={blocks} />}
     </>
   );
 }
@@ -198,74 +139,6 @@ function CustomerCompare({ rows, go }) {
         <label className="small row" style={{ gap: 6 }}><input type="checkbox" checked={only} onChange={(e) => setOnly(e.target.checked)} />只看要关注的</label></div>
       <Grid id="dash-cmp" columns={cols} rows={list} onRowClick={(r) => go('customer/' + r.id)} maxHeight={420}
         empty={rows.length ? '没有要关注的客户 ✓' : '系统里还没有客户出库记录（金蝶历史只有按编码的月销量，没有按客户的，所以这里先空着）'} />
-    </div>
-  );
-}
-
-// 224 ①: 要处理的单 —— 红条 + 订单状态 + 待办列表合成一块; 没有待办时缩成一行绿字
-function TodoBlock({ orders, role, go, lightN, from, to }) {
-  const all = orders.filter((d) => todoFor(role, d));
-  const lv = { red: [], amber: [], green: [] }; for (const d of all) lv[todoLevel(d)].push(d);
-  const list = [...lv.red, ...lv.amber, ...lv.green].slice(0, 6);
-  const jump = (v) => { try { sessionStorage.setItem('la9s.orders.jump', JSON.stringify({ light: v, from, to })); } catch { /* */ } go('orders'); };
-  return (
-    <div className={`card todo-sec ${lv.red.length ? 'todo-red' : all.length ? 'todo-amber' : 'todo-green'}`}>
-      <div className="card-h" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <h2>要处理的单 <span className="pill red">紧急 {lv.red.length}</span><span className="pill amber">进行中 {lv.amber.length}</span><span className="pill green">不急 {lv.green.length}</span>
-          <Info>紧急 = 下单超过 24 小时没发货、客户今天要货、收货有差异、运费没付、中方标了紧急。右边三个数是这个时间段里开的单的状态，点了到订单总览看。</Info></h2>
-        <div className="row" style={{ gap: 6 }}>{['active', 'done', 'cancelled'].map((v) => <button type="button" key={v} className="light-btn" onClick={() => jump(v)}><Light v={v} /> <b>{lightN[v]}</b></button>)}
-          <button type="button" className="btn sm" onClick={() => go('todo')}>全部待办 →</button></div>
-      </div>
-      {all.length === 0 ? <div className="card-b"><span className="pill green">当前岗位没有要处理的单 ✓</span></div> : list.map((d) => { const o = overdueOf(d); const L = todoLevel(d); return (
-        <div key={d.id} className="row between todo-row" onClick={() => go('deal/' + d.id)}>
-          <div style={{ minWidth: 0 }}><span className={`pill ${L}`} style={{ marginRight: 6 }}>{{ red: '紧急', amber: '进行中', green: '不急' }[L]}</span><CustLink id={d.customer_id} name={d.customer_name} /> <span className="muted small">{d.city} · </span><DealLink id={d.id} no={d.biz_no} />{o && <span className="pill red" style={{ marginLeft: 6 }}>{o.label}没发货</span>}</div>
-          <div className="row" style={{ flexShrink: 0 }}><span className="small muted">卡在：{stuckOf(d)}</span><span className="muted">›</span></div>
-        </div>); })}
-      {all.length > list.length && <div className="card-b small muted" style={{ cursor: 'pointer' }} onClick={() => go('todo')}>还有 {all.length - list.length} 单，到「我的待办」看全部 →</div>}
-    </div>
-  );
-}
-
-// 销售趋势: 期内每天出库金额 (一张图, 11-09 看板重做)
-function Trend({ rows, from, to, bare }) {
-  const days = []; for (let d = from; d <= to && days.length < 400; d = shift(d, 1)) days.push(d);
-  const by = {}; for (const r of rows) { const d = ymd(r.shipped_at); by[d] = (by[d] || 0) + N(r.amount); }
-  const step = days.length > 62 ? 7 : 1;   // 超过两个月按周合并
-  const pts = []; for (let i = 0; i < days.length; i += step) pts.push({ d: days[i], v: days.slice(i, i + step).reduce((a, x) => a + (by[x] || 0), 0) });
-  const max = Math.max(1, ...pts.map((p) => p.v)); const W = 600, H = 150, bw = W / Math.max(1, pts.length);
-  const [hov, setHov] = useState(null);
-  return (
-    <div className={bare ? 'trend-bare' : 'card'}>
-      <div className="card-h"><h2>销售趋势 <span className="muted small">每{step === 7 ? '周' : '天'}出库金额 XOF</span></h2>{hov && <span className="small"><b>{hov.d}</b>{step === 7 ? ' 起一周' : ''} · {money(hov.v)} XOF</span>}</div>
-      <div className="card-b">
-        {rows.length === 0 ? <div className="muted small">这个时间段还没有出库</div> : (
-          <svg viewBox={`0 0 ${W} ${H + 18}`} style={{ width: '100%', height: 180 }} onMouseLeave={() => setHov(null)}>
-            <line x1="0" x2={W} y1={H} y2={H} stroke="#e3e8ef" />
-            {pts.map((p, i) => { const h = p.v / max * (H - 8); return (
-              <rect key={p.d} x={i * bw + bw * 0.15} y={H - h} width={Math.max(1, bw * 0.7)} height={h} rx="2" fill={hov?.d === p.d ? '#1f5fd1' : '#8fb0e8'} onMouseEnter={() => setHov(p)} />); })}
-            <text x="0" y={H + 14} fontSize="11" fill="#8a94a6">{pts[0]?.d}</text>
-            <text x={W} y={H + 14} fontSize="11" fill="#8a94a6" textAnchor="end">{pts[pts.length - 1]?.d}</text>
-            <text x="0" y="10" fontSize="11" fill="#8a94a6">{money(max)}</text>
-          </svg>)}
-      </div>
-    </div>
-  );
-}
-
-// 328 (Frank 11-16): 看板上的已出货毛利 —— 只中方; 按出库日期算, 加权毛利率; 点进去看任意细分
-function DashMargin({ from, to, periodLabel, go }) {
-  const { org, role } = useApp();
-  const { lowPct } = useMarginRules();
-  const { data } = useData(() => call(role, `select * from app.margin_rows($1)`, [org]), [org, role]);
-  if (!data) return <div className="card card-b muted">加载中…</div>;
-  const rows = data.filter((r) => { const d = ymd(r.shipped_on); return d >= from && d <= to; });
-  const t = sumMargin(rows);
-  return (
-    <div className="card">
-      <button type="button" className="kpi flat" onClick={() => go('margin')}>
-        <div className="t"><span>已出货毛利 · {periodLabel}</span><span>按档位 / 种类 / 型号细看 →</span></div>
-      </button>
-      <div className="card-b" style={{ paddingTop: 0 }}>{rows.length ? <MarginKpis t={t} lowPct={lowPct} compact /> : <div className="muted small">这个时间段还没有出库</div>}</div>
     </div>
   );
 }

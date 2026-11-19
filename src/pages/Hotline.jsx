@@ -4,7 +4,7 @@ import { fmtPhone, telHref } from '../lib/phone.js';
 import React, { useMemo, useState } from 'react';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, DatePicker } from '../components/ui.jsx';
+import { useApp, useData, Pill, DatePicker, usePeriod, PeriodBar } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { CallModal, ProspectModal, ResultPill, KIND, CALL_RESULTS } from '../components/Crm.jsx';
 import { CustomerDrawer } from './Customers.jsx';
@@ -19,7 +19,7 @@ export default function Hotline() {
   const { org, role } = useApp();
   const [tab, setTab] = useState('queue');
   const [line, setLine] = useState('spare');
-  const [range, setRange] = useState(() => { const [, to] = periodRange('day'); const f = new Date(); f.setDate(f.getDate() - 30); return [dDate(f), to]; });
+  const P = usePeriod('hotline'); const range = [P.from, P.to];
   const [callFor, setCallFor] = useState(null);
   const [open, setOpen] = useState(null);
   const [newP, setNewP] = useState(false);
@@ -65,7 +65,7 @@ export default function Hotline() {
     <>
       <div className="pagehead"><div><div className="eyebrow">Suivi hotline</div><h1>热线回访</h1>
         <div className="sub">今天要打：约了今天（或更早）跟进的，加上 {SLEEP_DAYS} 天没联系也没下单的正式客户。打完点「记结果」，选一下结果就行。</div></div>
-        {can(role, 'prospect') && <button type="button" className="btn" onClick={() => setNewP(true)}>＋ 新潜客</button>}
+        <PeriodBar p={P}>{can(role, 'prospect') && <button type="button" className="btn" onClick={() => setNewP(true)}>＋ 新潜客</button>}</PeriodBar>
       </div>
       <div className="card">
         <div className="tabs">
@@ -80,7 +80,7 @@ export default function Hotline() {
             tools={<div className="seg">{[['spare', '备件'], ['recycle', '回收']].map(([v, l]) => <button type="button" key={v} className={line === v ? 'on' : ''} onClick={() => setLine(v)}>{l}</button>)}</div>} />
         </>) : (<>
           <Grid id="hotline-log" table="hotline_calls" columns={lCols} rows={data.calls} onRowClick={(r) => setOpen(r.customer_id)} empty="这段时间没有回访记录"
-            tools={<DatePicker range value={range} onChange={setRange} />} />
+            tools={<span className="small muted">联系记录按右上角选的时间段列</span>} />
         </>)}
       </div>
       {callFor && <CallModal customer={callFor} onClose={() => setCallFor(null)} />}

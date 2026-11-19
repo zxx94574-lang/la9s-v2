@@ -35,6 +35,7 @@ import { AnomalyHub, Always } from '../components/Anomalies.jsx';
 import { useKdTodoCount } from '../components/KdRecon.jsx';
 import { LossTodo } from '../components/Loss.jsx';
 import PublicHeld from '../components/PublicHeld.jsx';
+import { RemitTodo } from '../components/Remit.jsx';
 import { PricePendingTodo } from '../components/PricePending.jsx';
 import { PlanTodo, TaskBoard } from '../components/Tasks.jsx';
 export function nextAction(d, role) {
@@ -197,7 +198,7 @@ export default function Todo() {
         ))}
       </div>) },
     { id: 'follow', title: '钱和任务要跟进的', span: 12, render: () => (
-      <Merged title="钱和任务要跟进的" tip="付款计划过期没收够、公司收款账户压款超期、收款问题（付款申诉 / 员工代收超期 / 账对不上）、派下去的任务——都并在这一块，哪样有事哪样出来"><PlanTodo /><PublicHeld urgentOnly /><MoneyUrgent /><TaskBoard /></Merged>) },
+      <Merged title="钱和任务要跟进的" tip="付款计划过期没收够、公司收款账户压款超期、回款在途太久或到账差太多、收款问题（付款申诉 / 员工代收超期 / 账对不上）、派下去的任务——都并在这一块，哪样有事哪样出来"><PlanTodo /><PublicHeld urgentOnly /><RemitTodo /><MoneyUrgent /><TaskBoard /></Merged>) },
     { id: 'directives', title: '中方指令 / 定期任务', span: 12, render: () => <DirectiveBoard /> },
     { id: 'notices', title: '变更通知', span: 12, render: () => <ChangeNotices /> },
     { id: 'inquiry', title: '询单', span: 12, render: () => <Always title="询单"><InquiryTodo /></Always> },

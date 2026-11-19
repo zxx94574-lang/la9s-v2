@@ -4,7 +4,7 @@ import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Thumb } from '../components/ui.jsx';
+import { useApp, useData, Pill, Thumb, usePeriod, PeriodBar } from '../components/ui.jsx';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
@@ -24,7 +24,7 @@ export default function Receipts({ preset }) {
   const [drawer, setDrawer] = useState(null);
   const [voidRc, setVoidRc] = useState(null);
   const [realloc, setRealloc] = useState(null);
-  const [from, to] = periodRange('year');
+  const P = usePeriod('receipts', 'year'); const { from, to } = P;
 
   const { data } = useData(async () => {
     const [customers, list] = await Promise.all([q(Q.customers, [org]), q(Q.receipts, [org, from, to])]);
@@ -34,7 +34,7 @@ export default function Receipts({ preset }) {
       extra = { curs: curs.map((c) => c.currency), settled, bal };
     }
     return { customers, list, ...extra };
-  }, [org, customer, acc]);
+  }, [org, customer, acc, from, to]);
   if (!data) return <div className="empty">加载中…</div>;
 
   const sentence = (r) => {
@@ -75,7 +75,7 @@ export default function Receipts({ preset }) {
   return (
     <>
       <div className="pagehead"><div><div className="eyebrow">Encaissements</div><h1>收款与冲账</h1>
-        <div className="sub">隔天付款、一次付多单在这里收；客户当场付款直接在订单的「⑨ 收款」里收。两边是同一个收款功能。</div></div></div>
+        <div className="sub">隔天付款、一次付多单在这里收；客户当场付款直接在订单的「⑨ 收款」里收。两边是同一个收款功能。下面「收款记录」按右边选的时间段列。</div></div><PeriodBar p={P} /></div>
 
       <div className="card">
         <div className="card-h">

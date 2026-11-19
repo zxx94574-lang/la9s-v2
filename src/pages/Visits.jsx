@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Modal, PhotoInput, DatePicker, Thumb , PhoneInput, Choice, MoneyIn } from '../components/ui.jsx';
+import { useApp, useData, Modal, PhotoInput, DatePicker, Thumb, PhoneInput, Choice, MoneyIn, usePeriod, PeriodBar } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { ResultPill, FollowDate, VISIT_RESULTS } from '../components/Crm.jsx';
@@ -13,7 +13,7 @@ import { dDate, dt, today, friendlyError } from '../lib/format.js';
 
 export default function Visits() {
   const { org, role } = useApp();
-  const [range, setRange] = useState(() => { const f = new Date(); f.setDate(f.getDate() - 30); return [dDate(f), today()]; });
+  const P = usePeriod('visits'); const range = [P.from, P.to];
   const [form, setForm] = useState(false);
   const [open, setOpen] = useState(null);
   const { data } = useData(() => q(Q.visitsList, [org, range[0], range[1]]), [org, range[0], range[1]]);
@@ -34,13 +34,13 @@ export default function Visits() {
   ];
   return (
     <>
-      <div className="pagehead"><div><div className="eyebrow">Visites commerciales</div><h1>销售拜访</h1>
+      <div className="pagehead"><div><div className="eyebrow">Visites commerciales</div><h1>客户拜访</h1>
         <div className="sub">每次上门填一张：门店照片必拍，新店直接建潜客（自动临时编码），转正式和定档位归中方。</div></div>
-        {can(role, 'prospect') && <button type="button" className="btn primary" onClick={() => setForm(true)}>＋ 记一次拜访</button>}
+        <PeriodBar p={P}>{can(role, 'prospect') && <button type="button" className="btn primary" onClick={() => setForm(true)}>＋ 记一次拜访</button>}</PeriodBar>
       </div>
       <div className="card">
         <Grid id="visits" table="visits" columns={cols} rows={data} onRowClick={(r) => setOpen(r.customer_id)} empty="这段时间没有拜访记录"
-          tools={<><DatePicker range value={range} onChange={setRange} /><span className="small muted">{data.length} 次拜访 · {new Set(data.map((r) => r.customer_id)).size} 家店</span></>} />
+          tools={<><span className="small muted">{data.length} 次拜访 · {new Set(data.map((r) => r.customer_id)).size} 家店</span></>} />
       </div>
       {form && <VisitModal onClose={() => setForm(false)} />}
       {open && <CustomerDrawer id={open} onClose={() => setOpen(null)} />}

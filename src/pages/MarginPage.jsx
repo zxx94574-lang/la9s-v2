@@ -5,7 +5,7 @@
 import { RuleGear } from '../components/Rules.jsx';
 import React, { useMemo, useState } from 'react';
 import { call } from '../db/client.js';
-import { useApp, useData, DatePicker, Info, MoneyIn } from '../components/ui.jsx';
+import { useApp, useData, DatePicker, Info, MoneyIn, usePeriod, PeriodBar } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { DealLink, ModelLink, CustLink } from '../components/Archives.jsx';
 import { periodRange, PERIODS, money, qty, today } from '../lib/format.js';
@@ -52,8 +52,7 @@ function useMarginRows(org, role) {
 
 function Sold({ org, role }) {
   const { lowPct } = useMarginRules();
-  const [period, setPeriod] = useState('month'); const [custom, setCustom] = useState(periodRange('month'));
-  const [from, to] = period === 'custom' ? custom : periodRange(period);
+  const P = usePeriod('margin'); const { from, to } = P;
   const [rowDim, setRowDim] = useState('tier'); const [colDim, setColDim] = useState('category');
   const { data } = useMarginRows(org, role);
   const inRange = useMemo(() => (data || []).filter((r) => { const d = iso(r.shipped_on); return d >= from && d <= to; }), [data, from, to]);
@@ -76,8 +75,7 @@ function Sold({ org, role }) {
   return (
     <>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-        <div className="seg">{PERIODS.map(([k, l]) => <button type="button" key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
-        {period === 'custom' && <DatePicker range value={custom} onChange={setCustom} />}
+        <PeriodBar p={P} />
         <span className="small muted">按出库日期算</span>
       </div>
       <MarginKpis t={tot} lowPct={lowPct} />

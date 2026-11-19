@@ -27,7 +27,7 @@ export const ITEMS = {
   fob: ['◷', 'FOB 项目', 'sales', ['admin', 'manager', 'hotline', 'sales', 'finance']],
   customers: ['♧', '客户档案', 'cust', ['admin', 'manager', 'hotline', 'sales', 'finance']],
   hotline: ['☎', '热线回访', 'cust', ['admin', 'manager', 'hotline', 'sales']],
-  visits: ['⌖', '销售拜访', 'cust', ['admin', 'manager', 'hotline', 'sales']],
+  visits: ['⌖', '客户拜访', 'cust', ['admin', 'manager', 'hotline', 'sales']],
   stores: ['⌂', '客户门店', 'cust', ['admin', 'manager', 'hotline', 'sales']],
   receipts: ['↙', '收款与冲账', 'fin', ['admin', 'finance', 'manager']],
   balances: ['₣', '客户总账 Balance', 'fin', ['admin', 'finance', 'manager', 'hotline', 'sales']],

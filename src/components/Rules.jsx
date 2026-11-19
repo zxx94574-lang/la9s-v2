@@ -35,6 +35,8 @@ export const RULES = [
   ['cash.held', 'cash_rules', 'held_days', '员工代收：钱在员工手上超过几天没交就进紧急', 1, '天', 'num', { page: 'cash', anchor: 'cash-rules', where: '资金账户' }],
   ['freight.acct', 'freight_rules', 'account', '我们出的运费记在哪个账户', 'Wave-XOF', '', 'text', { page: 'cash', anchor: 'cash-rules', where: '资金账户' }],
   ['guest.low', 'guest_rules', 'low', '游客 / 客户账号：可售少于多少片显示「少量」', 50, '片', 'num', { page: 'inquiry', anchor: 'inquiry-rules', where: '询单' }],
+  ['remit.diff', 'remit_rules', 'diff_pct', '回款：实际到账比应到差多少要标红、核对时必须写原因', 2, '%', 'num', { page: 'cash', anchor: 'remit-rules', where: '资金账户 · 回款（汇回国内）' }],
+  ['remit.days', 'remit_rules', 'transit_days', '回款：交出去几天还没到账要提醒', 3, '天', 'num', { page: 'cash', anchor: 'remit-rules', where: '资金账户 · 回款（汇回国内）' }],
 ];
 const BY_ID = Object.fromEntries(RULES.map((r) => [r[0], r]));
 const JUMP = 'la9s.rule.jump';

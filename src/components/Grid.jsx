@@ -11,7 +11,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { useOutside, DateCalendar, useApp, copyToClipboard, Info, Choice, Modal } from './ui.jsx';
 import { loadTableOptions, loadRowAttrs, saveRowAttrs, customColumns } from '../lib/tableOptions.js';
 import TableOptionsModal from './TableOptions.jsx';
-import { gridAlign, colAlign, saveGridAlign } from '../lib/gridPrefs.js';
+import { gridAlign, colAlign, saveGridAlign, PAD_PX } from '../lib/gridPrefs.js';
 
 const PORTAL_ROLES = new Set(['boss', 'clerk', 'guest']);
 
@@ -40,7 +40,10 @@ const kindOf = (c) => c.type || (MONEY_RE.test(c.label) ? 'money' : QTY_RE.test(
 const isNumCol = (c) => kindOf(c) !== 'text';
 // 374: 金额 / 价格 / 数量一律右对齐 (固定); 其余列: 公司给这一列单独设的 > 列自己写的 > 公司的文字默认
 let ALIGN_GRID = 'grid';
-const alignOf = (c) => (kindOf(c) !== 'text' ? 'right' : (colAlign(ALIGN_GRID, c.key) || c.align || gridAlign().text || 'left'));
+// 431 (Frank 11-19 定 A): 数字列默认右对齐, 但也能单独改; 表头默认居中 (公司设置 head)
+const alignOf = (c) => colAlign(ALIGN_GRID, c.key) || (kindOf(c) !== 'text' ? 'right' : (c.align || gridAlign().text || 'left'));
+const headAlign = () => gridAlign().head || 'center';
+const fmtStat = (n) => (Number.isInteger(n) ? n.toLocaleString('en-US') : n.toLocaleString('en-US', { maximumFractionDigits: 2 }));
 
 // 只写了 render、没写 value 的列 (比如询单的 实存 / 预占 / 可售): 排序和筛选用「格子里显示的字」, 数字列再转成数字
 // (11-02 Frank: 点排序没反应、筛选大于以后整张表空了, 就是这个原因)
@@ -302,7 +305,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
     return out;
   };
   const [, setAlignTick] = useState(0);
-  const setAlign = async ({ col, a }) => { const cur = gridAlign(); const next = col ? { ...cur, cols: { ...cur.cols, [`${id || 'grid'}:${col}`]: a } } : { ...cur, text: a }; try { await saveGridAlign(app.role, app.org, next); setAlignTick((x) => x + 1); app.refresh?.(); } catch (e) { flash('没存上：' + String(e?.message || e).slice(0, 40)); } };
+  const setAlign = async ({ col, a, head, pad }) => { const cur = gridAlign(); const next = col ? { ...cur, cols: { ...cur.cols, [`${id || 'grid'}:${col}`]: a } } : head ? { ...cur, head } : pad ? { ...cur, pad } : { ...cur, text: a }; try { await saveGridAlign(app.role, app.org, next); setAlignTick((x) => x + 1); app.refresh?.(); } catch (e) { flash('没存上：' + String(e?.message || e).slice(0, 40)); } };
   const [toolsOpen, setToolsOpen] = useState(false);   // 265: 档案里的小表, 工具栏收成一个小图标
   const [panel, setPanel] = useState(null);   // 筛选面板的位置
   const panelBtn = useRef(null);
@@ -730,10 +733,26 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
     upd(); w.addEventListener('scroll', upd, { passive: true }); window.addEventListener('resize', upd);
     return () => { w.removeEventListener('scroll', upd); window.removeEventListener('resize', upd); };
   });
+  // 430 (Frank 11-19, 全站, 照飞书): 选中两格以上 → 屏幕下方小浮条: 平均值 · 计数 · 求和 (只算数字格; 文字格只计数)
+  const selStats = useMemo(() => {
+    if (!range || editing) return null;
+    if (range.r0 === range.r1 && range.c0 === range.c1) return null;
+    let count = 0, nums = 0, sum = 0;
+    for (let r = range.r0; r <= range.r1 && r < shown.length; r++) for (let c = range.c0; c <= range.c1 && c < vis.length; c++) {
+      const col = vis[c]; if (!col) continue;
+      let v = cellValue(col, shown[r]); if (v == null || v === '') continue;
+      count += 1;
+      if (typeof v === 'string') { const t = v.replace(/[,\s]/g, ''); if (/^-?\d+(\.\d+)?%?$/.test(t)) v = parseFloat(t); }
+      if (typeof v === 'number' && Number.isFinite(v)) { nums += 1; sum += v; }
+    }
+    return count > 1 ? { count, nums, sum } : null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel, editing, shown, vis]);
   const widthStyle = (c) => { const w = layout.widths[c.key]; return w ? { width: w, minWidth: w, maxWidth: w } : { minWidth: c.w, maxWidth: Math.max(c.w * 2.5, 220) }; };
 
   return (
-    <div id={gid} className="grid" onKeyDown={onKeyDown} onPaste={onPaste}>
+    <div id={gid} className="grid" style={{ '--cell-px': `${PAD_PX[gridAlign().pad] ?? 10}px` }} onKeyDown={onKeyDown} onPaste={onPaste}>
+      {selStats && createPortal(<div className="sel-stats" role="status">{selStats.nums > 0 && <><span>平均值 <b>{fmtStat(selStats.sum / selStats.nums)}</b></span><i /></>}<span>计数 <b>{selStats.count}</b></span>{selStats.nums > 0 && <><i /><span>求和 <b>{fmtStat(selStats.sum)}</b></span></>}</div>, document.body)}
       <style>{dragCss}</style>
       {gpanel && <GroupPanel at={gpanel} cols={filterCols} groups={Array.isArray(gf.groups) && gf.groups.length ? gf.groups : groupDefs} setGroups={setGroups} onClose={() => setGpanel(null)} />}
       {tip && createPortal(<div className="cell-tip" style={{ left: tip.left, top: tip.top }}>{tip.text}</div>, document.body)}
@@ -806,10 +825,12 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
               <div className="menu" style={{ right: 0, top: '110%' }}>
                 {layout.order.map((k) => byKey[k] && (
                   <label key={k} className="col-mi"><input type="checkbox" checked={!layout.hidden.includes(k)} onChange={() => toggleCol(k)} /><span className="grow">{byKey[k].label}</span>
-                    {app.role === 'admin' && kindOf(byKey[k]) === 'text' && typeof byKey[k].label === 'string' && <span className="al-seg" onClick={(e) => e.preventDefault()}>{[['left', '左'], ['center', '中'], ['right', '右']].map(([a, l]) => <button type="button" key={a} className={alignOf(byKey[k]) === a ? 'on' : ''} title={`这一列${l}对齐（全公司生效）`} onClick={() => setAlign({ col: k, a })}>{l}</button>)}</span>}</label>
+                    {app.role === 'admin' && typeof byKey[k].label === 'string' && <span className="al-seg" onClick={(e) => e.preventDefault()}>{[['left', '左'], ['center', '中'], ['right', '右']].map(([a, l]) => <button type="button" key={a} className={alignOf(byKey[k]) === a ? 'on' : ''} title={`这一列${l}对齐（全公司生效）`} onClick={() => setAlign({ col: k, a })}>{l}</button>)}</span>}</label>
                 ))}
                 {app.role === 'admin' && <div className="col-mi al-all"><span className="grow small muted">所有表的文字列默认</span><span className="al-seg">{[['left', '左'], ['center', '中'], ['right', '右']].map(([a, l]) => <button type="button" key={a} className={(gridAlign().text || 'left') === a ? 'on' : ''} onClick={() => setAlign({ a })}>{l}</button>)}</span></div>}
-                <div className="small muted" style={{ padding: '2px 10px 6px', maxWidth: 260, whiteSpace: 'normal' }}>金额、价格、数量固定右对齐，不能调。</div>
+                {app.role === 'admin' && <div className="col-mi al-all"><span className="grow small muted">所有表的表头</span><span className="al-seg">{[['left', '左'], ['center', '中'], ['right', '右']].map(([a, l]) => <button type="button" key={a} className={headAlign() === a ? 'on' : ''} onClick={() => setAlign({ head: a })}>{l}</button>)}</span></div>}
+                {app.role === 'admin' && <div className="col-mi al-all"><span className="grow small muted">格子左右间距</span><span className="al-seg">{[['compact', '紧'], ['normal', '标准'], ['loose', '松']].map(([a, l]) => <button type="button" key={a} className={(gridAlign().pad || 'normal') === a ? 'on' : ''} onClick={() => setAlign({ pad: a })}>{l}</button>)}</span></div>}
+                <div className="small muted" style={{ padding: '2px 10px 6px', maxWidth: 260, whiteSpace: 'normal' }}>金额、价格、数量默认右对齐，也可以单独改；改了全公司生效。</div>
                 <button type="button" className="mi" onClick={() => setLayout({ order: columns.map((c) => c.key), hidden: columns.filter((c) => c.hidden).map((c) => c.key), widths: {}, rowOrder: [] })}>↺ 恢复默认（列顺序、宽度、行顺序）</button>
               </div>
             )}
@@ -827,10 +848,10 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
                 const fill = isFill(c);
                 const f = liveConds.some((x) => x.key === c.key);
                 return (
-                  <th key={c.key} data-ck={c.key} style={{ ...widthStyle(c), textAlign: alignOf(c) }}
+                  <th key={c.key} data-ck={c.key} style={{ ...widthStyle(c), textAlign: headAlign() }}
                     onPointerDown={(e) => headDown(e, c.key)}
                     className={`${fill || c.tint ? 'fill-col' : ''} ${activeCol === c.key ? 'fill-active' : ''} ${colSel.has(c.key) ? 'col-sel' : ''}`}>
-                    <span className="th-inner" style={{ justifyContent: alignOf(c) === 'right' ? 'flex-end' : alignOf(c) === 'center' ? 'center' : 'flex-start' }}>
+                    <span className="th-inner" style={{ justifyContent: headAlign() === 'right' ? 'flex-end' : headAlign() === 'center' ? 'center' : 'flex-start' }}>
                       <span className="grip" onPointerDown={(e) => startDrag(e, c.key)} title="拖动调整列顺序">⠿</span>
                       {fill && <span className="pen" title="这一列要填">✎</span>}
                       <span className="th-label" onClick={() => !skipSort.current && c.sortable !== false && toggleSort(c.key)} title="点 = 排序；按住横着拖 = 选几列一起拖 / 隐藏 / 复制（Shift 点 = 选到这列，⌘ 点 = 加减一列）">{c.label}</span>

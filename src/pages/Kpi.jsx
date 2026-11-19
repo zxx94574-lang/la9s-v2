@@ -5,7 +5,7 @@ import SalesComm from '../components/SalesComm.jsx';
 import HotlineKpi from '../components/HotlineKpi.jsx';
 import React, { useMemo, useState } from 'react';
 import { q } from '../db/client.js';
-import { useApp, useData, DatePicker, Info, Assumed } from '../components/ui.jsx';
+import { useApp, useData, DatePicker, Info, Assumed, usePeriod, PeriodBar } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { DealLink } from '../components/Archives.jsx';
 import { periodRange, PERIODS } from '../lib/format.js';
@@ -32,8 +32,7 @@ const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y)
 export default function Kpi() {
   const { org } = useApp();
   const [lateSeg, setLateSeg] = useState(null);
-  const [period, setPeriod] = useState('month'); const [custom, setCustom] = useState(periodRange('month'));
-  const [from, to] = period === 'custom' ? custom : periodRange(period);
+  const P = usePeriod('kpi'); const { from, to } = P;
   const { data } = useData(async () => {
     const [deals, events, emps, discs, checks] = await Promise.all([
       q(`select d.id, d.biz_no, d.created_at, d.status, c.name as customer_name, (select count(*) from app.deal_lines l where l.deal_id = d.id)::int as lines
@@ -110,8 +109,7 @@ export default function Kpi() {
     <>
       <div className="pagehead"><div><div className="eyebrow">Délais & qualité</div><h1 tabIndex={0}>时效与准确率</h1>
         <div className="sub">只算上班时间（周一到周五 9:00–17:30，中午集体午休自动扣 1 小时；周六 9:00–12:00）。现在只显示、不考核：等员工用自己的工号登录、跑 2–4 周后，再按真实的中位数定线。</div></div>
-        <div className="row"><div className="seg">{PERIODS.map(([k, l]) => <button type="button" key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
-          {period === 'custom' && <DatePicker range value={custom} onChange={setCustom} align="right" />}</div></div>
+        <PeriodBar p={P} /></div>
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="bigsum">
           <div><div className="k">这段时间开的单</div><div className="v">{calc.rows.length}</div></div>
