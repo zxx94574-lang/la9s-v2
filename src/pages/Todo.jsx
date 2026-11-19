@@ -30,6 +30,7 @@ import { HoldsCard, VolumeShift } from '../components/Batch2.jsx';
 import { MoneyUrgent, ChangeNotices } from '../components/Batch3.jsx';
 import { InquiryTodo } from './Inquiry.jsx';
 import { AddonTodo } from '../components/Addons.jsx';
+import { AnomalyHub, Always } from '../components/Anomalies.jsx';
 import { LossTodo } from '../components/Loss.jsx';
 import PublicHeld from '../components/PublicHeld.jsx';
 import { PricePendingTodo } from '../components/PricePending.jsx';
@@ -169,22 +170,21 @@ export default function Todo() {
     <>
       <div className="pagehead"><div><div className="eyebrow">Mes tâches</div><h1 tabIndex={0}>我的待办</h1>
         <div className="sub">当前岗位：<b>{ROLES[role].label}</b>。下推一步，单子就自动出现在下一个人的待办里。</div></div></div>
-      <PricePendingTodo />
-      <PlanTodo />
-      <PublicHeld urgentOnly />
-      <TaskBoard />
-      <LossTodo />
-      <MoneyUrgent />
-      <InquiryTodo />
+      <AnomalyHub />
+      <Always title="答应付款的日子过了，钱没到"><PlanTodo /></Always>
+      <Always title="公司收款账户：压款超期"><PublicHeld urgentOnly /></Always>
+      <Always title="任务总表"><TaskBoard /></Always>
+      <Always title="钱的事（付款申诉 / 员工代收超期 / 账对不上）"><MoneyUrgent /></Always>
+      <Always title="询单"><InquiryTodo /></Always>
       <AddonTodo />
       <DirectiveBoard />
-      {['admin', 'manager', 'sales_manager'].includes(role) && <IssueList />}
+      {['admin', 'manager', 'sales_manager'].includes(role) && <Always title="员工上报的问题"><IssueList /></Always>}
       <ChangeNotices />
-      {['admin', 'manager', 'cn_support'].includes(role) && <PurchaseTodo />}
-      {['admin', 'manager'].includes(role) && <HoldsCard compact />}
-      {role === 'admin' && <TierCheck rows={tierRows} />}
-      {role === 'admin' && <VolumeShift />}
-      {['admin', 'manager', 'sales_manager', 'hotline', 'finance'].includes(role) && <OpenReturns />}
+      {['admin', 'manager', 'cn_support'].includes(role) && <Always title="采购与到货"><PurchaseTodo /></Always>}
+      {['admin', 'manager'].includes(role) && <Always title="冻结的库存"><HoldsCard compact /></Always>}
+      {role === 'admin' && <Always title="客户档位要核对"><TierCheck rows={tierRows} /></Always>}
+      {role === 'admin' && <Always title="客户拿货量变化"><VolumeShift /></Always>}
+      {['admin', 'manager', 'sales_manager', 'hotline', 'finance'].includes(role) && <Always title="退货没走完"><OpenReturns /></Always>}
       {extras.length > 0 && <div className="card" style={{ marginBottom: 12 }}>{extras.map(([to, text]) => (
         <div key={text} className="row between" style={{ padding: '12px 18px', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }} onClick={() => go(to)}><b>{text}</b><span className="muted">›</span></div>))}</div>}
       {!data ? <div className="card"><div className="empty">加载中…</div></div> : list.length === 0 ? <div className="card"><div className="empty">没有待办 ✓<br /><span className="small">右上角可以切换岗位，看其他人的待办</span></div></div> :

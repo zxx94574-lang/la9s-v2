@@ -1395,3 +1395,7 @@ tr.grp-row.d1 > td { background: #f7f9fc; } tr.grp-row.d2 > td { background: #fb
 @media (max-width: 760px) { .flow2-branch { flex-wrap: nowrap; overflow-x: auto; } .mini-t { display: block; overflow-x: auto; } }
 .flow2-branch > .small { white-space: nowrap; flex: none; }
 .flow2-branch .br-chip { flex: none; }
+
+/* 371 固定板块的空态: 一行 */
+.todo-empty { display: flex; align-items: center; gap: 8px; padding: 9px 18px; margin-bottom: 8px; font-size: 13px; color: var(--muted, #6b7686); }
+.todo-empty b { color: var(--ink, #1c2430); font-weight: 650; }
