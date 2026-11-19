@@ -1,3 +1,4 @@
+import { DoneHost } from '../components/Done.jsx';
 // One business (业务号) = one page. Fixed workflow bar on top; every step has its own page:
 // the current step shows its action, a finished step shows a read-only record (待改 13).
 // Going back = 「撤回到上一步」 with a reason (待改 14); cancelled deals can be restored (待改 16).
@@ -207,6 +208,7 @@ export default function Deal({ id }) {
           <span className="grow" />
           <button type="button" className="btn sm" onClick={() => setCustOpen(true)}>客户档案 / 开账号</button>
         </div>)}
+      <DoneHost only={['shipment', 'ret']} />
       {custOpen && <CustomerDrawer id={deal.customer_id} onClose={() => setCustOpen(false)} />}
       {!cancelled && seesPrice(role) && !['shipped'].includes(deal.status) && <DebtBanner customerId={deal.customer_id} deal={deal} />}
       {!cancelled && <PricePendingBar deal={deal} lines={data.lines} />}

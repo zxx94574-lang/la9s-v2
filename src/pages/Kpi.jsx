@@ -4,7 +4,7 @@ import SalesComm from '../components/SalesComm.jsx';
 import HotlineKpi from '../components/HotlineKpi.jsx';
 import React, { useMemo, useState } from 'react';
 import { q } from '../db/client.js';
-import { useApp, useData, DatePicker, Info } from '../components/ui.jsx';
+import { useApp, useData, DatePicker, Info, Assumed } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { DealLink } from '../components/Archives.jsx';
 import { periodRange, PERIODS } from '../lib/format.js';
@@ -22,10 +22,15 @@ const SEGS = [
   ['签收 → 客户确认对账', 'customer_received', 'balance_confirmed', '客户 / 热线', (ev) => ev.to.short_name],
 ];
 const qtyf = (n) => Number(n || 0).toLocaleString('en-US');
+export const KPI_TARGET = { s0: 30, s1: 120, s2: 30, s4: 60, s5: 60 };   // 390: 每一段的目标时限 (分钟, 上班时间); 客户的两段没有目标
+const pctl = (a, p) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.ceil(p * s.length) - 1)]; };
+const MIN_N = 10;   // 少于 10 单的数字不看
+const weekOf = (v) => { const d = new Date(v); const k = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); k.setUTCDate(k.getUTCDate() - ((k.getUTCDay() + 6) % 7)); return k.toISOString().slice(5, 10); };
 const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 
 export default function Kpi() {
   const { org } = useApp();
+  const [lateSeg, setLateSeg] = useState(null);
   const [period, setPeriod] = useState('month'); const [custom, setCustom] = useState(periodRange('month'));
   const [from, to] = period === 'custom' ? custom : periodRange(period);
   const { data } = useData(async () => {
@@ -50,19 +55,20 @@ export default function Kpi() {
          from app.deals d join app.customers c on c.id = d.customer_id where d.org_id = $1 and d.kind = 'normal' and d.created_at >= $2::date and d.created_at < ($3::date + 1)`, [org, from, to]),
       q(`select value from app.org_settings where org_id = $1 and key = 'wh_commission'`, [org]),
     ]);
-    return { deals, events, emps, discs, checks, dirs, com, opens, rate: Number(rate[0]?.value?.per_piece) || 5 };
+    const tg = (await q(`select value from app.org_settings where org_id = $1 and key = 'kpi_targets'`, [org]))[0]?.value || {};
+    return { deals, events, emps, discs, checks, dirs, com, opens, rate: Number(rate[0]?.value?.per_piece) || 5, target: Object.fromEntries(Object.entries({ ...KPI_TARGET, ...tg }).map(([k, v]) => [k, Number(v)])) };
   }, [org, from, to]);
   const calc = useMemo(() => {
     if (!data) return null;
     const emp = (id) => data.emps.find((e) => e.id === id)?.short_name;
     const byDeal = {}; for (const e of data.events) (byDeal[e.deal_id] ||= []).push(e);
-    const seg = SEGS.map(([name, , , owner]) => ({ name, owner, mins: [] })); const person = {}; const rows = [];
+    const seg = SEGS.map(([name, , , owner], i) => ({ name, owner, mins: [], target: data.target['s' + i] || null, items: [] })); const person = {}; const rows = [];
     for (const d of data.deals) {
       const ev = byDeal[d.id] || []; const r = { ...d };
       SEGS.forEach(([, a, b, , who], i) => {
         const from0 = ev.find((x) => x.action === a); const to0 = from0 && ev.find((x) => x.action === b && new Date(x.at) >= new Date(from0.at));
         if (!from0 || !to0) return;
-        const m = workMinutes(from0.at, to0.at); seg[i].mins.push(m); r['s' + i] = m;
+        const m = workMinutes(from0.at, to0.at); seg[i].mins.push(m); r['s' + i] = m; seg[i].items.push({ id: d.id, no: d.biz_no, customer: d.customer_name, m, lines: d.lines, week: weekOf(to0.at) });
         const p = who({ from: from0, to: to0 }, emp); if (p) { const k = p + '|' + SEGS[i][3]; (person[k] ||= { key: k, name: p, role: SEGS[i][3], mins: [], lines: 0 }); person[k].mins.push(m); person[k].lines += d.lines; }
       });
       const sh = ev.find((x) => x.action === 'shipped'); if (sh) r.total = workMinutes(d.created_at, sh.at);
@@ -89,6 +95,16 @@ export default function Kpi() {
   }, [data]);
   if (!calc) return <div className="empty">加载中…</div>;
   const totals = calc.rows.filter((r) => r.total != null).map((r) => r.total);
+  const weeks = [...new Set(calc.seg.flatMap((x) => x.items.map((it) => it.week)))].sort();
+  const segRows = calc.seg.map((x, i) => {
+    const n = x.mins.length; const ok = x.target ? x.mins.filter((m) => m <= x.target).length : 0;
+    const lines = x.items.reduce((a, it) => a + Number(it.lines || 0), 0);
+    const w1 = weeks[weeks.length - 1]; const w0 = weeks[weeks.length - 2];
+    const a1 = median(x.items.filter((it) => it.week === w1).map((it) => it.m)); const a0 = median(x.items.filter((it) => it.week === w0).map((it) => it.m));
+    const tr = a1 != null && a0 != null && a0 > 0 ? (a1 - a0) / a0 : null;
+    return { ...x, key: i, n, ok, rate: n && x.target ? (ok / n) * 100 : null, med: median(x.mins), p90: pctl(x.mins, 0.9), few: n < MIN_N, perLine: i === 1 || i === 4 ? (lines ? x.mins.reduce((a, b) => a + b, 0) / lines : null) : null,
+      late: x.target ? x.items.filter((it) => it.m > x.target).sort((a, b) => b.m - a.m) : [], trendTxt: tr == null ? '' : Math.abs(tr) < 0.05 ? '差不多' : `${tr > 0 ? '慢了' : '快了'} ${Math.abs(tr * 100).toFixed(0)}%`, trendUp: tr > 0.05 };
+  });
   return (
     <>
       <div className="pagehead"><div><div className="eyebrow">Délais & qualité</div><h1 tabIndex={0}>时效与准确率</h1>
@@ -104,14 +120,26 @@ export default function Kpi() {
         </div>
       </div>
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-h"><h2>每一步用了多久 <Info>中位数 = 一半的单比它快、一半比它慢，比平均数更能代表「正常要多久」。等客户的两段不算员工的。</Info></h2></div>
-        <Grid id="kpi-seg" noTools rows={calc.seg.map((s, i) => ({ ...s, key: i, n: s.mins.length, med: median(s.mins), max: s.mins.length ? Math.max(...s.mins) : null }))} rowKey={(r) => r.key} columns={[
-          { key: 'name', label: '这一段', w: 240, render: (r) => <b>{r.name}</b> },
-          { key: 'owner', label: '算谁的', w: 110, render: (r) => <span className={`pill ${r.owner.startsWith('客户') ? 'gray' : 'blue'}`}>{r.owner}</span> },
-          { key: 'n', label: '几单', w: 70, type: 'number' },
-          { key: 'med', label: '中位数', w: 130, value: (r) => r.med ?? -1, render: (r) => <b>{fmtMin(r.med)}</b> },
-          { key: 'max', label: '最慢的一单', w: 130, value: (r) => r.max ?? -1, render: (r) => fmtMin(r.max) },
+        <div className="card-h"><h2>每一步用了多久、达标了多少 <Info>达标率才是能评判的数；中位数 = 一般多久；「最慢 10%」= 十张单里最慢的那张要多久。最慢的单只当线索，点下面的单号进去看卡在哪。等客户的两段不算员工的。</Info></h2></div>
+        <Grid id="kpi-seg" noTools rows={segRows} rowKey={(r) => r.key} columns={[
+          { key: 'name', label: '这一段', w: 230, render: (r) => <b>{r.name}</b> },
+          { key: 'owner', label: '算谁的', w: 100, render: (r) => <span className={`pill ${r.owner.startsWith('客户') ? 'gray' : 'blue'}`}>{r.owner}</span> },
+          { key: 'n', label: '几单', w: 60, type: 'number' },
+          { key: 'target', label: '目标', w: 90, value: (r) => r.target ?? -1, render: (r) => (r.target ? fmtMin(r.target) : <span className="muted small">不设</span>) },
+          { key: 'rate', label: '达标率', w: 170, value: (r) => r.rate ?? -1, render: (r) => (r.target == null || !r.n ? <span className="muted small">—</span> : <span className={`pill ${r.few ? 'gray' : r.rate >= 90 ? 'green' : r.rate >= 70 ? 'amber' : 'red'}`}>{r.ok} / {r.n} 单 · {r.rate.toFixed(0)}%</span>) },
+          { key: 'med', label: '一般多久（中位数）', w: 140, value: (r) => r.med ?? -1, render: (r) => <b className={r.few ? 'muted' : ''}>{fmtMin(r.med)}</b> },
+          { key: 'p90', label: '最慢 10% 要多久', w: 130, value: (r) => r.p90 ?? -1, render: (r) => <span className={r.few ? 'muted' : ''}>{fmtMin(r.p90)}</span> },
+          { key: 'perLine', label: '每个型号', w: 100, value: (r) => r.perLine ?? -1, render: (r) => (r.perLine == null ? '' : <span className={r.few ? 'muted' : ''}>{fmtMin(r.perLine)}</span>) },
+          { key: 'trend', label: '这周比上周', w: 150, value: (r) => r.trendTxt || '', render: (r) => (r.trendTxt ? <span className={`pill ${r.trendUp ? 'red' : 'green'}`}>{r.trendTxt}</span> : <span className="muted small">—</span>) },
+          { key: 'few', label: '', w: 150, value: (r) => (r.few ? '单数太少' : ''), render: (r) => (r.few && r.n ? <span className="pill gray">不到 {MIN_N} 单，先别看</span> : '') },
         ]} />
+        <div className="card-b" style={{ paddingTop: 8 }}>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}><b>超时的单（线索，不是评判）</b>
+            <div className="chips">{segRows.filter((r) => r.target && r.late.length).map((r) => <button type="button" key={r.key} className={`chip ${lateSeg === r.key ? 'on' : ''}`} onClick={() => setLateSeg(lateSeg === r.key ? null : r.key)}>{r.name.split(' → ')[1] || r.name} {r.late.length}</button>)}</div>
+            {segRows.every((r) => !r.target || !r.late.length) && <span className="small muted">没有超时的单 ✓</span>}</div>
+          {lateSeg != null && segRows[lateSeg] && <div style={{ marginTop: 6 }}>{segRows[lateSeg].late.slice(0, 30).map((x) => <div key={x.id} className="todo-line"><DealLink id={x.id} no={x.no} /><span>{x.customer}</span><span className="small muted">{x.lines} 个型号</span><span className="grow" /><b className="red-t2">{fmtMin(x.m)}</b><span className="small muted">目标 {fmtMin(segRows[lateSeg].target)}</span></div>)}</div>}
+          <div className="small muted" style={{ marginTop: 8 }}>达标率 = 这一段在目标时限内做完的单 ÷ 这一段做完的单。目标在「规则参数」里调。系统量的是「点按钮的时间」；现在员工还没在系统里干活，数字只当参考，不考核。<Assumed>目标先按 报价确认 30 分钟、找货初检 2 小时、出销售单 30 分钟、复检打包 1 小时、出库 1 小时 定的；客户确认、签收、对账是客户的时间，不设目标。不到 10 单的数字灰掉。</Assumed></div>
+        </div>
       </div>
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="card-h"><h2>按人看：速度和准确率放一起 <Info>速度 = 他经手那一段的中位数。准确率（找货人）= 复检时被改了数量的行数 ÷ 他找的总行数。只看速度会逼人乱点完成，只看准确率会磨洋工，所以两个数并排。</Info></h2></div>

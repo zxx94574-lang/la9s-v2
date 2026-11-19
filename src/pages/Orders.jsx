@@ -1,3 +1,4 @@
+import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 import React, { useMemo, useState } from 'react';
 import { sumMargin, MarginPill, useMarginRules } from '../components/Margin.jsx';
 import { q } from '../db/client.js';
@@ -180,7 +181,7 @@ function ShipmentsList({ from, to }) {
   const price = seesPrice(role);
   const st = (s) => (s.voided_at ? '已撤销' : s.customer_received_at ? '已签收' : '待签收');
   const cols = [
-    { key: 'out_no', label: '出库单号', w: 150, render: (s) => <b className={s.voided_at ? 'strike' : ''}><DealLink id={s.deal_id} no={s.out_no} /></b> },
+    { key: 'out_no', label: '出库单号', w: 150, render: (s) => <b className={s.voided_at ? 'strike' : ''}><span className="deal-link"><DocPeek kind="shipment" id={s.id} /><DealLink id={s.deal_id} no={s.out_no} peek={false} /></span></b> },
     { key: 'bl_no', label: 'BL 号', w: 190, render: (s) => (s.bl_no ? <DealLink id={s.deal_id} no={s.bl_no} /> : <span className="muted small">没生成</span>) },
     { key: 'shipped_at', label: '发货时间', w: 130, render: (s) => dt(s.shipped_at) },
     { key: 'customer_name', label: '客户', w: 170, render: (s) => <><CustLink id={s.customer_id} name={s.customer_name} /> <span className="muted small">{s.city}</span></> },

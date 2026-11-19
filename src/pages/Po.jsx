@@ -1,3 +1,5 @@
+import { showDone, DoneHost } from '../components/Done.jsx';
+import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 // 采购单与到货 (Frank 2026-11-13, 待改 299 / 302) —— 国内初略版
 // 规矩: 采购单分「本地备货」「FOB」(一张单只有一种); 国内发了货才有采购单 → 没下推入库的部分一律算在途;
 // 到货时按箱勾「到了哪些箱」→ 一次下推一张采购入库单 (本地进 LA / 9S, FOB 进 FOB 仓); 少到的差额只有中方能关, 必须选结果 + 传凭证.
@@ -66,7 +68,7 @@ function poState(p) {
 export function PoLink({ id, no }) {
   const { openArchive } = useApp();
   if (!id) return <span className="mono">{no}</span>;
-  return <button type="button" className="linkbtn mono" title={`打开采购单 ${no}`} onClick={(e) => { e.stopPropagation(); openArchive({ kind: 'po', id }); }}>{no}</button>;
+  return <span className="deal-link"><DocPeek kind="po" id={id} /><button type="button" className="linkbtn mono" title={`打开采购单 ${no}`} onClick={(e) => { e.stopPropagation(); openArchive({ kind: 'po', id }); }}>{no}</button></span>;
 }
 
 export default function PoPage() {
@@ -190,6 +192,7 @@ export function PoDrawer({ id, onClose }) {
   ];
   return (
     <Drawer title={<span className="row" style={{ gap: 8 }}>采购单 <span className="mono">{po.po_no}</span><Pill tone={PURPOSE[po.purpose || 'unknown'][1]}>{PURPOSE[po.purpose || 'unknown'][0]}</Pill>{po.fob_no && <Pill tone="amber">{po.fob_no}</Pill>}{!po.fob_no && po.purpose === 'fob' && (po.fob_customer_codes || []).length > 0 && <Pill tone="amber">{po.fob_customer_codes.join(',')}</Pill>}</span>} onClose={onClose}>
+      <DoneHost only={['grn']} />
       <div className="kv" style={{ marginBottom: 12 }}>
         <div><div className="k">需求批次</div><div className="v">{po.batch_name || '—'}</div></div>
         <div><div className="k">入仓号</div><div className="v mono">{(po.warehouse_nos || []).join(' / ') || '—'}</div></div>
@@ -249,7 +252,7 @@ function ReceiveModal({ po, boxes, onClose, onDone }) {
   const byModel = Object.values(boxes.reduce((a, b) => { (a[b.model] = a[b.model] || { model: b.model, n: new Set(), pcs: 0 }); a[b.model].n.add(b.box_no); a[b.model].pcs += N(b.qty); return a; }, {}));
   const go = async () => {
     setBusy(true);
-    try { await call(role, `select app.receive_boxes($1,$2,$3,$4,$5)`, [po.id, boxes.map((b) => b.id), wh, photo, note || null]); toast(`已下推采购入库单：${nBox} 箱进${po.purpose === 'fob' ? ' FOB 仓' : ` ${wh} 仓`}`); onDone(); } catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
+    try { await call(role, `select app.receive_boxes($1,$2,$3,$4,$5)`, [po.id, boxes.map((b) => b.id), wh, photo, note || null]); toast(`已下推采购入库单：${nBox} 箱进${po.purpose === 'fob' ? ' FOB 仓' : ` ${wh} 仓`}`); showDone({ kind: 'grn', po: po.id }); onDone(); } catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
   };
   return (
     <Modal title={`到货入库：${po.po_no}`} onClose={onClose}

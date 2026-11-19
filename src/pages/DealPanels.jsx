@@ -1,3 +1,5 @@
+import { showDone } from '../components/Done.jsx';
+import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 // The panels of one deal. Each workflow step has its own panel: the action when it is the current step,
 // a read-only record once it has been pushed (待改 13). Every button calls exactly one SQL business function.
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
@@ -343,6 +345,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
   const [photo, setPhoto] = useState('');
   const [dup, setDup] = useState([]);
   const [rv, setRv] = useState({}); // line -> {qty, reason, check, note}
+  const [numFor, setNumFor] = useState(null); const [numVal, setNumVal] = useState('');
   const h = useHistory(rv, setRv);
   const scope = useRef();
   const [errs, setErrs] = useState(false);
@@ -399,6 +402,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
     for (const l of real) {
       const a = get(l); const dq = diffOf(l);
       if (a.qty === '') return toast(`${l.model} 实点数没填`, 'err');
+      if (!a.seen && dq === 0) return toast(`还有没核的行：${real.filter((x) => !get(x).seen && diffOf(x) === 0).slice(0, 4).map((x) => x.model).join('、')}（点整行 = 数过了）`, 'err');
       if (!fixOk(l)) return toast(dq > 0 ? `${l.model} 多了 ${dq} 片：放回货架并拍照` : `${l.model} 少了 ${-dq} 片：选「补上」（拍照）还是「少发」（写原因）`, 'err');
       if (dq !== 0) { fixes.push({ line_id: l.id, counted: N(a.qty), action: dq > 0 ? 'put_back' : a.act, photo: a.fphoto || null, reason: a.reason || null }); if (dq < 0 && a.act === 'less') less += 1; }
       if (must.has(l.id) && N(a.qty) > 0 && !a.check) return toast(`${l.model} 必须抽检（${must.get(l.id)}）：抽 2–3 盒，选抽检结果`, 'err');
@@ -440,9 +444,42 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
     <div className="card" ref={scope}>
       <div className="card-h"><h2>复检 + 打包 <Info>客户确认后由主管抽检、打包；打完包出发货文件，再出库</Info></h2>
         <div className="row">{reviewing ? <UndoBar h={h} scope={scope} /> : <Who e={e} />}</div></div>
+      {reviewing && can(role, 'review_pick') ? (
+        <div className="card-b ticks">
+          {/* 399 (Frank 11-18): 复检和找货同一套手机操作 —— 整行就是按钮, 点一下 = 数过了、数量对; 不对就按 − / ＋ 改成实点数; 必抽检的行单独标红, 不选抽检结果勾不上 */}
+          <div className="ticks-top"><div className="ticks-prog"><i style={{ width: `${real.length ? (real.filter((l) => get(l).seen).length / real.length) * 100 : 0}%` }} /></div>
+            <b>已核 {real.filter((l) => get(l).seen).length} / {real.length} 行</b><span className="grow" />
+            <Info>点整行 = 这一行数过了、数量对（变绿），再点一下取消。数量不对就按 − / ＋ 改成你实际数到的数（可以比该有的多），下面会出现怎么处理。红色「必抽检」的行要先选抽检结果才勾得上。</Info></div>
+          {[...real].sort((x, y) => (!!get(x).seen - !!get(y).seen) || (must.has(y.id) - must.has(x.id)) || String(x.bin || '~').localeCompare(String(y.bin || '~'), 'zh-CN', { numeric: true })).map((l) => { const a = get(l); const dq = diffOf(l); const mu = must.has(l.id); const sg = suggest.has(l.id); const bad = a.check && a.check !== 'ok';
+            const tap = () => { if (a.seen) return set(l, { seen: false }, '取消已核'); if (a.qty === '') return toast(`${l.model} 实点数没填`, 'err'); if (mu && N(a.qty) > 0 && !a.check) return toast(`${l.model} 必须抽检（${must.get(l.id)}）：抽 2–3 盒，先选抽检结果`, 'err'); if (navigator.vibrate) navigator.vibrate(15); set(l, { seen: true }, '已核'); };
+            const step = (d) => set(l, { qty: String(Math.max(0, N(a.qty) + d)), act: '', fphoto: '', reason: '', seen: false }, '改实点数');
+            return (
+              <div key={l.id} className={`tick-row ${a.seen ? 'done' : ''} ${dq !== 0 ? 'short' : ''} ${mu && !a.seen ? 'must' : ''}`}>
+                <button type="button" className="tick-main" onClick={tap} aria-pressed={!!a.seen}>
+                  <span className="tick-box">{a.seen ? '✓' : ''}</span>
+                  <span className="tick-info"><b className="tick-model">{l.model}</b><span className="tick-sub">{l.category} · {l.code} · 该有 {qty(l.qty_supply)} 片{dq !== 0 ? ` · ${dq > 0 ? '多' : '少'} ${qty(Math.abs(dq))}` : ''}</span></span>
+                  <span className="tick-bin">{l.warehouse}<b>{l.bin || '—'}</b></span>
+                </button>
+                <span className="tick-qty">
+                  <button type="button" className="step" disabled={N(a.qty) <= 0} onClick={() => step(-1)} aria-label="少一片">−</button>
+                  <button type="button" className="num" title="点这里直接输入实点数" onClick={() => setNumFor(l)}>{qty(a.qty)}<small>/ {qty(l.qty_supply)}</small></button>
+                  <button type="button" className="step" onClick={() => step(1)} aria-label="多一片">＋</button>
+                </span>
+                {(mu || sg || a.check) && <div className="tick-why">
+                  <span className={`pill ${mu ? 'red' : 'amber'}`}>{mu ? `必抽检 · ${must.get(l.id)}` : sg ? `建议抽检 · ${suggest.get(l.id)}` : '抽检'}</span>
+                  {Object.entries(CHECK_RESULTS).map(([k, n]) => <button type="button" key={k} className={`chip ${a.check === k ? 'on' : ''} ${errs && mu && !a.check ? 'err' : ''}`} onClick={() => set(l, { check: a.check === k ? '' : k, seen: false }, '抽检')}>{n}</button>)}
+                  {bad && <input className={`in ${errs && !a.note && dq === 0 ? 'err-in' : ''}`} style={{ flex: '1 1 160px', minWidth: 0 }} value={a.note} onChange={(ev) => set(l, { note: ev.target.value }, '抽检说明')} placeholder="哪里有问题（必写）" />}
+                </div>}
+              </div>); })}
+          {numFor && <Modal title={`${numFor.model} 实际数到几片`} onClose={() => setNumFor(null)} footer={<><button type="button" className="btn" onClick={() => setNumFor(null)}>取消</button><button type="button" className="btn primary" onClick={() => { set(numFor, { qty: String(N(numVal)), act: '', fphoto: '', reason: '', seen: false }, '改实点数'); setNumFor(null); setNumVal(''); }}>好</button></>}>
+            <div className="stack"><input className="in" inputMode="numeric" autoFocus style={{ fontSize: 28, fontWeight: 700, textAlign: 'center', height: 64 }} value={numVal} onChange={(ev) => setNumVal(ev.target.value.replace(/\D/g, ''))} placeholder={String(get(numFor).qty)} />
+              <div className="small muted" style={{ textAlign: 'center' }}>该有 {qty(numFor.qty_supply)} 片；数到多少填多少（多了少了下面会让你处理）</div></div>
+          </Modal>}
+        </div>
+      ) : (
       <Grid id="deal-review" slimTools table="deal_lines" columns={cols} rows={real} rowClass={(l) => (suggest.has(l.id) && reviewing ? 'suggest' : '')}
         foot={(rows) => ({ code: '合计', qty_picked: `${qty(rows.reduce((a, l) => a + N(l.qty_picked ?? l.qty_supply), 0))} 件`,
-          rqty: `${qty(rows.reduce((a, l) => a + N(reviewing ? get(l).qty : l.qty_supply), 0))} 件` })} />
+          rqty: `${qty(rows.reduce((a, l) => a + N(reviewing ? get(l).qty : l.qty_supply), 0))} 件` })} />)}
       {reviewing && real.some((l) => diffOf(l) !== 0) && (
         <div className="card-b fix-list" style={{ borderTop: '1px solid var(--line-2)' }}>
           <div className="pd-h" style={{ marginBottom: 2 }}>数量不对的行：当场处理完才能完成 <Info>多了就原路放回货架；少了就去拿来补上；真没货才少发（客户要重新确认）。每一笔都要拍照 / 写原因，记在这张单的复检记录里，并记一次找货出错。</Info></div>
@@ -841,7 +878,7 @@ function ShipForm({ deal, lines, shipments, act }) {
     const mth = optSubmit('ship_methods', method), bear = optSubmit('freight_bearer', bearerRaw);   // 401: ⚙ 里自己加的选项 → 后台按它挂的那一类处理, 名字另存
     const LAST = `(select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1)`;
     await act('已出库，客户总账已更新', `select app.ship($1,$2,$3,$4,$5,$6,$7)`, [deal.id, at, mth.base, phone.trim(), addrText, proof, payload && JSON.stringify(payload)])
-      .then(() => rememberContact(role, deal.customer_id, contact))
+      .then(() => { showDone({ kind: 'shipment', deal: deal.id }); return rememberContact(role, deal.customer_id, contact); })
       .then(() => (mth.label || bear.label ? call(role, `select app.set_opt_label('ship_method', ${LAST}, $2), app.set_opt_label('ship_freight', ${LAST}, $3)`, [deal.id, mth.label, bear.label]).catch(() => {}) : null))
       .then(() => call(role, `select app.record_ship_freight((select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1), $2, $3, $4) as mv`, [deal.id, bearer, bearer === 'customer' ? null : N(freight), proof])
         .then((r) => { if (bearer !== 'customer' && r?.[0]?.mv) window.dispatchEvent(new CustomEvent('la9s:flow', { detail: { text: `运费 ${money(N(freight))} XOF 已记一笔支出流水（本地物流费 · Wave-XOF）`, to: 'cash' } })); refresh(); }, (e) => toast('运费没记上：' + (e?.message || e), 'err')))
@@ -952,7 +989,7 @@ function ShipmentsCard({ deal, lines, shipments, act, role }) {
   if (!shipments.length) return null;
   const group = shipments.map((s) => ({ src: s.proof_path, label: `${s.out_no} 出库凭证` }));
   const cols = [
-    { key: 'out_no', label: '出库单号', w: 150, render: (s) => <span className={s.voided_at ? 'strike' : ''}><b className="mono">{s.out_no}</b></span> },
+    { key: 'out_no', label: '出库单号', w: 150, render: (s) => <DocNo kind="shipment" id={s.id} no={s.out_no} strike={!!s.voided_at} /> },
     { key: 'shipped_at', label: '发货时间', w: 130, render: (s) => dt(s.shipped_at) },
     { key: 'method', label: '方式', w: 110, render: (s) => optName('ship_methods', s.method, SHIP_METHODS, s.method_label) },
     { key: 'contact_phone', label: '电话', w: 120 },
@@ -1024,7 +1061,7 @@ export function PayPanel({ deal, receipts, shipments, act, role }) {
         {!shipments.some((s) => !s.voided_at) && <div className="card-b hint">还没出库：客户总账只在出库后增加。现在收的钱会记为预付，出库时自动抵扣。</div>}
         {receipts.length > 0 && <Grid id="deal-receipts" slimTools columns={[
           { key: 'seq', label: '第几笔', w: 70, sortable: false, render: (r) => `第 ${receipts.indexOf(r) + 1} 笔` },
-          { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <b className="mono">{r.rcv_no}</b> },
+          { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <DocNo kind="receipt" id={r.id} no={r.rcv_no} /> },
           { key: 'received_on', label: '收款日期', w: 100, render: (r) => dDate(r.received_on) },
           { key: 'method', label: '方式', w: 100, render: (r) => PAY_METHODS[r.method] },
           { key: 'src', label: '来源', w: 130, sortable: false, render: (r) => (r.from_prepaid ? <span className="pill blue" title={`客户 ${dDate(r.received_on)} 付的钱，当时记成预付，出库时自动抵到这张单`}>预付抵扣</span> : <span className="muted small">这张单收的</span>) },
@@ -1176,7 +1213,7 @@ export function ReturnPanel({ deal, lines, returns, act, role }) {
               if (!form.reason) return toast('请选择或填写退货原因', 'err');
               if (form.type === 'other' && !form.typeNote?.trim()) { setForm({ ...form, errs: true }); return toast('选了「其他」要写清楚是什么', 'err'); }
               if (!form.photo) { setForm({ ...form, errs: true }); return toast('收到退货要拍实物照片（不是盒子）', 'err'); }
-              const ty = optSubmit('return_types', form.type); await act('退货已登记，等中方审批', `select app.set_opt_label('return_reason', app.request_return($1,$2,$3,$4,null,$5,$6), $7)`, [deal.id, ty.base, form.type === 'other' ? `其他：${form.typeNote.trim()} · ${form.reason}` : form.reason, JSON.stringify(ls), new Date(form.at).toISOString(), form.photo, ty.label]).then(() => setForm(null), () => {});
+              const ty = optSubmit('return_types', form.type); await act('退货已登记，等中方审批', `select app.set_opt_label('return_reason', app.request_return($1,$2,$3,$4,null,$5,$6), $7)`, [deal.id, ty.base, form.type === 'other' ? `其他：${form.typeNote.trim()} · ${form.reason}` : form.reason, JSON.stringify(ls), new Date(form.at).toISOString(), form.photo, ty.label]).then(() => { showDone({ kind: 'ret', deal: deal.id }); setForm(null); }, () => {});
             }}>提交退货申请</button></>}>
           <div className="stack">
             <div className="card card-b" style={{ background: 'var(--amber-bg)' }}><b>① 收到退货</b> <span className="small muted">收到货才做退货单；没收到不做</span>

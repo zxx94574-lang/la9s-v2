@@ -208,7 +208,10 @@ export default function QuoteNew() {
           {role === 'admin' && <PageGear items={[['种类顺序（所有人同款）', () => setCatOrderOpen(true)], [edit ? '退出调整版面' : '调整版面', () => setLayoutEdit(!edit)]]} />}
         </div>
       </div>
-      {histOpen && customer && <PriceHistory customerId={customer} customerName={cust?.name} productIds={lines.filter((l) => l.product).map((l) => l.product.id)} onClose={() => setHistOpen(false)} />}
+      {histOpen && customer && <PriceHistory customerId={customer} customerName={cust?.name} productIds={lines.filter((l) => l.product).map((l) => l.product.id)} currency={currency} onClose={() => setHistOpen(false)}
+        current={lines.filter((l) => l.product).map((l) => ({ key: l.key, product_id: l.product.id, model: l.product.model, category: l.product.category, qty: Number(l.qty_req) || 0, now: nowPrice(l) }))}
+        onApply={priceMode ? async (list) => { const by = Object.fromEntries(list.map((x) => [x.key, x.price])); setLines(lines.map((l) => (by[l.key] == null ? l : canPrice ? { ...l, unit_price: String(by[l.key]), req_price: '' } : { ...l, req_price: String(by[l.key]) }))); toast(canPrice ? `已把 ${list.length} 个型号填成历史价，保存报价后生效` : `已把 ${list.length} 个型号填成申请价，保存后送中方审批`); } : null}
+        applyLabel={canPrice ? '用选中的历史价' : '申请用选中的历史价'} applyNote={canPrice ? '填进单价，保存报价后生效（标手改）' : '填成申请价，保存后中方批了才生效'} />}
       {prodOpen && <ProductDrawer product={prodOpen} tier={tier} onClose={() => setProdOpen(null)} />}
       {custOpen && cust && <CustomerDrawer id={cust.id} onClose={() => setCustOpen(false)} />}
       {catOrderOpen && <CatOrderModal categories={data.categories} onClose={() => setCatOrderOpen(false)} />}

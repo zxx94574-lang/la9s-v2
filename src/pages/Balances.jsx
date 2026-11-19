@@ -1,3 +1,4 @@
+import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 import React, { useMemo, useState } from 'react';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { q, call } from '../db/client.js';
@@ -95,7 +96,7 @@ export function CustomerLedger({ id }) {
         <div className="card">
           <div className="card-h"><h2>退货记录</h2><span className="muted small">点单号打开原单的「退货对账」</span></div>
           <Grid id="cust-returns" rowKey={(r) => r.id} rows={returns} columns={[
-            { key: 'rt_no', label: '退货单号', w: 150, render: (r) => <b><DealLink id={r.deal_id} no={r.rt_no} /></b> },
+            { key: 'rt_no', label: '退货单号', w: 150, render: (r) => <b><span className="deal-link"><DocPeek kind="ret" id={r.id} /><DealLink id={r.deal_id} no={r.rt_no} peek={false} /></span></b> },
             { key: 'batch_no', label: '批次', w: 130 },
             { key: 'biz_no', label: '原订单', w: 150, render: (r) => <DealChip id={r.deal_id} no={r.biz_no} onOpen={setDrawer} /> },
             { key: 'requested_at', label: '日期', w: 100, render: (r) => dDate(r.requested_at) },

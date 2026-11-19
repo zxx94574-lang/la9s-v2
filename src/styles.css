@@ -1413,3 +1413,18 @@ tr.grp-row.d1 > td { background: #f7f9fc; } tr.grp-row.d2 > td { background: #fb
 .sales-bar .l { font-size: 10.5px; color: var(--muted, #6b7686); white-space: nowrap; }
 .sales-bar.on, .sales-bar:hover { background: #eaf1fc; }
 .sales-detail { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 10px; }
+
+/* 386 历史价格: 按型号一行 */
+.ph-list { border: 1px solid var(--line-2); border-radius: 10px; overflow-x: auto; }
+.ph-row { display: grid; grid-template-columns: 34px minmax(130px, 1.4fr) 80px 110px minmax(150px, 1.3fr) 100px minmax(170px, 1.3fr); gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line-2); font-size: 13px; cursor: pointer; min-width: 820px; }
+.ph-row.ph-head { background: #f6f8fb; font-weight: 650; cursor: default; font-size: 12.5px; }
+.ph-row.none { cursor: default; color: var(--muted, #6b7686); }
+.ph-row.open { background: #f3f7fd; }
+.ph-row .r { text-align: right; }
+.ph-row input[type=checkbox] { width: 18px; height: 18px; }
+.ph-sub { padding: 6px 10px 10px 44px; background: #f9fbfe; border-bottom: 1px solid var(--line-2); display: flex; flex-direction: column; gap: 4px; min-width: 820px; }
+.ph-pick { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; cursor: pointer; text-align: left; }
+.ph-pick.on { border-color: var(--brand); background: #eaf1fc; }
+
+/* 399 复检卡片: 必抽检的行红边 */
+.tick-row.must { border-color: #e9b4ae; background: #fff7f6; }

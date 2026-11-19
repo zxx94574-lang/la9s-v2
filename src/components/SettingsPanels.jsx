@@ -117,9 +117,34 @@ export function PermPanel() {
           ...PERM_ROLES.map((pr) => ({ key: pr, label: ROLE_LABELS[pr] || pr, w: 90, align: 'center', value: (r) => (rolesFor(r.id).includes(pr) ? '✓' : ''),
             edit: (r) => ({ type: 'select', value: rolesFor(r.id).includes(pr) ? 'y' : 'n', options: [['y', '✓ 可以'], ['n', '— 不行']], onChange: (v) => toggle(r.id, pr, v === 'y') }) })),
         ]} />
+        <PortalMatrix />
       </Modal>}
     </div>
   );
+}
+
+// 393 (Frank 11-18): 权限表再加三列 —— 游客 / 客户老板 / 店员. 公司统一的默认; 单个客户在客户档案「客户账号能看什么」里还能单独开关 (那个优先)
+const PM_ROWS = [['stock', '看具体库存片数', '不勾 = 只看 有货 / 少量 / 可预订'], ['price', '看价格（只看他自己档位的价）', '游客没有档位，永远看不到价'], ['inquiry', '发询单', '关掉 = 这个入口不接询单，让他直接找销售员']];
+const PM_DEF = { stock: ['boss', 'clerk'], price: ['boss'], inquiry: ['guest', 'boss', 'clerk'] };
+const PM_WHO = [['guest', '游客'], ['boss', '客户老板'], ['clerk', '店员']];
+function PortalMatrix() {
+  const { org, role, toast, refresh } = useApp();
+  const { data } = useData(async () => (await q(`select value from app.org_settings where org_id = $1 and key = 'portal_matrix'`, [org]))[0]?.value || {}, [org]);
+  if (!data) return null;
+  const has = (k, w) => (Array.isArray(data[k]) ? data[k] : PM_DEF[k]).includes(w);
+  const toggle = async (k, w, on) => { const cur = new Set(Array.isArray(data[k]) ? data[k] : PM_DEF[k]); if (on) cur.add(w); else cur.delete(w);
+    try { await call(role, `select app.set_org_setting($1,'portal_matrix',$2)`, [org, JSON.stringify({ ...data, [k]: [...cur] })]); toast('已保存，客户端下次打开就按这个'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className="pd-h">客户端：游客 / 客户老板 / 店员</div>
+      <div className="hint" style={{ marginBottom: 8 }}>这是全公司的默认。某一个客户要例外，在他的客户档案「客户账号能看什么」里单独开关（那个优先）。「我的订单 / 我的对账 / 我的门店」这几页谁能看，在侧栏配置里按老板 / 店员开关。成本、别的档位价、别人的成交价，这三种人永远看不到。</div>
+      <Grid id="portal-matrix" noTools rows={PM_ROWS.map(([id, label, tip]) => ({ id, label, tip }))} columns={[
+        { key: 'label', label: '能做什么', w: 260, render: (r) => <><b>{r.label}</b><div className="small muted">{r.tip}</div></> },
+        ...PM_WHO.map(([w, l]) => ({ key: w, label: l, w: 110, align: 'center', value: (r) => (has(r.id, w) ? '✓' : ''),
+          edit: (r) => (r.id === 'price' && w === 'guest' ? null : { type: 'select', value: has(r.id, w) ? 'y' : 'n', options: [['y', '✓ 可以'], ['n', '— 不行']], onChange: (v) => toggle(r.id, w, v === 'y') }),
+          render: (r) => (r.id === 'price' && w === 'guest' ? <span className="muted small">永远不行</span> : has(r.id, w) ? '✓' : '—') })),
+      ]} />
+    </div>);
 }
 
 // 11-12 Frank: 凡是涨跌 / 时限 / 单价这类线, 都放在这里随时调 (改了立即生效)
@@ -137,6 +162,12 @@ const RULES = [
   ['margin_rules', 'low_pct', '毛利：毛利率低于多少标黄（要留意）；负数一律标红', 10, '%'],
   ['writeoff_rules', 'max_xof', '抹零：一张单最多抹多少', 100, 'XOF'],
   ['cash_rules', 'held_days', '员工代收：钱在员工手上超过几天没交就进紧急', 1, '天'],
+  ['guest_rules', 'low', '游客 / 客户账号：可售少于多少片显示「少量」', 50, '片'],
+  ['kpi_targets', 's0', '时效目标：建报价 → 联系上客户确认', 30, '分钟'],
+  ['kpi_targets', 's1', '时效目标：下推找货 → 初检完成', 120, '分钟'],
+  ['kpi_targets', 's2', '时效目标：初检完 → 出销售单', 30, '分钟'],
+  ['kpi_targets', 's4', '时效目标：客户确认 → 复检打包完', 60, '分钟'],
+  ['kpi_targets', 's5', '时效目标：打包完 → 出库', 60, '分钟'],
 ];
 export function RulesPanel() {
   const { org, role, toast, refresh } = useApp();

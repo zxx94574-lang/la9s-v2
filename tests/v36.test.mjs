@@ -67,3 +67,14 @@ test('移交客户: 一键全部移交 + 归属历史; 只中方', async () => {
   const log = await t.one(`select from_employee_id, to_employee_id, note from app.customer_owner_log where customer_id = $1`, [t.ids.camaraAbobo]);
   assert.equal(log.from_employee_id, t.ids.sales); assert.equal(log.note, 'Koffi 离职');
 });
+
+test('0070 客户端权限矩阵: 关掉游客询单 → 游客询单进不来; 默认照旧', async () => {
+  const t = await setup();
+  assert.equal((await t.one(`select app.portal_can($1,'guest','inquiry') as a, app.portal_can($1,'guest','stock') as b, app.portal_can($1,'boss','price') as c, app.portal_can($1,'clerk','price') as d`, [t.ids.org])).a, true);
+  const r = await t.one(`select app.portal_can($1,'guest','stock') as b, app.portal_can($1,'boss','price') as c, app.portal_can($1,'clerk','price') as d`, [t.ids.org]);
+  assert.deepEqual([r.b, r.c, r.d], [false, true, false]);
+  await t.db.query(`insert into app.org_settings (org_id, key, value) values ($1,'portal_matrix','{"inquiry":["boss"],"stock":["guest","boss"]}')`, [t.ids.org]);
+  await assert.rejects(t.db.query(`insert into app.inquiries (org_id, iq_no, source, lines) values ($1,'IQ-X','guest','[]')`, [t.ids.org]), /不接受这个入口/);
+  assert.equal((await t.one(`select app.portal_can($1,'guest','stock') as b`, [t.ids.org])).b, true);
+  assert.equal((await t.one(`select app.portal_can($1,'clerk','stock') as b`, [t.ids.org])).b, false);
+});

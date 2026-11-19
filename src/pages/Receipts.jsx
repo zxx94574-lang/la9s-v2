@@ -1,3 +1,4 @@
+import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 // 收款与冲账 (finance page, 待改 28–39): pick a customer → 未结清 / 已结清 tabs → same receipt form as inside the deal.
 // Receipt records are titled clearly, their 冲到 numbers open the order in a drawer, and 冲账情况 is one sentence.
 import React, { useState } from 'react';
@@ -44,7 +45,7 @@ export default function Receipts({ preset }) {
     return `冲 ${parts.join('、')}，剩 ${money(r.unallocated, r.account_currency)} 作为预付`;
   };
   const listCols = [
-    { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <b className="mono">{r.rcv_no}</b> },
+    { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <DocNo kind="receipt" id={r.id} no={r.rcv_no} /> },
     { key: 'received_on', label: '日期', w: 100, render: (r) => dDate(r.received_on) },
     { key: 'customer_name', label: '客户', w: 150, render: (r) => <><CustLink id={r.customer_id} name={r.customer_name} /> <span className="muted small">{r.customer_code}</span></> },
     { key: 'method', label: '方式', w: 90, render: (r) => PAY_METHODS[r.method] },

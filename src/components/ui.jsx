@@ -820,13 +820,16 @@ export function AcctImpact({ docLabel = '本单应收', doc, ledger, fmt, note, 
 
 // MoneyIn: <input> 的直接替身 (412) —— 用法和原来的 input 一模一样 (value 是字符串或数字, onChange 收到的 e.target.value 是不带逗号的纯数字串),
 // 只是显示时边输边加千分位 + 右对齐. inputMode="decimal" 允许小数, 否则只收整数. 全站金额 / 数量框统一用它.
-export function MoneyIn({ value, onChange, className = '', inputMode = 'numeric', ...rest }) {
+export function MoneyIn({ value: valueProp, defaultValue, onChange: onChangeProp, onBlur, className = '', inputMode = 'numeric', ...rest }) {
+  // 没传 value (只给 defaultValue) = 自己记着输入的数; onBlur 拿到的是去掉逗号的数
+  const [own, setOwn] = useState(defaultValue ?? ''); const free = valueProp === undefined;
+  const value = free ? own : valueProp; const onChange = (e) => { if (free) setOwn(e.target.value); onChangeProp?.(e); };
   const dec = inputMode === 'decimal';
   const clean = (raw) => { let t = String(raw ?? '').replace(/[^\d.]/g, ''); if (!dec) t = t.replace(/\./g, ''); else { const i = t.indexOf('.'); if (i >= 0) t = t.slice(0, i + 1) + t.slice(i + 1).replace(/\./g, ''); } return t; };
   const ref = useRef(null); const caret = useRef(null);
   useLayoutEffect(() => { if (caret.current == null || !ref.current) return; const shown = ref.current.value; let n = caret.current, i = 0; while (i < shown.length && n > 0) { if (shown[i] !== ',') n -= 1; i += 1; } try { ref.current.setSelectionRange(i, i); } catch { /* 有的手机键盘不让设光标 */ } caret.current = null; });
   const type = (e) => { const raw = e.target.value; const pos = e.target.selectionStart ?? raw.length; caret.current = raw.slice(0, pos).replace(/[^\d.]/g, '').length; onChange?.({ target: { value: clean(raw) }, currentTarget: e.currentTarget }); };
-  return <input ref={ref} {...rest} className={`${className} num-in`} inputMode={inputMode} value={groupNum(clean(value))} onChange={type} />;
+  return <input ref={ref} {...rest} className={`${className} num-in`} inputMode={inputMode} value={groupNum(clean(value))} onChange={type} onBlur={onBlur ? (e) => onBlur({ target: { value: clean(e.target.value) }, currentTarget: e.currentTarget }) : undefined} />;
 }
 
 // 361 (Frank 11-18, 全站): 同一时间只开一个弹层 —— 工具栏上的筛选 / 分组 / 筛选方案 / 下拉 / 更多菜单, 点开一个, 别的自动关.

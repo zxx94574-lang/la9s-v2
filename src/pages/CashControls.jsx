@@ -1,3 +1,4 @@
+import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 // 资金账户 · 财务管控 (Frank 11-11 217–220): 待核对到账 / 员工代收 / 对账与盘点 / 账户互转在途 / 月结锁账 + 提醒
 // 分工制衡做成三步 (登记 → 确认到账 → 对账), 现在中方一个人也能走完; 以后招了财务在权限配置里分出去.
 import React, { useState } from 'react';
@@ -92,7 +93,7 @@ function VerifyPanel({ ctl }) {
     <div className="card-b stack">
       <div className="hint">登记了、还没核对的收款：去 Wave / 银行 / 现金核对，钱确实到了就点「确认到账」；导入流水时金额对上的会自动确认。登记的人不能自己确认（中方除外）。</div>
       <Grid id="cash-verify" rows={ctl.pendingRcv} rowActions={can(role, 'receipt') ? [verifyRcvAction(role, toast, refresh)] : undefined} empty="没有待核对的收款 ✓" columns={[
-        { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <b className="mono">{r.rcv_no}</b> },
+        { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <DocNo kind="receipt" id={r.id} no={r.rcv_no} /> },
         { key: 'received_on', label: '日期', w: 100, render: (r) => dDate(r.received_on) },
         { key: 'days', label: '几天了', w: 70, render: (r) => <span className={r.days > 3 ? 'red-t2' : ''}>{r.days} 天</span> },
         { key: 'customer_name', label: '客户', w: 150, render: (r) => <CustLink id={r.customer_id} name={r.customer_name} /> },
@@ -114,7 +115,7 @@ function StaffHeld({ ctl, acc }) {
       {byEmp.length > 0 && <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>{byEmp.map((e) => <span key={e.name} className={`pill ${e.max > 3 ? 'red' : 'amber'}`}>{e.name}：{e.n} 笔 · 共 {money(e.total)} · 最久 {e.max} 天</span>)}</div>}
       <Grid id="cash-held" rows={ctl.held} rowKey={(r) => r.receipt_id} rowActions={[{ label: '这笔已交给公司', run: (r) => setHand(r) }]} empty="没有员工代收没交的 ✓" columns={[
         { key: 'employee_name', label: '员工', w: 100 },
-        { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <b className="mono">{r.rcv_no}</b> },
+        { key: 'rcv_no', label: '收款单号', w: 140, render: (r) => <DocNo kind="receipt" id={r.id} no={r.rcv_no} /> },
         { key: 'received_on', label: '收到日期', w: 100, render: (r) => dDate(r.received_on) },
         { key: 'days', label: '压了几天', w: 80, render: (r) => <span className={r.days > 3 ? 'red-t2' : ''}>{r.days} 天</span> },
         { key: 'customer_name', label: '客户', w: 150, render: (r) => <CustLink id={r.customer_id} name={r.customer_name} /> },
