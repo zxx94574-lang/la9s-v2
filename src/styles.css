@@ -1598,3 +1598,6 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 
 /* 467: 「可预订」小框本身就是打开在途小窗的按钮 */
 .peek-trig { all: unset; cursor: pointer; display: inline-flex; } .peek-trig:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+
+/* 457 游客询价: 店铺类型四个大按钮, 手机上两个一排 */
+.glevels { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; } .glevels .btn { min-height: 44px; } .glevels.err { outline: 2px solid var(--red); outline-offset: 2px; border-radius: 8px; }

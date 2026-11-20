@@ -17,6 +17,7 @@ import { ProspectModal } from '../components/Crm.jsx';
 import { dt, dDate, qty, money, friendlyError } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 import { fmtPhone } from '../lib/phone.js';
+import { GUEST_LEVELS } from './Guest.jsx';
 
 export const INQ_STATUS = { new: ['新询单', 'red'], contacted: ['已联系', 'amber'], quoted: ['已报价', 'blue'], converted: ['已转订单', 'green'], lost: ['没成交', 'gray'], invalid: ['无效', 'gray'] };
 export const INQ_SOURCE = { guest: ['游客', 'amber'], customer: ['客户账号', 'blue'], staff: ['员工', 'gray'] };
@@ -168,7 +169,7 @@ function ConvertModal({ inq, catalog, categories, onClose }) {
     <Modal wide title={`${view ? '询单' : '转成报价'} · ${inq.iq_no}`} onClose={onClose} footer={view ? <button type="button" className="btn" onClick={onClose}>关闭</button> : <><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><span className="small muted">合计 {money(total)} XOF</span><button type="button" className="btn primary" onClick={goConv}>转成报价</button></>}>
       <div className="stack">
         <div className="kv-row"><span><Pill tone={INQ_SOURCE[inq.source][1]}>{INQ_SOURCE[inq.source][0]}</Pill></span><span>客户 <b>{whoOf(inq)}</b>{!inq.customer_id && inq.guest_info?.phone ? ` · ${fmtPhone(inq.guest_info.phone)}` : ''}{inq.guest_info?.city ? ` · ${inq.guest_info.city}` : ''}</span>
-          {inq.customer_id ? <span className="small muted">档位 {inq.tier || '没定'}</span> : <span className="pill amber">游客：转报价时自动建成潜客，档位要你定</span>}<span className="small muted">{dt(inq.created_at)}</span></div>
+          {inq.customer_id ? <span className="small muted">档位 {inq.tier || '没定'}</span> : <span className="pill amber">游客自报：{GUEST_LEVELS.find((x) => x.v === inq.guest_info?.level)?.l.split(' · ')[0] || '没填'} → 转报价时建成潜客，先按 {inq.guest_info?.level === 'REPAIR' ? 'Repair' : 'Retail'} shop（系统默认 · 未确认），档位要你定</span>}<span className="small muted">{dt(inq.created_at)}</span></div>
         {inq.note && <div className="hint">备注：{inq.note}</div>}
         <Grid id="inq-conv" noTools rows={rows} rowKey={(r) => String(r._i)} columns={[
           { key: 'code', label: '编码', w: 80, mono: true, value: (r) => r.p?.code || '没编码', render: (r) => r.p?.code || <Pill tone="amber">没编码</Pill> },

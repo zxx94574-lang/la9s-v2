@@ -35,7 +35,7 @@ test('销售建询单 (只自己名下) → 中方转报价 (自动带档位价,
 test('游客询单: 不建客户不建单; 转报价时才建潜客; 没成交要原因; 订单作废 → 询单没成交', async () => {
   const t = await setup();
   const n0 = Number((await t.one(`select count(*) n from app.customers`)).n);
-  const no = (await t.db.query(`select app.guest_inquiry2($1,$2,$3,null) as v`, [t.ids.org, JSON.stringify({ phone: '+225 07 88 77 66 55', contact: 'Moussa', shop: 'Moussa Phone', city: 'Bouaké' }), JSON.stringify([{ product_id: t.ids.x6516, qty: 4 }])])).rows[0].v;
+  const no = (await t.db.query(`select app.guest_inquiry2($1,$2,$3,null) as v`, [t.ids.org, JSON.stringify({ phone: '+225 07 88 77 66 55', contact: 'Moussa', shop: 'Moussa Phone', city: 'Bouaké', level: 'retail' }), JSON.stringify([{ product_id: t.ids.x6516, qty: 4 }])])).rows[0].v;
   assert.match(no, /^IQ-/);
   assert.equal(Number((await t.one(`select count(*) n from app.customers`)).n), n0, '游客询单不建客户');
   const iq = (await t.one(`select id from app.inquiries where iq_no = $1`, [no])).id;

@@ -7,7 +7,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { toBlob } from 'html-to-image';
 import { callAnon, setCustomerSession, getOrg, REAL } from '../db/client.js';
-import { useApp, useData, Pill, Modal, MoneyIn } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, MoneyIn, Choice } from '../components/ui.jsx';
+import { DEFAULT_CUSTOMER_OPTIONS } from '../lib/customerOptions.js';
 import { friendlyError, dt } from '../lib/format.js';
 
 // 230 / 231 (Frank 11-11): 客户端只有两种 —— 有货 (绿) / 可预订 (不叫无货, 不显示少量和数量); 点了可预订的照样能下, 差的自动记进未满足需求
@@ -212,31 +213,44 @@ export function GuestShop() {
   );
 }
 
+// 457 (Frank 11-20): 想询价就必须留 姓名 / 电话 / 城市 / 等级; 不留不能提交. 游客看不到价格, 热线 / 销售联系时报.
+export const GUEST_LEVELS = [{ v: 'REPAIR', l: '维修店 · Réparateur' }, { v: 'RETAIL', l: '零售店 · Détaillant' }, { v: 'WHOLESALE', l: '批发店 · Grossiste' }, { v: 'MIXED', l: '批零兼营 · Mixte' }];
+const OTHER = '__other';
 function SubmitModal({ org, salesId, lines, onClose, onDone }) {
   const { toast } = useApp();
-  const [f, setF] = useState({ phone: '', shop: '', city: '', contact: '', note: '' });
+  const [f, setF] = useState({ contact: '', phone: '', city: '', city2: '', level: '', shop: '', note: '' });
   const [err, setErr] = useState(false);
-  const ok = f.phone.replace(/\D/g, '').length >= 8 && f.shop.trim() && f.city.trim() && f.contact.trim();
+  const city = f.city === OTHER ? f.city2.trim() : f.city;
+  const miss = { contact: !f.contact.trim(), phone: f.phone.replace(/\D/g, '').length < 8, city: !city, level: !f.level };
+  const ok = !Object.values(miss).some(Boolean);
   const go = async () => {
-    setErr(true); if (!ok) return;
+    setErr(true); if (!ok) { toast('带 * 的四项都要填 · Remplissez les champs *', 'err'); return; }
     try {
-      const [{ no }] = await callAnon(`select app.guest_inquiry2($1,$2,$3,$4) as no`, [org, JSON.stringify({ ...f, sales_id: salesId || null }), JSON.stringify(lines), f.note]);
+      const info = { contact: f.contact.trim(), phone: f.phone, city, city_new: f.city === OTHER, level: f.level, shop: f.shop.trim(), sales_id: salesId || null };
+      const [{ no }] = await callAnon(`select app.guest_inquiry2($1,$2,$3,$4) as no`, [org, JSON.stringify(info), JSON.stringify(lines), f.note]);
       onDone(no);
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
+  const lab = (zh, fr, req) => <label>{zh} · {fr}{req && <b style={{ color: 'var(--red)' }}> *</b>}</label>;
   const inp = (k, zh, fr, o = {}) => (
-    <div className={`field ${o.req ? 'req' : ''}`}><label>{zh} · {fr}{o.req && ' *'}</label>
-      <input className={`in ${err && o.req && !String(f[k]).trim() ? 'err' : ''}`} inputMode={o.mode} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></div>);
+    <div className="field">{lab(zh, fr, o.req)}
+      <input className={`in ${err && miss[k] ? 'err' : ''}`} inputMode={o.mode} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></div>);
+  const cities = [...DEFAULT_CUSTOMER_OPTIONS.cities, { v: OTHER, l: '其他 · Autre' }];
   return (
     <Modal title="提交询价 · Demande de prix" onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" onClick={go}>提交 · Envoyer</button></>}>
-      <div className="stack" style={{ gap: 8 }}>
+      footer={<><button type="button" className="btn" onClick={onClose}>取消 · Annuler</button><button type="button" className="btn primary" onClick={go}>提交 · Envoyer</button></>}>
+      <div className="stack" style={{ gap: 10 }}>
+        {inp('contact', '姓名', 'Nom', { req: true })}
         {inp('phone', '电话 / WhatsApp', 'Téléphone', { req: true, mode: 'tel' })}
-        {inp('shop', '店名', 'Boutique', { req: true })}
-        {inp('city', '城市 / 市场', 'Ville / marché', { req: true })}
-        {inp('contact', '怎么称呼你', 'Votre nom', { req: true })}
+        <div className="field">{lab('城市', 'Ville', true)}
+          <Choice value={f.city} onChange={(v) => setF({ ...f, city: v })} options={cities} placeholder="选城市 · Choisir" width="100%" err={err && miss.city && f.city !== OTHER} />
+          {f.city === OTHER && <input className={`in ${err && miss.city ? 'err' : ''}`} style={{ marginTop: 6 }} autoFocus placeholder="写城市名 · Nom de la ville" value={f.city2} onChange={(e) => setF({ ...f, city2: e.target.value })} />}</div>
+        <div className="field">{lab('你是哪种店', 'Type de boutique', true)}
+          <div className={`glevels ${err && miss.level ? 'err' : ''}`}>{GUEST_LEVELS.map((o) => (
+            <button type="button" key={o.v} className={`btn ${f.level === o.v ? 'primary' : ''}`} onClick={() => setF({ ...f, level: o.v })}>{o.l}</button>))}</div></div>
+        {inp('shop', '店名', 'Boutique')}
         {inp('note', '备注', 'Note')}
-        <div className="hint">提交后热线会马上联系你报价。只是先问问、不想留信息的话，关掉这个窗口，点「复制清单图片」发给销售员就行。</div>
+        <div className="hint">提交后热线会联系你报价。价格只在联系时告诉你。· Notre équipe vous contacte avec les prix.</div>
       </div>
     </Modal>
   );
