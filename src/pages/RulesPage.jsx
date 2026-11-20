@@ -8,7 +8,7 @@ export default function RulesPage() {
   if (role !== 'admin') return <div className="card card-b muted">只有中方能看和改规则参数。</div>;
   return (
     <div className="stack">
-      <div className="pagehead"><div><div className="eyebrow">Règles</div><h1>规则参数 <Info>总表：每条规则都在用到它的那一页旁边的 ⚙ 里改（例：时效目标在「时效与准确率」）。这里按「在哪里设置」分组列出现在的值，点一行就跳过去、自动打开那里的 ⚙。只在订单某一步用到的（必抽检、签收时限、抹零），没有固定页面，就在这里直接改。</Info></h1></div>
+      <div className="pagehead"><div><div className="eyebrow">Règles</div><h1>规则参数 <Info>全公司所有阈值、开关、权限表、发货文件都在这里。顶上一排是订单流程，第二排是流程以外的日常工作；点一个环节只看它的规则。值直接在这里改，改一格存一格、立即生效；用到它的页面旁边的 ⚙ 改的是同一个数。每条右边的 i 看三句：从哪来、作用在哪、触发后怎样；蓝色 ! = Claude 先定的、你还没拍板。</Info></h1></div>
         <span className="grow" /><button type="button" className="btn sm" onClick={() => go('pricing')}>特价表（促销价）›</button></div>
       <RulesIndex />
     </div>);

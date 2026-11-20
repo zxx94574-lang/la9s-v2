@@ -624,7 +624,7 @@ export function SoPanel({ deal, lines, catalog, categories, act, role, events, o
             const r = await act('已按档位重新带价（手改价不覆盖）', `select app.refresh_prices($1,$2)`, [deal.id, [...sel]]).catch(() => null);
             if (r) setSel(new Set());
           }}>↻ 获取价格（选中 {sel.size} 行）</button>{!sel.size && <span className="why">先勾选要重新带价的行</span>}
-          <Info>先勾选行再获取；手改价不会被覆盖。改价只有中方能操作；和档位价偏差 ≥{th[0]}% 黄、≥{th[1]}% 橙、≥{th[2]}% 红。</Info>
+          <Info>先勾选行再获取；手改价不会被覆盖。改价只有中方能操作；和档位价偏差 ≥{th[0]}% 标黄、≥{th[1]}% 标红（= 异价单），两个线在「规则参数 · 报价·确认」里改。</Info>
         </div>
       )}
       <Grid id="deal-so" slimTools table="deal_lines" columns={cols} rows={real}

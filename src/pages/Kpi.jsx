@@ -1,5 +1,6 @@
 // 241 (Frank 11-11): 时效与准确率 —— 先只显示、不考核; 跑 2–4 周看到真实的中位数再定线
 // 每张单按步骤分段计时 (只算上班时间), 谁的时间算谁的; 等客户的时间单独算; 速度和准确率成对看
+import { WorkMap } from '../components/WorkMap.jsx';
 import { RuleGear } from '../components/Rules.jsx';
 import SalesComm from '../components/SalesComm.jsx';
 import HotlineKpi from '../components/HotlineKpi.jsx';
@@ -22,6 +23,7 @@ const SEGS = [
   ['出库 → 客户签收', 'shipped', 'customer_received', '客户 / 热线', (ev) => ev.to.short_name],
   ['签收 → 客户确认对账', 'customer_received', 'balance_confirmed', '客户 / 热线', (ev) => ev.to.short_name],
 ];
+const SEG_AREA = ['quote', 'pick', 'so', 'so', 'ship', 'ship', 'sign', 'sign'];   // 每一段属于工作地图的哪个环节
 const qtyf = (n) => Number(n || 0).toLocaleString('en-US');
 export const KPI_TARGET = { s0: 30, s1: 120, s2: 30, s4: 60, s5: 60 };   // 390: 每一段的目标时限 (分钟, 上班时间); 客户的两段没有目标
 const pctl = (a, p) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.ceil(p * s.length) - 1)]; };
@@ -32,6 +34,7 @@ const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y)
 export default function Kpi() {
   const { org } = useApp();
   const [lateSeg, setLateSeg] = useState(null);
+  const [sel, setSel] = useState(null);   // 11-20: 和规则参数同一条工作地图, 点一个环节只看它
   const P = usePeriod('kpi'); const { from, to } = P;
   const { data } = useData(async () => {
     const [deals, events, emps, discs, checks] = await Promise.all([
@@ -102,14 +105,27 @@ export default function Kpi() {
     const w1 = weeks[weeks.length - 1]; const w0 = weeks[weeks.length - 2];
     const a1 = median(x.items.filter((it) => it.week === w1).map((it) => it.m)); const a0 = median(x.items.filter((it) => it.week === w0).map((it) => it.m));
     const tr = a1 != null && a0 != null && a0 > 0 ? (a1 - a0) / a0 : null;
-    return { ...x, key: i, n, ok, rate: n && x.target ? (ok / n) * 100 : null, med: median(x.mins), p90: pctl(x.mins, 0.9), few: n < MIN_N, perLine: i === 1 || i === 4 ? (lines ? x.mins.reduce((a, b) => a + b, 0) / lines : null) : null,
+    return { ...x, key: i, area: SEG_AREA[i], n, ok, rate: n && x.target ? (ok / n) * 100 : null, med: median(x.mins), p90: pctl(x.mins, 0.9), few: n < MIN_N, perLine: i === 1 || i === 4 ? (lines ? x.mins.reduce((a, b) => a + b, 0) / lines : null) : null,
       late: x.target ? x.items.filter((it) => it.m > x.target).sort((a, b) => b.m - a.m) : [], trendTxt: tr == null ? '' : Math.abs(tr) < 0.05 ? '差不多' : `${tr > 0 ? '慢了' : '快了'} ${Math.abs(tr * 100).toFixed(0)}%`, trendUp: tr > 0.05 };
   });
+  // 工作地图每格的小字: 流程环节 = 这一环节里各段合起来的达标率; 流程外 = 那块的关键数
+  const areaInfo = (k) => {
+    const rs = segRows.filter((r) => r.area === k && r.target && r.n);
+    if (rs.length) { const ok = rs.reduce((a, r) => a + r.ok, 0); const n = rs.reduce((a, r) => a + r.n, 0); const pct = (ok / n) * 100; const few = n < MIN_N;
+      return { sub: few ? `${n} 单 · 太少` : `达标 ${pct.toFixed(0)}%`, tone: few ? 'gray' : pct >= 90 ? 'green' : pct >= 70 ? 'amber' : 'red' }; }
+    if (segRows.some((r) => r.area === k && r.n)) return { sub: '等客户', tone: 'gray' };
+    if (k === 'hotline') return calc.openLate.length ? { sub: `${calc.openLate.length} 张超 5 分钟`, tone: 'red' } : { sub: '都在 5 分钟内', tone: 'green' };
+    if (k === 'dir') { const late = calc.dirPeople.reduce((a, p) => a + p.late, 0); return calc.dirPeople.length ? { sub: late ? `${late} 次超时` : '都按时', tone: late ? 'red' : 'green' } : { sub: '没有', tone: 'gray' }; }
+    if (k === 'staff') { const n = new Set([...calc.people.map((x) => x.name), ...calc.comPeople.map((x) => x.name)]).size; return n ? { sub: `${n} 人` } : { sub: '没有', tone: 'gray' }; }
+    return { sub: '没有', tone: 'gray' };
+  };
+  const show = (...ks) => !sel || ks.includes(sel);
+  const FLOWK = ['quote', 'pick', 'so', 'ship', 'sign'];
   return (
     <>
-      <div className="pagehead"><div><div className="eyebrow">Délais & qualité</div><h1 tabIndex={0}>时效与准确率</h1>
-        <div className="sub">只算上班时间（周一到周五 9:00–17:30，中午集体午休自动扣 1 小时；周六 9:00–12:00）。现在只显示、不考核：等员工用自己的工号登录、跑 2–4 周后，再按真实的中位数定线。</div></div>
+      <div className="pagehead"><div><div className="eyebrow">Délais & qualité</div><h1 tabIndex={0}>时效与准确率 <Info>只算上班时间（周一到周五 9:00–17:30，中午集体午休自动扣 1 小时；周六 9:00–12:00）。现在只显示、不考核：等员工用自己的工号登录、跑 2–4 周后，再按真实的中位数定线。顶上的环节和「规则参数」是同一条：点一个只看它，再点一下看全部。</Info></h1></div>
         <PeriodBar p={P} /></div>
+      <div style={{ marginBottom: 12 }}><WorkMap value={sel} onChange={setSel} info={areaInfo} /></div>
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="bigsum">
           <div><div className="k">这段时间开的单</div><div className="v">{calc.rows.length}</div></div>
@@ -118,9 +134,9 @@ export default function Kpi() {
           <div><div className="k">收货差异</div><div className="v" style={{ color: data.discs.length ? 'var(--red)' : undefined }}>{data.discs.length} <small>张</small></div></div>
         </div>
       </div>
-      <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-h"><h2>每一步用了多久、达标了多少 <Info>达标率才是能评判的数；中位数 = 一般多久；「最慢 10%」= 十张单里最慢的那张要多久。最慢的单只当线索，点下面的单号进去看卡在哪。等客户的两段不算员工的。</Info> <RuleGear anchor="kpi-targets" title="时效目标" ids={['kpi.s0', 'kpi.s1', 'kpi.s2', 'kpi.s4', 'kpi.s5']} /></h2></div>
-        <Grid id="kpi-seg" noTools rows={segRows} rowKey={(r) => r.key} columns={[
+      {show(...FLOWK) && <div className="card" style={{ marginBottom: 12 }}>
+        <div className="card-h"><h2>每一步 <Assumed>目标先按 报价确认 30 分钟、找货初检 2 小时、出销售单 30 分钟、复检打包 1 小时、出库 1 小时 定的；客户确认、签收、对账是客户的时间，不设目标。不到 10 单的数字灰掉。</Assumed> <Info>达标率 = 这一段在目标时限内做完的单 ÷ 这一段做完的单；目标在标题旁 ⚙ 或「规则参数」里改。达标率才是能评判的数；中位数 = 一般多久；「最慢 10%」= 十张单里最慢的那张要多久。最慢的单只当线索，点下面的单号进去看卡在哪。等客户的两段不算员工的。</Info> <RuleGear anchor="kpi-targets" title="时效目标" ids={['kpi.s0', 'kpi.s1', 'kpi.s2', 'kpi.s4', 'kpi.s5']} /></h2></div>
+        <Grid id="kpi-seg" noTools rows={segRows.filter((r) => !sel || r.area === sel)} rowKey={(r) => r.key} columns={[
           { key: 'name', label: '这一段', w: 230, render: (r) => <b>{r.name}</b> },
           { key: 'owner', label: '算谁的', w: 100, render: (r) => <span className={`pill ${r.owner.startsWith('客户') ? 'gray' : 'blue'}`}>{r.owner}</span> },
           { key: 'n', label: '几单', w: 60, type: 'number' },
@@ -137,11 +153,10 @@ export default function Kpi() {
             <div className="chips">{segRows.filter((r) => r.target && r.late.length).map((r) => <button type="button" key={r.key} className={`chip ${lateSeg === r.key ? 'on' : ''}`} onClick={() => setLateSeg(lateSeg === r.key ? null : r.key)}>{r.name.split(' → ')[1] || r.name} {r.late.length}</button>)}</div>
             {segRows.every((r) => !r.target || !r.late.length) && <span className="small muted">没有超时的单 ✓</span>}</div>
           {lateSeg != null && segRows[lateSeg] && <div style={{ marginTop: 6 }}>{segRows[lateSeg].late.slice(0, 30).map((x) => <div key={x.id} className="todo-line"><DealLink id={x.id} no={x.no} /><span>{x.customer}</span><span className="small muted">{x.lines} 个型号</span><span className="grow" /><b className="red-t2">{fmtMin(x.m)}</b><span className="small muted">目标 {fmtMin(segRows[lateSeg].target)}</span></div>)}</div>}
-          <div className="small muted" style={{ marginTop: 8 }}>达标率 = 这一段在目标时限内做完的单 ÷ 这一段做完的单。目标点上面标题旁的 ⚙ 改。系统量的是「点按钮的时间」；现在员工还没在系统里干活，数字只当参考，不考核。<Assumed>目标先按 报价确认 30 分钟、找货初检 2 小时、出销售单 30 分钟、复检打包 1 小时、出库 1 小时 定的；客户确认、签收、对账是客户的时间，不设目标。不到 10 单的数字灰掉。</Assumed></div>
         </div>
-      </div>
-      <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-h"><h2>按人看：速度和准确率放一起 <Info>速度 = 他经手那一段的中位数。准确率（找货人）= 复检时被改了数量的行数 ÷ 他找的总行数。只看速度会逼人乱点完成，只看准确率会磨洋工，所以两个数并排。</Info></h2></div>
+      </div>}
+      {show('staff') && <div className="card" style={{ marginBottom: 12 }}>
+        <div className="card-h"><h2>按人看 <Info>速度和准确率放一起看。速度 = 他经手那一段的中位数。准确率（找货人）= 复检时被改了数量的行数 ÷ 他找的总行数。只看速度会逼人乱点完成，只看准确率会磨洋工，所以两个数并排。</Info></h2></div>
         <Grid id="kpi-people" rows={calc.people} rowKey={(r) => r.key} empty="还没有数据（步骤要由员工自己的账号点，才算得到人头上）" columns={[
           { key: 'name', label: '谁', w: 120, render: (r) => <b>{r.name}</b> },
           { key: 'role', label: '哪一段', w: 110 },
@@ -150,9 +165,9 @@ export default function Kpi() {
           { key: 'acc', label: '复检被改的行', w: 170, value: (r) => (r.role === '找货人' && calc.fix[r.name] ? calc.fix[r.name].fix : -1),
             render: (r) => { const f = r.role === '找货人' && calc.fix[r.name]; if (!f) return <span className="muted small">—</span>; const pct = f.lines ? (f.fix / f.lines) * 100 : 0; return <span className={`pill ${f.fix === 0 ? 'green' : pct > 5 ? 'red' : 'amber'}`}>{f.fix} / {f.lines} 行（每 100 行 {pct.toFixed(1)}）</span>; } },
         ]} />
-      </div>
-      <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-h"><h2>中方指令：几点下的、几点收到、几点完成 <RuleGear anchor="kpi-dir" title="指令规则" ids={['dir.ack']} /></h2><Info>规定下达后 5 分钟内点「收到」（只算上班时间）。超时的那几条，系统查了他那几分钟有没有在系统里操作订单：有 = 当时在忙；没有 = 没在看。</Info></div>
+      </div>}
+      {show('dir') && <div className="card" style={{ marginBottom: 12 }}>
+        <div className="card-h"><h2>中方指令 <RuleGear anchor="kpi-dir" title="指令规则" ids={['dir.ack']} /></h2><Info>规定下达后 5 分钟内点「收到」（只算上班时间）。超时的那几条，系统查了他那几分钟有没有在系统里操作订单：有 = 当时在忙；没有 = 没在看。</Info></div>
         <Grid id="kpi-dir" rows={calc.dirPeople} empty="这段时间没有下过指令" columns={[
           { key: 'emp_no', label: '工号', w: 80 }, { key: 'name', label: '谁', w: 120, render: (r) => <b>{r.name}</b> },
           { key: 'n', label: '收到几条', w: 90, type: 'number' },
@@ -162,19 +177,19 @@ export default function Kpi() {
           { key: 'doneMed', label: '收到 → 完成', w: 130, value: (r) => r.doneMed ?? -1, render: (r) => fmtMin(r.doneMed) },
           { key: 'rejects', label: '被退回', w: 90, type: 'number', render: (r) => (r.rejects ? <span className="pill amber">{r.rejects} 次</span> : '0') },
         ]} />
-      </div>
-      <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-h"><h2>报价建好 → 热线点开联系客户</h2>{calc.openLate.length > 0 ? <span className="pill red">{calc.openLate.length} 张超过 5 分钟</span> : <span className="pill green">都在 5 分钟内</span>}<Info>单一建好就该联系客户，规定 5 分钟内点开。客户不接不算他的错，但每次没接要在单里记「客户忙」。</Info></div>
+      </div>}
+      {show('hotline', 'quote') && <div className="card" style={{ marginBottom: 12 }}>
+        <div className="card-h"><h2>报价 → 热线点开</h2>{calc.openLate.length > 0 ? <span className="pill red">{calc.openLate.length} 张超过 5 分钟</span> : <span className="pill green">都在 5 分钟内</span>}<Info>单一建好就该联系客户，规定 5 分钟内点开。客户不接不算他的错，但每次没接要在单里记「客户忙」。</Info></div>
         <Grid id="kpi-open" rows={calc.openLate} empty="没有超时的" columns={[
           { key: 'biz_no', label: '订单号', w: 150, render: (r) => <DealLink id={r.id} no={r.biz_no} /> }, { key: 'customer_name', label: '客户', w: 160 },
           { key: 'created_at', label: '几点建的', w: 140, render: (r) => String(r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at).slice(0, 16).replace('T', ' ') },
           { key: 'mins', label: '过了多久才点开', w: 170, value: (r) => r.mins, render: (r) => <span className="pill red">{fmtMin(r.mins)}{r.opened ? '' : ' · 到现在还没点开'}</span> },
         ]} />
-      </div>
-      <HotlineKpi from={from} to={to} />
-      <SalesComm from={from} to={to} />
-      <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-h"><h2>仓库准确绩效 · 提成（正确出货每片 {data.rate} XOF） <RuleGear anchor="kpi-wh" title="仓库提成" ids={['wh.comm']} /></h2><Info>按出库的片数算给这张单的复核人（没有复核人就给找货人）。这张单被记了发错的责任（少发 / 多发 / 发错型号），整张单的提成取消，下面列出是哪几张。月底算工资照这张表。每片多少钱在「设置 → 规则参数」里可调。</Info></div>
+      </div>}
+      {show('hotline') && <HotlineKpi from={from} to={to} />}
+      {show('staff') && <SalesComm from={from} to={to} />}
+      {show('staff') && <div className="card" style={{ marginBottom: 12 }}>
+        <div className="card-h"><h2>仓库提成 <span className="small muted">每片 {data.rate} XOF</span> <RuleGear anchor="kpi-wh" title="仓库提成" ids={['wh.comm']} /></h2><Info>按出库的片数算给这张单的复核人（没有复核人就给找货人）。这张单被记了发错的责任（少发 / 多发 / 发错型号），整张单的提成取消，下面列出是哪几张。月底算工资照这张表。每片多少钱在「设置 → 规则参数」里可调。</Info></div>
         <Grid id="kpi-com" rows={calc.comPeople} empty="这段时间没有出库" columns={[
           { key: 'emp_no', label: '工号', w: 80 }, { key: 'name', label: '谁', w: 120, render: (r) => <b>{r.name}</b> },
           { key: 'deals', label: '经手几单', w: 90, type: 'number' }, { key: 'pieces', label: '出库片数', w: 100, type: 'number', render: (r) => qtyf(r.pieces) },
@@ -183,8 +198,8 @@ export default function Kpi() {
           { key: 'amount', label: '提成 XOF', w: 120, type: 'number', render: (r) => <b>{qtyf(r.amount)}</b> },
           { key: 'voided', label: '发错被取消的单', w: 320, value: (r) => r.voided.length, render: (r) => (r.voided.length ? <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}><span className="pill red">{r.voided.length} 单 · 少拿 {qtyf(r.lost)}</span>{r.voided.map((v) => <DealLink key={v.deal_id} id={v.deal_id} no={v.biz_no} />)}</span> : <span className="pill green">0</span>) },
         ]} />
-      </div>
-      <div className="card">
+      </div>}
+      {show(...FLOWK) && <div className="card">
         <div className="card-h"><h2>每张单</h2></div>
         <Grid id="kpi-deals" rows={calc.rows} empty="这段时间没有单" columns={[
           { key: 'biz_no', label: '订单号', w: 150, render: (r) => <DealLink id={r.id} no={r.biz_no} /> },
@@ -193,7 +208,7 @@ export default function Kpi() {
           { key: 'total', label: '建单 → 出库', w: 130, value: (r) => r.total ?? -1, render: (r) => <b>{fmtMin(r.total)}</b> },
           ...SEGS.map(([name], i) => ({ key: 's' + i, label: name.replace(' → ', '→'), w: 150, value: (r) => r['s' + i] ?? -1, render: (r) => (r['s' + i] == null ? '' : fmtMin(r['s' + i])) })),
         ]} />
-      </div>
+      </div>}
     </>
   );
 }

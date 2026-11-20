@@ -154,11 +154,11 @@ const fmt = (n, cur) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 
 
 // 改价偏差预警阈值 (待改 18): stored per browser in the demo; admin only
 export const DEFAULT_THRESHOLDS = [5, 10, 20];
-export function getThresholds() {
-  try { const v = JSON.parse(localStorage.getItem('la9s.priceThresholds')); if (Array.isArray(v) && v.length === 3) return v.map(Number); } catch { /* ignore */ }
-  return DEFAULT_THRESHOLDS;
-}
-export function setThresholds(v) { try { localStorage.setItem('la9s.priceThresholds', JSON.stringify(v)); } catch { /* ignore */ } }
+// 11-20: 改价偏差不再存浏览器, 统一读规则参数 price_rules —— 偏离 ≥ warn_pct 标黄, ≥ odd_pct 标红 (= 异价单); 只有黄 / 红两档 (全站三色规矩)
+let PRICE_TH = [5, 10, 10];
+export function setPriceRules(v) { const w = Number(v?.warn_pct) || 5; const o = Number(v?.odd_pct) || 10; PRICE_TH = [w, Math.max(o, w), Math.max(o, w)]; }
+export function getThresholds() { return PRICE_TH; }
+export function setThresholds() { /* 老接口, 不再用 */ }
 // deviation level of a price vs the tier price: 0 none, 1 yellow, 2 orange, 3 red, 4 zero price
 export function priceLevel(price, tierPrice, th = getThresholds()) {
   const p = Number(price), t = Number(tierPrice);

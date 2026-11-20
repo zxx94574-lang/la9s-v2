@@ -908,6 +908,22 @@ export function useStickyPagehead() {
 // 442 (Frank 11-19): 鼠标放上去要马上出提示. 浏览器自带的 title 提示固定要等 1 秒多 → 全站接管:
 // 鼠标移到任何带 title / data-tip 的东西上, 立刻出我们自己的小黑框 (挂一次, 所有页面自动有). 手机不启用 (没有悬停).
 export function useInstantTips() {
+  // 11-20: 全站 ⓘ / ! 小图标的说明框 —— 放到屏幕坐标上 (position: fixed), 靠右 / 靠下放不下就往回挪, 不会被卡片裁掉、不超出屏幕
+  useEffect(() => {
+    const place = (e) => {
+      const ic = e.target instanceof Element ? e.target.closest('.info-i') : null; if (!ic) return;
+      const tip = ic.querySelector(':scope > .info-tip'); if (!tip) return;
+      tip.style.position = 'fixed'; tip.style.left = '0px'; tip.style.top = '0px'; tip.style.right = 'auto'; tip.style.bottom = 'auto';
+      requestAnimationFrame(() => {
+        const r = ic.getBoundingClientRect(); const w = tip.offsetWidth; const h = tip.offsetHeight;
+        let left = r.left; if (left + w > window.innerWidth - 8) left = Math.max(8, window.innerWidth - w - 8);
+        let top = r.bottom + 6; if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+        tip.style.left = `${left}px`; tip.style.top = `${top}px`;
+      });
+    };
+    document.addEventListener('mouseover', place, true); document.addEventListener('focusin', place, true);
+    return () => { document.removeEventListener('mouseover', place, true); document.removeEventListener('focusin', place, true); };
+  }, []);
   useEffect(() => {
     if (window.matchMedia?.('(hover: none)').matches) return undefined;
     const tip = document.createElement('div'); tip.className = 'cell-tip itip'; tip.style.display = 'none'; document.body.appendChild(tip);

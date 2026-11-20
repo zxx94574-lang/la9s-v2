@@ -10,10 +10,10 @@ import CodeReview from './pages/CodeReview.jsx';
 import { DirectiveGate } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info, useStickyPagehead, useInstantTips } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
-import { ExportPanel, DocSettings, PermPanel } from './components/SettingsPanels.jsx';
+import { ExportPanel } from './components/SettingsPanels.jsx';
 import { loadAllOpts } from './components/Opts.jsx';
 import { loadGridAlign } from './lib/gridPrefs.js';
-import { ROLES, can, getThresholds, setThresholds, DEFAULT_THRESHOLDS, setPermOverride } from './lib/domain.js';
+import { ROLES, setPermOverride, setPriceRules } from './lib/domain.js';
 import { t, getLang, setLang as setLangStore, LANGS } from './lib/i18n.js';
 import Dashboard from './pages/Dashboard.jsx';
 import QuoteNew from './pages/QuoteNew.jsx';
@@ -123,6 +123,7 @@ export default function App() {
   useEffect(() => { if (org) q(`select value from app.org_settings where org_id = $1 and key = 'nav'`, [org]).then((r) => setNavCfg(r[0]?.value || null)); }, [org, tick]);
   // 权限配置 (11-09): 开局和每次 refresh 读一遍, can() 立即按新配置走
   const [permTick, setPermTick] = useState(0);
+  useEffect(() => { if (org) q(`select value from app.org_settings where org_id = $1 and key = 'price_rules'`, [org]).then((r) => setPriceRules(r[0]?.value)).catch(() => {}); }, [org, tick]);
   useEffect(() => { if (org) q(`select value from app.org_settings where org_id = $1 and key = 'perm_matrix'`, [org]).then((r) => { setPermOverride(r[0]?.value || {}); setPermTick((x) => x + 1); }).catch(() => {}); Promise.all([loadAllOpts(org), loadGridAlign(org)]).then(() => setPermTick((x) => x + 1)); }, [org, tick]);
   // 侧栏宽度: 拖右边缘 (180–380), 每个人自己的
   const dragSide = (e) => {
@@ -351,23 +352,19 @@ export default function App() {
       {settings && (
         <Modal title="设置" onClose={() => setSettings(false)}>
           <div className="stack">
-            <div className="field"><label>语言</label>
+            <div className="field"><label>语言 <Info>已翻译：导航、岗位、订单状态、流程步骤、给客户的单据（报价单、销售单、Balance）。其余页面文字还是中文，按页面陆续补。</Info></label>
               <div className="seg">{LANGS.map(([k, l]) => <button type="button" key={k} className={lang === k ? 'on' : ''} onClick={() => changeLang(k)}>{l}</button>)}</div>
-              <span className="hint">已翻译：导航、岗位、订单状态、流程步骤、给客户的单据（报价单、销售单、Balance）。其余页面文字还是中文，按页面陆续补。</span>
+
             </div>
             {role === 'admin' && <LayoutSwitch onDone={() => setSettings(false)} />}
-            <Thresholds role={role} toast={toast} />
-            {role === 'admin' && <div className="field"><label>规则参数</label><div className="row" style={{ gap: 8 }}><span className="hint grow">每条规则都在用到它的那一页旁边的 ⚙ 里改（例：时效目标在「时效与准确率」）。总表只列出来、点了跳过去。</span><button type="button" className="btn sm" onClick={() => { setSettings(false); go('rules'); }}>看总表 ›</button></div></div>}
-            <PermPanel />
+            {role === 'admin' && <div className="field"><label>规则与系统参数 <Info>所有阈值、开关、权限表、发货文件都在这一页：顶上按订单流程和日常工作排好，点哪个环节只看那里的规则。</Info></label><div><button type="button" className="btn" onClick={() => { setSettings(false); go('rules'); }}>打开规则与系统参数 ›</button></div></div>}
             <ExportPanel />
-            <DocSettings />
             {!SERVER && <><div className="field"><label>当前岗位（演示）</label>
               <select className="in" value={role} onChange={(e) => setRole(e.target.value)}>{Object.entries(ROLES).map(([k, r]) => <option key={k} value={k}>{r.label} — {r.desc}</option>)}</select>
             </div>
-            <div className="field"><label>演示数据</label>
+            <div className="field"><label>演示数据 <Info>{isPersistent() ? '数据存在本浏览器（IndexedDB），换设备不同步。' : '当前浏览器不允许存储。'}</Info></label>
               <div className="row">
                 <ResetButton onReset={async () => { const o = await resetDemo(); setOrg(o); setSettings(false); refresh(); go('dashboard'); toast('演示数据已重置'); }} />
-                <span className="hint">{isPersistent() ? '数据存在本浏览器（IndexedDB），换设备不同步。' : '当前浏览器不允许存储。'}</span>
               </div>
             </div></>}
           </div>
@@ -392,35 +389,13 @@ function ResetButton({ onReset }) {
   );
 }
 
-// 改价偏差预警阈值 (待改 18)：只有中方能改
-function Thresholds({ role, toast }) {
-  const [v, setV] = useState(getThresholds().map(String));
-  const ok = can(role, 'settings_thresholds');
-  const save = () => {
-    const n = v.map(Number);
-    if (!(n[0] > 0 && n[0] < n[1] && n[1] < n[2] && n[2] <= 100)) return toast('请按 黄 < 橙 < 红 填写百分比', 'err');
-    setThresholds(n); toast('改价预警阈值已保存');
-  };
-  return (
-    <div className="field"><label>改价偏差预警（和档位价比，%）</label>
-      <div className="row" style={{ gap: 6 }}>
-        {['黄', '橙', '红'].map((l, i) => <span key={l} className="row" style={{ gap: 4 }}>{l} ≥<input className="in" style={{ width: 64 }} disabled={!ok} inputMode="numeric" value={v[i]} onChange={(e) => { const x = [...v]; x[i] = e.target.value.replace(/\D/g, ''); setV(x); }} />%</span>)}
-        {ok ? <><button type="button" className="btn sm primary" onClick={save}>保存</button><button type="button" className="btn sm" onClick={() => { setV(DEFAULT_THRESHOLDS.map(String)); setThresholds(DEFAULT_THRESHOLDS); }}>恢复 5/10/20</button></>
-          : <span className="hint">只有中方能改</span>}
-      </div>
-      <span className="hint">单价为 0 一律红色拦住，只有选「赠品 / 样品」才放行。</span>
-    </div>
-  );
-}
-
 // 设置 → 布局编辑 (开发者级, 只中方): 打开后, 已接入的页面每个板块上方出现编辑条
 function LayoutSwitch({ onDone }) {
   const on = useLayoutEdit();
   return (
-    <div className="field"><label>布局编辑（只中方）</label>
+    <div className="field"><label>布局编辑 <Info>只中方。调板块顺序、宽度（12 列对齐）、显示 / 隐藏、间距；每页单独保存，全员一致，定下来点「锁定为正式版」。现在接入：经营总览，其他页面陆续接。</Info></label>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <button type="button" className={`btn ${on ? '' : 'primary'}`} onClick={() => { setLayoutEdit(!on); onDone(); }}>{on ? '退出布局编辑' : '进入布局编辑'}</button>
-        <span className="hint">调板块顺序、宽度（12 列对齐）、显示 / 隐藏、间距；每页单独保存，全员一致，定下来点「锁定为正式版」。颜色固定品牌蓝。现在接入：经营总览、新建询单 / 报价，其他页面陆续接。</span>
       </div>
     </div>
   );

@@ -2,13 +2,13 @@
 import React, { useState } from 'react';
 import { q, call, REAL } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, FileDrop, Modal, MoneyIn } from './ui.jsx';
+import { useApp, useData, FileDrop, Modal, Info } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { PERM_GROUPS, PERM_ROLES, defaultRoles } from '../lib/perm.js';
 import { ROLE_LABELS, rolesFor } from '../lib/domain.js';
 import { saveFile } from '../lib/saveFile.js';
 import { friendlyError, dt } from '../lib/format.js';
-import { BL_TYPES_DEFAULT, GS_DEFAULT, BL_SUGGEST_DEFAULT } from './Bl.jsx';
+import { BL_TYPES_DEFAULT, GS_DEFAULT } from './Bl.jsx';
 
 export function ExportPanel() {
   const { org, role, toast } = useApp();
@@ -32,14 +32,13 @@ export function ExportPanel() {
     } catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(''); }
   };
   return (
-    <div className="field"><label>数据导出（整库）{REAL && <Pill tone="amber">真实数据版：每周导一次存飞书云盘</Pill>}</label>
+    <div className="field"><label>导出整库 <Info>JSON 是完整备份（含证件照，以后能原样导回）；Excel 每张表一个工作表给人看。系统只记录谁、几点、导了多少行，不保存文件。{REAL ? '真实数据版：每周导一次存飞书云盘。' : ''}</Info></label>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <button type="button" className="btn sm primary" disabled={!!busy} onClick={() => run('both')}>⇩ 导出整库（JSON + Excel）</button>
         <button type="button" className="btn sm" disabled={!!busy} onClick={() => run('json')}>只要 JSON</button>
         <button type="button" className="btn sm" disabled={!!busy} onClick={() => run('xlsx')}>只要 Excel</button>
         {busy && <span className="small muted">{busy}</span>}
       </div>
-      <span className="hint">JSON 是完整备份（含证件照，以后能原样导回）；Excel 每张表一个工作表给人看。系统只记录谁、几点、导了多少行，不保存文件。</span>
       {role === 'admin' && log?.length > 0 && <div className="small muted" style={{ marginTop: 6 }}>最近导出：{log.slice(0, 3).map((l) => `${dt(l.at)} ${l.who || ''} ${l.kind}${l.detail?.rows ? ` ${Number(l.detail.rows).toLocaleString()} 行` : ''}`).join('；')}</div>}
     </div>
   );
@@ -51,9 +50,9 @@ export function DocSettings() {
   const { org, role, toast, refresh } = useApp();
   const [tick, setTick] = useState(0);
   const { data } = useData(async () => {
-    const [[customs], [logo], [hdr], [sug]] = await Promise.all([q(Q.orgFile, [org, 'customs']), q(Q.orgFile, [org, 'logo_gs']),
-      q(`select value from app.org_settings where org_id = $1 and key = 'doc_header_gs'`, [org]), q(`select value from app.org_settings where org_id = $1 and key = 'bl_suggest'`, [org])]);
-    return { customs, logo, header: { ...GS_DEFAULT, ...(hdr?.value || {}) }, suggest: { ...BL_SUGGEST_DEFAULT, ...(sug?.value || {}) } };
+    const [[customs], [logo], [hdr]] = await Promise.all([q(Q.orgFile, [org, 'customs']), q(Q.orgFile, [org, 'logo_gs']),
+      q(`select value from app.org_settings where org_id = $1 and key = 'doc_header_gs'`, [org])]);
+    return { customs, logo, header: { ...GS_DEFAULT, ...(hdr?.value || {}) } };
   }, [org, tick]);
   if (role !== 'admin' || !data) return null;
   const upload = async (key, file, okTypes, maxMb) => {
@@ -64,9 +63,9 @@ export function DocSettings() {
     catch (e) { toast(friendlyError(e), 'err'); }
   };
   const setting = async (key, value, msg) => { try { await call(role, `select app.set_org_setting($1,$2,$3)`, [org, key, JSON.stringify(value)]); toast(msg || '已保存'); setTick((x) => x + 1); } catch (e) { toast(friendlyError(e), 'err'); } };
-  const { customs, logo, header, suggest } = data;
+  const { customs, logo, header } = data;
   return (
-    <div className="field"><label>发货文件（BL + 海关文件）</label>
+    <div className="field"><label>发货文件（BL + 海关文件） <Info>出库记录里每批都有「BL ×2」和「海关文件」两个按钮；到「大单建议打印」阈值的单会标出来（阈值在「复检·出库」这一环节）。海关文件换批次时在这里重传。</Info></label>
       <div className="stack" style={{ gap: 8 }}>
         <div className="grid2">
           <div className="stack" style={{ gap: 4 }}><span className="small">随货附件（海关 PDF）{customs ? <> · 现在是 <b>{customs.name}</b>（{Math.round(customs.bytes / 1024)} KB，{dt(customs.uploaded_at)}）</> : <span className="muted"> · 还没上传</span>}</span>
@@ -79,11 +78,6 @@ export function DocSettings() {
           <div className="field" style={{ marginTop: 8 }}><label>BL 上「Type」怎么写（一行一个：种类=单据名称；BL 不出中文，没写的种类留空）</label>
             <textarea className="in" rows={5} defaultValue={Object.entries({ ...BL_TYPES_DEFAULT, ...(header.types || {}) }).map(([k, v]) => `${k}=${v}`).join('\n')} key={JSON.stringify(header.types || {})}
               onBlur={(e) => { const t = Object.fromEntries(e.target.value.split('\n').map((x) => x.split('=').map((y) => y.trim())).filter((x) => x[0] && x[1])); setting('doc_header_gs', { ...header, types: t }); }} /></div>
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="small">大单建议打印：金额 ≥</span><MoneyIn className="in" style={{ width: 120 }} inputMode="numeric" defaultValue={suggest.amount} key={`a${suggest.amount}`} onBlur={(e) => Number(e.target.value) !== Number(suggest.amount) && setting('bl_suggest', { ...suggest, amount: Number(e.target.value) || 0 })} />
-          <span className="small">XOF 或件数 ≥</span><MoneyIn className="in" style={{ width: 90 }} inputMode="numeric" defaultValue={suggest.qty} key={`q${suggest.qty}`} onBlur={(e) => Number(e.target.value) !== Number(suggest.qty) && setting('bl_suggest', { ...suggest, qty: Number(e.target.value) || 0 })} />
-        </div>
-        <span className="hint">出库记录里每批都有「BL ×2」和「海关文件」两个按钮；到阈值的单会标「大单 · 建议打印」，小单不强制。海关文件换批次时在这里重传。</span>
       </div>
     </div>
   );
@@ -103,10 +97,9 @@ export function PermPanel() {
   const rows = PERM_GROUPS.flatMap(([g, list]) => list.map(([k, l]) => ({ id: k, group: g, label: l })));
   const toggle = (k, r, on) => { const cur = new Set(m && Array.isArray(m[k]) ? m[k] : defaultRoles(k)); on ? cur.add(r) : cur.delete(r); save({ ...(m || {}), [k]: [...cur] }); };
   return (
-    <div className="field"><label>权限配置</label>
+    <div className="field"><label>权限表 <Info>每个动作谁能做，你勾；中方永远全开。改完立即生效。</Info></label>
       <div className="row" style={{ gap: 8 }}>
         <button type="button" className="btn sm" onClick={load}>打开权限表（动作 × 岗位）</button>
-        <span className="hint">每个动作谁能做，你勾；中方永远全开。改完立即生效。</span>
       </div>
       {open && <Modal title="权限配置 · 动作 × 岗位" wide onClose={() => setOpen(false)}
         footer={<><button type="button" className="btn" onClick={() => save(null)}>恢复默认</button><span className="grow" /><button type="button" className="btn primary" onClick={() => setOpen(false)}>关闭</button></>}>

@@ -1620,3 +1620,42 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
   .opt-add { padding-left: 0; padding-right: 3px; }
 }
 .opt-row .opt-color { padding-right: 2px; }
+
+/* 11-20 工作地图: 规则参数 / 时效与准确率共用. 上排订单流程 (带箭头), 下排流程以外; 每格 = 名字 + 一行小字 */
+.wmap { background: #fff; border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
+.wm-row { display: flex; flex-wrap: wrap; gap: 6px 4px; align-items: stretch; }
+.wm-cell { display: inline-flex; align-items: center; gap: 4px; }
+.wm-flow .wm-cell { flex: 1 1 110px; }
+.wm-flow .wm-step { flex: 1; }
+.wm-step { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 96px; padding: 7px 8px; border: 1px solid var(--line-2); border-radius: 10px; background: #fff; cursor: pointer; font: inherit; color: inherit; }
+.wm-step:hover { border-color: #b8c8e6; }
+.wm-step b { font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+.wm-step span { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.wm-step.on { border: 2px solid var(--brand); background: #eef3fc; padding: 6px 7px; }
+.wm-step.on b, .wm-step.on span { color: var(--brand); }
+.wm-step.t-red span { color: var(--red); } .wm-step.t-amber span { color: #b45309; } .wm-step.t-green span { color: #15803d; } .wm-step.t-gray b { color: var(--muted); font-weight: 500; }
+.wm-arrow { font-style: normal; color: #94a3b8; font-size: 18px; flex: 0 0 auto; }
+.wm-other { border-top: 1px dashed var(--line-2); padding-top: 8px; }
+.wm-lab { font-size: 12px; color: var(--muted); align-self: center; margin-right: 4px; white-space: nowrap; }
+.wm-other .wm-step { flex-direction: row; gap: 6px; min-width: 0; padding: 5px 10px; }
+.wm-other .wm-step.on { padding: 4px 9px; }
+@media (max-width: 760px) { .wm-flow { flex-wrap: nowrap; overflow-x: auto; } .wm-flow .wm-cell { flex: 0 0 auto; } }
+/* 规则一行 */
+.rl { display: grid; }
+.rl-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line-2); }
+.rl-row:first-child { border-top: 0; }
+.rl-name { min-width: 0; overflow-wrap: anywhere; }
+.rl-num { display: inline-flex; align-items: center; gap: 6px; }
+.rl-in { width: 110px; text-align: right; }
+.rl-tog { cursor: pointer; border: 0; min-width: 44px; }
+.rl-ico { display: inline-flex; gap: 4px; align-items: center; min-width: 40px; }
+.rl-tip { display: grid; grid-template-columns: 64px 1fr; gap: 4px 8px; text-align: left; min-width: 240px; }
+.rl-tip i { font-style: normal; color: #94a3b8; }
+
+.rl { grid-template-columns: repeat(auto-fill, minmax(min(100%, 470px), 1fr)); column-gap: 28px; }
+.rl-row { grid-template-columns: minmax(0, 1fr) auto 48px; border-top: 1px solid var(--line-2); }
+.rl-row:first-child { border-top: 1px solid var(--line-2); }
+.rl-num { min-width: 160px; justify-content: flex-end; } .rl-num .small { white-space: nowrap; min-width: 34px; }
+.rl-tog { min-width: 56px; } .rl-row > .rl-tog { justify-self: end; }
+.rl-tip span { white-space: normal; }
+.rl-num .rl-in, .rl-row > .rl-in { width: 120px !important; flex: 0 0 120px; }

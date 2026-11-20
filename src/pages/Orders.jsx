@@ -13,7 +13,7 @@ import { MultiPick, Schemes } from '../components/FilterBar.jsx';
 import Inquiry from './Inquiry.jsx';
 import { OPEN_DRAFT } from './QuoteNew.jsx';
 import { USERS } from '../db/bootstrap.js';
-import { STATUS, TIERS, seesPrice, can, dealLight, stuckOf, LIGHT_LABEL } from '../lib/domain.js';
+import { STATUS, TIERS, seesPrice, can, dealLight, stuckOf, LIGHT_LABEL, STEPS, reachedStep } from '../lib/domain.js';
 import { money, qty, dt, periodRange, PERIODS } from '../lib/format.js';
 
 const GROUPS = [['', '全部状态'], ['open', '进行中'], ['quoted,hotline_ok', '只报价'], ['picking,picked', '找货中'], ['ordered', '待客户确认'], ['confirmed,reviewed', '待复检 / 待出库'], ['partial,shipped', '已出库'], ['unpaid', '已出库未收清'], ['cancelled', '已作废']];
@@ -23,7 +23,8 @@ export default function Orders() {
   const { org, go, role } = useApp();
   // 看板上点某个颜色跳过来: 带时间段 + 灯色 (一次性)
   const [jump] = useState(() => { try { const j = JSON.parse(sessionStorage.getItem('la9s.orders.jump')); sessionStorage.removeItem('la9s.orders.jump'); return j; } catch { return null; } });
-  const P = usePeriod('orders', 'year', jump ? { period: 'custom', custom: [jump.from, jump.to] } : null);
+  const P = usePeriod('orders', 'year', jump?.from ? { period: 'custom', custom: [jump.from, jump.to] } : null);
+  const [stepF, setStepF] = useState(jump?.step || '');   // 11-20: 规则参数「看卡在这一步的单」跳过来
   const { period, custom, setPeriod, setCustom } = P;
   const { from, to } = P;
   const [open, setOpen] = useState(false);
@@ -46,6 +47,7 @@ export default function Orders() {
   const voided = useData(() => q(Q.voidedDeals, [org]), [org]).data || [];
   const modelDeals = useMemo(() => new Set(olines.filter((l) => fmodel.includes(l.model)).map((l) => l.deal_id)), [olines, fmodel]);
   const rows = useMemo(() => (data || []).filter((d) => {
+    if (stepF) { if (d.status === 'cancelled' || STEPS[reachedStep(d) + 1]?.key !== stepF) return false; }
     if (light) { if (dealLight(d) !== light) return false; } else if (d.status === 'cancelled' && grp !== 'cancelled') return false;   // 作废的单默认在「已作废」页签; 选了红灯就显示
     if (tier && d.tier !== tier) return false;
     if (fcust.length && !fcust.includes(d.customer_id)) return false;
@@ -57,7 +59,7 @@ export default function Orders() {
     if (grp && !['open', 'unpaid'].includes(grp) && !grp.split(',').includes(d.status)) return false;
     if (text) { const t = text.toUpperCase(); if (![d.biz_no, d.customer_name, d.customer_code, d.city, d.quote_no, d.so_no].some((x) => String(x || '').toUpperCase().includes(t))) return false; }
     return true;
-  }), [data, text, tier, grp, light, fcust, ftier, fpay, fmodel, modelDeals]);
+  }), [data, text, tier, grp, light, fcust, ftier, fpay, fmodel, modelDeals, stepF]);
   const price = seesPrice(role);
   const mRows = useData(() => (role === 'admin' ? call(role, `select deal_id, qty, revenue, cost, profit, cost_missing, cost_goods, sale, returned, adjust, freight, fee from app.margin_rows($1)`, [org]) : Promise.resolve([])), [org, role]).data;
   const margins = useMemo(() => { const by = {}; for (const r of mRows || []) (by[r.deal_id] ||= []).push(r); return Object.fromEntries(Object.entries(by).map(([k, v]) => [k, sumMargin(v)])); }, [mRows]);
@@ -150,6 +152,7 @@ export default function Orders() {
             ]} foot={(rs) => ({ model: '合计', pcs: `${qty(rs.reduce((a, r) => a + r.pcs, 0))} 片`, ...(price ? { amount: money(rs.reduce((a, r) => a + r.amount, 0)) } : {}) })} />
           </>
         ) : null}
+        {stepF && <div className="banner" style={{ marginBottom: 8 }}>只看现在卡在「{STEPS.find((x) => x.key === stepF)?.label}」这一步的单（{rows.length} 张） <button type="button" className="btn sm ghost" onClick={() => setStepF('')}>看全部 ×</button></div>}
         {light !== 'draft' && mode === 'orders' && <Grid id="orders" table="deals" columns={cols} rows={rows} onShown={(rs, conds, qq) => { const ms = conds.filter((c) => c.key === 'models').flatMap((c) => (c.op === 'in' ? c.vals || [] : c.op === 'contains' ? [c.a] : [])).map((v) => String(v || '').toUpperCase()).filter(Boolean); setPeekHighlight([...ms, qq]); setGridShown({ rows: rs, models: (conds.find((c) => c.key === 'models' && c.op === 'in')?.vals || []).map((v) => String(v).toUpperCase()) }); }} onRowClick={(d) => go('deal/' + d.id)} empty={!data ? '加载中…' : light ? `${custom && period === 'custom' ? `${custom[0]} 至 ${custom[1]} ` : '这个时间段'}没有「${LIGHT_LABEL[light]}」的订单` : (data.length ? '没有符合条件的订单' : '这个时间段还没有订单')}
           foot={(rows) => ({ biz_no: `合计 ${rows.length} 单`, qty: `${qty(rows.reduce((a, d) => a + Number(['quoted', 'hotline_ok'].includes(d.status) ? d.qty_req : d.qty_supply), 0))} 件`,
             amount: price ? money(rows.reduce((a, d) => a + Number(d.amount), 0)) : '', due: price ? money(rows.reduce((a, d) => a + Math.max(0, Number(d.due)), 0)) : '' })} />}
