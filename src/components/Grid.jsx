@@ -128,8 +128,18 @@ function edgeScroller(box) {
   };
 }
 
+// 父子行重排: 顶层按现在的顺序, 每个顶层后面接它的子行 (子行之间保持现在的顺序); 父行被筛掉的子行放在最后
+function treeOrder(rows, parentOf, rowKey) {
+  const kids = new Map(); const tops = []; const orphans = [];
+  for (const r of rows) { const p = parentOf(r); if (p == null) tops.push(r); else { if (!kids.has(p)) kids.set(p, []); kids.get(p).push(r); } }
+  const out = [];
+  for (const t of tops) { out.push(t); const k = kids.get(rowKey(t)); if (k) { out.push(...k); kids.delete(rowKey(t)); } }
+  for (const k of kids.values()) orphans.push(...k);
+  return out.concat(orphans);
+}
+
 export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyProp = (r) => r.id, rowClass, onRowClick, onDelete, selectable: selectableProp, foot, tools, empty = '暂无数据', maxHeight, noTools,
-  onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors, onShown, compactTools, slimTools, rowActions }) {
+  onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors, onShown, compactTools, slimTools, rowActions, parentOf }) {
   // 行没有 id 的表 (汇总表): 退到 key / employee_id / deal_id, 免得 React 报 key 重复、选区错位
   const rowKey = (r) => rowKeyProp(r) ?? r?.key ?? r?.employee_id ?? r?.deal_id ?? r?.code;
   // ── 每张表的自定义列 (Frank 11-08): 传 table="xxx" 就自动长出「选项设置」里加的列, 值存 row_attrs ──
@@ -203,9 +213,11 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
       const pos = new Map(layout.rowOrder.map((k, i) => [k, i]));
       out = [...out].map((r, i) => [r, i]).sort((a, b) => (pos.get(rowKey(a[0])) ?? 1e9 + a[1]) - (pos.get(rowKey(b[0])) ?? 1e9 + b[1])).map((x) => x[0]);
     }
+    // 有父子行的表 (parentOf(row) = 父行的 key; 顶层返回 null): 不管怎么排序 / 拖行, 子行永远紧跟在自己的父行下面 (Frank 11-20 发现拖了父行明细没跟走)
+    if (parentOf) out = treeOrder(out, parentOf, rowKey);
     return out;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, gf, sort, byKey, layout.rowOrder]);
+  }, [rows, gf, sort, byKey, layout.rowOrder, parentOf]);
   // 333 / 362 (Frank 11-17 / 11-18): 飞书式分组 —— 任意列都能当分组, 可以多级 (最多 3 级); 组内保持上面的筛选 / 排序; 组头 = 值 + 行数 (+ 数字列小计), 可收起.
   // 存法同筛选 (gf.groups = [{ key, dir }]; 老的 gf.group 照样认), 能存进筛选方案.
   const groupDefs = useMemo(() => (Array.isArray(gf.groups) && gf.groups.length ? gf.groups : (gf.group ? [{ key: gf.group, dir: 'asc' }] : [])).filter((g) => g.key && byKey[g.key]).slice(0, GROUP_MAX), [gf.groups, gf.group, byKey]);
@@ -256,6 +268,16 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   const moveRow = (from, to) => {
     if (from === to) return;
     if (onReorder) { onReorder(from, to, shown); return; }
+    if (parentOf) {   // 父子表: 只排顶层行, 拖子行 = 拖它的父行; 落点落在别人的子行上 = 落到那个父行
+      const top = (i) => { const r = shown[i]; const pk = r && parentOf(r); return pk == null ? rowKey(r) : pk; };
+      const tops = shown.filter((r) => parentOf(r) == null).map(rowKey);
+      const f = tops.indexOf(top(from)), t = tops.indexOf(top(to));
+      if (f < 0 || t < 0 || f === t) return;
+      const [k] = tops.splice(f, 1); tops.splice(t, 0, k);
+      setLayout((l) => ({ ...l, rowOrder: tops })); setSort(null);
+      if (navigator.vibrate) navigator.vibrate(8);
+      return;
+    }
     const keys = shown.map(rowKey); const [k] = keys.splice(from, 1); keys.splice(to, 0, k);
     setLayout((l) => ({ ...l, rowOrder: keys })); setSort(null);
     if (navigator.vibrate) navigator.vibrate(8);

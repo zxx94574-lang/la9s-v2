@@ -1,6 +1,6 @@
 // 426–437 (Frank 11-19): 经营总览的板块 —— 总览 / 本地销售与毛利 / FOB 销售与毛利 / 账款四张卡 / 打卡情况 / 客户拜访 / 热线电话.
 // 统一做法: 标题 → 一个大数 (带单位, 不省略) → 小方框 → 右端小实心 ▼ 展开明细 (默认收起).
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Assumed, Modal, MoneyIn, Choice, Info } from './ui.jsx';
 import { CustLink, EmpLink, DealLink, ModelLink } from './Archives.jsx';
@@ -134,10 +134,11 @@ export function SalesSection({ kind, rows, transit }) {
       if (!exp[p.k]) continue;
       const cb = new Map();
       for (const r of p.rows) { const k = keyOf.c(r); if (!cb.has(k)) cb.set(k, { k, label: keyOf.cl(r), rows: [], ref: r }); cb.get(k).rows.push(r); }
-      for (const c of [...cb.values()].map((g) => ({ ...g, t: total(g.rows, m) })).sort((a, b) => b.t.rev - a.t.rev)) out.push({ id: `c:${p.k}:${c.k}`, lvl: 1, label: c.label, t: c.t, ref: c.ref });
+      for (const c of [...cb.values()].map((g) => ({ ...g, t: total(g.rows, m) })).sort((a, b) => b.t.rev - a.t.rev)) out.push({ id: `c:${p.k}:${c.k}`, pk: p.k, lvl: 1, label: c.label, t: c.t, ref: c.ref });
     }
     return out;
   }, [list, exp, dim, kind, JSON.stringify(m)]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const parentOf = useCallback((r) => (r.lvl ? 'p:' + r.pk : null), []);
   const cols = [
     { key: 'label', label: fob ? '客户 / 订单' : dim === 'category' ? '种类 / 档位' : '档位 / 种类', w: 220, sortable: false, filterable: false, value: (r) => r.label,
       render: (r) => (r.lvl === 0
@@ -177,7 +178,7 @@ export function SalesSection({ kind, rows, transit }) {
           {open && !fob && <div className="seg sm">{[['category', '按种类'], ['tier', '按档位']].map(([k, l]) => <button type="button" key={k} className={dim === k ? 'on' : ''} onClick={() => { setDim(k); setExp({}); }}>{l}</button>)}</div>}
           <Fold open={open} onClick={() => setOpen(!open)} />
         </div>
-        {open && <div style={{ marginTop: 10 }}><Grid id={`dash-${kind}`} columns={cols} rows={table} noTools rowClass={(r) => (r.lvl ? 'dk-child' : '')}
+        {open && <div style={{ marginTop: 10 }}><Grid id={`dash-${kind}`} columns={cols} rows={table} noTools parentOf={parentOf} rowClass={(r) => (r.lvl ? 'dk-child' : '')}
           foot={() => ({ label: '合计', rev: money(t.rev, C), qty: qty(t.qty), cost: money(t.cost, C), profit: money(t.profit, C), pct: t.pct == null ? '—' : `${t.pct.toFixed(1)}%`, n: t.n })} /></div>}
       </div>}
       {dlg && <MergeDlg groups={groups} merge={merge} def={def} org={org} onClose={() => setDlg(false)} onSet={(x) => { setMerge(x); setDlg(false); }} />}
