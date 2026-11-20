@@ -1659,10 +1659,13 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 .rl-tog { min-width: 56px; } .rl-row > .rl-tog { justify-self: end; }
 .rl-tip span { white-space: normal; }
 .rl-num .rl-in, .rl-row > .rl-in { width: 120px !important; flex: 0 0 120px; }
-/* 11-20 Frank: 明细 / 展开按钮做大一点 (全站 Fold + 明细表行首展开) */
-.fold-btn { font-size: 13px; padding: 6px 12px; border: 1px solid var(--brand-soft2, #c9d8f2); background: var(--brand-soft); font-weight: 500; min-height: 30px; }
-.fold-btn i { font-size: 11px; }
+/* 11-20 Frank: 明细一律用 ☰ (单号预览同一个图标), 全站放大一号, 不另加框 */
+.peek-eye { width: 20px; height: 20px; font-size: 13px; line-height: 18px; }
+.peek-eye.on { color: var(--brand); border-color: var(--brand); background: var(--brand-soft); }
 .dk-row0 { display: inline-flex; align-items: center; gap: 6px; }
-.dk-exp { width: 24px; height: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #c9d8f2; border-radius: 6px; background: var(--brand-soft); font-size: 13px; flex: 0 0 auto; }
-.dk-exp:hover { background: #d9e5f8; }
-.dk-row1 { padding-left: 30px; }
+.dk-exp { margin: 0; }
+.dk-row1 { padding-left: 26px; }
+.fold-btn { font-size: 13px; }
+.fold-btn .fold-ico { font-style: normal; font-size: 14px; display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: var(--muted); margin-right: 2px; }
+.fold-btn.on .fold-ico, .fold-btn:hover .fold-ico { color: var(--brand); border-color: var(--brand); }
+.pill.tierp { white-space: nowrap; }

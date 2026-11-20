@@ -58,7 +58,19 @@ export function Modal({ title, onClose, children, footer, wide, risk }) {
 // 客户档位固定配色 (Frank 11-09, 同飞书): S 黄 / Wholesale 红 / Retail 蓝 / Repair 绿
 export const TIER_TONE = { S: 'amber', WHOLESALE: 'red', RETAIL: 'blue', REPAIR: 'green' };
 const TIER_NAME = { S: 'S', WHOLESALE: 'Wholesale shop', RETAIL: 'Retail shop', REPAIR: 'Repair shop' };
-export const TierPill = ({ tier, empty = '没档位', suffix = '' }) => (tier ? <span className={`pill ${TIER_TONE[tier] || 'gray'}`}>{TIER_NAME[tier] || tier}{suffix}</span> : <span className="pill gray">{empty}</span>);
+const TIER_SHORT = { S: 'S', WHOLESALE: 'Wholesale', RETAIL: 'Retail', REPAIR: 'Repair' };
+// 473 (Frank 11-20): 凡出现档位一律这个色块 (S 黄 / Wholesale 红 / Retail 蓝 / Repair 绿); short = 窄处去掉 shop, 不缩成单字母 (Retail / Repair 都是 R)
+export const TierPill = ({ tier, empty = '没档位', suffix = '', short }) => (tier ? <span className={`pill tierp ${TIER_TONE[tier] || 'gray'}`}>{(short ? TIER_SHORT : TIER_NAME)[tier] || tier}{suffix}</span> : <span className="pill gray">{empty}</span>);
+export const tierOpt = (o) => <TierPill tier={o.v} />;
+// 一句话里的档位名 (日志 / 提示是存成字的) → 显示时换成色块
+const TIER_WORD = { 'Wholesale shop': 'WHOLESALE', 'Retail shop': 'RETAIL', 'Repair shop': 'REPAIR', Wholesale: 'WHOLESALE', Retail: 'RETAIL', Repair: 'REPAIR', S: 'S' };
+const TIER_RE = /(Wholesale shop|Retail shop|Repair shop|Wholesale|Retail|Repair|(?<![A-Za-z0-9-])S(?![A-Za-z0-9-]))/g;
+export const TierText = ({ children }) => {
+  if (typeof children !== 'string') return children ?? null;
+  const parts = children.split(TIER_RE);
+  if (parts.length === 1) return children;
+  return <>{parts.map((x, i) => (i % 2 ? <TierPill key={i} tier={TIER_WORD[x]} short={!x.endsWith('shop') && x !== 'S'} /> : x))}</>;
+};
 // 订单三色灯 (Frank 11-09 19:10): 红 = 已取消 / 黄 = 进行中 / 绿 = 已完成
 export const LIGHT = { done: ['green', '已完成'], active: ['amber', '进行中'], cancelled: ['red', '已取消'] };
 export const Light = ({ v }) => { const [tone, label] = LIGHT[v] || LIGHT.active; return <span className={`pill ${tone}`}>{label}</span>; };
@@ -657,7 +669,8 @@ export function RateInput({ a, b = 'XOF', value, onChange, placeholder, invalid,
 // 平铺和下拉同高同圆角. options: ['a', 'b'] 或 [[值, 显示名, 右侧小字?]]. empty = 「不选」那一项的名字 (给了才有).
 const sv = (x) => (x == null ? '' : String(x));
 const normOpts = (options) => (options || []).filter((o) => o != null).map((o) => (Array.isArray(o) ? { v: o[0], l: String(o[1] ?? o[0]), hint: o[2] } : (typeof o === 'object' ? { v: o.v ?? o.value ?? o.id, l: String(o.l ?? o.label ?? o.name ?? ''), hint: o.hint } : { v: o, l: String(o) })));
-export function Choice({ value, onChange, options, empty, placeholder = '请选择', err, disabled, flat, width, style, className = '', size }) {
+export function Choice({ value, onChange, options, empty, placeholder = '请选择', err, disabled, flat, width, style, className = '', size, renderOpt }) {
+  const show = (o) => (renderOpt && !o.empty ? renderOpt(o) : o.l);
   const opts = normOpts(options);
   const asFlat = flat ?? (opts.length + (empty ? 1 : 0) <= 3 && opts.every((o) => o.l.length <= 12));
   const [open, setOpen] = useState(false); const [kw, setKw] = useState(''); const [hi, setHi] = useState(0); const [pos, setPos] = useState(null);
@@ -695,13 +708,13 @@ export function Choice({ value, onChange, options, empty, placeholder = '请选�
   if (asFlat) return (
     <span className={`choice-flat ${size === 'sm' ? 'sm' : ''} ${className}`} style={style} role="radiogroup">
       {all.map((o) => { const on = sv(o.v) === sv(value); return (
-        <button type="button" key={sv(o.v)} role="radio" aria-checked={on} disabled={disabled} className={`chip ${on ? 'on' : ''} ${err && !cur && !empty ? 'err' : ''}`} onClick={() => onChange(o.v)}>{o.l}</button>); })}
+        <button type="button" key={sv(o.v)} role="radio" aria-checked={on} disabled={disabled} className={`chip ${on ? 'on' : ''} ${err && !cur && !empty ? 'err' : ''}`} onClick={() => onChange(o.v)}>{show(o)}</button>); })}
     </span>);
   return (
     <>
       <button type="button" ref={btn} disabled={disabled} className={`in choice-btn ${size === 'sm' ? 'sm' : ''} ${err && !cur ? 'err-in' : ''} ${className}`} style={{ width, ...style }} aria-haspopup="listbox" aria-expanded={open}
         onClick={() => setOpen((o) => !o)} onKeyDown={(e) => { if (!open && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setOpen(true); } }}>
-        <span className={`choice-v ${cur ? '' : 'ph'}`}>{cur ? cur.l : (empty && (value ?? '') === '' ? empty : placeholder)}</span><span className="choice-caret">▾</span>
+        <span className={`choice-v ${cur ? '' : 'ph'}`}>{cur ? show(cur) : (empty && (value ?? '') === '' ? empty : placeholder)}</span><span className="choice-caret">▾</span>
       </button>
       {open && pos && createPortal(
         <div className="menu choice-pop" ref={pop} style={{ position: 'fixed', ...pos }} role="listbox" onKeyDown={key}>
@@ -709,7 +722,7 @@ export function Choice({ value, onChange, options, empty, placeholder = '请选�
           <div className="choice-list">
             {list.map((o, i) => { const on = sv(o.v) === sv(value); return (
               <button type="button" key={sv(o.v)} role="option" aria-selected={on} className={`opt ${i === hi ? 'hi' : ''} ${on ? 'on' : ''} ${o.empty ? 'muted' : ''}`} onMouseEnter={() => setHi(i)} onClick={() => pick(o)}>
-                <span className="opt-l">{o.l}</span>{o.hint ? <span className="opt-h">{o.hint}</span> : null}{on ? <span className="tick">✓</span> : null}
+                <span className="opt-l">{show(o)}</span>{o.hint ? <span className="opt-h">{o.hint}</span> : null}{on ? <span className="tick">✓</span> : null}
               </button>); })}
             {!list.length && <div className="small muted" style={{ padding: 10 }}>没有匹配的选项</div>}
           </div>

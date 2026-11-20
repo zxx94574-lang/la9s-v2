@@ -6,7 +6,7 @@ import { RuleGear } from '../components/Rules.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, Info, Assumed, MoneyIn, DatePicker, Shared } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, Info, Assumed, MoneyIn, DatePicker, Shared, TierPill } from '../components/ui.jsx';
 import { AvailPill } from '../components/DocPeek.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
@@ -169,7 +169,7 @@ function ConvertModal({ inq, catalog, categories, onClose }) {
     <Modal wide title={`${view ? '询单' : '转成报价'} · ${inq.iq_no}`} onClose={onClose} footer={view ? <button type="button" className="btn" onClick={onClose}>关闭</button> : <><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><span className="small muted">合计 {money(total)} XOF</span><button type="button" className="btn primary" onClick={goConv}>转成报价</button></>}>
       <div className="stack">
         <div className="kv-row"><span><Pill tone={INQ_SOURCE[inq.source][1]}>{INQ_SOURCE[inq.source][0]}</Pill></span><span>客户 <b>{whoOf(inq)}</b>{!inq.customer_id && inq.guest_info?.phone ? ` · ${fmtPhone(inq.guest_info.phone)}` : ''}{inq.guest_info?.city ? ` · ${inq.guest_info.city}` : ''}</span>
-          {inq.customer_id ? <span className="small muted">档位 {inq.tier || '没定'}</span> : <span className="pill amber">游客自报：{GUEST_LEVELS.find((x) => x.v === inq.guest_info?.level)?.l.split(' · ')[0] || '没填'} → 转报价时建成潜客，先按 {inq.guest_info?.level === 'REPAIR' ? 'Repair' : 'Retail'} shop（系统默认 · 未确认），档位要你定</span>}<span className="small muted">{dt(inq.created_at)}</span></div>
+          {inq.customer_id ? <span className="small muted">档位 <TierPill tier={inq.tier} empty="没定" /></span> : <span className="pill amber">游客自报：{GUEST_LEVELS.find((x) => x.v === inq.guest_info?.level)?.l.split(' · ')[0] || '没填'} → 转报价时建成潜客，先按 <TierPill tier={inq.guest_info?.level === 'REPAIR' ? 'REPAIR' : 'RETAIL'} />（系统默认 · 未确认），档位要你定</span>}<span className="small muted">{dt(inq.created_at)}</span></div>
         {inq.note && <div className="hint">备注：{inq.note}</div>}
         <Grid id="inq-conv" noTools rows={rows} rowKey={(r) => String(r._i)} columns={[
           { key: 'code', label: '编码', w: 80, mono: true, value: (r) => r.p?.code || '没编码', render: (r) => r.p?.code || <Pill tone="amber">没编码</Pill> },

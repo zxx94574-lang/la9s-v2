@@ -3,7 +3,7 @@
 // ChangeNotices —— 「变更通知」: 不按正常流程走的事一条条记, 中方点「已阅」才消失
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Pill, Info, Thumb } from './ui.jsx';
+import { useApp, useData, Pill, Info, Thumb, TierText } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { CustLink, DealLink, EmpLink } from './Archives.jsx';
 import { NoteModal } from '../pages/DealPanels.jsx';
@@ -139,7 +139,7 @@ export function ChangeNotices() {
         { key: 'biz_no', label: '订单', w: 130, render: (n) => (n.deal_id ? <DealLink id={n.deal_id} no={n.biz_no} /> : '—') },
         { key: 'customer_name', label: '客户', w: 120, render: (n) => (n.customer_id ? <CustLink id={n.customer_id} name={n.customer_name} /> : '') },
         { key: 'kind', label: '类型', w: 110, value: (n) => EVENT_LABELS[n.kind] || (n.kind === 'dup_photo' ? '重复照片' : n.kind), render: (n) => <Pill tone="gray">{n.kind === 'dup_photo' ? '重复照片' : n.kind === 'price_decided' ? '改价审批' : n.kind === 'payment_appeal' ? '付款申诉' : EVENT_LABELS[n.kind] || n.kind}</Pill> },
-        { key: 'text', label: '改了什么', w: 420, value: noticeText, render: (n) => noticeText(n) },
+        { key: 'text', label: '改了什么', w: 420, value: noticeText, render: (n) => (n.kind === 'tier_changed' ? <TierText>{noticeText(n)}</TierText> : noticeText(n)) },
       ]} />}
       {!hist && list.length > 0 && <>      <Grid id="todo-notices" noTools rows={[...list].sort((a, b) => (KIND_TONE[b.kind] === 'red') - (KIND_TONE[a.kind] === 'red'))} selectable={{ selected: sel, onChange: setSel }} columns={[
         { key: 'at', label: '什么时候', w: 120, render: (n) => dt(n.at) },
@@ -147,7 +147,7 @@ export function ChangeNotices() {
         { key: 'biz_no', label: '订单', w: 130, render: (n) => (n.deal_id ? <DealLink id={n.deal_id} no={n.biz_no} /> : '—') },
         { key: 'customer_name', label: '客户', w: 120, render: (n) => (n.customer_id ? <CustLink id={n.customer_id} name={n.customer_name} /> : '') },
         { key: 'kind', label: '类型', w: 110, value: (n) => EVENT_LABELS[n.kind] || (n.kind === 'dup_photo' ? '重复照片' : n.kind), render: (n) => <Pill tone={KIND_TONE[n.kind] || 'amber'}>{n.kind === 'dup_photo' ? '重复照片' : n.kind === 'price_decided' ? '改价审批' : n.kind === 'payment_appeal' ? '付款申诉' : EVENT_LABELS[n.kind] || n.kind}</Pill> },
-        { key: 'text', label: '改了什么', w: 420, value: noticeText, render: (n) => noticeText(n) },
+        { key: 'text', label: '改了什么', w: 420, value: noticeText, render: (n) => (n.kind === 'tier_changed' ? <TierText>{noticeText(n)}</TierText> : noticeText(n)) },
       ]} /></>}
     </div>
   );

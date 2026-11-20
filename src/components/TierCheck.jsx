@@ -3,7 +3,7 @@
 // 只提醒, 不自动改档位. 中方两个选择: 立即确认 (以后不再提醒) / 先试一段时间 (到期再提醒)
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, FRow, Info, TierPill, Thumb, Choice, MoneyIn } from './ui.jsx';
+import { useApp, useData, Modal, FRow, Info, TierPill, TierText, tierOpt, Thumb, Choice, MoneyIn } from './ui.jsx';
 import { CustLink } from './Archives.jsx';
 import { TIERS } from '../lib/domain.js';
 import { qty, dDate, today, friendlyError } from '../lib/format.js';
@@ -49,7 +49,7 @@ export default function TierCheck({ rows }) {
         <div key={c.id} className="row between todo-row" style={{ cursor: 'default' }}>
           <div className="stack" style={{ gap: 3, minWidth: 0 }}>
             <div><CustLink id={c.id} name={c.name} /> <span className="muted small">{c.city} · {c.code || c.temp_code || '潜客'}</span> <TierPill tier={c.tier} />{c.shop_type && <span className="pill gray" style={{ marginLeft: 6 }}>员工填：{c.shop_type}</span>}</div>
-            <div className="small">{c.why === 'mismatch' ? '⚠ ' : '👉 '}{c.text}{c.sug && c.sug !== c.tier && c.why !== 'new' && <span className="muted">（按提货量对应「{TIERS[c.sug]}」）</span>}</div>
+            <div className="small">{c.why === 'mismatch' ? '⚠ ' : '👉 '}<TierText>{c.text}</TierText>{c.sug && c.sug !== c.tier && c.why !== 'new' && <span className="muted">（按提货量对应 <TierPill tier={c.sug} />）</span>}</div>
           </div>
           <div className="row" style={{ flexShrink: 0 }}>{c.shop_photo && <Thumb src={c.shop_photo} size={34} label="店铺照片" />}<button type="button" className="btn sm primary" onClick={() => setAct(c)}>定档位</button></div>
         </div>))}
@@ -71,7 +71,7 @@ function TierModal({ c, onClose }) {
           <div><div className="k">员工填的店铺类型</div><div className="v" style={{ fontSize: 15 }}>{c.shop_type || '—'}</div></div>
           <div><div className="k">店铺照片</div><div className="v">{c.shop_photo ? <Thumb src={c.shop_photo} size={64} label="店铺照片" /> : <span className="muted small">没传</span>}</div></div>
         </div>
-        <FRow label="档位" req><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} /></FRow>
+        <FRow label="档位" req><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} renderOpt={tierOpt} /></FRow>
         <FRow label="怎么确认" req><div className="chips">
           <button type="button" className={`chip ${mode === 'confirm' ? 'on' : ''}`} onClick={() => setMode('confirm')}>立即确认（以后不再提醒）</button>
           <button type="button" className={`chip ${mode === 'trial' ? 'on' : ''}`} onClick={() => setMode('trial')}>先用这个档位试一段时间</button></div></FRow>

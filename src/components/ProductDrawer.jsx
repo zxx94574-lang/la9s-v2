@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { ProductSales } from './SalesStats.jsx';
 import { q, call } from '../db/client.js';
 import { PoLink } from '../pages/Po.jsx';
-import { TierPill, useApp, useData, Drawer, Pill, BigNum, DatePicker, Modal, Info, Bang, MoneyIn } from './ui.jsx';
+import { TierPill, TierText, useApp, useData, Drawer, Pill, BigNum, DatePicker, Modal, Info, Bang, MoneyIn } from './ui.jsx';
 import { TIERS, can } from '../lib/domain.js';
 import Grid from './Grid.jsx';
 import { DealLink } from './Archives.jsx';
@@ -164,7 +164,7 @@ export default function ProductDrawer({ product, tier, onClose }) {
         {seeAll && data ? <CostBlocks p={p} ps={data.ps} batches={data.batches} tier={tier} priceOf={priceOf} lockedOf={lockedOf} ed={ed} setEd={setEd}
           onChanged={changed} toast={toast} role={role} />
           : seeTier && tier ? (
-            <section className="pd-sec"><div className="kv"><div><div className="k">本单客户档位价（{TIERS[tier]}）</div><div className="v" style={{ fontSize: 18 }}>{priceOf(tier) != null ? `${money(priceOf(tier))} XOF` : <Pill tone="amber">没定价，等中方</Pill>}</div></div></div></section>
+            <section className="pd-sec"><div className="kv"><div><div className="k">本单客户档位价 <TierPill tier={tier} /></div><div className="v" style={{ fontSize: 18 }}>{priceOf(tier) != null ? `${money(priceOf(tier))} XOF` : <Pill tone="amber">没定价，等中方</Pill>}</div></div></div></section>
           ) : <div className="hint">价格只有中方看得到。</div>}
         {/* ⑥ 库存 */}
         <section className="pd-sec">
@@ -211,9 +211,9 @@ export function ConfirmEdit({ c, onBack, onSave, title = '确认修改档案' })
         <button type="button" className="btn primary" disabled={red && !reason.trim()} onClick={() => onSave(reason.trim())}>确认保存</button></>}>
       <div className="stack">
         <table className="t"><thead><tr><th>项目</th><th>改前</th><th>改后</th></tr></thead>
-          <tbody>{c.rows.map(([l, a, b]) => <tr key={l}><td>{l}</td><td className="muted">{a}</td><td><b>{b}</b></td></tr>)}</tbody></table>
+          <tbody>{c.rows.map(([l, a, b]) => <tr key={l}><td><TierText>{l}</TierText></td><td className="muted"><TierText>{a}</TierText></td><td><b><TierText>{b}</TierText></b></td></tr>)}</tbody></table>
         <div className="pd-h">自检 {c.checks.length === 0 && <span className="pill green">没发现问题</span>}</div>
-        {c.checks.map((x, i) => <div key={i} className={`pill ${x.tone}`} style={{ display: 'block', whiteSpace: 'normal' }}>{x.tone === 'red' ? '✕ ' : '⚠ '}{x.msg}</div>)}
+        {c.checks.map((x, i) => <div key={i} className={`pill ${x.tone}`} style={{ display: 'block', whiteSpace: 'normal' }}>{x.tone === 'red' ? '✕ ' : '⚠ '}<TierText>{x.msg}</TierText></div>)}
         <label className="field"><span>原因{red ? '（必填）' : '（可不填）'}</span><input className="in" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例如 新批次到货，成本变了" /></label>
       </div>
     </Modal>

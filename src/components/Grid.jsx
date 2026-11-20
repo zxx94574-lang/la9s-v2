@@ -876,7 +876,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
                     <span className="th-inner" style={{ justifyContent: headAlign() === 'right' ? 'flex-end' : headAlign() === 'center' ? 'center' : 'flex-start' }}>
                       <span className="grip" onPointerDown={(e) => startDrag(e, c.key)} title="拖动调整列顺序">⠿</span>
                       {fill && <span className="pen" title="这一列要填">✎</span>}
-                      <span className="th-label" onClick={() => !skipSort.current && c.sortable !== false && toggleSort(c.key)} title="点 = 排序；按住横着拖 = 选几列一起拖 / 隐藏 / 复制（Shift 点 = 选到这列，⌘ 点 = 加减一列）">{c.label}</span>
+                      <span className="th-label" onClick={() => !skipSort.current && c.sortable !== false && toggleSort(c.key)} title="点 = 排序；按住横着拖 = 选几列一起拖 / 隐藏 / 复制（Shift 点 = 选到这列，⌘ 点 = 加减一列）">{c.head || c.label}</span>
                       {c.sortable !== false && <span className={`sort ${sort?.key === c.key ? 'on' : ''}`} onClick={() => !skipSort.current && toggleSort(c.key)}>{sort?.key === c.key ? (sort.dir === 'asc' ? '▲' : '▼') : '⇅'}</span>}
                       {c.filterable !== false && (
                         <button type="button" className={`funnel gf-keep ${f ? 'on' : ''}`} title="按这一列筛选" onClick={(e) => { e.stopPropagation(); if (panel?.forKey === c.key) setPanel(null); else openPanel(c, e.currentTarget); }}>⏷</button>

@@ -18,7 +18,7 @@ import React, { useEffect, useRef, useState } from 'react';
 const N = (v) => Number(v) || 0;
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { TierPill, Light, useApp, useData, Pill, Modal, OptionNote, Info, MoreMenu, Choice } from '../components/ui.jsx';
+import { TierPill, tierOpt, Light, useApp, useData, Pill, Modal, OptionNote, Info, MoreMenu, Choice } from '../components/ui.jsx';
 import { STATUS, STEPS, LAST_STEP, reachedStep, EVENT_LABELS, ROLES, CONFIRM_METHODS, NOTE_OPTIONS, TIERS, can, seesPrice, dealPriceVisible } from '../lib/domain.js';
 import { money, qty, dt, dDate, today, friendlyError } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
@@ -374,7 +374,7 @@ function ApproveModal({ deal, lines, margin, onClose }) {
           <div className="small muted" style={{ marginTop: 4 }}>{mode === 'pass' ? '照常往下走。' : mode === 'pick_only' ? '单子照常走到复检，但出库被卡住，等你「放行出库」才能发（比如钱到了再发）。要写说明。' : '审批还挂着，单子留在报价、不动库存；之后你再来批或不批。要写说明。'}</div></div>
         {prospect && <div className="grid2">
           <div className="field req"><label>新客户：正式编码</label><input className="in mono" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} /></div>
-          <div className="field req"><label>档位（决定价格）</label><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} /></div></div>}
+          <div className="field req"><label>档位（决定价格）</label><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} renderOpt={tierOpt} /></div></div>}
         <Grid id="approve-lines" noTools rows={lines} columns={[
           { key: 'code', label: '编码', w: 90, value: (l) => l.code || '没编码', mono: true },
           { key: 'model', label: '型号', w: 150, value: (l) => l.model, render: (l) => <><ModelLink id={l.product_id} model={l.model} tier={deal.tier} /> <span className="muted small">{l.category}</span></> },

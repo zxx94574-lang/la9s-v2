@@ -11,7 +11,7 @@ import React, { useMemo, useState } from 'react';
 import { useShare, SHARE_RANGES, shareRange, ShareNote } from '../components/SalesStats.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { TierPill, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker , PhoneInput, phoneValid, Info, Choice, MoneyIn, Assumed } from '../components/ui.jsx';
+import { TierPill, tierOpt, Light, useApp, useData, Pill, Modal, Drawer, Thumb, MonthPicker , PhoneInput, phoneValid, Info, Choice, MoneyIn, Assumed } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { CallModal, ProspectModal, ResultPill, KIND, custLabel } from '../components/Crm.jsx';
 import { AccountPanel, ACC } from '../components/Account.jsx';
@@ -238,7 +238,7 @@ function ActivateModal({ c, emps, onClose }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!code.trim() || !tier} onClick={go}>转正式</button></>}>
       <div className="stack">
         <div className="field req"><label>正式编码（金蝶客户编码）</label><input className="in mono" autoFocus value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} style={{ maxWidth: 200 }} /></div>
-        <div className="field req"><label>档位（决定价格）</label><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} /></div>
+        <div className="field req"><label>档位（决定价格）</label><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} renderOpt={tierOpt} /></div>
         <div className="field"><label>归属销售（算激励用）</label><OptChoice optKey="emp_list" title="员工名单" data value={owner} onChange={setOwner} options={emps.map((e) => [e.id, e.short_name, e.department || ''])} empty="—" flat={false} style={{ width: 220 }} /></div>
       </div>
     </Modal>
@@ -309,7 +309,7 @@ function InfoModal({ c, onClose }) {
         {inp('name', '客户名称（大写）')}{inp('contact_name', '收货人（客户那边接货的人，BL 上的 Responsable）', 'M. Moumouni')}
         <div className="field"><label>电话（BL 上要印）</label><PhoneInput value={f.phone} onChange={(v) => setF((x) => ({ ...x, phone: v }))} /></div>{inp('city', '城市（BL 上的 Ville）', 'Yamoussoukro')}
         {inp('address', '地址')}
-        {'tier' in f && <div className="field"><label>客户档位（只中方）</label><Choice value={f.tier} onChange={(k) => setF({ ...f, tier: k })} options={Object.entries(TIERS)} /></div>}
+        {'tier' in f && <div className="field"><label>客户档位（只中方）</label><Choice value={f.tier} onChange={(k) => setF({ ...f, tier: k })} options={Object.entries(TIERS)} renderOpt={tierOpt} /></div>}
       </div>
       {confirm && <ConfirmEdit c={confirm} title="确认修改客户档案" onBack={() => setConfirm(null)} onSave={go} />}
     </Modal>

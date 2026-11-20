@@ -3,7 +3,7 @@
 // 卖价不低于生效清仓价的行, 不再被「会亏」拦住 (规则在 0052).
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, FRow, Info, Choice, DatePicker, Pill, Assumed, MoneyIn } from './ui.jsx';
+import { useApp, useData, Modal, FRow, Info, Choice, DatePicker, Pill, Assumed, MoneyIn, TierPill } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { ModelLink } from './Archives.jsx';
 import { money, friendlyError, today, dDate } from '../lib/format.js';
@@ -35,7 +35,7 @@ export default function ClearanceCard({ products }) {
     { key: 'price', label: '特价 XOF', w: 110, num: true, value: (r) => Number(r.price), render: (r) => <b>{money(r.price)}</b> },
     { key: 'starts_on', label: '开始', w: 100, value: (r) => dDate(r.starts_on) },
     { key: 'ends_on', label: '结束', w: 100, value: (r) => dDate(r.ends_on) },
-    { key: 'who', label: '适用对象', w: 200, value: who },
+    { key: 'who', label: '适用对象', w: 200, value: who, render: (r) => (r.tiers?.length && !r.customers ? <span>档位：{r.tiers.map((x) => <TierPill key={x} tier={x} short />)}</span> : who(r)) },
     { key: 'note', label: '原因', w: 220 },
   ];
   const end = async (r) => { try { await call(role, `select app.end_clearance($1)`, [r.id]); toast('已结束这条特价'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
@@ -64,7 +64,7 @@ export default function ClearanceCard({ products }) {
         <FRow label="价格" req><MoneyIn className="in" inputMode="numeric" style={{ width: 130 }} value={f.price} onChange={(e) => set('price', e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">XOF / 片</span></FRow>
         <FRow label="起止日期" req><DatePicker range value={f.range} onChange={(v) => set('range', v)} /></FRow>
         <FRow label="给谁" req><Choice value={f.scope} onChange={(v) => set('scope', v)} options={[['all', '所有客户'], ['tier', '指定档位'], ['cust', '指定客户']]} /></FRow>
-        {f.scope === 'tier' && <FRow label="档位" req><span className="chips">{Object.entries(TIERS).map(([k, v]) => <button type="button" key={k} className={`chip ${f.tiers.includes(k) ? 'on' : ''}`} onClick={() => set('tiers', f.tiers.includes(k) ? f.tiers.filter((x) => x !== k) : [...f.tiers, k])}>{v}</button>)}</span></FRow>}
+        {f.scope === 'tier' && <FRow label="档位" req><span className="chips">{Object.entries(TIERS).map(([k, v]) => <button type="button" key={k} className={`chip ${f.tiers.includes(k) ? 'on' : ''}`} onClick={() => set('tiers', f.tiers.includes(k) ? f.tiers.filter((x) => x !== k) : [...f.tiers, k])}>{<TierPill tier={k} />}</button>)}</span></FRow>}
         {f.scope === 'cust' && <FRow label="客户" req>
           <Choice value="" onChange={(v) => v && !f.custs.includes(v) && set('custs', [...f.custs, v])} flat={false} placeholder="＋ 加一个客户" style={{ width: 260 }} options={(custs || []).filter((c) => !f.custs.includes(c.id)).map((c) => [c.id, c.name, c.code])} />
           <span className="chips" style={{ flexBasis: '100%' }}>{f.custs.map((id) => <button type="button" key={id} className="chip on" title="点一下去掉" onClick={() => set('custs', f.custs.filter((x) => x !== id))}>{(custs || []).find((c) => c.id === id)?.name || id} ×</button>)}</span></FRow>}

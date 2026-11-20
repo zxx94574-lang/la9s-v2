@@ -2,7 +2,7 @@
 // 统一做法: 标题 → 一个大数 (带单位, 不省略) → 小方框 → 右端小实心 ▼ 展开明细 (默认收起).
 import React, { useCallback, useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Assumed, Modal, MoneyIn, Choice, Info } from './ui.jsx';
+import { useApp, useData, Assumed, Modal, MoneyIn, Choice, Info, TierPill } from './ui.jsx';
 import { CustLink, EmpLink, DealLink, ModelLink } from './Archives.jsx';
 import { useMarginRules } from './Margin.jsx';
 import { usePublicHeld } from './PublicHeld.jsx';
@@ -20,8 +20,8 @@ const CURS = ['XOF', 'CNY', 'USD'];
 const AMBER = '#8DB4EE';   // 440 (Frank 11-19): FOB 用浅蓝, 和品牌蓝同色系; 全站「本地 vs FOB」= 品牌蓝 + 浅蓝
 
 // 小实心三角: 展开 / 收起明细
-// 439 (Frank 11-19): 展开明细的按钮全站统一 —— 带字「明细 ▼ / 收起 ▲」, 永远在板块 / 卡片的右下角
-export const Fold = ({ open, onClick, label = '明细' }) => <button type="button" className={`fold-btn ${open ? 'on' : ''}`} onClick={onClick} aria-expanded={!!open}>{open ? '收起' : label}<i>{open ? '▲' : '▼'}</i></button>;
+// 439 (Frank 11-19): 展开明细的按钮全站统一, 永远在板块 / 卡片的右下角; 11-20 Frank: 明细一律用 ☰ 图标 (和单号预览同一个), 只放大不加框
+export const Fold = ({ open, onClick, label = '明细' }) => <button type="button" className={`fold-btn ${open ? 'on' : ''}`} onClick={onClick} aria-expanded={!!open}><i className="fold-ico">☰</i>{open ? '收起' : label}</button>;
 const Amt = ({ v, cur, tone }) => <span className={`dk-v ${tone || ''}`}>{v == null ? '—' : money(v, cur)}<small>{cur}</small></span>;
 
 // ───────── 折算 ─────────
@@ -130,11 +130,11 @@ export function SalesSection({ kind, rows, transit }) {
     const out = [];
     const ps = [...by.values()].map((g) => ({ ...g, t: total(g.rows, m) })).sort((a, b) => b.t.rev - a.t.rev);
     for (const p of ps) {
-      out.push({ id: 'p:' + p.k, lvl: 0, label: p.label, t: p.t, pk: p.k, ref: p.ref });
+      out.push({ id: 'p:' + p.k, lvl: 0, label: p.label, t: p.t, pk: p.k, ref: p.ref, tier: !fob && dim === 'tier' && p.k !== '-' ? p.k : null });
       if (!exp[p.k]) continue;
       const cb = new Map();
       for (const r of p.rows) { const k = keyOf.c(r); if (!cb.has(k)) cb.set(k, { k, label: keyOf.cl(r), rows: [], ref: r }); cb.get(k).rows.push(r); }
-      for (const c of [...cb.values()].map((g) => ({ ...g, t: total(g.rows, m) })).sort((a, b) => b.t.rev - a.t.rev)) out.push({ id: `c:${p.k}:${c.k}`, pk: p.k, lvl: 1, label: c.label, t: c.t, ref: c.ref });
+      for (const c of [...cb.values()].map((g) => ({ ...g, t: total(g.rows, m) })).sort((a, b) => b.t.rev - a.t.rev)) out.push({ id: `c:${p.k}:${c.k}`, pk: p.k, lvl: 1, label: c.label, t: c.t, ref: c.ref, tier: !fob && dim === 'category' && c.k !== '-' ? c.k : null });
     }
     return out;
   }, [list, exp, dim, kind, JSON.stringify(m)]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -142,8 +142,8 @@ export function SalesSection({ kind, rows, transit }) {
   const cols = [
     { key: 'label', label: fob ? '客户 / 订单' : dim === 'category' ? '种类 / 档位' : '档位 / 种类', w: 220, sortable: false, filterable: false, value: (r) => r.label,
       render: (r) => (r.lvl === 0
-        ? <span className="dk-row0"><button type="button" className="dk-exp" aria-label={exp[r.pk] ? '收起' : '展开'} onClick={(e) => { e.stopPropagation(); setExp((x) => ({ ...x, [r.pk]: !x[r.pk] })); }}>{exp[r.pk] ? '▾' : '▸'}</button>{fob ? <CustLink id={r.ref.customer_id} name={r.label} /> : <b>{r.label}</b>}</span>
-        : <span className="dk-row1">{fob ? <DealLink id={r.ref.deal_id} no={r.label} /> : r.label}</span>) },
+        ? <span className="dk-row0"><button type="button" className={`peek-eye dk-exp ${exp[r.pk] ? 'on' : ''}`} aria-label={exp[r.pk] ? '收起' : '展开'} onClick={(e) => { e.stopPropagation(); setExp((x) => ({ ...x, [r.pk]: !x[r.pk] })); }}>☰</button>{fob ? <CustLink id={r.ref.customer_id} name={r.label} /> : r.tier ? <TierPill tier={r.tier} /> : <b>{r.label}</b>}</span>
+        : <span className="dk-row1">{fob ? <DealLink id={r.ref.deal_id} no={r.label} /> : r.tier ? <TierPill tier={r.tier} /> : r.label}</span>) },
     { key: 'share', label: '占比', w: 110, sortable: false, filterable: false, value: (r) => (t.rev ? r.t.rev / t.rev * 100 : 0),
       render: (r) => { const p = t.rev ? r.t.rev / t.rev * 100 : 0; return <span className={`dbar ${r.lvl ? 'sub' : ''}`} data-tip={`占销售额 ${p.toFixed(1)}%`}><i style={{ width: `${Math.max(0, Math.min(100, p))}%` }} /></span>; } },
     { key: 'rev', label: `销售额 ${C}`, w: 130, type: 'money', sortable: false, value: (r) => r.t.rev, render: (r) => (r.lvl ? money(r.t.rev, C) : <b>{money(r.t.rev, C)}</b>) },

@@ -5,7 +5,7 @@ import { RuleGear } from '../components/Rules.jsx';
 import React, { useMemo, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal , RateInput, MoneyIn } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal , RateInput, MoneyIn, TierPill } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import ProductDrawer from '../components/ProductDrawer.jsx';
 import ClearanceCard from '../components/Clearance.jsx';
@@ -58,8 +58,8 @@ export default function Pricing() {
     { key: 'rmb_cost', label: '人民币成本', w: 100, edit: ed('rmb_cost'), render: (r) => r.rmb_cost ?? '—' },
     { key: 'freight_xof', label: '运费 XOF', w: 90, edit: ed('freight_xof'), render: (r) => r.freight_xof ?? '—' },
     { key: 'landed', label: '到岸成本 XOF', w: 110, value: landed, render: (r) => (landed(r) == null ? <span className="muted">缺成本</span> : <b>{money(landed(r))}</b>) },
-    ...TIERS4.map(([tier, label, fk]) => ({ key: fk, label: `${label} FEE`, w: 90, edit: ed(fk), render: (r) => r[fk] ?? '—' })),
-    ...TIERS4.map(([tier, label, fk]) => ({ key: `p_${tier}`, label: `${label} 价`, w: 120, value: (r) => r.prices[tier]?.price,
+    ...TIERS4.map(([tier, label, fk]) => ({ key: fk, label: `${label} FEE`, head: <><TierPill tier={tier} short /> FEE</>, w: 100, edit: ed(fk), render: (r) => r[fk] ?? '—' })),
+    ...TIERS4.map(([tier, label, fk]) => ({ key: `p_${tier}`, label: `${label} 价`, head: <><TierPill tier={tier} short /> 价</>, w: 120, value: (r) => r.prices[tier]?.price,
       render: (r) => {
         const cur = r.prices[tier]; const l = landed(r); const fee = N(val(r, fk));
         const calc = l != null && fee != null ? l + fee : null;
@@ -163,7 +163,7 @@ function RatesModal({ org, rates, setRates, onClose }) {
           <div className="banner warn"><b>{pv.changed.length}</b> / {pv.total} 个型号的价格会变（涨的红、降的绿）。还没保存。</div>
           <div style={{ maxHeight: 340, overflow: 'auto' }}><Grid id="fx-preview" noTools rows={pv.changed.slice(0, 500)} rowKey={(r) => r.product_id} columns={[
             { key: 'model', label: '型号', w: 110, render: (r) => <b>{r.model}</b> }, { key: 'category', label: '种类', w: 110 }, { key: 'code', label: '编码', w: 80 },
-            ...TS.map((t) => ({ key: t, label: TIERS[t] || t, w: 150, num: true, value: (r) => Number(r.after?.[t] ?? 0), render: (r) => cell(r, t) }))]} /></div>
+            ...TS.map((t) => ({ key: t, label: TIERS[t] || t, head: <TierPill tier={t} />, w: 150, num: true, value: (r) => Number(r.after?.[t] ?? 0), render: (r) => cell(r, t) }))]} /></div>
           {pv.changed.length > 500 && <div className="small muted">只列了前 500 个。</div>}</>)}
       </div>
     </Modal>

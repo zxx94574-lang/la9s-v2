@@ -14,7 +14,7 @@ import { DocActions, DocSheet, BalanceCopy, BalancePreview } from '../components
 import { BlActions } from '../components/Bl.jsx';
 import { flagAnomaly } from '../components/IssueReport.jsx';
 import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus , ReceiptDone } from '../components/ReceiptForm.jsx';
-import { Modal, Shared, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip, Choice, Assumed, MoneyIn, AcctImpact } from '../components/ui.jsx';
+import { Modal, Shared, tierOpt, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip, Choice, Assumed, MoneyIn, AcctImpact } from '../components/ui.jsx';
 import { ImpactFor } from '../components/Impact.jsx';
 import PickTicks, { AssignBar } from '../components/PickTicks.jsx';
 import { ContactPick, useContacts, rememberContact, contactRole } from '../components/Contacts.jsx';
@@ -1140,7 +1140,7 @@ function TierGate({ deal, info, act, role }) {
         <div className="panel stack">
           <div className="hint">这个客户的档位中方还没确认，报价现在按<b>最贵档（Repair）</b>显示，<b>先不要发给客户</b>。中方定了档位，价格会自动重算，才能联系客户确认。超过 7 天没人动的草稿会自动作废（可恢复）。</div>
           {role === 'admin' ? (<>
-            <FRow label="定档位" req><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} /></FRow>
+            <FRow label="定档位" req><Choice value={tier} onChange={(k) => setTier(k)} options={Object.entries(TIERS)} renderOpt={tierOpt} /></FRow>
             <FRow label="备注"><input className="in" style={{ width: '100%', maxWidth: 420 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如 看了店铺照片，按零售店" /></FRow>
             {deal.tier_request_note && <div className="small muted">员工说：{deal.tier_request_note}</div>}
             {prospect && <FRow label="客户编码" req><input className="in" style={{ width: 140 }} value={code} onChange={(e) => setCode(e.target.value)} /><span className="small muted">潜客定档 = 转成正式客户，系统给了下一个号，可改（和金蝶 / 飞书一致）</span></FRow>}

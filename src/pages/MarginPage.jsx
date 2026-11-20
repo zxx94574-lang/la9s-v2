@@ -5,7 +5,7 @@
 import { RuleGear } from '../components/Rules.jsx';
 import React, { useMemo, useState } from 'react';
 import { call } from '../db/client.js';
-import { useApp, useData, DatePicker, Info, MoneyIn, usePeriod, PeriodBar } from '../components/ui.jsx';
+import { useApp, useData, DatePicker, Info, MoneyIn, usePeriod, PeriodBar, TierPill } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { DealLink, ModelLink, CustLink } from '../components/Archives.jsx';
 import { periodRange, PERIODS, money, qty, today } from '../lib/format.js';
@@ -22,6 +22,8 @@ const DIMS = [
   ['month', '月份', (r) => r.month],
   ['supply', '本地 / FOB', (r) => (r.supply === 'fob' ? 'FOB' : '本地')],
 ];
+const TIER_OF = { S: 'S', Wholesale: 'WHOLESALE', Retail: 'RETAIL', Repair: 'REPAIR' };   // 交叉表里的档位 key → 色块 (473)
+const tierCell = (k) => (TIER_OF[k] ? <TierPill tier={TIER_OF[k]} short /> : k);
 const DIM_ORDER = { tier: ['S', 'Wholesale', 'Retail', 'Repair', '（没档位）'] };
 const sortKeys = (dim, keys) => {
   const o = DIM_ORDER[dim];
@@ -84,8 +86,8 @@ function Sold({ org, role }) {
           <span className="row small" style={{ gap: 6 }}>行 {sel(rowDim, setRowDim)} 列 {sel(colDim, setColDim, true)}</span>
           <Info>每一格 = 这一组货的总利润 ÷ 总销售额（加权）。例：行选「档位」、列选「种类」，Wholesale 那一行电池那一格 = 卖给 Wholesale 客户的电池的毛利率。下面明细表里筛选（某个客户、某个销售员…）会同时作用到这张表和上面的汇总。</Info></div>
         <Grid id={`margin-pivot-${rowDim}-${colDim}`} compactTools rows={pivot.rows} rowKey={(r) => r.key} empty={!data ? '加载中…' : '这个时间段没有出库'} columns={[
-          { key: 'key', label: DIMS.find((d) => d[0] === rowDim)[1], w: 150, render: (r) => <b>{r.key}</b> },
-          ...(colDim === 'none' ? [] : pivot.cols.map((c) => ({ key: 'c_' + c, label: c, w: 150, type: 'number', value: (r) => r.cells[c]?.pct ?? null, render: (r) => cell(r.cells[c]) }))),
+          { key: 'key', label: DIMS.find((d) => d[0] === rowDim)[1], w: 150, render: (r) => (rowDim === 'tier' ? tierCell(r.key) : <b>{r.key}</b>) },
+          ...(colDim === 'none' ? [] : pivot.cols.map((c) => ({ key: 'c_' + c, label: c, head: colDim === 'tier' ? tierCell(c) : undefined, w: 150, type: 'number', value: (r) => r.cells[c]?.pct ?? null, render: (r) => cell(r.cells[c]) }))),
           { key: 'all', label: '合计', w: 170, type: 'number', value: (r) => r.all.pct ?? null, render: (r) => cell(r.all) },
           { key: 'rev', label: '销售额', w: 120, type: 'number', value: (r) => r.all.revenue, render: (r) => money(Math.round(r.all.revenue)) },
           { key: 'share', label: '占利润', w: 90, type: 'number', value: (r) => (tot.profit ? r.all.profit / tot.profit * 100 : null), render: (r) => (tot.profit ? `${(r.all.profit / tot.profit * 100).toFixed(1)}%` : '') },
@@ -97,7 +99,7 @@ function Sold({ org, role }) {
           { key: 'shipped_on', label: '出库日', w: 100, value: (r) => iso(r.shipped_on), render: (r) => iso(r.shipped_on) },
           { key: 'biz_no', label: '订单号', w: 150, render: (r) => <DealLink id={r.deal_id} no={r.biz_no} /> },
           { key: 'customer_name', label: '客户', w: 150, render: (r) => <CustLink id={r.customer_id} name={r.customer_name} /> },
-          { key: 'tier', label: '档位', w: 100, value: (r) => TIER_LABEL[r.tier] || '' },
+          { key: 'tier', label: '档位', w: 100, value: (r) => TIER_LABEL[r.tier] || '', render: (r) => <TierPill tier={r.tier} short empty="—" /> },
           { key: 'supply', label: '本地 / FOB', w: 90, value: (r) => (r.supply === 'fob' ? 'FOB' : '本地') },
           { key: 'owner_name', label: '销售员', w: 100 },
           { key: 'category', label: '种类', w: 90 },
@@ -162,9 +164,9 @@ function StockMargin({ org, role }) {
         <div className="mkpis">
           <div className="mkpi"><div className="k">库存片数</div><div className="v">{qty(calc.all.qty)}</div>{calc.all.missingQty > 0 && <div className="s">{qty(calc.all.missingQty)} 片没有成本，没算进去</div>}</div>
           <div className="mkpi"><div className="k">库存成本</div><div className="v">{money(Math.round(calc.all.cost))}</div></div>
-          {[['S', 'pS'], ['Wholesale', 'pW'], ['Retail', 'pR'], ['Repair', 'pP']].map(([l, k]) => <div className="mkpi" key={k}><div className="k">全按 {l} 卖</div><div className="v">{pctCell(calc.all[k])}</div></div>)}
+          {[['S', 'pS'], ['WHOLESALE', 'pW'], ['RETAIL', 'pR'], ['REPAIR', 'pP']].map(([l, k]) => <div className="mkpi" key={k}><div className="k">全按 <TierPill tier={l} short /> 卖</div><div className="v">{pctCell(calc.all[k])}</div></div>)}
           <div className="mkpi"><div className="k">按最近 3 个月出货比例</div><div className="v">{calc.mix ? pctCell(calc.all.blend) : <span className="pill gray">数据不足</span>}</div>
-            <div className="s">{calc.mix ? Object.entries(calc.mix).filter(([, v]) => v > 0).map(([k, v]) => `${TIER_LABEL[k]} ${(v * 100).toFixed(0)}%`).join(' · ')
+            <div className="s">{calc.mix ? Object.entries(calc.mix).filter(([, v]) => v > 0).map(([k, v]) => <span key={k} style={{ marginRight: 8, whiteSpace: 'nowrap' }}><TierPill tier={k} short /> {(v * 100).toFixed(0)}%</span>)
               : '系统里自己的出货要满 30 天才算；也可以先导入飞书 Sales Order 历史（待改 111）'}</div></div>
         </div>)}
       <div className="card">
@@ -173,10 +175,10 @@ function StockMargin({ org, role }) {
           { key: 'key', label: '种类', w: 130, render: (r) => <b>{r.key}</b> },
           { key: 'qty', label: '片数', w: 90, type: 'number', render: (r) => qty(r.qty) },
           { key: 'cost', label: '成本', w: 130, type: 'number', render: (r) => money(Math.round(r.cost)) },
-          { key: 'pS', label: 'S', w: 100, type: 'number', render: (r) => pctCell(r.pS) },
-          { key: 'pW', label: 'Wholesale', w: 100, type: 'number', render: (r) => pctCell(r.pW) },
-          { key: 'pR', label: 'Retail', w: 100, type: 'number', render: (r) => pctCell(r.pR) },
-          { key: 'pP', label: 'Repair', w: 100, type: 'number', render: (r) => pctCell(r.pP) },
+          { key: 'pS', label: 'S', head: <TierPill tier="S" short />, w: 100, type: 'number', render: (r) => pctCell(r.pS) },
+          { key: 'pW', label: 'Wholesale', head: <TierPill tier="WHOLESALE" short />, w: 100, type: 'number', render: (r) => pctCell(r.pW) },
+          { key: 'pR', label: 'Retail', head: <TierPill tier="RETAIL" short />, w: 100, type: 'number', render: (r) => pctCell(r.pR) },
+          { key: 'pP', label: 'Repair', head: <TierPill tier="REPAIR" short />, w: 100, type: 'number', render: (r) => pctCell(r.pP) },
           { key: 'blend', label: '按出货比例', w: 120, type: 'number', render: (r) => (calc.mix ? pctCell(r.blend) : <span className="muted small">数据不足</span>) },
           { key: 'missingQty', label: '缺成本片数', w: 100, type: 'number', render: (r) => (r.missingQty ? <span className="pill gray">{qty(r.missingQty)}</span> : '') },
         ]} />
