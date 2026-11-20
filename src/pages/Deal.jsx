@@ -17,6 +17,7 @@ import { useAddons, AddonBranch, AddonPanel, AddonStartModal, canStartAddon, add
 import React, { useEffect, useRef, useState } from 'react';
 const N = (v) => Number(v) || 0;
 import { q, call } from '../db/client.js';
+import { workMinutes, fmtMin } from '../lib/worktime.js';
 import * as Q from '../db/queries.js';
 import { TierPill, tierOpt, Light, useApp, useData, Pill, Modal, OptionNote, Info, MoreMenu, Choice } from '../components/ui.jsx';
 import { STATUS, STEPS, LAST_STEP, reachedStep, EVENT_LABELS, ROLES, CONFIRM_METHODS, NOTE_OPTIONS, TIERS, can, seesPrice, dealPriceVisible } from '../lib/domain.js';
@@ -89,6 +90,7 @@ export default function Deal({ id }) {
 
   const margin = useDealMargin(data?.deal || null);
   const marginOpen = mOpen ?? !!margin?.loss;        // 亏钱 → 自动展开 (Frank 344)
+  const { data: kt } = useData(() => q(`select value from app.org_settings where org_id = $1 and key = 'kpi_targets'`, [org]), [org]);   // 475 ①: 流程条当前这步卡了多久
 
   if (error) return <div className="card card-b">读取失败：{String(error.message || error)}</div>;
   if (!data) return <div className="empty">加载中…</div>;
@@ -124,6 +126,12 @@ export default function Deal({ id }) {
     sign: live.length ? (Number(deal.unsigned_n) > 0 ? `${deal.unsigned_n} 批待签收` : deal.balance_pending ? '已签收 · 待对账' : '已对账') : '',
     pay: Number(deal.shipped_amount) > 0 ? (Number(deal.due) > 0 ? `欠 ${money(deal.due, deal.currency)}` : '已结清') : '',
   }[k]);
+  // 475 ① (Frank 11-20): 当前这一步卡了多久 —— 从上一个动作算起, 只算上班时间; 超过时效目标变黄, 超过 2 倍变红 (目标 = 时效页「每一步」里的那几个)
+  const KT = { s0: 30, s1: 120, s2: 30, s4: 60, s5: 60, ...(kt?.[0]?.value || {}) };
+  const stepTarget = { quote: KT.s0, pick: KT.s1, so: ['ordered', 'confirmed'].includes(deal.status) ? null : KT.s2, ship: Number(KT.s4) + Number(KT.s5) }[STEP_KEYS[current]] ?? null;
+  const lastAt = data.events.length ? data.events.reduce((a, e) => (new Date(e.at) > new Date(a) ? e.at : a), deal.created_at) : deal.created_at;
+  const stuckMin = !cancelled && !allDone ? workMinutes(lastAt, new Date()) : null;
+  const stuckTone = stuckMin == null ? '' : !stepTarget ? 'gray' : stuckMin <= stepTarget ? 'green' : stuckMin <= stepTarget * 2 ? 'amber' : 'red';
   const nextLabel = current >= 0 && current < LAST_STEP ? STEPS[current + 1]?.label : null;
   const overdue = deal.planned_ship_date && ['confirmed', 'reviewed', 'partial'].includes(deal.status) && dDate(deal.planned_ship_date) < today();
   const dueToday = deal.planned_ship_date && ['confirmed', 'reviewed', 'partial'].includes(deal.status) && dDate(deal.planned_ship_date) === today();
@@ -143,11 +151,11 @@ export default function Deal({ id }) {
             return (
               <React.Fragment key={s.key}>
                 {i > 0 && <span className={`flow2-line ${done ? 'done' : ''}`} />}
-                <button type="button" className={`flow2-step ${done ? 'done' : ''} ${now ? 'now' : ''} ${curKey === s.key ? 'viewing' : ''}`}
+                <button type="button" className={`flow2-step ${done ? 'done' : ''} ${now ? 'now' : ''} ${now && stuckTone ? 'st-' + stuckTone : ''} ${curKey === s.key ? 'viewing' : ''}`}
                   disabled={!reachable} onClick={() => setView(s.key)} title={doc ? `${s.label}：${doc}` : s.label}>
                   <span className="c">{done ? '✓' : i + 1}</span>
                   <span className="l"><span className="hide-m">{t(s.label)}</span><span className="show-m">{t(s.short)}</span></span>
-                  <span className="d">{curKey === s.key ? (doc ? (isDocNo ? short(doc) : doc) : now ? '当前' : '') : now ? '当前' : ''}</span>
+                  <span className="d">{curKey === s.key && doc && !now ? (isDocNo ? short(doc) : doc) : now ? <span className={`stuck-t ${stuckTone}`} title={stepTarget ? `这一步已经 ${fmtMin(stuckMin)}（目标 ${fmtMin(stepTarget)}，只算上班时间）` : `等客户，已经 ${fmtMin(stuckMin)}`}>{fmtMin(stuckMin)}</span> : curKey === s.key && doc ? (isDocNo ? short(doc) : doc) : ''}</span>
                 </button>
               </React.Fragment>
             );

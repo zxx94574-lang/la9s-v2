@@ -268,7 +268,7 @@ function Slot({ title, children, open0 }) {
   }, []);
   return (
     <div className="slot" style={has ? null : { display: 'none' }}>
-      {has && <div className="row between todo-row slot-h" onClick={() => setOpen(!open)}><span><b>{title}</b>{n > 0 && <span className="pill gray" style={{ marginLeft: 8 }}>{n} 条</span>}</span><span className={`fold-btn ${open ? 'on' : ''}`} style={{ alignSelf: 'center' }}><i className="fold-ico">☰</i>{open ? '收起' : '明细'}</span></div>}
+      {has && <div className="row between todo-row slot-h" onClick={() => setOpen(!open)}><span><b>{title}</b>{n > 0 && <span className="pill gray" style={{ marginLeft: 8 }}>{n} 条</span>}</span><span className={`fold-btn ico-only ${open ? 'on' : ''}`} style={{ alignSelf: 'center' }} title={open ? '收起' : '明细'}><i className="fold-ico">☰</i></span></div>}
       <div ref={ref} className="todo-merge slot-b" style={open ? null : { display: 'none' }}>{children}</div>
     </div>);
 }

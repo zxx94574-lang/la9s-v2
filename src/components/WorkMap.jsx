@@ -1,3 +1,4 @@
+import React from 'react';
 // 工作地图 (Frank 11-20): 「规则参数」「时效与准确率」… 凡是按业务环节分的页面, 顶上都用这一条.
 // 上面一排 = 订单流程 (询单 → 报价·确认 → … → 收款), 和订单页的流程条同一套环节;
 // 下面一排 = 流程以外的日常工作 (热线回访 / 客户拜访 / 资金 / 采购 / 打卡工资 / 指令 / 客户定价 / 系统).
@@ -31,20 +32,22 @@ export function goArea(k, go) {
   if (a.page) go(a.page);
 }
 
-// info(k) → { sub, tone } | null   tone: red / amber / green / gray
+// info(k) → { val, sub, tone } | null   tone: red / amber / green / gray
+// 474 (Frank 11-20): 和订单页流程条同一个样子 —— 流程里的环节 = 圆圈 + 连线, 流程以外 = 圆圈不连线;
+// 圆圈里 = 这一环节的主数 (时效页: 主指标, 绿黄红; 规则参数页: 几条规则, 灰), 圆圈下 = 名字 + 一行小字.
 export function WorkMap({ value, onChange, info }) {
-  const cell = (a, i, arr) => {
+  const node = (a, line) => {
     const x = info?.(a.k) || null;
     return (
-      <span key={a.k} className="wm-cell">
-        <button type="button" className={`wm-step ${value === a.k ? 'on' : ''} ${x?.tone ? 't-' + x.tone : ''}`} onClick={() => onChange(value === a.k ? null : a.k)}>
-          <b>{a.l}</b><span>{x?.sub ?? '—'}</span></button>
-        {arr === FLOW && i < arr.length - 1 && <i className="wm-arrow" aria-hidden="true">›</i>}
-      </span>);
+      <React.Fragment key={a.k}>
+        <button type="button" className={`wm-node ${value === a.k ? 'on' : ''} t-${x?.tone || 'gray'}`} onClick={() => onChange(value === a.k ? null : a.k)} title={x?.sub || ''}>
+          <span className="wm-dot">{x?.val ?? '—'}</span><b>{a.l}</b>{x?.sub && <span className="wm-sub">{x.sub}</span>}</button>
+        {line && <i className="wm-line" aria-hidden="true" />}
+      </React.Fragment>);
   };
   return (
     <div className="wmap">
-      <div className="wm-row wm-flow">{FLOW.map((a, i) => cell(a, i, FLOW))}</div>
-      <div className="wm-row wm-other"><span className="wm-lab">流程以外</span>{OTHER.map((a, i) => cell(a, i, OTHER))}</div>
+      <div className="wm-row wm-flow">{FLOW.map((a, i) => node(a, i < FLOW.length - 1))}</div>
+      <div className="wm-row wm-other"><span className="wm-lab">流程以外</span>{OTHER.map((a) => node(a, false))}</div>
     </div>);
 }

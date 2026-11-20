@@ -188,7 +188,9 @@ export function CustomerDrawer({ id, onClose }) {
               <dt>客户类别</dt><dd>{c.status === 'prospect' ? <Pill tone="amber">潜客</Pill> : c.status === 'active' ? <Pill tone="green">正式</Pill> : <Pill>停用</Pill>} {SUPPLY[c.supply] || SUPPLY.local} · {KIND[c.kind]}{c.recycle_type ? ` · ${c.recycle_type}` : ''}</dd>
               <dt>归属销售员</dt><dd>{c.owner_employee_id ? <EmpLink id={c.owner_employee_id} name={c.owner} /> : '—（待认领）'}{ownerPhone ? <span className="muted small">　{fmtPhone(ownerPhone)}</span> : null}</dd>
               {price && <><dt>欠款</dt><dd><b className={Number(c.balance) > 0 ? 'red-t2' : ''}>{Number(c.balance) < 0 ? `预付 ${money(-c.balance)}` : money(c.balance || 0)}</b>{c.oldest_days ? <span className="muted small">　最老一笔 {c.oldest_days} 天</span> : null}</dd>
-                <dt>上限 / 账期</dt><dd>{c.credit_limit != null ? money(c.credit_limit) : '不限'} / {c.credit_days != null ? `${c.credit_days} 天` : '不限'}{c.has_agreement && <> <Pill tone="gray">有协议</Pill></>}{c.block_on_debt && <> <Pill tone="red">有欠款不出货</Pill></>}</dd></>}
+                <dt>上限 / 账期</dt><dd>{c.credit_limit != null ? money(c.credit_limit) : '不限'} / {c.credit_days != null ? `${c.credit_days} 天` : '不限'}{c.has_agreement && <> <Pill tone="gray">有协议</Pill></>}{c.block_on_debt && <> <Pill tone="red">有欠款不出货</Pill></>}
+                  {c.credit_limit != null && Number(c.credit_limit) > 0 && <LimitBar label="欠款 / 上限" v={Math.max(0, Number(c.balance || 0))} max={Number(c.credit_limit)} fmt={(x) => money(x)} />}
+                  {c.credit_days != null && Number(c.credit_days) > 0 && <LimitBar label="最老一笔 / 账期" v={Number(c.oldest_days || 0)} max={Number(c.credit_days)} fmt={(x) => `${x} 天`} />}</dd></>}
               <dt>备注</dt><dd>{c.note || '—'}</dd>
             </dl>
           </div>
@@ -470,4 +472,15 @@ function CustMargin({ customerId }) {
       ]} />
     </div>
   );
+}
+
+// 475 ④ (Frank 11-20): 欠款 / 上限、最老一笔 / 账期 画成门槛条 —— 上限、账期就是红线; 到 70% 变黄 (Claude 先定的)
+function LimitBar({ label, v, max, fmt }) {
+  const p = max ? (v / max) * 100 : 0; const tone = p >= 100 ? 'red' : p >= 70 ? 'amber' : 'green';
+  const hi = Math.max(120, p * 1.05); const pos = (x) => `${Math.min(100, (x / hi) * 100)}%`;
+  return (
+    <div className={`lim-bar t-${tone}`} title={`${label}：${fmt(v)} / ${fmt(max)}（${p.toFixed(0)}%）。到 70% 变黄，到上限变红。`}>
+      <span className="small muted">{label}</span><b>{p.toFixed(0)}%</b>
+      <span className="mt-band" style={{ background: `linear-gradient(90deg, #dcfce7 0 ${pos(70)}, #fef3c7 ${pos(70)} ${pos(100)}, #fee2e2 ${pos(100)})` }}><i style={{ left: pos(Math.min(p, hi)) }} /></span>
+    </div>);
 }

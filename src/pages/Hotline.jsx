@@ -15,6 +15,7 @@ const SLEEP_DAYS = 14;
 const daysSince = (v) => (v ? Math.floor((Date.now() - new Date(v).getTime()) / 864e5) : null);
 
 import { CallLists } from '../components/Batch2.jsx';
+import { MetricStrip } from '../components/Metric.jsx';
 export default function Hotline() {
   const { org, role } = useApp();
   const [tab, setTab] = useState('queue');
@@ -67,6 +68,7 @@ export default function Hotline() {
         <div className="sub">今天要打：约了今天（或更早）跟进的，加上 {SLEEP_DAYS} 天没联系也没下单的正式客户。打完点「记结果」，选一下结果就行。</div></div>
         <PeriodBar p={P}>{can(role, 'prospect') && <button type="button" className="btn" onClick={() => setNewP(true)}>＋ 新潜客</button>}</PeriodBar>
       </div>
+      <MetricStrip ids={['quote.open', 'hotline.same', 'hotline.follow']} from={P.from} to={P.to} />
       <div className="card">
         <div className="tabs">
           <button type="button" className={tab === 'queue' ? 'on' : ''} onClick={() => setTab('queue')}>今天要打 <span className="queue-n">{queue.length}</span></button>

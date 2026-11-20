@@ -21,7 +21,8 @@ const AMBER = '#8DB4EE';   // 440 (Frank 11-19): FOB 用浅蓝, 和品牌蓝同�
 
 // 小实心三角: 展开 / 收起明细
 // 439 (Frank 11-19): 展开明细的按钮全站统一, 永远在板块 / 卡片的右下角; 11-20 Frank: 明细一律用 ☰ 图标 (和单号预览同一个), 只放大不加框
-export const Fold = ({ open, onClick, label = '明细' }) => <button type="button" className={`fold-btn ${open ? 'on' : ''}`} onClick={onClick} aria-expanded={!!open}><i className="fold-ico">☰</i>{open ? '收起' : label}</button>;
+// 11-20 Frank: 只留 ☰ 图标, 不要「明细 / 收起」两个字; 展开 = 图标变实心蓝, 收起 = 回到白底
+export const Fold = ({ open, onClick, label = '明细' }) => <button type="button" className={`fold-btn ico-only ${open ? 'on' : ''}`} onClick={onClick} aria-expanded={!!open} aria-label={open ? '收起' : label} title={open ? '收起' : label}><i className="fold-ico">☰</i></button>;
 const Amt = ({ v, cur, tone }) => <span className={`dk-v ${tone || ''}`}>{v == null ? '—' : money(v, cur)}<small>{cur}</small></span>;
 
 // ───────── 折算 ─────────

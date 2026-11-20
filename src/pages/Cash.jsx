@@ -14,6 +14,7 @@ import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { can, PAY_METHODS } from '../lib/domain.js';
 import { money, dDate, today, friendlyError, periodRange } from '../lib/format.js';
+import { MetricStrip } from '../components/Metric.jsx';
 
 export const EXPENSE_CATS = ['交通费（出租车 / Yango）', '话费 / 网费', '运费 / 清关', '房租', '工资 / 补贴', '餐费', '水电', '办公用品', '采购付款', '其他'];
 const KIND_L = { opening: '期初', deposit: '到账', handover: '交款', expense: '支出', bank_out: '流水出账', transfer_out: '互转转出', transfer_in: '互转转入', count_adjust: '盘点调整' };
@@ -129,6 +130,7 @@ export default function Cash() {
           {dec && <button type="button" className="btn" onClick={() => setModal({ t: 'account' })}>账户设置</button>}
         </PeriodBar>
       </div>
+      <MetricStrip ids={['cash.pending', 'pay.days']} from={P.from} to={P.to} />
       {data.acc.length === 0 && <div className="card card-b muted">还没有账户。中方点「账户设置」先建。</div>}
       {/* 414 (Frank 11-18): 自有账户 / 公户分两块; 卡片可以拖动换位置 (只中方, 顺序全公司一样); 待核对的收款在卡片上看得见 */}
       {[['own', '公司自有账户', data.acc.filter((a) => !a.is_public)], ['pub', '公户（钱在个人手里，算他欠公司）', data.acc.filter((a) => a.is_public)]].map(([gk, gt, list]) => (list.length > 0 || gk === 'own') && (

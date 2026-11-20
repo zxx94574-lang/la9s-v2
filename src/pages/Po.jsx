@@ -14,6 +14,8 @@ import { can } from '../lib/domain.js';
 import { parsePackingBook } from '../lib/packingList.js';
 import { ReceiveModal as LineReceive } from './Replenish.jsx';
 import { dDate, dt, qty, money, today, friendlyError } from '../lib/format.js';
+import { MetricStrip } from '../components/Metric.jsx';
+import { periodRange } from '../lib/format.js';
 
 const N = (v) => Number(v) || 0;
 export const PURPOSE = { local: ['本地备货', 'blue'], fob: ['FOB', 'amber'], mixed: ['混装', 'amber'], supplies: ['物资', 'gray'], unknown: ['待定', 'gray'] };
@@ -124,6 +126,7 @@ export default function PoPage() {
         {can(role, 'po_edit') && <button type="button" className="btn" onClick={() => setImp(true)}>⇪ 导入箱单</button>}
         {can(role, 'po_edit') && <button type="button" className="btn primary" onClick={() => setEdit({ purpose: 'local', lines: [] })}>＋ 新建采购单</button>}
       </div>
+      <MetricStrip ids={['po.late']} from={periodRange('month')[0]} to={periodRange('month')[1]} />
       <div className="card">
         <div className="card-h" style={{ justifyContent: 'flex-end' }}><div className="seg"><button type="button" className={view === 'po' ? 'on' : ''} onClick={() => setView('po')}>按订单看</button><button type="button" className={view === 'line' ? 'on' : ''} onClick={() => setView('line')}>按明细看</button></div></div>
         {view === 'line' ? <Grid id="po-lines" columns={lineCols} rows={(detail || []).filter(filt)} empty={detail ? '没有明细' : '加载中…'}

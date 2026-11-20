@@ -167,7 +167,7 @@ export function RulesIndex() {
   const rank = (id) => (id.startsWith('kpi.') ? 2 : BY_ID[id][6] === 'bool' ? 0 : 1);
   const by = {}; for (const r of RULES) { const m = META[r[0]]; if (m) (by[m.area] ||= []).push(r[0]); }
   for (const k of Object.keys(by)) by[k].sort((a, b) => rank(a) - rank(b));
-  const info = (k) => { const n = (by[k] || []).length + (k === 'sys' ? SYS_PANELS.length : 0); return { sub: n ? `${n} 条` : '没有', tone: n ? null : 'gray' }; };
+  const info = (k) => { const n = (by[k] || []).length + (k === 'sys' ? SYS_PANELS.length : 0); return { val: n || '—', sub: n ? `${n} 条规则` : '没有规则', tone: 'gray' }; };
   const shown = AREAS.filter((a) => (sel ? a.k === sel : (by[a.k] || []).length || a.k === 'sys'));
   return (
     <div className="stack" style={{ gap: 12 }}>

@@ -1,6 +1,7 @@
 // 241 (Frank 11-11): 时效与准确率 —— 先只显示、不考核; 跑 2–4 周看到真实的中位数再定线
 // 每张单按步骤分段计时 (只算上班时间), 谁的时间算谁的; 等客户的时间单独算; 速度和准确率成对看
-import { WorkMap } from '../components/WorkMap.jsx';
+import { WorkMap, FLOW, OTHER } from '../components/WorkMap.jsx';
+import { METRICS, useMetricCfg, useMetricData, MetricCard, metricTone, fmtMetric, HiddenMetrics } from '../components/Metric.jsx';
 import { RuleGear } from '../components/Rules.jsx';
 import SalesComm from '../components/SalesComm.jsx';
 import HotlineKpi from '../components/HotlineKpi.jsx';
@@ -32,7 +33,7 @@ const weekOf = (v) => { const d = new Date(v); const k = new Date(Date.UTC(d.get
 const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 
 export default function Kpi() {
-  const { org } = useApp();
+  const { org, role } = useApp();
   const [lateSeg, setLateSeg] = useState(null);
   const [sel, setSel] = useState(null);   // 11-20: 和规则参数同一条工作地图, 点一个环节只看它
   const P = usePeriod('kpi'); const { from, to } = P;
@@ -96,6 +97,29 @@ export default function Kpi() {
     const fix = {}; for (const c of data.checks) { const p = emp(c.picker_employee_id); if (p) { (fix[p] ||= { lines: 0, fix: 0 }); fix[p].lines += c.lines; fix[p].fix += c.review_fix; } }
     return { dirPeople, comPeople, openRows, openLate, seg, rows, fix, people: Object.values(person).map((p) => ({ ...p, n: p.mins.length, med: median(p.mins), avg: p.mins.reduce((a, b) => a + b, 0) / p.mins.length })) };
   }, [data]);
+  // 474: 时效页自己算出来的几个指标 (达标率 / 找货出错率 / 收货差异 / 指令按时), 并进全站同一套指标里
+  const extra = useMemo(() => {
+    if (!calc) return {};
+    const out = {};
+    const segCols = [{ key: 'no', label: '单号', w: 150, render: (r) => <DealLink id={r.id} no={r.no} /> }, { key: 'customer', label: '客户', w: 150 }, { key: 'seg', label: '哪一段', w: 160 }, { key: 'm', label: '用时', w: 110, type: 'number', render: (r) => <span className={r.late ? 'red-t2' : ''}>{fmtMin(r.m)}</span> }];
+    const pass = (areas) => {
+      const segs = calc.seg.map((x, i) => ({ ...x, area: SEG_AREA[i] })).filter((x) => areas.includes(x.area) && x.target);
+      const items = segs.flatMap((x) => x.items.map((it) => ({ ...it, seg: x.name, late: it.m > x.target })));
+      const ok = items.filter((it) => !it.late).length;
+      return { value: items.length ? (ok / items.length) * 100 : null, rows: items.sort((a, b) => b.late - a.late || b.m - a.m), cols: segCols, sub: items.length ? `${ok} / ${items.length}${items.length < MIN_N ? ' · 太少' : ''}` : '' };
+    };
+    out['quote.pass'] = pass(['quote']); out['pick.pass'] = pass(['pick']); out['so.pass'] = pass(['so']); out['ship.pass'] = pass(['ship']); out['sign.pass'] = pass(['sign']);
+    const fx = Object.entries(calc.fix).map(([name, f]) => ({ id: name, who: name, lines: f.lines, fix: f.fix, p: f.lines ? (f.fix / f.lines) * 100 : 0 }));
+    const L = fx.reduce((a, x) => a + x.lines, 0), F = fx.reduce((a, x) => a + x.fix, 0);
+    out['pick.err'] = { value: L ? (F / L) * 100 : null, rows: fx.sort((a, b) => b.p - a.p), cols: [{ key: 'who', label: '找货人', w: 120 }, { key: 'lines', label: '找的行', w: 90, type: 'number' }, { key: 'fix', label: '被改的行', w: 90, type: 'number' }, { key: 'p', label: '出错率', w: 90, type: 'number', render: (r) => `${r.p.toFixed(1)}%` }], sub: `${F} / ${L} 行` };
+    const dn = [...new Set(data.discs.map((x) => x.deal_id))];
+    out['ship.disc'] = { value: dn.length, rows: dn.map((id) => { const d = calc.rows.find((r) => r.id === id); return { id, no: d?.biz_no || '—', customer: d?.customer_name || '' }; }), cols: [{ key: 'no', label: '单号', w: 150, render: (r) => <DealLink id={r.id} no={r.no} /> }, { key: 'customer', label: '客户', w: 160 }] };
+    const dn2 = calc.dirPeople.reduce((a, p) => a + p.n, 0), dl = calc.dirPeople.reduce((a, p) => a + p.late, 0);
+    out['dir.ontime'] = { value: dn2 ? ((dn2 - dl) / dn2) * 100 : null, rows: calc.dirPeople.filter((p) => p.late || p.unack), cols: [{ key: 'name', label: '谁', w: 120 }, { key: 'n', label: '几条', w: 70, type: 'number' }, { key: 'late', label: '超时', w: 70, type: 'number' }, { key: 'unack', label: '没收到', w: 80, type: 'number' }], sub: `${dn2 - dl} / ${dn2} 条` };
+    return out;
+  }, [calc, data]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const mdata = useMetricData(from, to, extra);
+  const mcfg = useMetricCfg();
   if (!calc) return <div className="empty">加载中…</div>;
   const totals = calc.rows.filter((r) => r.total != null).map((r) => r.total);
   const weeks = [...new Set(calc.seg.flatMap((x) => x.items.map((it) => it.week)))].sort();
@@ -108,16 +132,13 @@ export default function Kpi() {
     return { ...x, key: i, area: SEG_AREA[i], n, ok, rate: n && x.target ? (ok / n) * 100 : null, med: median(x.mins), p90: pctl(x.mins, 0.9), few: n < MIN_N, perLine: i === 1 || i === 4 ? (lines ? x.mins.reduce((a, b) => a + b, 0) / lines : null) : null,
       late: x.target ? x.items.filter((it) => it.m > x.target).sort((a, b) => b.m - a.m) : [], trendTxt: tr == null ? '' : Math.abs(tr) < 0.05 ? '差不多' : `${tr > 0 ? '慢了' : '快了'} ${Math.abs(tr * 100).toFixed(0)}%`, trendUp: tr > 0.05 };
   });
-  // 工作地图每格的小字: 流程环节 = 这一环节里各段合起来的达标率; 流程外 = 那块的关键数
+  // 工作地图每格: 圆圈 = 这一环节排第一个的指标 (绿黄红, 门槛在指标卡 ⚙ 里改), 小字 = 指标名
+  const areaMetrics = (k) => METRICS.filter((m) => m.area === k && !mcfg.get(m.id).hidden && (m.id !== 'cust.price' || role === 'admin'));
   const areaInfo = (k) => {
-    const rs = segRows.filter((r) => r.area === k && r.target && r.n);
-    if (rs.length) { const ok = rs.reduce((a, r) => a + r.ok, 0); const n = rs.reduce((a, r) => a + r.n, 0); const pct = (ok / n) * 100; const few = n < MIN_N;
-      return { sub: few ? `${n} 单 · 太少` : `达标 ${pct.toFixed(0)}%`, tone: few ? 'gray' : pct >= 90 ? 'green' : pct >= 70 ? 'amber' : 'red' }; }
-    if (segRows.some((r) => r.area === k && r.n)) return { sub: '等客户', tone: 'gray' };
-    if (k === 'hotline') return calc.openLate.length ? { sub: `${calc.openLate.length} 张超 5 分钟`, tone: 'red' } : { sub: '都在 5 分钟内', tone: 'green' };
-    if (k === 'dir') { const late = calc.dirPeople.reduce((a, p) => a + p.late, 0); return calc.dirPeople.length ? { sub: late ? `${late} 次超时` : '都按时', tone: late ? 'red' : 'green' } : { sub: '没有', tone: 'gray' }; }
-    if (k === 'staff') { const n = new Set([...calc.people.map((x) => x.name), ...calc.comPeople.map((x) => x.name)]).size; return n ? { sub: `${n} 人` } : { sub: '没有', tone: 'gray' }; }
-    return { sub: '没有', tone: 'gray' };
+    const m0 = areaMetrics(k)[0]; if (!m0 || !mdata) return k === 'sys' ? { val: '—', sub: '' , tone: 'gray' } : { val: '—', sub: '没有指标', tone: 'gray' };
+    const m = mcfg.get(m0.id); const v = mdata[m0.id]?.value ?? null;
+    const short = v == null ? '—' : m.unit === '%' ? `${Math.round(v)}%` : m.unit === '天' ? `${Math.round(v)}天` : String(Math.round(v));
+    return { val: short, sub: m.name, tone: metricTone(m, v) };
   };
   const show = (...ks) => !sel || ks.includes(sel);
   const FLOWK = ['quote', 'pick', 'so', 'ship', 'sign'];
@@ -126,6 +147,9 @@ export default function Kpi() {
       <div className="pagehead"><div><div className="eyebrow">Délais & qualité</div><h1 tabIndex={0}>时效与准确率 <Info>只算上班时间（周一到周五 9:00–17:30，中午集体午休自动扣 1 小时；周六 9:00–12:00）。现在只显示、不考核：等员工用自己的工号登录、跑 2–4 周后，再按真实的中位数定线。顶上的环节和「规则参数」是同一条：点一个只看它，再点一下看全部。</Info></h1></div>
         <PeriodBar p={P} /></div>
       <div style={{ marginBottom: 12 }}><WorkMap value={sel} onChange={setSel} info={areaInfo} /></div>
+      {mdata && mcfg.ready && <div className="mt-area">
+        <div className="mt-strip" style={{ marginBottom: 0 }}>{[...FLOW, ...OTHER].filter((a) => !sel || a.k === sel).flatMap((a) => areaMetrics(a.k).map((m) => <MetricCard key={m.id} id={m.id} d={mdata[m.id]} cfg={mcfg} tag={sel ? null : a.l} />))}</div>
+        <HiddenMetrics area={sel} /></div>}
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="bigsum">
           <div><div className="k">这段时间开的单</div><div className="v">{calc.rows.length}</div></div>

@@ -10,6 +10,7 @@ import { ResultPill, FollowDate, VISIT_RESULTS } from '../components/Crm.jsx';
 import { CustomerDrawer } from './Customers.jsx';
 import { can } from '../lib/domain.js';
 import { dDate, dt, today, friendlyError } from '../lib/format.js';
+import { MetricStrip } from '../components/Metric.jsx';
 
 export default function Visits() {
   const { org, role } = useApp();
@@ -38,6 +39,7 @@ export default function Visits() {
         <div className="sub">每次上门填一张：门店照片必拍，新店直接建潜客（自动临时编码），转正式和定档位归中方。</div></div>
         <PeriodBar p={P}>{can(role, 'prospect') && <button type="button" className="btn primary" onClick={() => setForm(true)}>＋ 记一次拜访</button>}</PeriodBar>
       </div>
+      <MetricStrip ids={['visit.conv', 'visit.n']} from={P.from} to={P.to} />
       <div className="card">
         <Grid id="visits" table="visits" columns={cols} rows={data} onRowClick={(r) => setOpen(r.customer_id)} empty="这段时间没有拜访记录"
           tools={<><span className="small muted">{data.length} 次拜访 · {new Set(data.map((r) => r.customer_id)).size} 家店</span></>} />

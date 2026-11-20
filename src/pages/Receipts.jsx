@@ -12,6 +12,7 @@ import { BalanceCopy } from '../components/Doc.jsx';
 import ReceiptForm, { DealDrawer, DealChip, BalanceLine, VoidReceiptModal, RcvStatus, rcvState, ReallocModal, verifyRcvAction , ReceiptDone } from '../components/ReceiptForm.jsx';
 import { can, PAY_METHODS } from '../lib/domain.js';
 import { money, dDate, friendlyError, periodRange } from '../lib/format.js';
+import { MetricStrip } from '../components/Metric.jsx';
 
 const N = (v) => Number(v || 0);
 
@@ -76,6 +77,7 @@ export default function Receipts({ preset }) {
     <>
       <div className="pagehead"><div><div className="eyebrow">Encaissements</div><h1>收款与冲账</h1>
         <div className="sub">隔天付款、一次付多单在这里收；客户当场付款直接在订单的「⑨ 收款」里收。两边是同一个收款功能。下面「收款记录」按右边选的时间段列。</div></div><PeriodBar p={P} /></div>
+      <MetricStrip ids={['pay.days', 'cash.pending']} from={from} to={to} />
 
       <div className="card">
         <div className="card-h">
