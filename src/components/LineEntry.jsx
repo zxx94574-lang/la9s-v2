@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Grid from './Grid.jsx';
 import ModelPicker, { avail, StockPill } from './ModelPicker.jsx';
+import { AvailPill } from './DocPeek.jsx';
 import { Modal, Shared, useApp, useHistory, UndoBar, Bang, lowTip, MoneyIn } from './ui.jsx';
 import { call } from '../db/client.js';
 import { money, qty } from '../lib/format.js';
@@ -487,8 +488,8 @@ export function PickList({ catalog, categories, picked, onClose, onAdd, stockLab
               { key: 'category', label: '种类', w: 110, value: (p) => p.category },
               { key: 'model', label: '机型', w: 140, value: (p) => p.model, render: (p) => <><b>{p.model}</b></> },
               { key: 'shared', label: '通用性', w: 160, value: (p) => (p.shared_models || []).join(' / '), render: (p) => <Shared list={p.shared_models} /> },
-              { key: 'avail', label: stockLabel || '可售', w: 80, align: 'center', value: (p) => (p.band ? { ok: '有货', low: '有货', none: '可预订' }[p.band] : avail(p)),
-                render: (p) => (p.band ? <span className={`pill ${{ ok: 'green', low: 'green', none: 'amber' }[p.band]}`}>{{ ok: '有货', low: '有货', none: '可预订' }[p.band]}</span> : <StockPill n={avail(p)} />) },
+              { key: 'avail', label: '状态', w: 96, align: 'center', value: (p) => (p.band ? ({ ok: '可售', low: '可售' }[p.band] || '可预订') : avail(p) > 0 ? `可售 ${avail(p)}` : '可预订'),
+                render: (p) => (p.band ? <AvailPill band={p.band} pid={p.id} /> : <StockPill n={avail(p)} pid={p.id} />) },
               { key: 'qty', label: '数量', w: 90, fill: true, value: (p) => (picked?.has(p.id) ? '已在明细' : chosen[p.id] ?? ''), render: (p) => (picked?.has(p.id) ? <span className="small muted">已在明细</span> : p.id in chosen ? (chosen[p.id] || <span className="muted">数量</span>) : ''),
                 edit: (p) => (picked?.has(p.id) ? null : { type: 'number', value: chosen[p.id] ?? '', onChange: (v) => setChosen((c) => ({ ...c, [p.id]: String(v ?? '').replace(/\D/g, '') })) }) },
             ]} />

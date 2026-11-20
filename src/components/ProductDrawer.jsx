@@ -74,7 +74,7 @@ export default function ProductDrawer({ product, tier, onClose }) {
       seeAll ? q(`select * from app.price_settings where org_id = $1`, [org]) : [null],
       role === 'admin' ? q(`select id, name from app.categories where org_id = $1 order by sort_order nulls last, name`, [org]).catch(() => q(`select id, name from app.categories where org_id = $1 order by name`, [org])) : [],
       seeAll ? call(role, `select * from app.archive_history($1,'product',$2)`, [org, product.id]).catch(() => []) : [],
-      q(`select * from app.v_in_transit where product_id = $1 and remaining > 0 order by eta nulls last`, [product.id]).catch(() => []),
+      ['admin', 'cn_support'].includes(role) ? q(`select * from app.v_in_transit where product_id = $1 and remaining > 0 order by eta nulls last`, [product.id]).catch(() => []) : [],   // 467: 在途数量只中方 + 国内采购看
     ]);
     return { p, recent, batches, cats, hist, transit, ps: ps || { rmb_per_xof: 0.0107, xof_per_usd: 600, round_to: 100 } };
   }, [product?.id, org, tick]);

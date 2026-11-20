@@ -12,7 +12,7 @@ import { balanceWords } from '../lib/domain.js';
 import { money, dDate, dt, friendlyError } from '../lib/format.js';
 
 // 230 / 231 (Frank 11-11): 客户端只有两种 —— 有货 (绿) / 可预订 (不叫无货, 不显示少量和数量); 点了可预订的照样能下, 差的自动记进未满足需求
-const BAND = { ok: ['有货 · En stock', 'green'], low: ['少量 · Stock limité', 'amber'], preorder: ['可预订 · Sur commande', 'blue'], none: ['暂时没货 · Rupture', 'gray'] };
+const BAND = { ok: ['可售 · En stock', 'green'], low: ['可售 · En stock', 'green'], preorder: ['可预订 · Sur commande', 'amber'], none: ['可预订 · Sur commande', 'amber'] };   // 464: 只有两个词
 const PSTATUS = { quoted: '已报价，等确认 · Devis prêt', hotline_ok: '已确认，排队备货 · Confirmée', picking: '备货中 · En préparation', picked: '备货中 · En préparation',
   ordered: '销售单已出，请确认 · À confirmer', confirmed: '已确认，打包中 · Emballage', reviewed: '已打包，待发货 · Prête', partial: '部分已发货 · Livrée en partie', shipped: '已发货 · Livrée' };
 const SOSTATUS = { submitted: ['待老板处理', 'amber'], accepted: ['老板自己发', 'blue'], rejected: ['已拒绝', 'gray'], forwarded: ['已转给 LA&9S', 'blue'], delivered: ['已送达', 'green'] };
@@ -67,7 +67,7 @@ export function PortalShop() {
           return (
             <div key={p.id} className={`pitem ${Number(cart[p.id]) > 0 ? 'on' : ''}`}>
               <div className="grow"><b>{p.model}</b><div className="small muted">{p.category} · {p.code}</div>
-                <div className="row" style={{ gap: 4, marginTop: 4, flexWrap: 'wrap' }}>{p.avail != null ? <Pill tone={Number(p.avail) > 0 ? 'green' : 'gray'}>{Number(p.avail) > 0 ? `有货 ${Number(p.avail).toLocaleString('en-US')} 片` : '暂时没货'}</Pill> : <Pill tone={bt}>{bl}</Pill>}{Number(p.transit) > 0 && <Pill tone="blue">可预订 {Number(p.transit).toLocaleString('en-US')} 片</Pill>}{p.price != null && <span className="small">你的价 <b>{Number(p.price).toLocaleString('en-US')}</b></span>}</div></div>
+                <div className="row" style={{ gap: 4, marginTop: 4, flexWrap: 'wrap' }}>{p.avail != null && Number(p.avail) > 0 ? <Pill tone="green">可售 {Number(p.avail).toLocaleString('en-US')} 片</Pill> : <Pill tone={p.avail != null ? 'amber' : bt}>{p.avail != null ? '可预订 · Sur commande' : bl}</Pill>}{p.price != null && <span className="small">你的价 <b>{Number(p.price).toLocaleString('en-US')}</b></span>}</div></div>
               <div className="qty-step">
                 <button type="button" onClick={() => setCart((c) => ({ ...c, [p.id]: Math.max(0, Number(c[p.id] || 0) - 5) }))}>−</button>
                 <MoneyIn inputMode="numeric" value={cart[p.id] || ''} placeholder="0" onChange={(e) => setCart((c) => ({ ...c, [p.id]: e.target.value.replace(/\D/g, '') }))} />

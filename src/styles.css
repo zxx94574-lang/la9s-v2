@@ -1595,3 +1595,6 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 .slot-h { background: #fafbfd; } .slot-b { border-bottom: 1px solid var(--line-2); background: #fff; }
 .slot-b > .card, .slot-b .todo-empty { border: 0 !important; box-shadow: none !important; border-radius: 0 !important; margin: 0 !important; }
 .route-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 14px; }
+
+/* 467: 「可预订」小框本身就是打开在途小窗的按钮 */
+.peek-trig { all: unset; cursor: pointer; display: inline-flex; } .peek-trig:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }

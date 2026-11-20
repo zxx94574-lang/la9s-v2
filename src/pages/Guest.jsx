@@ -12,7 +12,7 @@ import { friendlyError, dt } from '../lib/format.js';
 
 // 230 / 231 (Frank 11-11): 客户端只有两种 —— 有货 (绿) / 可预订 (不叫无货, 不显示少量和数量); 点了可预订的照样能下, 差的自动记进未满足需求
 // 393: 游客只看 有货 / 少量 / 可预订 (在途有货), 不给数量和价格. 「少量」的线在规则参数里 (默认低于 50 片)
-const BAND = { ok: ['有货 · En stock', 'green'], low: ['少量 · Stock limité', 'amber'], preorder: ['可预订 · Sur commande', 'blue'], none: ['暂时没货 · Rupture', 'gray'] };
+const BAND = { ok: ['可售 · En stock', 'green'], low: ['可售 · En stock', 'green'], preorder: ['可预订 · Sur commande', 'amber'], none: ['可预订 · Sur commande', 'amber'] };   // 464: 只有两个词
 const T = (zh, fr) => <>{zh}<span className="fr"> · {fr}</span></>;
 
 function Shell({ children, sub }) {

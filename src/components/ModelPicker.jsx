@@ -4,10 +4,12 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { createPortal } from 'react-dom';
 import { money, qty } from '../lib/format.js';
 import { useOutside } from './ui.jsx';
+import { AvailPill } from './DocPeek.jsx';
 
 export const avail = (p) => p.stock.reduce((a, s) => a + s.on_hand - s.reserved, 0);
 // 内部看库存 (230): 直接给数量 + 颜色 —— 充足绿 / 快没了黄 (< 20) / 0 红; 全站同一个
-export const StockPill = ({ n }) => <span className={`pill ${n >= 20 ? 'green' : n > 0 ? 'amber' : 'red'}`}>{qty(n)} 片</span>;
+// 464: 改成全站统一的 可售 (绿, 带片数) / 可预订 (黄)
+export const StockPill = ({ n, pid }) => <AvailPill n={n} pid={pid} />;
 
 export default function ModelPicker({ catalog, categories, tier, onPick, onUnpick, showPrice = true, extra, picked }) {
   const [cat, setCat] = useState('');
@@ -76,7 +78,7 @@ export default function ModelPicker({ catalog, categories, tier, onPick, onUnpic
                     <span className="pk-l1"><span className="m">{picked?.has(p.id) ? '✓ ' : ''}{p.model}</span><span className="muted small">{p.category}</span></span>
                     <span className="pk-l2 muted small"><span className="mono">{p.code}</span>{p.variant ? ` · ${p.variant}` : ''}{p.shared_models.length ? ` · 通用 ${p.shared_models.length}` : ''}</span>
                   </span>
-                  <span className="pk-c"><StockPill n={avail(p)} />{showPrice && (tier ? <span className="small muted">{money(p.prices[tier])} XOF</span> : <span className="small muted">先选客户</span>)}</span>
+                  <span className="pk-c"><StockPill n={avail(p)} pid={p.id} />{showPrice && (tier ? <span className="small muted">{money(p.prices[tier])} XOF</span> : <span className="small muted">先选客户</span>)}</span>
                 </button>
               ))}
             </div>

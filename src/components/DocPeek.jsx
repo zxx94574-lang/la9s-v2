@@ -2,7 +2,7 @@
 // 销售订单的在 Archives.jsx (DealPeek, 老的不动); 这里是 采购单 / 出库单 / 收款单 / 退货单.
 // 权限照旧: 找货员看不到价; 手机上弹框居中 (.peek 的手机样式).
 import React, { useEffect, useRef, useState } from 'react';
-import { q } from '../db/client.js';
+import { q, call } from '../db/client.js';
 import { useApp } from './ui.jsx';
 import { seesPrice } from '../lib/domain.js';
 import { money, qty, dDate, dt } from '../lib/format.js';
@@ -10,6 +10,15 @@ import { money, qty, dDate, dt } from '../lib/format.js';
 let OPEN = null;
 const N = (v) => Number(v || 0);
 const DEFS = {
+  // 467 / 468: 「可预订」小框上看在途 —— 预计到货时间 · 片数 · 机型名; 不含 FOB; 后台只给中方 + 国内采购
+  transit: {
+    label: '看在途的货',
+    load: async (id, { org, role }) => { const lines = await call(role, `select * from app.transit_peek($1,$2)`, [org, id]); return { h: { n: lines.length }, lines }; },
+    head: () => ['在途的货', '不含 FOB', ''],
+    cols: [['预计到货时间', (l) => (l.eta ? dDate(l.eta) : '还没定')], ['片数', (l) => qty(l.qty), 'r'], ['机型名', (l) => <b>{l.model}</b>]],
+    foot: (ls) => [`${ls.length} 批`, qty(ls.reduce((a, l) => a + N(l.qty), 0)), ''],
+    empty: '现在没有在途的货',
+  },
   po: {
     label: '看这张采购单的明细',
     load: async (id) => { const [[h], lines] = await Promise.all([
@@ -55,15 +64,15 @@ const DEFS = {
   },
 };
 
-export function DocPeek({ kind, id }) {
-  const { role } = useApp();
+export function DocPeek({ kind, id, trigger }) {
+  const { role, org } = useApp();
   const def = DEFS[kind];
   const [at, setAt] = useState(null); const [d, setD] = useState(null); const btn = useRef(); const timer = useRef();
   const shut = useRef(); shut.current = () => { clearTimeout(timer.current); setAt(null); };
   useEffect(() => () => { clearTimeout(timer.current); if (OPEN === shut) OPEN = null; }, []);
   useEffect(() => {
     if (!at) return undefined;
-    const off = (e) => { if (!e.target.closest?.('.peek') && e.target !== btn.current) shut.current(); };
+    const off = (e) => { if (!e.target.closest?.('.peek') && !btn.current?.contains(e.target)) shut.current(); };
     const sc = (e) => { if (!e.target.closest?.('.peek')) shut.current(); };
     document.addEventListener('mousedown', off); window.addEventListener('scroll', sc, true);
     return () => { document.removeEventListener('mousedown', off); window.removeEventListener('scroll', sc, true); };
@@ -75,17 +84,17 @@ export function DocPeek({ kind, id }) {
     const r = btn.current.getBoundingClientRect(); const w = Math.min(440, window.innerWidth - 16);
     const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)); const below = window.innerHeight - r.bottom > 260 || r.top < 260;
     setAt({ left, w, ...(below ? { top: r.bottom + 6, maxH: window.innerHeight - r.bottom - 16 } : { bottom: window.innerHeight - r.top + 6, maxH: r.top - 16 }) });
-    if (!d) def.load(id).then((x) => setD(x.h ? x : { h: null, lines: [] })).catch(() => setD({ h: null, lines: [] }));
+    if (!d) def.load(id, { org, role }).then((x) => setD(x.h ? x : { h: null, lines: [] })).catch(() => setD({ h: null, lines: [] }));
   };
   const price = seesPrice(role);
   const cols = def.cols.filter((c) => !c[3] || price);
   const keep = def.cols.map((c) => !c[3] || price);
   return (
     <>
-      <button type="button" ref={btn} className="peek-eye" aria-label={def.label}
+      <button type="button" ref={btn} className={trigger ? 'peek-trig' : 'peek-eye'} aria-label={def.label}
         onMouseEnter={() => { clearTimeout(timer.current); timer.current = setTimeout(open, 120); }}
         onMouseLeave={() => { clearTimeout(timer.current); timer.current = setTimeout(() => shut.current(), 150); }}
-        onClick={(e) => { e.stopPropagation(); clearTimeout(timer.current); if (at) shut.current(); else open(); }}>☰</button>
+        onClick={(e) => { e.stopPropagation(); clearTimeout(timer.current); if (at) shut.current(); else open(); }}>{trigger || '☰'}</button>
       {at && (
         <div className="peek" style={{ left: at.left, width: at.w, top: at.top, bottom: at.bottom, maxHeight: Math.max(180, at.maxH) }} onClick={(e) => e.stopPropagation()}
           onMouseEnter={() => clearTimeout(timer.current)} onMouseLeave={() => shut.current()}>
@@ -104,3 +113,13 @@ export function DocPeek({ kind, id }) {
 }
 // 单号 + 小眼睛 (不带跳转的地方用)
 export const DocNo = ({ kind, id, no, strike }) => <span className="deal-link"><DocPeek kind={kind} id={id} /><b className={`mono ${strike ? 'strike' : ''}`}>{no}</b></span>;
+
+// 464 / 467: 选货的地方全站只有两个状态 —— 可售 (绿) / 可预订 (黄), 对内对外同一个词.
+// n 给了数字 (有权看库存的人) → 可售带片数; 可预订的小框: 中方 / 国内采购 悬停或点一下看在途 (别人只是一个黄框).
+export function AvailPill({ n, band, pid }) {
+  const { role } = useApp();
+  const ok = n != null ? Number(n) > 0 : band === 'ok' || band === 'low';
+  if (ok) return <span className="pill green">{n != null ? `可售 ${qty(n)}` : '可售'}</span>;
+  const pill = <span className="pill amber">可预订</span>;
+  return pid && ['admin', 'cn_support'].includes(role) ? <DocPeek kind="transit" id={pid} trigger={pill} /> : pill;
+}
