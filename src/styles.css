@@ -1669,3 +1669,8 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 .fold-btn .fold-ico { font-style: normal; font-size: 14px; display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: var(--muted); margin-right: 2px; }
 .fold-btn.on .fold-ico, .fold-btn:hover .fold-ico { color: var(--brand); border-color: var(--brand); }
 .pill.tierp { white-space: nowrap; }
+/* 11-20 Frank: 看板卡片的百分比 = 色块 (和表格小块同一种, 大一号) */
+.pill.dk-pct { display: inline-flex; align-items: baseline; font-size: clamp(20px, 2.1vw, 28px); font-weight: 780; letter-spacing: -.5px; padding: 3px 12px; margin: 6px 0 2px; line-height: 1.15; border-radius: 8px; font-variant-numeric: tabular-nums; }
+.pill.dk-pct small { font-size: 12px; margin-left: 4px; font-weight: 600; }
+.dk-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.dk-share { display: inline-flex; align-items: center; gap: 6px; width: 100%; } .dk-share .dbar { flex: 1; } .dk-share small { color: var(--muted); font-variant-numeric: tabular-nums; }

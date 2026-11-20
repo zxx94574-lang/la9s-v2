@@ -32,11 +32,11 @@ export function sumMargin(rows) {
 }
 
 // 毛利率小块: 负 = 红, 低于设定 = 黄, 其余绿 (Frank 三色规则)
-export function MarginPill({ pct, lowPct = 10, missing }) {
+export function MarginPill({ pct, lowPct = 10, missing, big }) {
   if (missing) return <span className="pill gray">成本缺失</span>;
   if (pct == null || !Number.isFinite(pct)) return <span className="muted small">—</span>;
   const tone = pct < 0 ? 'red' : pct < lowPct ? 'amber' : 'green';
-  return <span className={`pill ${tone}`}>{pct.toFixed(1)}%</span>;
+  return big ? <span className={`pill dk-pct ${tone}`}>{pct.toFixed(1)}<small>%</small></span> : <span className={`pill ${tone}`}>{pct.toFixed(1)}%</span>;
 }
 
 export const marginCols = (lowPct) => [
@@ -57,7 +57,7 @@ export function MarginKpis({ t, lowPct, compact }) {
       {cell('销售额', money(Math.round(t.revenue)), t.returned || t.adjust ? `原 ${money(Math.round(t.sale))}${t.returned ? ` · 退货 −${money(Math.round(t.returned))}` : ''}${t.adjust ? ` · 调整 / 核销 ${t.adjust < 0 ? '−' : '+'}${money(Math.abs(Math.round(t.adjust)))}` : ''}` : null)}
       {cell('成本', money(Math.round(t.cost)), t.freight || t.fee ? `货 ${money(Math.round(t.goods))}${t.freight ? ` · 运费 ${money(Math.round(t.freight))}` : ''}${t.fee ? ` · 手续费 ${money(Math.round(t.fee))}` : ''}` : null)}
       {cell('利润', <span className={t.profit < 0 ? 'red-t2' : ''}>{money(Math.round(t.profit))}</span>)}
-      {cell('毛利率', <MarginPill pct={t.pct} lowPct={lowPct} />, t.cover != null && t.cover < 99.5 ? `只算有成本的 ${t.cover.toFixed(0)}% 销售额` : null)}
+      {cell('毛利率', <MarginPill pct={t.pct} lowPct={lowPct} big />, t.cover != null && t.cover < 99.5 ? `只算有成本的 ${t.cover.toFixed(0)}% 销售额` : null)}
       {cell('数量', qty(t.qty), t.missingQty ? `${qty(t.missingQty)} 片成本缺失` : null)}
     </div>
   );

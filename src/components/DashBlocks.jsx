@@ -51,6 +51,8 @@ function total(rows, m) {
 }
 const pctTone = (p, low) => (p == null ? '' : p < 0 ? 'red' : p < low ? 'amber' : 'green');
 const Pct = ({ p, low }) => (p == null ? <span className="muted">—</span> : <span className={`pill ${pctTone(p, low)}`}>{p.toFixed(1)}%</span>);
+// 看板卡片上的百分比 = 同一种色块, 大一号 (Frank 11-20: 和表格里的小块一样, 只是更大)
+export const BigPct = ({ p, low }) => (p == null ? <span className="dk-v muted">—</span> : <span className={`pill dk-pct ${pctTone(p, low)}`}>{p.toFixed(1)}<small>%</small></span>);
 
 export function useDashRows(from, to) {
   const { org, role, tick } = useApp();
@@ -62,42 +64,46 @@ export function useDashRows(from, to) {
 export function Overview({ rows }) {
   const { lowPct } = useMarginRules();
   const [target, setTarget] = useLs('la9s.dash.ov.cur', 'CNY');
+  const [open, setOpen] = useLs('la9s.dash.ov.open', false);
   const m = { target };
   const loc = total(rows.filter((r) => r.supply !== 'fob'), m), fob = total(rows.filter((r) => r.supply === 'fob'), m), all = total(rows, m);
-  const share = all.rev ? loc.rev / all.rev * 100 : 0;
-  const card = (title, f, tone) => (
-    <div className="dk">
-      <div className="dk-t">{title} <small>{target}</small></div>
-      <Amt v={f(all)} cur={target} tone={tone?.(all)} />
-      <div className="dk-sub"><span><i style={{ background: 'var(--brand)' }} />本地 <b>{money(f(loc), target)}</b> {target}</span><span><i style={{ background: AMBER }} />FOB <b>{money(f(fob), target)}</b> {target}</span></div>
-    </div>);
+  // Frank 11-20: 卡片上只放合计, 不再上下堆「本地 / FOB」; 分业务的数放进 ☰ 明细
+  const card = (title, v, tone) => (
+    <div className="dk"><div className="dk-t">{title} <small>{target}</small></div><Amt v={v} cur={target} tone={tone} /></div>);
+  const biz = [['本地', loc, 'var(--brand)'], ['FOB', fob, AMBER]].map(([name, t, color]) => ({ id: name, name, color, t }));
   return (
     <div className="card dash-sec">
       <div className="card-h" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <h2>总览 <Info>本地 + FOB 合在一起，只算已经出库的。</Info>
+        <h2>总览 <Info>本地 + FOB 合在一起，只算已经出库的。分业务的数在右下角「☰ 明细」里。</Info>
           <Assumed>折算用「出库那天的记账汇率」（汇率与取整里改一次、记一次，从 11-19 起留历史；之前的出库都按现在这个汇率）。要用自己指定的汇率，到下面本地 / FOB 板块点「合并币种 → 统一汇率」。</Assumed></h2>
         <span className="grow" />
         <div className="seg sm">{CURS.map((c) => <button type="button" key={c} className={target === c ? 'on' : ''} onClick={() => setTarget(c)}>{c}</button>)}</div>
       </div>
       {!rows.length ? <div className="card-b muted small">这个时间段还没有出库</div> : <div className="card-b">
         <div className="dk-row">
-          {card('销售额', (t) => t.rev)}
-          {card('成本', (t) => t.cost)}
-          {card('利润', (t) => t.profit, (t) => (t.profit < 0 ? 'red-t2' : ''))}
-          <div className="dk">
-            <div className="dk-t">毛利率</div>
-            <span className={`dk-v ${all.pct != null && all.pct < 0 ? 'red-t2' : ''}`}>{all.pct == null ? '—' : all.pct.toFixed(1)}<small>%</small></span>
-            <div className="dk-sub"><span><i style={{ background: 'var(--brand)' }} />本地 <Pct p={loc.pct} low={lowPct} /></span><span><i style={{ background: AMBER }} />FOB <Pct p={fob.pct} low={lowPct} /></span></div>
-          </div>
+          {card('销售额', all.rev)}
+          {card('成本', all.cost)}
+          {card('利润', all.profit, all.profit < 0 ? 'red-t2' : '')}
+          <div className="dk"><div className="dk-t">毛利率</div><BigPct p={all.pct} low={lowPct} /></div>
         </div>
-        <div className="dk-ratio-w"><div className="dk-ratio"><i style={{ width: `${share}%`, background: 'var(--brand)' }} /><i style={{ width: `${100 - share}%`, background: AMBER }} /></div>
-          <div className="dk-ratio-l"><span>本地 <b>{share.toFixed(0)}</b> %</span><span>FOB <b>{(100 - share).toFixed(0)}</b> %</span></div></div>
         <div className="dk-chips">
-          <span className="dchip">本地 <b>{qty(loc.qty)}</b> 片 · <b>{loc.n}</b> 单</span>
-          <span className="dchip">FOB <b>{qty(fob.qty)}</b> 片 · <b>{fob.n}</b> 单</span>
-          <span className="dchip">合计 <b>{qty(all.qty)}</b> 片 · <b>{all.n}</b> 单 · <b>{all.c}</b> 位客户</span>
+          <span className="dchip">出库 <b>{qty(all.qty)}</b> 片</span><span className="dchip"><b>{all.n}</b> 单</span><span className="dchip"><b>{all.c}</b> 位客户</span>
           {all.miss > 0 && <span className="dchip red">{qty(all.miss)} 片没成本，没算进毛利</span>}
+          <span className="grow" />
+          <Fold open={open} onClick={() => setOpen(!open)} />
         </div>
+        {open && <div style={{ marginTop: 10 }}><Grid id="dash-ov" noTools rows={biz} columns={[
+          { key: 'name', label: '业务', w: 110, sortable: false, filterable: false, render: (r) => <span className="dk-row0"><i className="dk-dot" style={{ background: r.color }} /><b>{r.name}</b></span> },
+          { key: 'share', label: '占比', w: 130, sortable: false, filterable: false, value: (r) => (all.rev ? r.t.rev / all.rev * 100 : 0),
+            render: (r) => { const p = all.rev ? r.t.rev / all.rev * 100 : 0; return <span className="dk-share"><span className="dbar"><i style={{ width: `${p}%`, background: r.color }} /></span><small>{p.toFixed(0)}%</small></span>; } },
+          { key: 'rev', label: `销售额 ${target}`, w: 140, type: 'money', sortable: false, value: (r) => r.t.rev, render: (r) => money(r.t.rev, target) },
+          { key: 'cost', label: `成本 ${target}`, w: 140, type: 'money', sortable: false, value: (r) => r.t.cost, render: (r) => money(r.t.cost, target) },
+          { key: 'profit', label: `利润 ${target}`, w: 140, type: 'money', sortable: false, value: (r) => r.t.profit, render: (r) => <span className={r.t.profit < 0 ? 'red-t2' : ''}>{money(r.t.profit, target)}</span> },
+          { key: 'pct', label: '毛利率', w: 90, type: 'number', sortable: false, value: (r) => r.t.pct, render: (r) => <Pct p={r.t.pct} low={lowPct} /> },
+          { key: 'qty', label: '片', w: 90, type: 'number', sortable: false, value: (r) => r.t.qty, render: (r) => qty(r.t.qty) },
+          { key: 'n', label: '单', w: 60, type: 'number', sortable: false, value: (r) => r.t.n },
+          { key: 'c', label: '客户', w: 70, type: 'number', sortable: false, value: (r) => r.t.c },
+        ]} foot={() => ({ name: '合计', rev: money(all.rev, target), cost: money(all.cost, target), profit: money(all.profit, target), pct: all.pct == null ? '—' : `${all.pct.toFixed(1)}%`, qty: qty(all.qty), n: all.n, c: all.c })} /></div>}
       </div>}
     </div>);
 }
@@ -168,7 +174,7 @@ export function SalesSection({ kind, rows, transit }) {
           <div className="dk"><div className="dk-t">销售额 <small>{C}</small></div><Amt v={t.rev} cur={C} /></div>
           <div className="dk"><div className="dk-t">成本 <small>{C}</small></div><Amt v={t.cost} cur={C} /></div>
           <div className="dk"><div className="dk-t">利润 <small>{C}</small></div><Amt v={t.profit} cur={C} tone={t.profit < 0 ? 'red-t2' : ''} /></div>
-          <div className="dk"><div className="dk-t">毛利率</div><span className={`dk-v ${pctTone(t.pct, lowPct)}-t`}>{t.pct == null ? '—' : t.pct.toFixed(1)}<small>%</small></span></div>
+          <div className="dk"><div className="dk-t">毛利率</div><BigPct p={t.pct} low={lowPct} /></div>
         </div>
         <div className="dk-chips">
           <span className="dchip">出库 <b>{qty(t.qty)}</b> 片</span><span className="dchip"><b>{t.n}</b> 单</span><span className="dchip"><b>{t.c}</b> 位客户</span>
