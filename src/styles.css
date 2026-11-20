@@ -1674,3 +1674,29 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 .pill.dk-pct small { font-size: 12px; margin-left: 4px; font-weight: 600; }
 .dk-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }
 .dk-share { display: inline-flex; align-items: center; gap: 6px; width: 100%; } .dk-share .dbar { flex: 1; } .dk-share small { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* 477 (Frank 11-20): 日期筛选 —— 五个按钮 (再点一下出选项, 蓝色小 ▾) + 一个日期框 (自定义, 点两下选一段) */
+.per-seg button { display: inline-flex; align-items: center; gap: 2px; }
+.per-caret { font-style: normal; font-size: 10px; color: var(--brand); opacity: .55; padding: 2px 0 2px 3px; margin-right: -3px; }
+.per-seg button.on .per-caret { opacity: 1; }
+.per-menu { padding: 6px; z-index: 80; animation: menuIn .16s var(--spring); }
+.per-list { display: flex; flex-direction: column; gap: 2px; }
+.per-grid { display: grid; gap: 4px; } .per-grid.m { grid-template-columns: repeat(4, 1fr); } .per-grid.q { grid-template-columns: repeat(4, 1fr); }
+.per-it { border: 1px solid transparent; background: none; border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 13px; text-align: left; cursor: pointer; white-space: nowrap; }
+.per-grid .per-it { text-align: center; padding: 8px 4px; border-color: var(--line); }
+.per-it:hover:not(:disabled) { background: var(--brand-soft); }
+.per-it.on { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 600; }
+.per-it:disabled { color: #c3cad4; cursor: default; background: none; }
+.per-yr { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 6px; }
+.per-yr b { font-size: 14px; } .per-yr button { border: 1px solid var(--line); background: #fff; border-radius: 6px; width: 28px; height: 26px; cursor: pointer; }
+.per-yr button:disabled { opacity: .35; cursor: default; }
+.rp-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #d5dfeb; background: #fff; border-radius: 10px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rp-btn b { font-weight: 600; } .rp-ico { color: var(--muted); font-size: 12px; }
+.rp-btn:hover, .rp-btn.open { border-color: var(--brand); }
+.rp-btn.on { background: var(--brand); border-color: var(--brand); color: #fff; } .rp-btn.on .rp-ico { color: #fff; }
+.rp-pop { animation: menuIn .16s var(--spring); z-index: 80; }
+.rp-pop .dp-head { display: flex; gap: 6px; align-items: center; } .rp-pop .dp-head select { flex: 1; min-width: 0; }
+.rp-arr { border: 1px solid var(--line); background: #fff; border-radius: 8px; width: 30px; height: 32px; cursor: pointer; font-size: 16px; flex: none; }
+.rp-pop .dp-now { margin: 8px 0 6px; }
+.rp-pop .dp-grid button.inrange.pv { background: #e8f0fc; }
+.rp-pop .dp-grid button.rs:not(.re) { border-radius: 8px 0 0 8px; } .rp-pop .dp-grid button.re:not(.rs) { border-radius: 0 8px 8px 0; }
+.rp-foot { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
