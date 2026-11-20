@@ -1601,3 +1601,22 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 
 /* 457 游客询价: 店铺类型四个大按钮, 手机上两个一排 */
 .glevels { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; } .glevels .btn { min-height: 44px; } .glevels.err { outline: 2px solid var(--red); outline-offset: 2px; border-radius: 8px; }
+
+/* 选项 ⚙ 弹窗 (Frank 11-20): 一行 = 名字 (撑满) · 颜色 · 右边一个「删除」; 新增那一行 = 输入框 (撑满) · 右边「＋ 加」, 和上面的「删除」对齐同宽 */
+.sort-body > .opt-row { flex: 1; border: 0; padding: 0; background: transparent; grid-template-columns: minmax(0, 1fr) auto auto auto; }
+.sort-body > .opt-row.data { grid-template-columns: minmax(0, 1fr) auto; }
+.opt-row .opt-del, .opt-add .opt-del { width: 76px; justify-content: center; }
+.opt-add { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 0 3px 0 calc(10px + 2ch + 10px); }
+.opt-add .in { min-width: 0; }
+@media (max-width: 560px) { .opt-add { grid-template-columns: minmax(0, 1fr) auto; padding-left: 0; } .opt-add .opt-addbase { grid-column: 1 / -1; } .sort-body > .opt-row { grid-template-columns: minmax(0, 1fr) auto auto; } }
+.opt-row .opt-del { grid-column: -2; }
+.sort-body > .opt-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+.sort-body > .opt-row:has(.opt-base) { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+.sort-body > .opt-row.data { grid-template-columns: minmax(0, 1fr) auto; }
+.opt-row .opt-color { width: 86px; }
+@media (max-width: 560px) {
+  .sort-body > .opt-row { grid-template-columns: minmax(0, 1fr) auto auto; } .sort-body > .opt-row .opt-color { grid-column: auto; width: 78px; }
+  .opt-row .opt-del, .opt-add .opt-del { width: 60px; padding-left: 4px; padding-right: 4px; }
+  .opt-add { padding-left: 0; padding-right: 3px; }
+}
+.opt-row .opt-color { padding-right: 2px; }
