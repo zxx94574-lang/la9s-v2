@@ -1,4 +1,5 @@
 import { RuleGear } from '../components/Rules.jsx';
+import { DocSettings } from '../components/SettingsPanels.jsx';
 import { showDone } from '../components/Done.jsx';
 import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 // The panels of one deal. Each workflow step has its own panel: the action when it is the current step,
@@ -1015,7 +1016,7 @@ function ShipmentsCard({ deal, lines, shipments, act, role }) {
       <div className="card-h"><h2>出库记录</h2></div>
       {justVoided && <div className="card-b lock">已撤销出库。如果已经把这笔的 Balance 发给客户，请到「签收 · 对账」重新复制一张发过去。</div>}
       <Grid id="deal-shipments" slimTools table="shipments" columns={cols} rows={shipments} rowClass={(s) => (s.voided_at ? 'voided' : '')} />
-      <div className="card-b hint">发货文件：「BL」点开预览、预览里打印（一次两张：仓库联留底、客户联给客户签字），「海关文件」同样先预览再打印（设置里上传的固定 PDF；大单（金额或件数到设置的阈值）会提示建议打印，小单不强制。客户签字后拍照挂上就是发货证明。「发货失败 / 退回」只用于货没到客户手上（Yango 去不了、改期、我方隔天发）：货回原仓位并重新预占、应收冲回、订单回到待出库，作废的出库单留痕。客户签收后只能走退货。金蝶写入暂未接入。</div>
+      <div className="card-b hint">发货文件：「BL」点开预览、预览里打印（一次两张：仓库联留底、客户联给客户签字），「海关文件」同样先预览再打印（上传的固定 PDF，在「发货文件」标题旁 ⚙ 或「规则参数 → 系统」里换）；大单（金额或件数到规则参数里的阈值）会提示建议打印，小单不强制。客户签字后拍照挂上就是发货证明。「发货失败 / 退回」只用于货没到客户手上（Yango 去不了、改期、我方隔天发）：货回原仓位并重新预占、应收冲回、订单回到待出库，作废的出库单留痕。客户签收后只能走退货。金蝶写入暂未接入。</div>
       {voiding && <VoidModal s={voiding} onClose={() => setVoiding(null)} onOk={(r) => act(`${voiding.out_no} 已撤销，货已回库并重新预占`, `select app.void_shipment($1,$2)`, [voiding.id, r]).then(() => { setVoiding(null); setJustVoided(true); }, () => {})} />}
     </div>
   );
@@ -1372,9 +1373,12 @@ function DocsBlock({ deal, lines, role }) {
   const left = lines.filter((l) => l.product_id && N(l.qty_supply) > N(l.qty_shipped));
   const pending = ['reviewed', 'partial'].includes(deal.status) && left.length > 0;
   const pseudo = pending ? { id: null, bl_no: deal.next_bl_no, shipped_at: new Date(), lines: left.map((l) => ({ deal_line_id: l.id, qty: N(l.qty_supply) - N(l.qty_shipped) })), qty: left.reduce((a, l) => a + N(l.qty_supply) - N(l.qty_shipped), 0), amount: left.reduce((a, l) => a + (N(l.qty_supply) - N(l.qty_shipped)) * N(l.unit_price), 0) } : null;
+  const [setOpen, setSetOpen] = useState(false);
   return (
     <div className="card">
-      <div className="card-h"><h2>发货文件 <Info>打包完先打印，随货走；BL 编号出库时自动落到出库单上</Info></h2></div>
+      <div className="card-h"><h2>发货文件 <Info>打包完先打印，随货走；BL 编号出库时自动落到出库单上。海关 PDF、G&S logo、单据名称在旁边 ⚙ 里换（同一份也在「规则参数 → 系统」）。</Info></h2>
+        {role === 'admin' && <button type="button" className="gear-btn" title="发货文件设置：海关 PDF / logo / 单据名称" onClick={() => setSetOpen(true)}>⚙</button>}</div>
+      {setOpen && <Modal title="发货文件设置" onClose={() => setSetOpen(false)} footer={<button type="button" className="btn" onClick={() => setSetOpen(false)}>关闭</button>}><DocSettings /></Modal>}
       <div className="card-b stack" style={{ gap: 8 }}>
         {pending ? (
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1382,7 +1386,7 @@ function DocsBlock({ deal, lines, role }) {
             <BlActions shipment={pseudo} deal={deal} lines={lines} pending />
           </div>
         ) : <div className="hint">{deal.status === 'shipped' ? '全部出库完。每批的 BL / 海关文件在下面出库记录里可以重打。' : '复检打包完成后，这里出 BL ×2 和海关文件。'}</div>}
-        <div className="hint">「BL」点开预览再打印，一次两张 = 一张仓库备案、一张客户签字（客户签字那张拍照回传，在「签收 · 对账」步挂上）；「海关文件」= 设置里上传的固定 PDF。大单（金额或件数到设置的阈值）会提示建议打印，小单不强制。</div>
+        <div className="hint">「BL」点开预览再打印，一次两张 = 一张仓库备案、一张客户签字（客户签字那张拍照回传，在「签收 · 对账」步挂上）；「海关文件」= 上传的固定 PDF（标题旁 ⚙ 换）。大单（金额或件数到规则参数里的阈值）会提示建议打印，小单不强制。</div>
       </div>
     </div>
   );

@@ -161,7 +161,7 @@ export function RuleGear({ ids, anchor, title = '这里的规则' }) {
 // 规则参数总页 (Frank 11-20): 顶上工作地图 → 选一个环节只看它; 每条规则一行 = 短名字 · 现在的值 (直接改) · ⓘ 三句说明 · 去这一步 ›
 export function RulesIndex() {
   const { go } = useApp();
-  const [sel, setSel] = useState(null);
+  const [sel, setSel] = useState(() => { try { const v = sessionStorage.getItem('la9s.rules.area'); sessionStorage.removeItem('la9s.rules.area'); return v || null; } catch { return null; } });
   const data = useRuleValues(RULES.map((r) => r[0]));
   // 一个环节里: 拦截 / 开关在前, 数字阈值在中间, 时效目标在后
   const rank = (id) => (id.startsWith('kpi.') ? 2 : BY_ID[id][6] === 'bool' ? 0 : 1);

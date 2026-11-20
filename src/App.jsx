@@ -357,7 +357,7 @@ export default function App() {
 
             </div>
             {role === 'admin' && <LayoutSwitch onDone={() => setSettings(false)} />}
-            {role === 'admin' && <div className="field"><label>规则与系统参数 <Info>所有阈值、开关、权限表、发货文件都在这一页：顶上按订单流程和日常工作排好，点哪个环节只看那里的规则。</Info></label><div><button type="button" className="btn" onClick={() => { setSettings(false); go('rules'); }}>打开规则与系统参数 ›</button></div></div>}
+            {role === 'admin' && <div className="field"><label>规则与系统参数 <Info>所有阈值、开关、权限表、发货文件都在这一页：顶上按订单流程和日常工作排好，点哪个环节只看那里的规则。</Info></label><div><button type="button" className="btn" onClick={() => { setSettings(false); go('rules'); }}>打开规则与系统参数 ›</button> <button type="button" className="btn" onClick={() => { try { sessionStorage.setItem('la9s.rules.area', 'sys'); } catch { /* */ } setSettings(false); go('rules'); }}>权限表 · 发货文件 ›</button></div></div>}
             <ExportPanel />
             {!SERVER && <><div className="field"><label>当前岗位（演示）</label>
               <select className="in" value={role} onChange={(e) => setRole(e.target.value)}>{Object.entries(ROLES).map(([k, r]) => <option key={k} value={k}>{r.label} — {r.desc}</option>)}</select>
