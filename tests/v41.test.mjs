@@ -35,3 +35,14 @@ test('打卡: 到点下班不用写原因, 不算早退', async () => {
   const r = await t.val(U.manager, P, [t.ids.org, null]);
   assert.equal(r.kind, 'out'); assert.equal(r.early, false);
 });
+
+test('下班打卡记下还有几件待办没做完 (0073)', async () => {
+  const t = await setup();
+  const P = `select app.punch($1,5.3501,-4.0101,20,$2)`;
+  await t.db.query(`insert into app.attendance_settings (org_id) values ($1) on conflict do nothing`, [t.ids.org]);
+  await t.db.query(`update app.attendance_settings set end_time = '00:00', half_day_end = '00:00' where org_id = $1`, [t.ids.org]);
+  await t.val(U.manager, P, [t.ids.org, null]); await t.val(U.manager, P, [t.ids.org, null]);
+  await t.as(U.manager, `select app.punch_left($1, 4)`, [t.ids.org]);
+  const r = await t.one(`select todo_left from app.attendance where kind = 'out' order by at desc limit 1`);
+  assert.equal(r.todo_left, 4);
+});

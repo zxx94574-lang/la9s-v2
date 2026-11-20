@@ -1589,3 +1589,9 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 .cell-tip.itip { pointer-events: none; z-index: 900; }
 .kpi .t { white-space: nowrap; }
 
+
+/* 448 待办只有三段: 其他的事 = 段里的一行 (Slot), 点开才展开 */
+.todo-sec .sec-none { padding: 14px; display: none; } .todo-sec:not(:has(.todo-row)) .sec-none { display: block; }
+.slot-h { background: #fafbfd; } .slot-b { border-bottom: 1px solid var(--line-2); background: #fff; }
+.slot-b > .card, .slot-b .todo-empty { border: 0 !important; box-shadow: none !important; border-radius: 0 !important; margin: 0 !important; }
+.route-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 14px; }

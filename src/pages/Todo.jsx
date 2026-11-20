@@ -1,10 +1,9 @@
 import { PurchaseTodo } from './Po.jsx';
-import { LayoutGrid, setLayoutEdit, useLayoutEdit } from '../components/Layout.jsx';
 import { DealLink, CustLink } from '../components/Archives.jsx';
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Info } from '../components/ui.jsx';
+import { useApp, useData, Pill, Info, Modal, MultiChoice, Assumed } from '../components/ui.jsx';
 import { IssueList } from '../components/IssueReport.jsx';
 import TierCheck, { useTierCheck } from '../components/TierCheck.jsx';
 import DirectiveBoard from '../components/Directives.jsx';
@@ -31,12 +30,10 @@ import { HoldsCard, VolumeShift } from '../components/Batch2.jsx';
 import { MoneyUrgent, ChangeNotices } from '../components/Batch3.jsx';
 import { InquiryTodo } from './Inquiry.jsx';
 import { AddonTodo } from '../components/Addons.jsx';
-import { AnomalyHub, Always } from '../components/Anomalies.jsx';
+import { AnomalyHub } from '../components/Anomalies.jsx';
 import { useKdTodoCount } from '../components/KdRecon.jsx';
-import { LossTodo } from '../components/Loss.jsx';
 import PublicHeld from '../components/PublicHeld.jsx';
 import { RemitTodo } from '../components/Remit.jsx';
-import { PricePendingTodo } from '../components/PricePending.jsx';
 import { PlanTodo, TaskBoard } from '../components/Tasks.jsx';
 export function nextAction(d, role) {
   // 251: 新客户档位没定 → 这张报价是草稿; 申请了就卡在中方
@@ -124,7 +121,6 @@ export function OverdueBar({ orders, go, compact }) {
 export default function Todo() {
   const { org, role, go, toast, refresh, tick } = useApp();
   const { data } = useData(() => q(Q.orders, [org, '2000-01-01', '2999-12-31']), [org, tick]);
-  const layEdit = useLayoutEdit();
   // 非订单的待办: 今天要回访的客户 (热线 / 销售), 待认领到账 + 待批交款支出 (中方)
   const { data: extra } = useData(async () => {
     const [[f]] = await Promise.all([q(`select
@@ -145,48 +141,75 @@ export default function Todo() {
     return f;
   }, [org]);
   const kdTodo = useKdTodoCount();
-  const extras = [
-    ['hotline', 'sales', 'manager', 'admin'].includes(role) && Number(extra?.follow) > 0 && ['hotline', `☎ 今天要回访 ${extra.follow} 位客户（约好今天或已过期的）`],
-    role === 'admin' && Number(extra?.cash) > 0 && ['cash', `₣ 资金账户有 ${extra.cash} 笔要中方处理（认领到账 / 确认交款 / 批支出）`],
-    ['hotline', 'finance'].includes(role) && Number(extra?.notices) > 0 && ['cash', `🔔 ${extra.notices} 笔「客户说付了」还没对上到账`],
-    role === 'admin' && Number(extra?.pw_changed) > 0 && ['customers', `🔑 ${extra.pw_changed} 个客户自己改了下单密码，确认是不是本人（不是就冻结）`],
-    ['hotline', 'manager', 'admin', 'sales_manager'].includes(role) && Number(extra?.guest_new) > 0 && ['orders', `🌐 ${extra.guest_new} 张游客询价还没跟进，马上联系报价`],
-    role === 'admin' && Number(extra?.approvals) > 0 && ['orders', `✓ ${extra.approvals} 张询单等中方审批（新客户 / 特价 / 超欠款 / 没编码）`],
-    ['admin', 'manager', 'finance'].includes(role) && Number(extra?.pr_eta) > 0 && ['purchase', `⇣ ${extra.pr_eta} 张采购 / 物资申请 5 天内到或已过期没到`],
-    ['admin', 'manager', 'finance'].includes(role) && Number(extra?.pr_new) > 0 && ['purchase', `⇣ ${extra.pr_new} 张新的采购 / 物资申请还没下单`],
-    ['finance', 'manager'].includes(role) && Number(extra?.grn_ready) > 0 && ['kingdee', `⇆ ${extra.grn_ready} 张收货单要录金蝶采购入库`],
-    role === 'admin' && Number(extra?.fob_price) > 0 && ['fob', `◷ ${extra.fob_price} 个 FOB 申请等中方定价`],
-    role === 'admin' && Number(extra?.fob_release) > 0 && ['fob', `◷ ${extra.fob_release} 个 FOB 已到货，等中方决定放货`],
-    ['finance', 'manager', 'admin'].includes(role) && kdTodo > 0 && ['kingdee', `⇆ 还没录金蝶 ${kdTodo} 张（出库 / 入库 / 其他出入库 / 收款）`],
-    ['manager', 'admin'].includes(role) && Number(extra?.kd_audit) > 0 && ['kingdee', `⇆ ${extra.kd_audit} 张金蝶单已提交，等审核`],
-  ].filter(Boolean);
   // 客户要货日期到了 (今天或已过) 的排最前 (Frank 11-07: 明天要的到明天自动前移)
   const td = today();
   const wantDue = (d) => d.want_on && dDate(d.want_on) <= td && !['shipped', 'cancelled'].includes(d.status);
   const rank = (d) => (wantDue(d) ? -1 : nextAction(d, role)?.alert?.tone === 'red' ? 0 : nextAction(d, role)?.alert ? 1 : 2);
   const tierRows = useTierCheck();
   const list = (data || []).filter((d) => todoFor(role, d)).sort((a, b) => rank(a) - rank(b));
-  // 227 (Frank 11-11): 待办分三个板块, 系统自动分 —— 红 紧急 / 黄 进行中 / 绿 待跟进; 中方可以手动把某张单提成紧急
+  // 448 (Frank 11-19 22:07–22:22): 每个岗位的待办只有三段 —— 紧急 / 进行中 / 待跟进. 其他所有板块都变成这三段里的一行 (有事才出现, 点开才展开).
+  // 中方另外多三块: 我下达的指令 / 定期任务 / 变更通知. 做完的自动消失 (进各自的记录).
+  // 昨天以前就该推进、到今天还没动的「进行中」自动升成紧急 (等客户 / 等别人的不升).
   const groups = { red: [], amber: [], green: [] };
-  for (const d of list) groups[todoLevel(d)].push(d);
+  const stale = (d) => d.updated_at && dt(d.updated_at).slice(0, 10) < td && !['ordered', 'shipped'].includes(d.status);
+  for (const d of list) { const lv = todoLevel(d); const up = lv === 'amber' && stale(d); groups[up ? 'red' : lv].push(up ? { ...d, _stale: true } : d); }
   const urgent = async (e, d) => { e.stopPropagation(); try { await call(role, `select app.set_deal_urgent($1,$2)`, [d.id, !d.urgent]); toast(d.urgent ? '已取消紧急' : '已提成紧急'); refresh(); } catch (er) { toast(friendlyError(er), 'err'); } };
-  const SEC = [['red', '紧急', '超过 24 小时没发货、客户今天要货、中方标了紧急的'], ['amber', '进行中', '正常在走、今天该推进的'], ['green', '待跟进', '还没到日子的、等客户付款的、联系 3 次客户都忙的']];
-  // 11-19 Frank: 待办和经营总览一样能排序 (中方「⚙ 整理待办」: 拖顺序 / 宽度 / 隐藏, 全员一致); 没事的板块自动沉到最下面、两个一排
+  const SEC = [['red', '紧急', '今天必须处理：异常的单、卡住的单、超过 24 小时没发货、客户今天要货、中方标了紧急的、昨天就该推进到今天还没动的'], ['amber', '进行中', '正常在走、今天该推进的'], ['green', '待跟进', '还没到日子的、等客户付款的、联系 3 次客户都忙的、要留意但不急的']];
   const admin = role === 'admin';
-  const blocks = [
-    { id: 'anomaly', title: '异常的单', span: 12, render: () => <AnomalyHub /> },
-    { id: 'deals', title: '要推进的单（紧急 / 进行中 / 待跟进，没走完的退货算紧急）', span: 12, render: () => (
-      !data ? <div className="card"><div className="empty">加载中…</div></div> : <div className="stack" style={{ gap: 12 }}>
+  const { data: routeSet } = useData(async () => (await q(`select value from app.org_settings where org_id = $1 and key = 'todo_route'`, [org]))[0]?.value || {}, [org, tick]);
+  const [routeOpen, setRouteOpen] = useState(false);
+  const mine = (id) => (routeSet?.[id] || SLOTS[id].roles).includes(role);
+  const ex = (k) => Number(extra?.[k] || 0);
+  const line = (id, to, text) => mine(id) && <div key={id} className="row between todo-row" onClick={() => go(to)}><b>{text}</b><span className="muted">›</span></div>;
+  const slot = (id, node, open0) => mine(id) && <Slot key={id} title={SLOTS[id].label} open0={open0}>{node}</Slot>;
+  const items = {
+    red: [
+      slot('anomaly', <AnomalyHub />, true),
+      !admin && slot('directives', <DirectiveBoard />, true),
+      slot('returns', <OpenReturns />, true),
+      slot('money', <><PlanTodo /><PublicHeld urgentOnly /><RemitTodo /><MoneyUrgent /></>),
+      slot('issues', <IssueList />),
+      ex('approvals') > 0 && line('approvals', 'orders', `${ex('approvals')} 张单等中方审批`),
+      ex('cash') > 0 && line('cash', 'cash', `资金账户 ${ex('cash')} 笔要处理（认领到账 / 确认交款 / 批支出）`),
+      ex('guest_new') > 0 && line('guest', 'orders', `${ex('guest_new')} 张游客询价还没跟进`),
+      ex('pw_changed') > 0 && line('pw', 'customers', `${ex('pw_changed')} 个客户改了下单密码，确认是不是本人`),
+      ex('fob_release') > 0 && line('fob_release', 'fob', `${ex('fob_release')} 个 FOB 已到货，等决定放货`),
+    ],
+    amber: [
+      slot('inquiry', <InquiryTodo />),
+      slot('addons', <AddonTodo />),
+      slot('tasks', <TaskBoard />),
+      slot('purchase', <PurchaseTodo />),
+      slot('holds', <HoldsCard compact />),
+      ex('follow') > 0 && line('follow', 'hotline', `今天要回访 ${ex('follow')} 位客户`),
+      ex('notices') > 0 && line('paynotice', 'cash', `${ex('notices')} 笔「客户说付了」还没对上到账`),
+      ex('pr_new') > 0 && line('pr', 'purchase', `${ex('pr_new')} 张采购 / 物资申请还没下单`),
+      ex('pr_eta') > 0 && line('pr', 'purchase', `${ex('pr_eta')} 张采购 / 物资申请 5 天内到或已过期`),
+      ex('fob_price') > 0 && line('fob_price', 'fob', `${ex('fob_price')} 个 FOB 申请等定价`),
+      kdTodo > 0 && line('kd', 'kingdee', `还没录金蝶 ${kdTodo} 张`),
+      ex('grn_ready') > 0 && line('kd', 'kingdee', `${ex('grn_ready')} 张收货单要录金蝶采购入库`),
+    ],
+    green: [
+      slot('tier', <TierCheck rows={tierRows} />),
+      slot('volume', <VolumeShift />),
+      ex('kd_audit') > 0 && line('kd_audit', 'kingdee', `${ex('kd_audit')} 张金蝶单已提交，等审核`),
+    ],
+  };
+  return (
+    <>
+      <div className="pagehead"><div><div className="eyebrow">Mes tâches</div><h1 tabIndex={0}>我的待办 <Info>当前岗位：{ROLES[role].label}。只有三段：紧急 / 进行中 / 待跟进。下推一步，单子自动出现在下一个人的待办里；做完的自动消失。</Info></h1></div>
+        {admin && <div className="row"><button type="button" className="btn sm" onClick={() => setRouteOpen(true)}>⚙ 归谁</button></div>}</div>
+      {!data ? <div className="card"><div className="empty">加载中…</div></div> : <div className="stack" style={{ gap: 12 }}>
         {SEC.map(([k, label, tip]) => (
           <div key={k} className={`card todo-sec todo-${k}`}>
             <div className="card-h"><h2><span className={`pill ${k}`}>{label}</span> {groups[k].length} 单 <Info>{tip}</Info></h2></div>
-            {k === 'red' && <OpenReturns />}
-            {groups[k].length === 0 ? (k === 'red' ? null : <div className="empty small" style={{ padding: 14 }}>没有</div>) : groups[k].map((d) => {
+            {items[k].filter(Boolean)}
+            {groups[k].map((d) => {
               const n = nextAction(d, role); const o = overdueOf(d);
               return (
                 <div key={d.id} className="row between todo-row" onClick={() => go('deal/' + d.id)}>
                   <div className="stack" style={{ gap: 3, minWidth: 0 }}>
-                    <div><b style={{ fontSize: 15 }}>{d.customer_name}</b> <span className="muted small">{d.city} · {d.customer_code}</span>{d.urgent && <span className="pill red" style={{ marginLeft: 6 }}>中方标紧急</span>}{o && <span className={`pill ${o.tier === 'amber' ? 'amber' : 'red'}`} style={{ marginLeft: 6 }}>下单 {o.label} 没发货</span>}{Number(d.busy_n) > 0 && <span className="pill gray" style={{ marginLeft: 6 }}>客户忙 ×{d.busy_n}</span>}</div>
+                    <div><b style={{ fontSize: 15 }}>{d.customer_name}</b> <span className="muted small">{d.city} · {d.customer_code}</span>{d.urgent && <span className="pill red" style={{ marginLeft: 6 }}>中方标紧急</span>}{d._stale && <span className="pill red" style={{ marginLeft: 6 }}>昨天没做完</span>}{o && <span className={`pill ${o.tier === 'amber' ? 'amber' : 'red'}`} style={{ marginLeft: 6 }}>下单 {o.label} 没发货</span>}{Number(d.busy_n) > 0 && <span className="pill gray" style={{ marginLeft: 6 }}>客户忙 ×{d.busy_n}</span>}</div>
                     <div className="small muted">{d.biz_no} · {dt(d.updated_at)} · {d.line_count} 个型号{d.want_on && !['shipped', 'cancelled'].includes(d.status) && <> · <Pill tone={wantDue(d) ? 'red' : 'blue'}>客户要货 {dDate(d.want_on)}</Pill></>}</div>
                     <div className="small">👉 {Number(d.busy_n) >= 3 && ['quoted', 'hotline_ok'].includes(d.status) ? '联系 3 次客户都忙：可以作废，或改天再联系' : n.what}{role === 'admin' && <span className="muted">（{n.roles.map((r) => ROLES[r].label).join('/')}）</span>}</div>
                   </div>
@@ -194,48 +217,73 @@ export default function Todo() {
                 </div>
               );
             })}
+            <div className="empty small sec-none">没有</div>
           </div>
         ))}
-      </div>) },
-    { id: 'follow', title: '钱和任务要跟进的', span: 12, render: () => (
-      <Merged title="钱和任务要跟进的" tip="付款计划过期没收够、公司收款账户压款超期、回款在途太久或到账差太多、收款问题（付款申诉 / 员工代收超期 / 账对不上）、派下去的任务——都并在这一块，哪样有事哪样出来"><PlanTodo /><PublicHeld urgentOnly /><RemitTodo /><MoneyUrgent /><TaskBoard /></Merged>) },
-    { id: 'directives', title: '中方指令 / 定期任务', span: 12, render: () => <DirectiveBoard /> },
-    { id: 'notices', title: '变更通知', span: 12, render: () => <ChangeNotices /> },
-    { id: 'inquiry', title: '询单', span: 12, render: () => <Always title="询单"><InquiryTodo /></Always> },
-    { id: 'addons', title: '追加的货', span: 12, render: () => <AddonTodo /> },
-    ['admin', 'manager', 'sales_manager'].includes(role) && { id: 'issues', title: '员工上报的问题', span: 12, render: () => <Always title="员工上报的问题"><IssueList /></Always> },
-    ['admin', 'manager', 'cn_support'].includes(role) && { id: 'purchase', title: '采购与到货', span: 12, render: () => <Always title="采购与到货"><PurchaseTodo /></Always> },
-    ['admin', 'manager'].includes(role) && { id: 'holds', title: '冻结的库存', span: 12, render: () => <Always title="冻结的库存"><HoldsCard compact /></Always> },
-    admin && { id: 'tier', title: '客户档位要核对', span: 12, render: () => <Always title="客户档位要核对"><TierCheck rows={tierRows} /></Always> },
-    admin && { id: 'volume', title: '客户拿货量变化', span: 12, render: () => <Always title="客户拿货量变化"><VolumeShift /></Always> },
-    extras.length > 0 && { id: 'extras', title: '其他提醒', span: 12, render: () => <div className="card">{extras.map(([to, text]) => (
-      <div key={text} className="row between" style={{ padding: '12px 18px', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }} onClick={() => go(to)}><b>{text}</b><span className="muted">›</span></div>))}</div> },
-  ].filter(Boolean);
-  return (
-    <>
-      <div className="pagehead"><div><div className="eyebrow">Mes tâches</div><h1 tabIndex={0}>我的待办</h1>
-        <div className="sub">当前岗位：<b>{ROLES[role].label}</b>。下推一步，单子就自动出现在下一个人的待办里。<span className="muted">没事的板块自动排到最下面。</span></div></div>
-        {admin && <div className="row"><button type="button" className={`btn sm ${layEdit ? 'primary' : ''}`} onClick={() => setLayoutEdit(!layEdit)} title="待办里有哪些板块、谁在前、多宽">⚙ 整理待办</button></div>}</div>
-      <LayoutGrid page="todo" blocks={blocks} className={layEdit ? '' : 'sink-empty'} defaultGap={12} />
+        {admin && <DirectiveBoard />}
+        {admin && <ChangeNotices />}
+      </div>}
+      {routeOpen && <RouteModal cur={routeSet || {}} onClose={() => setRouteOpen(false)} />}
     </>
   );
 }
 
-// 11-19 Frank: 杂项合成一块 —— 一张卡片, 里面哪样有事哪样出来; 全没事 = 一行「0 条」(和别的空板块一样沉到最下面)
-function Merged({ title, tip, children }) {
-  const ref = useRef(null); const [n, setN] = useState(-1);
+// 448: 待办里除了订单以外的每一类事 —— 归哪些岗位 (默认值; 中方在「⚙ 归谁」里改, 存 org_settings todo_route)
+const L = ['admin', 'manager', 'sales_manager'];
+export const SLOTS = {
+  anomaly: { label: '异常的单', roles: ['admin', 'manager', 'sales_manager', 'hotline', 'finance', 'sales', 'picker'] },
+  directives: { label: '中方给我的指令 / 定期任务', roles: ['manager', 'sales_manager', 'hotline', 'finance', 'sales', 'picker', 'cn_support'] },
+  returns: { label: '退货没走完', roles: ['admin', 'manager', 'sales_manager', 'hotline', 'finance'] },
+  money: { label: '钱要跟进的', roles: ['admin', 'finance'] },
+  issues: { label: '员工上报的问题', roles: L },
+  approvals: { label: '等审批的单', roles: ['admin'] },
+  cash: { label: '资金账户要处理的', roles: ['admin'] },
+  guest: { label: '游客询价', roles: ['hotline', 'manager', 'admin', 'sales_manager'] },
+  pw: { label: '客户改了密码', roles: ['admin'] },
+  fob_release: { label: 'FOB 等放货', roles: ['admin'] },
+  inquiry: { label: '询单', roles: ['admin', 'hotline', 'sales', 'sales_manager', 'manager'] },
+  addons: { label: '追加的货', roles: ['admin', 'manager', 'picker', 'hotline', 'sales_manager'] },
+  tasks: { label: '派出去的任务', roles: ['admin', 'manager', 'sales_manager', 'hotline', 'finance', 'sales', 'picker'] },
+  purchase: { label: '采购与到货', roles: ['manager', 'cn_support'] },
+  holds: { label: '冻结的库存', roles: ['admin', 'manager'] },
+  follow: { label: '今天要回访的客户', roles: ['hotline', 'sales', 'manager'] },
+  paynotice: { label: '客户说付了、还没对上', roles: ['hotline', 'finance'] },
+  pr: { label: '采购 / 物资申请', roles: ['manager', 'finance'] },
+  fob_price: { label: 'FOB 等定价', roles: ['admin'] },
+  kd: { label: '录金蝶', roles: ['finance'] },
+  kd_audit: { label: '金蝶等审核', roles: ['manager', 'finance'] },
+  tier: { label: '客户档位要核对', roles: ['admin'] },
+  volume: { label: '客户拿货量变化', roles: ['admin'] },
+};
+
+// 一类事 = 一行: 有事才出现, 点一下展开看明细 / 处理. 里面没东西时整行不出现.
+const ITEM = '.todo-row, .todo-line, tbody tr[data-row]';
+const BUSY = ITEM + ', .card-h .pill.red, .card-h .pill.amber, .card-h .pill.blue';   // 常驻的板块 (空着也画一张卡) 靠这个判断「里面有没有事」
+function Slot({ title, children, open0 }) {
+  const ref = useRef(null); const [n, setN] = useState(0); const [has, setHas] = useState(false); const [open, setOpen] = useState(!!open0);
   useLayoutEffect(() => {
     const el = ref.current; if (!el) return undefined;
-    const chk = () => setN(el.childElementCount);
-    chk(); const mo = new MutationObserver(chk); mo.observe(el, { childList: true }); return () => mo.disconnect();
+    const chk = () => { setHas(!!el.querySelector(BUSY)); setN(el.querySelectorAll(ITEM).length); };
+    chk(); const mo = new MutationObserver(chk); mo.observe(el, { childList: true, subtree: true }); return () => mo.disconnect();
   }, []);
-  return (<>
-    <div className="card" style={n === 0 ? { display: 'none' } : null}>
-      <div className="card-h"><h2>{title} <Info>{tip}</Info></h2></div>
-      <div ref={ref} className="todo-merge">{children}</div>
-    </div>
-    {n === 0 && <div className="card todo-empty"><b>{title}</b><span className="pill gray">0 条</span><span className="small muted">没有</span></div>}
-  </>);
+  return (
+    <div className="slot" style={has ? null : { display: 'none' }}>
+      {has && <div className="row between todo-row slot-h" onClick={() => setOpen(!open)}><span><b>{title}</b>{n > 0 && <span className="pill gray" style={{ marginLeft: 8 }}>{n} 条</span>}</span><span className="fold-btn" style={{ alignSelf: 'center' }}>{open ? '收起' : '明细'}<i>{open ? '▲' : '▼'}</i></span></div>}
+      <div ref={ref} className="todo-merge slot-b" style={open ? null : { display: 'none' }}>{children}</div>
+    </div>);
+}
+
+function RouteModal({ cur, onClose }) {
+  const { org, role, toast, refresh } = useApp();
+  const [v, setV] = useState(() => Object.fromEntries(Object.entries(SLOTS).map(([k, x]) => [k, cur[k] || x.roles])));
+  const staff = Object.entries(ROLES).filter(([k]) => !['boss', 'clerk'].includes(k)).map(([k, x]) => ({ v: k, l: x.label }));
+  const save = async () => { try { await call(role, `select app.set_org_setting($1,$2,$3)`, [org, 'todo_route', JSON.stringify(v)]); toast('已保存，所有人的待办马上按这个来'); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (
+    <Modal title="待办里每类事归谁" wide onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" onClick={save}>保存</button></>}>
+      <div className="hint">订单按流程自动走到下一个人，不用在这里设。这里只管订单以外的事：归哪个岗位，就只出现在哪个岗位的待办里。<Assumed>现在只能按岗位分（例：录金蝶 → 财务）。按具体的人分（例：只给王振宇）要等工号登录做好，一人一个账号以后才分得出来。</Assumed></div>
+      <div className="route-grid">{Object.entries(SLOTS).map(([k, x]) => (
+        <div key={k} className="field"><label>{x.label}</label><MultiChoice value={v[k]} onChange={(nv) => setV({ ...v, [k]: nv })} options={staff} /></div>))}</div>
+    </Modal>);
 }
 
 // 11-09 Frank 第 21 条: 退货没走完 (没批 / 没检验 / 没对账) 一直挂待办

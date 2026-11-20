@@ -10,6 +10,7 @@ import { useApp, useData, Pill, Modal, DatePicker, MonthPicker, Drawer, MoneyIn 
 import { staffOptions, optLabel } from '../lib/staffOptions.js';
 import { EmpLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
+import { todoFor, todoLevel } from './Todo.jsx';
 import { dt, today, friendlyError } from '../lib/format.js';
 
 const mapUrl = (lat, lng) => `https://www.google.com/maps?q=${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}`;
@@ -29,7 +30,7 @@ function locate() {
 }
 
 export default function Attendance() {
-  const { org, role, toast, refresh } = useApp();
+  const { org, role, toast, refresh, go } = useApp();
   const [tab, setTab] = useState('me');
   const [day, setDay] = useState(today());
   const [month, setMonth] = useState(today().slice(0, 7));
@@ -46,19 +47,22 @@ export default function Attendance() {
       admin ? q(Q.attendanceDay, [org, day]) : [], admin ? q(Q.attendanceMonth, [org, month]) : [], q(Q.attendanceSettings, [org]),
       q(Q.myAppeals, [org, USERS[role]]), admin ? q(Q.appeals, [org, since.toISOString().slice(0, 10)]) : []]);
     const [{ ps }] = await call(role, `select app.punch_state($1) as ps`, [org]);
-    return { mine, sites, dayRows, monthRows, st, myAp, allAp, ps };
+    // 448: 下班打卡时提示还有几件待办没做完 (紧急 + 进行中, 按这个岗位算)
+    const left = ps?.next === 'out' ? (await q(Q.orders, [org, '2000-01-01', '2999-12-31'])).filter((d) => todoFor(role, d) && todoLevel(d) !== 'green').length : 0;
+    return { mine, sites, dayRows, monthRows, st, myAp, allAp, ps, left };
   }, [org, role, day, month]);
   if (!data) return <div className="empty">加载中…</div>;
   // 450: 只有一个按键. 这一下是上班还是下班, 后台按今天的状态定 (app.punch), 不按钟点.
   const ps = data.ps || { next: 'in' };
   const punch = async (pos, note) => {
-    if (ps.next === 'out' && ps.early && !note) { setEarly({ pos: pos || null, note: '' }); return; }
+    if (ps.next === 'out' && (ps.early || data.left > 0) && note == null) { setEarly({ pos: pos || null, note: '' }); return; }
     setBusy(true); setFail(null);
     try {
       const p = pos || await locate();
       const [{ r }] = await call(role, `select app.punch($1,$2,$3,$4,$5) as r`, [org, p.lat, p.lng, p.acc, note || null]);
       const nm = r.kind === 'in' ? '打卡' : '下班打卡';
       toast(r.new_site ? `已${nm} · 新地点（第一次来，等中方起名）${r.late ? ' · 迟到' : ''}` : r.ok ? `${nm}成功 · ${r.site}（${r.distance} 米）${r.late ? ' · 迟到' : ''}${r.early ? ' · 早退' : ''}` : `已${nm}，但不在规定地点（最近：${r.site || '没设地点'} ${r.distance ?? ''} 米）`, r.ok ? undefined : 'err');
+      if (r.kind === 'out') await call(role, `select app.punch_left($1,$2)`, [org, data.left || 0]).catch(() => {});
       setEarly(null); refresh();
     } catch (e) { setFail(e.message); toast(friendlyError(e), 'err'); } finally { setBusy(false); }
   };
@@ -72,6 +76,7 @@ export default function Attendance() {
     { key: 'ok', label: '在不在', w: 90, value: (a) => (a.ok ? '在' : '不在'), render: (a) => (a.ok ? <Pill tone="green">在</Pill> : <Pill tone="red">不在</Pill>) },
     { key: 'late', label: '迟到 / 早退', w: 100, value: (a) => (a.late ? '迟到' : a.early ? '早退' : ''), render: (a) => (a.late ? <Pill tone="amber">迟到</Pill> : a.early ? <Pill tone="red">早退</Pill> : null) },
     { key: 'early_note', label: '早退原因', w: 160 },
+    { key: 'todo_left', label: '待办没做完', w: 100, type: 'number', render: (a) => (Number(a.todo_left) > 0 ? <Pill tone="red">{a.todo_left} 件</Pill> : null) },
     { key: 'emp_city', label: '负责城市', w: 90 },
     { key: 'usual_dist', label: '离常去点', w: 100, value: (a) => (a.usual_dist == null ? '' : `${a.usual_dist} 米`), render: (a) => (a.usual_dist == null ? <span className="muted small">—</span> : a.usual_dist > 2000 ? <Pill tone="amber">{(a.usual_dist / 1000).toFixed(1)} 公里</Pill> : `${a.usual_dist} 米`) },
     { key: 'acc', label: '定位精度', w: 90, value: (a) => (a.accuracy_m ? `±${Math.round(a.accuracy_m)} 米` : '') },
@@ -139,9 +144,10 @@ export default function Attendance() {
         tools={<>{admin && <button type="button" className="btn sm primary" onClick={() => setSite({})}>＋ 新地点</button>}{admin && <button type="button" className="btn sm" onClick={() => setSite('rules')}>打卡规则</button>}</>} /></div>}
       {site && site !== 'rules' && (admin ? <SiteModal s={site} onClose={() => setSite(null)} /> : <NameModal s={site} onClose={() => setSite(null)} />)}
       {appeal && <AppealModal onClose={() => setAppeal(null)} />}
-      {early && <Modal title="提前下班" risk="yellow" onClose={() => setEarly(null)} footer={<><button type="button" className="btn" onClick={() => setEarly(null)}>先不打</button><button type="button" className="btn primary" disabled={busy || !early.note.trim()} onClick={() => punch(early.pos, early.note.trim())}>确认下班打卡</button></>}>
-        <div className="hint">还没到下班时间（{String(ps.end_time || '').slice(0, 5)}）。可以打，但要写原因，这一天会记「早退」，算一次异常；有正当理由中方看得到。</div>
-        <div className="field"><label>原因</label><input className="in" autoFocus value={early.note} onChange={(e) => setEarly({ ...early, note: e.target.value })} placeholder="例：去医院 / 送货到客户那里直接回家" /></div>
+      {early && <Modal title={ps.early ? '提前下班' : '下班打卡'} risk="yellow" onClose={() => setEarly(null)} footer={<><button type="button" className="btn" onClick={() => setEarly(null)}>先不打</button>{data.left > 0 && <button type="button" className="btn" onClick={() => { setEarly(null); go('todo'); }}>去待办</button>}<button type="button" className="btn primary" disabled={busy || (ps.early && !early.note.trim())} onClick={() => punch(early.pos, early.note.trim())}>确认下班打卡</button></>}>
+        {data.left > 0 && <div className="banner warn">还有 <b>{data.left}</b> 件待办没做完（紧急 + 进行中）。今天的事今天做完；现在下班，没做完的明天会升成紧急，中方看得到。</div>}
+        {ps.early && <><div className="hint">还没到下班时间（{String(ps.end_time || '').slice(0, 5)}）。可以打，但要写原因，这一天会记「早退」，算一次异常。</div>
+          <div className="field"><label>原因</label><input className="in" autoFocus value={early.note} onChange={(e) => setEarly({ ...early, note: e.target.value })} placeholder="例：去医院 / 送货到客户那里直接回家" /></div></>}
       </Modal>}
       {site === 'rules' && <RulesModal st={data.st} onClose={() => setSite(null)} />}
     </>
