@@ -241,7 +241,12 @@ export default function Deal({ id }) {
       )}
       {!cancelled && deal.status === 'quoted' && deal.approval === 'pending' && (
         <div className="banner info row" style={{ marginBottom: 12, gap: 8 }}>
-          <span>⏳ 等中方审批：{deal.approval_reasons.join('、')}。批了以后才看得到价格、才能往下推。</span><span className="grow" />
+          <span>{deal.direct
+            ? (deal.approval_reasons.every((x) => /超欠款上限|超账期|有欠款不出货/.test(x))
+              ? <>⏳ <b>熟客直接下单 · 卡在欠款关</b>：{deal.approval_reasons.join('、')}。财务对完账、登记收款后自动下推找货；中方也可以直接特批。</>
+              : <>⏳ <b>熟客直接下单 · 等中方批</b>：{deal.approval_reasons.join('、')}。批了自动下推找货。</>)
+            : <>⏳ 等中方审批：{deal.approval_reasons.join('、')}。批了以后才看得到价格、才能往下推。</>}</span><span className="grow" />
+          {deal.direct && role === 'finance' && <button type="button" className="btn sm" onClick={() => nav('receipts')}>去登记收款 →</button>}
           {role === 'admin' && <button type="button" className="btn sm primary" onClick={() => setApprove(true)}>审批</button>}
         </div>)}
       {!cancelled && deal.approval === 'rejected' && deal.status === 'quoted' && <ResubmitBanner deal={deal} act={act} role={role} />}

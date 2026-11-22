@@ -28,6 +28,7 @@ export function shipAlert(d) {
 }
 import { HoldsCard, VolumeShift } from '../components/Batch2.jsx';
 import { MoneyUrgent, ChangeNotices } from '../components/Batch3.jsx';
+import { DirectHeld } from '../components/Direct.jsx';
 import { InquiryTodo } from './Inquiry.jsx';
 import { AddonTodo } from '../components/Addons.jsx';
 import { AnomalyHub } from '../components/Anomalies.jsx';
@@ -167,7 +168,7 @@ export default function Todo() {
       slot('anomaly', <AnomalyHub />, true),
       !admin && slot('directives', <DirectiveBoard />, true),
       slot('returns', <OpenReturns />, true),
-      slot('money', <><PlanTodo /><PublicHeld urgentOnly /><RemitTodo /><MoneyUrgent /></>),
+      slot('money', <><DirectHeld /><PlanTodo /><PublicHeld urgentOnly /><RemitTodo /><MoneyUrgent /></>),
       slot('issues', <IssueList />),
       ex('approvals') > 0 && line('approvals', 'orders', `${ex('approvals')} 张单等中方审批`),
       ex('cash') > 0 && line('cash', 'cash', `资金账户 ${ex('cash')} 笔要处理（认领到账 / 确认交款 / 批支出）`),

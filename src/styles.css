@@ -1732,3 +1732,4 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 .wm-flow .wm-node { flex: 0 1 92px; width: auto; min-width: 66px; }
 .wm-flow .wm-node b { font-size: 12.5px; }
 .mt-tag { font-size: 11px; color: var(--muted); background: #f1f5f9; border-radius: 5px; padding: 1px 6px; margin-right: 4px; white-space: nowrap; }
+.direct-box { border-bottom: 1px solid var(--line-2); background: var(--brand-soft, #eef3fb); }

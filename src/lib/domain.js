@@ -15,6 +15,7 @@ export const ROLES = {
 
 const P = {
   quote: ['manager', 'hotline'],
+  direct_order: ['manager'],   // 0076 熟客直接下单（跳过报价）：默认只有仓库主管；后台也读权限表
   hotline_confirm: ['hotline', 'manager', 'sales_manager', 'sales'],   // 391: 销售对自己名下的客户也能确认 (后台卡「只能动自己名下的」)
   start_picking: ['manager', 'hotline', 'sales_manager', 'sales'],
   submit_pick: ['picker', 'manager'],

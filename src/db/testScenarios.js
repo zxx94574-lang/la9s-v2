@@ -41,6 +41,9 @@ export async function seedScenarios(db, org, log = () => {}) {
     await as(USERS.admin, `select app.set_customer_terms($1,5000000,30,false,null)`, [c.id]).catch(() => {});
   }
   for (const c of C.slice(0, 12)) await db.query(`update app.customers set owner_employee_id = $2 where id = $1`, [c.id, E.sales]);
+  // 欠款类场景专用的客户 (调低上限不影响别的场景)
+  const CX = await all(`select id, code, name, tier from app.customers where org_id = $1 and status = 'active' and tier is not null and coalesce(supply,'local') = 'local' order by code offset 30 limit 8`, [org]);
+  for (const c of CX) await as(USERS.admin, `select app.confirm_customer_tier($1,$2,'confirm',2,'测试版：定档')`, [c.id, c.tier]).catch(() => {});
   log(`物料 ${P.length} 个、客户 ${C.length} 个`);
   if (P.length < 10 || C.length < 5) { report.fail.push({ name: '准备', err: `物料 ${P.length} / 客户 ${C.length} 不够` }); return report; }
 
@@ -134,6 +137,24 @@ export async function seedScenarios(db, org, log = () => {}) {
   });
   log('分支做完');
 
+  // ── 2b. 熟客直接下单 (0076): 三道关各留几张 ──
+  const DO = (c, ls) => val(USERS.manager, `select app.create_direct_order($1,$2,'XOF',$3,$4,'测试：熟客直接下单')`, [org, c.id, JSON.stringify(ls), photo('wa')]);
+  for (const c of C.slice(0, 6)) await as(USERS.admin, `select app.set_customer_taker($1,$2)`, [c.id, E.manager]).catch(() => {});
+  for (let k = 0; k < 4; k++) await run('直接下单·关都过了', async () => { const r = await DO(C[(i++) % C.length], lines(i, 3)); if (r.state !== 'picking') throw new Error('应该直接下推，结果是 ' + r.state); });
+  for (let k = 0; k < 3; k++) await run('直接下单·要议价（等中方）', async () => {
+    const ls = lines(i, 2).map((l, n) => n === 0 ? { ...l, requested_price: 100, reason: '测试：客户说别家便宜' } : l);
+    const r = await DO(C[(i++) % C.length], ls); if (r.state !== 'price') throw new Error('应该停在价格关，结果是 ' + r.state);
+    if (k === 0) await as(USERS.admin, `select app.approve_quote($1,true,'测试：议价批了','[]')`, [r.deal]);
+  });
+  for (let k = 0; k < 3; k++) await run('直接下单·超欠款（转财务）', async () => {
+    const c = CX[k]; await toShipped(c, lines(i, 2));
+    await as(USERS.admin, `select app.set_customer_terms($1,1000,30,false,(select owner_employee_id from app.customers where id = $1))`, [c.id]);
+    const r = await DO(c, lines(i + 1, 2)); if (r.state !== 'credit') throw new Error('应该停在欠款关，结果是 ' + r.state);
+    if (k === 0) { await as(USERS.admin, `select app.set_customer_terms($1,50000000,30,false,(select owner_employee_id from app.customers where id = $1))`, [c.id]); await S.pay(c.id, 1000); }
+    if (k === 1) await as(USERS.admin, `select app.approve_quote($1,true,'测试：老客户，特批先找货','[]')`, [r.deal]);
+  });
+  log('直接下单做完');
+
   // ── 3. 钱 ──
   for (let k = 0; k < 4; k++) await run('钱·冲最老的', async () => { const c = C[(i++) % C.length]; const a = await toShipped(c, lines(i, 2)); const b = await toShipped(c, lines(i + 1, 2)); await S.pay(c.id, (await due(a)) + Math.round((await due(b)) / 2)); });
   for (let k = 0; k < 3; k++) await run('钱·预付', async () => { const c = C[(i++) % C.length]; await S.pay(c.id, 500000 + k * 100000); });
@@ -152,7 +173,7 @@ export async function seedScenarios(db, org, log = () => {}) {
   for (let k = 0; k < 2; k++) await run('钱·抹零', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); const x = await due(d); await S.pay(c.id, x - 80); await as(USERS.admin, `select app.write_off($1,80,'测试：零头抹掉')`, [d]); });
   for (let k = 0; k < 2; k++) await run('钱·坏账核销', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); await as(USERS.admin, `select app.write_off_bad_debt($1,$2,'测试：客户跑了',$3)`, [d, await due(d), photo('bad')]); });
   for (let k = 0; k < 2; k++) await run('钱·价格调整（出库后补差）', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); await as(USERS.admin, `select app.adjust_price($1,-5000,'测试：出库后给客户让 5000',$2)`, [d, photo('adj')]); });
-  for (let k = 0; k < 2; k++) await run('钱·退预付', async () => { const c = C[(i++) % C.length]; await S.pay(c.id, 300000); await as(USERS.admin, `select app.refund_customer($1,$2,100000,$3,'测试：退一部分预付',$4)`, [c.id, accId(/Wave-XOF/i), day(0), photo('refund')]); });
+  for (let k = 0; k < 2; k++) await run('钱·退预付', async () => { const c = CX[6 + k]; await S.pay(c.id, 300000); await as(USERS.admin, `select app.refund_customer($1,$2,50000,$3,'测试：退一部分预付',$4)`, [c.id, accId(/Wave-XOF/i), day(0), photo('refund')]); });
   for (let k = 0; k < 2; k++) await run('钱·撤销收款', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); const r = await S.pay(c.id, await due(d)); await as(USERS.admin, `select app.void_receipt($1,'测试：登记错了')`, [r]); });
   for (let k = 0; k < 2; k++) await run('钱·撤销出库', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); const sh = await one(`select id from app.shipments where deal_id = $1 limit 1`, [d]); await as(USERS.admin, `select app.void_shipment($1,'测试：Yango 没接到货')`, [sh.id]); });
   for (let k = 0; k < 2; k++) await run('钱·支出', async () => { await as(USERS.finance, `select app.record_expense($1,$2,$3,'交通费（出租车 / Yango）',$4,'测试：送货')`, [accId(/Wave-XOF/i), 5000 + k * 2500, day(k), photo('exp')]); });
@@ -198,7 +219,7 @@ export async function seedScenarios(db, org, log = () => {}) {
 
   // ── 5. 拦截: 故意制造, 留着给中方看 ──
   await db.query(`update app.org_settings set value = '{"on":true}' where org_id = $1 and key = 'credit_gate'`, [org]);
-  for (let k = 0; k < 2; k++) await run('拦截·超欠款上限（卡在出库前）', async () => { const c = C[(i++) % C.length]; await as(USERS.admin, `select app.set_customer_terms($1,10000,30,false,(select owner_employee_id from app.customers where id = $1))`, [c.id]);
+  for (let k = 0; k < 2; k++) await run('拦截·超欠款上限（卡在出库前）', async () => { const c = CX[4 + k]; await as(USERS.admin, `select app.set_customer_terms($1,10000,30,false,(select owner_employee_id from app.customers where id = $1))`, [c.id]);
     const d = await S.quote(c.id, lines(i, 3)); await S.confirm(d); await S.pick(d); await S.cconfirm(d); await S.review(d);
     let blocked = false; try { await S.ship(d); } catch { blocked = true; } if (!blocked) throw new Error('超上限没拦住'); });
   await db.query(`update app.org_settings set value = '{"on":false}' where org_id = $1 and key = 'credit_gate'`, [org]);

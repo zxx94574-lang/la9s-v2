@@ -3,7 +3,7 @@
 
 export const customers = `
 select c.id, c.code, c.temp_code, c.name, c.city, c.tier, c.status, c.phone, c.supply, c.market, c.shop_type, c.contact_name, c.block_on_debt,
-       e.short_name as owner
+       c.tier_confirmed_at, c.taker_employee_id, e.short_name as owner
 from app.customers c left join app.employees e on e.id = c.owner_employee_id
 where c.org_id = $1
 order by c.status, c.code nulls last, c.name`;

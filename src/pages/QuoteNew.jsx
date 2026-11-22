@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { q, call, callValue } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, DatePicker, Modal, SortList, RateInput, Info, PageGear, Choice } from '../components/ui.jsx';
+import { useApp, useData, DatePicker, Modal, SortList, RateInput, Info, PageGear, Choice, PhotoInput } from '../components/ui.jsx';
 import ProductDrawer from '../components/ProductDrawer.jsx';
 import { CustomerDrawer } from './Customers.jsx';
 import { STEPS } from '../lib/domain.js';
@@ -83,6 +83,7 @@ export default function QuoteNew() {
   const lastPrices = useLastPrices(customer || null);
   usePromos(customer || null);     // 这个客户生效的特价 (促销价…) → 自动成为单价
   const [histOpen, setHistOpen] = useState(false);
+  const [waProof, setWaProof] = useState('');
   if (!data) return <div className="empty">加载中…</div>;
   const cust = data.customers.find((c) => c.id === customer);
   const tier = cust?.tier;
@@ -137,6 +138,31 @@ export default function QuoteNew() {
     } finally { setBusy(false); }
   };
 
+  // 0076 熟客直接下单: 不走报价确认, 下推找货前自动查 价格 / 欠款 / 特批 三道关
+  const directOk = !!(cust && cust.status === 'active' && cust.tier && cust.tier_confirmed_at && currency === 'XOF' && can(role, 'direct_order'));
+  const submitDirect = async () => {
+    setErrs(true);
+    const fin = finalizeLines(lines);
+    if (fin.error) return toast(fin.error, 'err');
+    if (!fin.lines.length) return toast('请至少添加一行物料', 'err');
+    if (fin.lines.some((l) => !l.product)) return toast('有没编码的型号：直接下单只能选有编码的；没编码的点「先报价」', 'err');
+    const zero = fin.lines.filter((l) => !(Number(l.qty_req) > 0));
+    if (zero.length) { setCellErrs(Object.fromEntries(zero.map((l) => [l.key, { qty_req: '数量不能为 0' }]))); return toast(`${zero.length} 行数量为 0（已标红）`, 'err'); }
+    const noWhy = fin.lines.filter((l) => Number(l.req_price) > 0 && !String(l.note || '').trim());
+    if (noWhy.length) { setCellErrs(Object.fromEntries(noWhy.map((l) => [l.key, { note: '要议价的行写上客户的理由' }]))); return toast(`${noWhy.length} 行要议价但没写理由（已标红）：在备注里写客户怎么说的`, 'err'); }
+    if (!waProof) return toast('贴一张客户下单的截图（群里那条消息），证明是客户要的', 'err');
+    setBusy(true);
+    try {
+      const payload = fin.lines.map((l) => ({ product_id: l.product.id, qty_req: Number(l.qty_req), stock_item_id: l.stock_item_id || null, note: l.note || null,
+        ...(Number(l.unit_price) > 0 ? { unit_price: Number(l.unit_price) } : {}), ...(Number(l.req_price) > 0 ? { requested_price: Number(l.req_price), reason: l.note } : {}) }));
+      const [{ r }] = await call(role, `select app.create_direct_order($1,$2,'XOF',$3,$4,$5) as r`, [org, customer, JSON.stringify(payload), waProof, note || null]);
+      if (draftId) await call(role, `select app.delete_quote_draft($1)`, [draftId]).catch(() => {});
+      refresh(); setWaProof('');
+      toast({ picking: '已直接下推找货（价格、欠款都没问题）', price: '有要议价的行：已送中方，议完价自动下推找货', credit: '客户超欠款上限 / 账期：已转财务对账，收到款自动下推找货', approval: '这张单要中方特批：批了自动下推找货' }[r.state] || '已保存');
+      go('deal/' + r.deal);
+    } catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
+  };
+
   const t = lineTotals(lines, tier, showPrice, fx);
   // 板块 (11-01 布局编辑样板页): 中方可以调顺序 / 宽度 / 隐藏; 比如明细 8 + 合计和按钮 4 = 按钮放到右侧栏
   const nowPrice = (l) => (Number(l.req_price) > 0 ? Number(l.req_price) : (Number(l.unit_price) > 0 ? Number(l.unit_price) : tierPrice(l, tier, fx)));
@@ -184,9 +210,20 @@ export default function QuoteNew() {
         {showPrice && tier && priced && <div className="s"><div className="k">报价金额（按 {cust.tier} 档{fx ? ` · 汇率 ${fx}` : ''}）</div><div className="v">{money(t.amt, currency)} {currency}</div></div>}
       </div></div>) },
     { id: 'actions', title: '操作按钮', span: 12, locked: true, render: () => (
-      <div className="card"><div className="actionbar">
-        <span className="hint">{can(role, 'quote') ? '保存后生成报价单号，可复制图片发客户群。' : `当前岗位不能报价（${whoCan('quote')}）`}</span>
-        <button type="button" className="btn primary lg" disabled={busy || !can(role, 'quote')} onClick={submit}>{busy ? '保存中…' : priceOk ? '改价核对过，保存报价单 →' : '保存报价单 →'}</button>
+      <div className="card">
+        {directOk && <div className="card-b direct-box">
+          <div className="row" style={{ gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div className="grow" style={{ minWidth: 220 }}>
+              <b>熟客直接下单</b> <Info>不走报价确认。下推找货前系统自动查三道关：① 价格（有「申请价」的行要中方议价）② 欠款（超上限 / 超账期转财务对账）③ 特批。都过了直接下推找货；卡住的批完 / 收到款后自动下推。</Info>
+              <div className="small muted">客户原话截图 *（群里那条下单消息）</div>
+            </div>
+            <PhotoInput value={waProof} onChange={setWaProof} label="贴截图" camera={false} invalid={errs && !waProof} />
+            <button type="button" className="btn primary lg" disabled={busy} onClick={submitDirect}>{busy ? '下单中…' : '直接下单 →'}</button>
+          </div>
+        </div>}
+        <div className="actionbar">
+        <span className="hint">{can(role, 'quote') ? (directOk ? '新客户、大单或要先给客户看价，就先报价。' : '保存后生成报价单号，可复制图片发客户群。') : `当前岗位不能报价（${whoCan('quote')}）`}</span>
+        <button type="button" className={`btn ${directOk ? '' : 'primary'} lg`} disabled={busy || !can(role, 'quote')} onClick={submit}>{busy ? '保存中…' : priceOk ? '改价核对过，保存报价单 →' : directOk ? '先报价 →' : '保存报价单 →'}</button>
       </div></div>) },
   ];
   return (
