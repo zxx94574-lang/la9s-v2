@@ -7,6 +7,8 @@ import { q, call } from '../db/client.js';
 import { useApp, useData, MoneyIn, usePopBus, useOutside, Info, Assumed } from './ui.jsx';
 import { WorkMap, AREAS, AREA, goArea } from './WorkMap.jsx';
 import { PermPanel, ExportPanel, DocSettings } from './SettingsPanels.jsx';
+import { IconLibrary } from './Icons.jsx';
+import { ITEMS as NAV_ITEMS } from './Nav.jsx';
 import { friendlyError } from '../lib/format.js';
 
 // [id, 存在 org_settings 的 key, 字段, 说明, 默认值, 单位, 类型 num|bool|text, home]
@@ -80,7 +82,8 @@ export const META = {
   'sales.comm': { area: 'staff', short: '销售提成 · 每片', src: 'Frank 11-18 定', apply: '整单付清的片数', effect: '自动带进工资单' },
 };
 // 「系统」里不是数字的设置: 直接放整块面板 (原来在右上角设置里)
-const SYS_PANELS = [['perm', '权限表', PermPanel], ['docs', '发货文件（BL + 海关文件）', DocSettings], ['export', '导出整库', ExportPanel]];
+function IconPanel() { const { org, role, toast, refresh } = useApp(); return <IconLibrary org={org} role={role} call={call} toast={toast} refresh={refresh} pageNames={Object.fromEntries(Object.entries(NAV_ITEMS).map(([k, v]) => [k, v[1]]))} />; }
+const SYS_PANELS = [['perm', '权限表', PermPanel], ['docs', '发货文件（BL + 海关文件）', DocSettings], ['icons', '图标库', IconPanel], ['export', '导出整库', ExportPanel]];
 
 const JUMP = 'la9s.rule.jump';
 

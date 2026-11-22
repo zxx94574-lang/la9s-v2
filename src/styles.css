@@ -1749,3 +1749,11 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 .opt-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; text-align: left; cursor: pointer; min-width: 0; }
 .opt-row.on { border: 2px solid var(--brand); background: var(--brand-soft, #eef3fb); }
 .opt-row .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 图标 (11-22): 统一线条图标 */
+.icon { display: inline-block; vertical-align: -3px; flex-shrink: 0; }
+.nav-item .ico { display: inline-flex; align-items: center; justify-content: center; width: 22px; }
+.mnav b .icon { vertical-align: middle; }
+.icon-lib { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.icon-lib .il { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; min-width: 0; text-align: center; }
+.icon-lib .il.on { border: 2px solid var(--brand); }
+.icon-lib .il small { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }

@@ -12,6 +12,7 @@ import { Ctx, Modal, useToasts, useOutside, Info, useStickyPagehead, useInstantT
 import { ArchiveHost } from './components/Archives.jsx';
 import { ExportPanel } from './components/SettingsPanels.jsx';
 import { loadAllOpts } from './components/Opts.jsx';
+import { RouteIcon, Icon, setIconOverride } from './components/Icons.jsx';
 import { loadGridAlign } from './lib/gridPrefs.js';
 import { ROLES, setPermOverride, setPriceRules } from './lib/domain.js';
 import { t, getLang, setLang as setLangStore, LANGS } from './lib/i18n.js';
@@ -125,7 +126,7 @@ export default function App() {
   // 权限配置 (11-09): 开局和每次 refresh 读一遍, can() 立即按新配置走
   const [permTick, setPermTick] = useState(0);
   useEffect(() => { if (org) q(`select value from app.org_settings where org_id = $1 and key = 'price_rules'`, [org]).then((r) => setPriceRules(r[0]?.value)).catch(() => {}); }, [org, tick]);
-  useEffect(() => { if (org) q(`select value from app.org_settings where org_id = $1 and key = 'perm_matrix'`, [org]).then((r) => { setPermOverride(r[0]?.value || {}); setPermTick((x) => x + 1); }).catch(() => {}); Promise.all([loadAllOpts(org), loadGridAlign(org)]).then(() => setPermTick((x) => x + 1)); }, [org, tick]);
+  useEffect(() => { if (org) q(`select value from app.org_settings where org_id = $1 and key = 'perm_matrix'`, [org]).then((r) => { setPermOverride(r[0]?.value || {}); setPermTick((x) => x + 1); }).catch(() => {}); Promise.all([loadAllOpts(org), loadGridAlign(org), q(`select value from app.org_settings where org_id = $1 and key = 'nav_icons'`, [org]).then((r) => setIconOverride(r[0]?.value || {})).catch(() => {})]).then(() => setPermTick((x) => x + 1)); }, [org, tick]);
   // 侧栏宽度: 拖右边缘 (180–380), 每个人自己的
   const dragSide = (e) => {
     e.preventDefault(); const x0 = e.clientX, w0 = sideW;
@@ -270,7 +271,7 @@ export default function App() {
                 <button type="button" className="gh" onClick={() => setOpenGroups((o) => ({ ...o, [g.id]: !isOpen }))}>{t(g.label)}<span className="chev">⌄</span></button>
                 {isOpen && g.items.map((it) => (
                   <button type="button" key={it.route} className={`nav-item ${active(it.route) ? 'active' : ''}`} onClick={() => go(it.route)}>
-                    <span className="ico">{it.ico}</span><span>{t(it.label)}</span>
+                    <span className="ico"><RouteIcon route={it.route} /></span><span>{t(it.label)}</span>
                     {it.route === 'todo' && (overdueN > 0 || todoCount > 0) && <span className={`pill red ${overdueN ? 'hotpill' : ''}`} style={{ marginLeft: 'auto' }} title={overdueN ? `${overdueN} 张超过 24 小时没发货` : ''}>{overdueN ? `⏰${overdueN} · ` : ''}{todoCount}</span>}
                   </button>
                 ))}
@@ -339,18 +340,18 @@ export default function App() {
 
         {portal ? (
         <nav className="mnav">
-          <button type="button" className={page === 'p/shop' ? 'on' : ''} onClick={() => go('p/shop')}><b>＋</b>下单</button>
-          <button type="button" className={page === 'p/orders' ? 'on' : ''} onClick={() => go('p/orders')}><b>≡</b>订单</button>
-          <button type="button" className={page === 'p/pos' ? 'on' : ''} onClick={() => go('p/pos')}><b>¤</b>收银</button>
-          {role === 'boss' && <button type="button" className={page === 'p/balance' ? 'on' : ''} onClick={() => go('p/balance')}><b>₣</b>对账</button>}
-          {role === 'boss' && <button type="button" className={page === 'p/stores' ? 'on' : ''} onClick={() => go('p/stores')}><b>⌂</b>门店</button>}
+          <button type="button" className={page === 'p/shop' ? 'on' : ''} onClick={() => go('p/shop')}><b><RouteIcon route="p/shop" size={20} /></b>下单</button>
+          <button type="button" className={page === 'p/orders' ? 'on' : ''} onClick={() => go('p/orders')}><b><RouteIcon route="p/orders" size={20} /></b>订单</button>
+          <button type="button" className={page === 'p/pos' ? 'on' : ''} onClick={() => go('p/pos')}><b><RouteIcon route="p/pos" size={20} /></b>收银</button>
+          {role === 'boss' && <button type="button" className={page === 'p/balance' ? 'on' : ''} onClick={() => go('p/balance')}><b><RouteIcon route="p/balance" size={20} /></b>对账</button>}
+          {role === 'boss' && <button type="button" className={page === 'p/stores' ? 'on' : ''} onClick={() => go('p/stores')}><b><RouteIcon route="p/stores" size={20} /></b>门店</button>}
         </nav>) : (
         <nav className="mnav">
-          <button type="button" className={page === 'dashboard' ? 'on' : ''} onClick={() => go('dashboard')}><b>◫</b>首页</button>
-          <button type="button" className={page === 'todo' ? 'on' : ''} onClick={() => go('todo')}><b>◉</b>待办{(overdueN > 0 || todoCount > 0) && <span className={`badge ${overdueN ? 'hot' : ''}`}>{overdueN || todoCount}</span>}</button>
-          <button type="button" className="plus" onClick={() => go('quote/new')}><b>＋</b>报价</button>
-          <button type="button" className={active('orders') ? 'on' : ''} onClick={() => go('orders')}><b>≡</b>订单</button>
-          <button type="button" onClick={() => setDrawer(true)}><b>☰</b>更多</button>
+          <button type="button" className={page === 'dashboard' ? 'on' : ''} onClick={() => go('dashboard')}><b><RouteIcon route="dashboard" size={20} /></b>首页</button>
+          <button type="button" className={page === 'todo' ? 'on' : ''} onClick={() => go('todo')}><b><RouteIcon route="todo" size={20} /></b>待办{(overdueN > 0 || todoCount > 0) && <span className={`badge ${overdueN ? 'hot' : ''}`}>{overdueN || todoCount}</span>}</button>
+          <button type="button" className="plus" onClick={() => go('quote/new')}><b><Icon name="plus" size={20} /></b>报价</button>
+          <button type="button" className={active('orders') ? 'on' : ''} onClick={() => go('orders')}><b><RouteIcon route="orders" size={20} /></b>订单</button>
+          <button type="button" onClick={() => setDrawer(true)}><b><Icon name="list" size={20} /></b>更多</button>
         </nav>)}
       </div>
 
