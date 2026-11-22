@@ -1742,3 +1742,4 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 .pos-item b, .pos-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pos-line { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line-2); min-width: 0; }
 .pos-line .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-sticky { position: sticky; bottom: 64px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 12px 12px; padding: 10px 12px; background: #fff; border: 1px solid var(--brand); border-radius: 10px; box-shadow: 0 2px 10px rgba(4,71,176,.15); }

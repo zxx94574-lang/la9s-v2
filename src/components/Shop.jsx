@@ -39,7 +39,7 @@ export function ShopPos() {
   const shown = useMemo(() => { const items = data?.items || []; const t = text.trim().toUpperCase(); return items.filter((i) => i.qty > 0 && (!t || `${i.model} ${i.category} ${i.quality}`.toUpperCase().includes(t))).slice(0, 40); }, [data, text]);
   if (!data) return <div className="empty">加载中…</div>;
   if (!data.me) return <div className="empty">客户账号才能用收银。</div>;
-  const today = data.sales.filter((s) => !s.voided_at && s.sold_at.slice(0, 10) === todayIso());
+  const today = data.sales.filter((s) => !s.voided_at && new Date(s.sold_at).toISOString().slice(0, 10) === todayIso());
   const todayTotal = today.reduce((a, s) => a + Number(s.total), 0);
   const total = cart.reduce((a, c) => a + c.qty * (Number(c.price) || 0), 0);
   const add = (i) => { setDone(null); setCart((cs) => { const ex = cs.find((c) => c.item.id === i.id); return ex ? cs.map((c) => (c.item.id === i.id ? { ...c, qty: Math.min(c.qty + 1, i.qty) } : c)) : [...cs, { item: i, qty: 1, price: i.price ?? '' }]; }); };
@@ -73,8 +73,10 @@ export function ShopPos() {
               </button>))}
             {!shown.length && <div className="empty">没有找到。货不在店里库存的，先到「店里库存」补录。</div>}
           </div>
+          {cart.length > 0 && <div className="pos-sticky show-m"><span>{cart.reduce((a, c) => a + c.qty, 0)} 件 · <b>{money(total)} XOF</b></span>
+            <button type="button" className="btn primary" onClick={() => document.getElementById('pos-cart')?.scrollIntoView({ behavior: 'smooth' })}>去收钱 ↓</button></div>}
         </div>
-        <div className="card">
+        <div className="card" id="pos-cart">
           <div className="card-h"><h2>这一单</h2>{cart.length > 0 && <Pill tone="blue">{cart.length} 种</Pill>}</div>
           {cart.map((c) => (
             <div key={c.item.id} className="pos-line">
