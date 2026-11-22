@@ -11,7 +11,7 @@ export async function seedScenarios(db, org, log = () => {}) {
   const report = { ok: {}, fail: [] };
   const run = async (name, fn) => {
     try { await fn(); report.ok[name] = (report.ok[name] || 0) + 1; }
-    catch (e) { report.fail.push({ name, err: String(e.message || e).slice(0, 300) }); }
+    catch (e) { report.fail.push({ name, n: (report.ok[name] || 0) + report.fail.filter((f) => f.name === name).length, err: String(e.message || e).slice(0, 300) }); }
   };
   const photo = (k) => `test://${k}-${Math.random().toString(36).slice(2, 8)}.jpg`;
   const day = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
@@ -40,6 +40,7 @@ export async function seedScenarios(db, org, log = () => {}) {
     await as(USERS.admin, `select app.confirm_customer_tier($1,$2,'confirm',2,'测试版：定档')`, [c.id, c.tier]).catch(() => {});
     await as(USERS.admin, `select app.set_customer_terms($1,5000000,30,false,null)`, [c.id]).catch(() => {});
   }
+  for (const c of C.slice(0, 12)) await db.query(`update app.customers set owner_employee_id = $2 where id = $1`, [c.id, E.sales]);
   log(`物料 ${P.length} 个、客户 ${C.length} 个`);
   if (P.length < 10 || C.length < 5) { report.fail.push({ name: '准备', err: `物料 ${P.length} / 客户 ${C.length} 不够` }); return report; }
 
@@ -66,7 +67,7 @@ export async function seedScenarios(db, org, log = () => {}) {
     balance: (d) => as(USERS.finance, `select app.confirm_balance($1,'whatsapp',$2,'测试：对账')`, [d, photo('balance')]),
     pay: async (cust, amount, extra = {}) => {
       const acc = extra.account || (await one(`select id from app.cash_accounts where org_id = $1 and name ilike '%wave%' order by name limit 1`, [org]))?.id;
-      return val(USERS.finance, `select app.record_receipt2($1,$2)`, [org, JSON.stringify({ customer_id: cust, received_on: extra.on || day(0), amount_landed: amount, amount_paid: amount, currency: 'XOF', method: 'wave', account_id: acc, proof: photo('pay'), alloc_mode: extra.mode || 'oldest', targets: extra.targets || [], ...extra.p })]);
+      return val(USERS.finance, `select app.record_receipt2($1,$2)`, [org, JSON.stringify({ customer_id: cust, received_on: extra.on || day(0), amount_landed: amount, amount_paid: amount, currency: 'XOF', method: 'wave', account_id: acc, proof: photo('pay'), mode: extra.mode || 'oldest', targets: extra.targets || [], ...extra.p })]);
     },
   };
   const toShipped = async (c, ls, o = {}) => {
@@ -138,6 +139,98 @@ export async function seedScenarios(db, org, log = () => {}) {
   for (let k = 0; k < 3; k++) await run('钱·预付', async () => { const c = C[(i++) % C.length]; await S.pay(c.id, 500000 + k * 100000); });
   for (let k = 0; k < 3; k++) await run('钱·部分付款', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 3)); await S.pay(c.id, Math.round((await due(d)) * 0.4)); });
   log('钱做完');
+
+  // ── 3b. 钱的其他情况 ──
+  const acc = Object.fromEntries((await all(`select name, id from app.cash_accounts where org_id = $1`, [org])).map((a) => [a.name, a.id]));
+  const accId = (re) => Object.entries(acc).find(([n]) => re.test(n))?.[1];
+  for (let k = 0; k < 3; k++) await run('钱·现金收款', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); await S.pay(c.id, await due(d), { account: accId(/Cash-XOF/i), p: { method: 'cash' } }); });
+  for (let k = 0; k < 3; k++) await run('钱·人民币收款（跨币种）', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); const x = await due(d);
+    await val(USERS.finance, `select app.record_receipt2($1,$2)`, [org, JSON.stringify({ customer_id: c.id, received_on: day(0), amount_landed: Math.round(x / 85), currency: 'CNY', account_currency: 'XOF', rate: 85, method: 'cash', account_id: accId(/Cash-RMB/i), proof: photo('rmb'), mode: 'oldest' })]); });
+  for (let k = 0; k < 3; k++) await run('钱·公户代收（钱在 Roland 手里）', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); await S.pay(c.id, await due(d), { account: accId(/Roland.*Wave/i) || accId(/公户/) }); });
+  for (let k = 0; k < 2; k++) await run('钱·员工代收', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2));
+    await S.pay(c.id, await due(d), { account: null, p: { method: 'cash', account_id: null, collector_employee_id: E.sales } }); });
+  for (let k = 0; k < 2; k++) await run('钱·抹零', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); const x = await due(d); await S.pay(c.id, x - 80); await as(USERS.admin, `select app.write_off($1,80,'测试：零头抹掉')`, [d]); });
+  for (let k = 0; k < 2; k++) await run('钱·坏账核销', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); await as(USERS.admin, `select app.write_off_bad_debt($1,$2,'测试：客户跑了',$3)`, [d, await due(d), photo('bad')]); });
+  for (let k = 0; k < 2; k++) await run('钱·价格调整（出库后补差）', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); await as(USERS.admin, `select app.adjust_price($1,-5000,'测试：出库后给客户让 5000',$2)`, [d, photo('adj')]); });
+  for (let k = 0; k < 2; k++) await run('钱·退预付', async () => { const c = C[(i++) % C.length]; await S.pay(c.id, 300000); await as(USERS.admin, `select app.refund_customer($1,$2,100000,$3,'测试：退一部分预付',$4)`, [c.id, accId(/Wave-XOF/i), day(0), photo('refund')]); });
+  for (let k = 0; k < 2; k++) await run('钱·撤销收款', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); const r = await S.pay(c.id, await due(d)); await as(USERS.admin, `select app.void_receipt($1,'测试：登记错了')`, [r]); });
+  for (let k = 0; k < 2; k++) await run('钱·撤销出库', async () => { const c = C[(i++) % C.length]; const d = await toShipped(c, lines(i, 2)); const sh = await one(`select id from app.shipments where deal_id = $1 limit 1`, [d]); await as(USERS.admin, `select app.void_shipment($1,'测试：Yango 没接到货')`, [sh.id]); });
+  for (let k = 0; k < 2; k++) await run('钱·支出', async () => { await as(USERS.finance, `select app.record_expense($1,$2,$3,'交通费（出租车 / Yango）',$4,'测试：送货')`, [accId(/Wave-XOF/i), 5000 + k * 2500, day(k), photo('exp')]); });
+  // 核对到账: 大部分收款中方核对过, 留 3 笔「待核对」给资金账户页看
+  for (const r of (await all(`select id from app.receipts where org_id = $1 and verify_status = 'pending' and voided_at is null order by created_at`, [org])).slice(3)) await as(USERS.admin, `select app.verify_receipt($1,'测试：到账核对')`, [r.id]).catch(() => {});
+  for (let k = 0; k < 2; k++) await run('钱·回款（汇回国内）', async () => {
+    await as(USERS.admin, `select app.ensure_remit_accounts($1)`, [org]);
+    const to = (await one(`select id from app.remit_accounts where org_id = $1 order by name limit 1 offset $2`, [org, k]))?.id;
+    const rid = await val(USERS.finance, `select app.create_remittance($1,$2)`, [org, JSON.stringify({ from_account_id: (await one(`select a.id from app.cash_accounts a where a.org_id = $1 and a.currency = 'XOF' order by app.account_balance(a.id) desc limit 1`, [org])).id, to_account_id: to, amount_out: 200000 + k * 100000, rate: 85, ref_rate: 85, company: '测试汇款公司', on_date: day(2), proof: photo('remit') })]);
+    if (k === 0) { await as(USERS.admin, `select app.remit_arrive($1,7200,$2,$3)`, [rid, day(1), photo('arrive')]); }
+  });
+  log('钱的其他情况做完');
+
+  // ── 4. FOB: 每个阶段都留几条 ──
+  const fobStages = ['applied', 'priced', 'purchasing', 'in_transit', 'arrived', 'deposit', 'released', 'shipped', 'closed', 'cancelled'];
+  for (let k = 0; k < 16; k++) {
+    const st = fobStages[k % fobStages.length];
+    await run(`FOB·${st}`, async () => {
+      const c = C[(i++) % C.length]; const wh = k % 3 !== 0;
+      const f = await val(USERS.sales, `select app.create_fob($1,$2,$3,$4,'XOF',$5,$6)`, [org, c.id, wh ? 'CI' : 'TG', wh ? 'warehouse' : 'logistics',
+        JSON.stringify(pick(k + 40, 2).map((p, n) => ({ product_id: p.id, qty: 200 + n * 100 }))), `测试 FOB：${st}`]);
+      if (st === 'applied') return;
+      for (const l of await all(`select id from app.fob_lines where project_id = $1`, [f])) await as(USERS.admin, `select app.set_fob_price($1,$2)`, [l.id, 2500 + k * 10]);
+      if (st === 'priced') return;
+      if (st === 'cancelled') { await as(USERS.manager, `select app.fob_advance($1,'cancelled','{"note":"测试：客户取消"}')`, [f]); return; }
+      await as(USERS.manager, `select app.fob_advance($1,'purchasing',$2)`, [f, JSON.stringify({ po_no: `TEST-FOB-${k}` })]);
+      if (st === 'purchasing') return;
+      await as(USERS.manager, `select app.fob_advance($1,'in_transit',$2)`, [f, JSON.stringify({ logistics: '测试物流', tracking: `TRK${k}`, eta: day(-10) })]);
+      const tot = Number((await one(`select total from app.v_fob where id = $1`, [f])).total);
+      await as(USERS.finance, `select app.record_fob_payment($1,'deposit',$2,$3,'bank',$4)`, [f, Math.round(tot * 0.3), day(5), photo('fobdep')]);
+      if (st === 'in_transit') return;
+      if (wh) await as(USERS.manager, `select app.fob_receive($1,$2)`, [f, JSON.stringify((await all(`select id, qty from app.fob_lines where project_id = $1`, [f])).map((l) => ({ line_id: l.id, qty: l.qty })))]);
+      else await as(USERS.manager, `select app.fob_advance($1,'arrived','{}')`, [f]);
+      if (st === 'arrived' || st === 'deposit') return;
+      const full = st !== 'released';
+      if (full) await as(USERS.finance, `select app.record_fob_payment($1,'balance',$2,$3,'bank',$4)`, [f, tot - Math.round(tot * 0.3), day(1), photo('fobbal')]);
+      await as(USERS.admin, `select app.fob_release($1,$2)`, [f, full ? '测试：收齐了' : '测试：老客户，尾款下周付，先放']);
+      if (st === 'released') return;
+      await as(USERS.manager, `select app.fob_ship($1,$2,'测试 FOB 出库')`, [f, photo('fobship')]);
+    });
+  }
+  log('FOB 做完');
+
+  // ── 5. 拦截: 故意制造, 留着给中方看 ──
+  await db.query(`update app.org_settings set value = '{"on":true}' where org_id = $1 and key = 'credit_gate'`, [org]);
+  for (let k = 0; k < 2; k++) await run('拦截·超欠款上限（卡在出库前）', async () => { const c = C[(i++) % C.length]; await as(USERS.admin, `select app.set_customer_terms($1,10000,30,false,(select owner_employee_id from app.customers where id = $1))`, [c.id]);
+    const d = await S.quote(c.id, lines(i, 3)); await S.confirm(d); await S.pick(d); await S.cconfirm(d); await S.review(d);
+    let blocked = false; try { await S.ship(d); } catch { blocked = true; } if (!blocked) throw new Error('超上限没拦住'); });
+  await db.query(`update app.org_settings set value = '{"on":false}' where org_id = $1 and key = 'credit_gate'`, [org]);
+  for (let k = 0; k < 2; k++) await run('拦截·卖价低于成本（要中方批）', async () => { const c = C[(i++) % C.length]; const ls = lines(i, 2).map((l, n) => n === 0 ? { ...l, unit_price: 1 } : l);
+    const d = await val(USERS.admin, `select app.create_quote_priced($1,$2,'XOF',$3,'测试：报了 1 块钱')`, [org, c.id, JSON.stringify(ls)]);
+    let blocked = false; try { await S.confirm(d); } catch (e) { blocked = /LOSS_BLOCK/.test(e.message); } if (!blocked) throw new Error('低于成本没拦住'); });
+  for (let k = 0; k < 2; k++) await run('拦截·员工改价待批', async () => { const c = C[(i++) % C.length]; const d = await S.quote(c.id, lines(i, 2)); await S.confirm(d); await S.pick(d);
+    const l = await one(`select id, unit_price from app.deal_lines where deal_id = $1 order by seq limit 1`, [d]);
+    await as(USERS.manager, `select app.request_line_price($1,$2,'测试：客户嫌贵要便宜点')`, [l.id, Math.round(Number(l.unit_price) * 0.9)]); });
+  for (let k = 0; k < 2; k++) await run('拦截·冻结库存', async () => { const p = P[(i++) % P.length]; await as(USERS.admin, `select app.freeze_stock($1,20,'待评估（软件 / 版本）',$2)`, [p.stock_id, photo('freeze')]); });
+  log('拦截做完');
+
+  // ── 6. 客户 / 热线 / 拜访 / 询单 ──
+  const results = ['order', 'quote', 'no_answer', 'later', 'busy'];
+  for (let k = 0; k < 12; k++) await run('热线回访', async () => { const c = C[(i++) % C.length]; await as(USERS.hotline, `select app.log_call($1,'spare','call',$2,$3,$4)`, [c.id, results[k % 5], `测试回访 ${k + 1}`, day(-1 - (k % 3))]); });
+  for (let k = 0; k < 6; k++) await run('潜客 + 拜访', async () => {
+    const pr = await val(USERS.sales, `select app.create_prospect($1,$2,$3,'Yopougon',$4)`, [org, `测试潜客 ${k + 1}`, `07000010${String(k).padStart(2, '0')}`, JSON.stringify({ shop_type: k % 2 ? 'Repair shop' : 'Retail shop', market: 'Siporex' })]);
+    await as(USERS.sales, `select app.log_visit($1,$2,$3)`, [pr, k % 3 ? 'interested' : 'order', JSON.stringify({ photo: photo('shop'), activity: 'Réparation', products_wanted: 'LCD', monthly_qty: String(50 + k * 20) })]);
+  });
+  for (let k = 0; k < 6; k++) await run('询单（员工建）', async () => { const c = C[k]; const q = await val(USERS.sales, `select app.submit_inquiry($1,$2,$3,'测试询单')`, [org, c.id, JSON.stringify(pick(k, 2).map((p) => ({ product_id: p.id, qty: 30 })))]);
+    if (k < 3) await as(USERS.admin, `select app.inquiry_convert($1,'[]',null)`, [q]); else if (k === 3) await as(USERS.admin, `select app.inquiry_mark($1,'lost','价格谈不拢')`, [q]); });
+  for (let k = 0; k < 4; k++) await run('询单（游客）', async () => { await val(USERS.admin, `select app.guest_inquiry2($1,$2,$3,'测试游客')`, [org, JSON.stringify({ contact: `游客 ${k + 1}`, phone: `0500000${k}00`, city: 'Abobo', level: ['REPAIR', 'RETAIL', 'WHOLESALE', 'MIXED'][k] }), JSON.stringify(pick(k + 5, 2).map((p) => ({ product_id: p.id, qty: 20 })))]); });
+  log('客户相关做完');
+
+  // ── 7. 中方指令 / 任务 ──
+  for (let k = 0; k < 6; k++) await run('中方指令', async () => {
+    const id = await val(USERS.admin, `select app.issue_directive2($1,$2)`, [org, JSON.stringify({ title: ['盘点 LA 仓电池', '给 KABRE 打电话催款', '整理 9S 仓货架', '核对昨天的出库单', '拍新到的屏幕照片', '回访上周的潜客'][k], body: '测试指令', assignees: [k % 2 ? E.picker : E.hotline], due_on: day(k % 3 - 1), report_mode: 'all' })]);
+    const ids = await all(`select id from app.directives where group_id = (select group_id from app.directives where id = $1) or id = $1`, [id]).catch(() => [{ id }]);
+    if (k >= 2) for (const x of ids) await as(k % 2 ? USERS.picker : USERS.hotline, `select app.ack_directive2($1,'测试：刚看到')`, [x.id]).catch(() => {});
+    if (k >= 4) for (const x of ids) await as(k % 2 ? USERS.picker : USERS.hotline, `select app.complete_directive($1,'测试：做完了',$2)`, [x.id, photo('dir')]).catch(() => {});
+  });
+  log('指令做完');
 
   // ── 结束: 恢复规则, 做总账检查 ──
   await db.query(`update app.org_settings set value = '{"on":true}' where org_id = $1 and key in ('rep_debt_rules','credit_gate')`, [org]);
