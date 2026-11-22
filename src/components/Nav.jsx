@@ -25,6 +25,7 @@ export const ITEMS = {
   orders: ['≡', '订单总览', 'sales', []],
   inquiry: ['？', '询单', 'sales', ['admin', 'manager', 'sales_manager', 'hotline', 'sales']],   // 391: 没有定价权的人的前门
   fob: ['◷', 'FOB 项目', 'sales', ['admin', 'manager', 'hotline', 'sales', 'finance']],
+  accounts: ['◎', '客户账号', 'cust', ['admin']],
   customers: ['♧', '客户档案', 'cust', ['admin', 'manager', 'hotline', 'sales', 'finance']],
   hotline: ['☎', '热线回访', 'cust', ['admin', 'manager', 'hotline', 'sales']],
   visits: ['⌖', '客户拜访', 'cust', ['admin', 'manager', 'hotline', 'sales']],
@@ -43,6 +44,8 @@ export const ITEMS = {
   staff: ['♙', '员工与工资', 'cn', ['admin', 'sales_manager']],
   import: ['⇩', '数据导入', 'cn', ['admin']],
   // 客户下单端 (客户老板 / 门店店员)
+  'p/pos': ['¤', '收银', 'portal', ['boss', 'clerk']],
+  'p/stock': ['▦', '店里库存', 'portal', ['boss', 'clerk']],
   'p/shop': ['＋', '下单', 'portal', ['boss', 'clerk']],
   'p/orders': ['≡', '我的订单', 'portal', ['boss', 'clerk']],
   'p/balance': ['₣', '我的对账', 'portal', ['boss']],

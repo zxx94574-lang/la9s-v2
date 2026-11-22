@@ -1733,3 +1733,12 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 .wm-flow .wm-node b { font-size: 12.5px; }
 .mt-tag { font-size: 11px; color: var(--muted); background: #f1f5f9; border-radius: 5px; padding: 1px 6px; margin-right: 4px; white-space: nowrap; }
 .direct-box { border-bottom: 1px solid var(--line-2); background: var(--brand-soft, #eef3fb); }
+/* 0077 店里收银 */
+.pos-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; margin-top: 12px; }
+@media (max-width: 900px) { .pos-grid { grid-template-columns: minmax(0, 1fr); } }
+.pos-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; padding: 0 12px 12px; }
+.pos-item { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; min-width: 0; }
+.pos-item:hover { border-color: var(--brand); }
+.pos-item b, .pos-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-line { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line-2); min-width: 0; }
+.pos-line .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

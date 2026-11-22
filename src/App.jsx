@@ -42,6 +42,7 @@ import Staff from './pages/Staff.jsx';
 import Sop from './pages/Sop.jsx';
 import Kingdee from './pages/Kingdee.jsx';
 import { StoresHq, PortalShop, PortalOrders, PortalBalance, PortalStores } from './pages/Portal.jsx';
+import { ShopPos, ShopStock, CustomerAccounts } from './components/Shop.jsx';
 import { buildNav, NavEditor } from './components/Nav.jsx';
 
 const store = {
@@ -225,6 +226,9 @@ export default function App() {
     case 'kingdee': view = <Kingdee />; break;
     case 'stores': view = <StoresHq />; break;
     case 'p/shop': view = <PortalShop />; break;
+    case 'p/pos': view = <ShopPos />; break;
+    case 'p/stock': view = <ShopStock />; break;
+    case 'accounts': view = <CustomerAccounts />; break;
     case 'p/orders': view = <PortalOrders />; break;
     case 'p/balance': view = <PortalBalance />; break;
     case 'p/stores': view = <PortalStores />; break;
@@ -337,6 +341,7 @@ export default function App() {
         <nav className="mnav">
           <button type="button" className={page === 'p/shop' ? 'on' : ''} onClick={() => go('p/shop')}><b>＋</b>下单</button>
           <button type="button" className={page === 'p/orders' ? 'on' : ''} onClick={() => go('p/orders')}><b>≡</b>订单</button>
+          <button type="button" className={page === 'p/pos' ? 'on' : ''} onClick={() => go('p/pos')}><b>¤</b>收银</button>
           {role === 'boss' && <button type="button" className={page === 'p/balance' ? 'on' : ''} onClick={() => go('p/balance')}><b>₣</b>对账</button>}
           {role === 'boss' && <button type="button" className={page === 'p/stores' ? 'on' : ''} onClick={() => go('p/stores')}><b>⌂</b>门店</button>}
         </nav>) : (

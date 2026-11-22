@@ -253,6 +253,33 @@ export async function seedScenarios(db, org, log = () => {}) {
   });
   log('指令做完');
 
+  // ── 8. 客户账号 + 店里收银 (0077): 一个客户开账号, 老板 + 门店店员, 店里卖货 ──
+  await run('客户账号·开账号和门店', async () => {
+    const c = C[1];
+    const corg = (await one(`insert into app.orgs (kind,name,country,base_currency,doc_prefix) values ('customer',$1,'CI','XOF','TC') returning id`, [c.name])).id;
+    await db.query(`update app.customers set linked_org_id = $1, portal_opts = '{"stock":true,"price":true,"inquiry":true}' where id = $2`, [corg, c.id]);
+    await db.query(`insert into app.members (user_id, org_id, roles) values ($1,$2,'{boss}') on conflict do nothing`, [USERS.boss, corg]);
+    const st = await val(USERS.admin, `select app.create_store($1,'测试门店 1','Abobo','店长（测试）')`, [c.id]);
+    await val(USERS.admin, `select app.create_store($1,'测试门店 2','Yopougon','店长 2（测试）')`, [c.id]);
+    const sorg = (await one(`insert into app.orgs (kind,name,country,base_currency,doc_prefix,parent_id) values ('store','测试门店 1','CI','XOF','T1',$1) returning id`, [corg])).id;
+    await db.query(`update app.portal_stores set org_id = $1 where id = $2`, [sorg, st]);
+    await db.query(`insert into app.members (user_id, org_id, roles) values ($1,$2,'{clerk}') on conflict do nothing`, [USERS.clerk, sorg]);
+    // 我们给他出两次货 → 自动进他店里
+    for (let k = 0; k < 2; k++) await toShipped(c, lines(70 + k, 4, 30));
+    await as(USERS.boss, `select app.shop_stock_in('BG6M','电池盖','其他 · A 货',50,800)`);
+    await as(USERS.clerk, `select app.shop_stock_in('X6516','屏幕','其他 · 普通',20)`);
+    const items = await all(`select id, qty from app.shop_items where customer_id = $1`, [c.id]);
+    for (const [n, it] of items.entries()) await as(USERS.boss, `select app.shop_set_price($1,$2)`, [it.id, 1500 + n * 500]);
+    let last = null;
+    for (let k = 0; k < 16; k++) {
+      const it = items[k % items.length]; const q = 1 + (k % 3);
+      last = await val(k % 2 ? USERS.clerk : USERS.boss, `select app.shop_sell($1,$2,$3)`, [JSON.stringify([{ item_id: it.id, qty: q }]), ['cash', 'wave', 'orange'][k % 3], k % 5 === 0 ? '批发客户 KONE' : null]);
+    }
+    const sid = (await one(`select id from app.shop_sales where sale_no = $1 and customer_id = $2`, [last, c.id])).id;
+    await as(USERS.boss, `select app.shop_void_sale($1,'测试：客人退回')`, [sid]);
+  });
+  log('客户账号做完');
+
   // ── 结束: 恢复规则, 做总账检查 ──
   await db.query(`update app.org_settings set value = '{"on":true}' where org_id = $1 and key in ('rep_debt_rules','credit_gate')`, [org]);
   report.ledger = await all(`select * from app.ledger_check($1)`, [org]).catch((e) => [{ err: e.message }]);
