@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { openDb, resetDemo, q, isPersistent, REAL, SERVER, serverMe, setCustomerSession, customerSession } from './db/client.js';
+import { openDb, resetDemo, q, isPersistent, REAL, TEST, SERVER, serverMe, setCustomerSession, customerSession } from './db/client.js';
 import { StaffLogin, doLogout } from './components/StaffLogin.jsx';
 import { CustomerLogin, GuestShop, MustChange } from './pages/Guest.jsx';
 import * as Q from './db/queries.js';
@@ -273,7 +273,7 @@ export default function App() {
               </div>);
           })}
           {role === 'admin' && <button type="button" className="nav-item" style={{ marginTop: 8, color: 'var(--muted)' }} onClick={() => setNavEdit(true)}><span className="ico">⚙</span><span>调整侧栏</span></button>}
-          <div className="side-foot">{REAL ? '真实数据快照版' : 'v2 浏览器演示版 · 数据全部虚构'}<br />规则 = 正式版同一套 SQL</div>
+          <div className="side-foot">{TEST ? '测试版 · 测试数据，和真实版分开' : REAL ? '真实数据快照版' : 'v2 浏览器演示版 · 数据全部虚构'}<br />规则 = 正式版同一套 SQL</div>
           <div className="side-drag hide-m" onPointerDown={dragSide} title="拖动调宽度" />
         </aside>
 
@@ -282,7 +282,7 @@ export default function App() {
             <div className="row" style={{ gap: 10 }}>
               <button type="button" className="btn ghost show-m" style={{ padding: 6 }} onClick={() => setDrawer(true)} aria-label="菜单">☰</button>
               <img className="mlogo" src="./la9s-logo.png" alt="LA&9S" onClick={() => go('dashboard')} />
-              <span className="brand">LA&9S<small>{portal ? 'Commande client · 客户下单' : '科特迪瓦 · 中方管理'}</small></span>
+              <span className="brand">LA&9S<small>{portal ? 'Commande client · 客户下单' : '科特迪瓦 · 中方管理'}</small></span>{TEST && <span className="pill red" style={{ marginLeft: 8 }} title="这里的单据都是测试数据，和真实版完全分开">测试版</span>}
               {!portal && <span className="navhist">
                 <button type="button" className="btn sm" disabled={!navPos.back} onClick={navBack} title="回到上一页（档案、滚到哪都照原样）">←<span className="hide-m"> 返回</span></button>
                 <button type="button" className="btn sm hide-m" disabled={!navPos.fwd} onClick={navFwd} title="回到刚才那一页">前进 →</button>

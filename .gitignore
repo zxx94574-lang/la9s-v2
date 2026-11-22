@@ -10,3 +10,7 @@ dist/
 real.tmp.mjs
 真实数据*/
 dist-server/
+public/real-data.json
+public/staff-pack.json
+public/batch-pack.json
+public/quittance.pdf

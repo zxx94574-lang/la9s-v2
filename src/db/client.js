@@ -4,10 +4,13 @@ import { PGlite } from '@electric-sql/pglite';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { applyMigrations, seedDemo, USERS } from './bootstrap.js';
 import { seedReal } from './realSeed.js';
+import { seedScenarios } from './testScenarios.js';
 import { SOP_DEFAULTS } from './sopDefaults.js';
 
 // 真实数据版 (VITE_REAL=1): 同一套规则, 开局导入金蝶 / 飞书快照 (real-data.json, 不进代码仓库), 和演示版的浏览器数据完全分开
 export const REAL = import.meta.env.VITE_REAL === '1';
+// 测试版 (VITE_TEST=1, 11-22): 真实快照 + 自动生成的测试场景, 单独的浏览器库, 和真实版完全分开
+export const TEST = import.meta.env.VITE_TEST === '1';
 // 服务器版 (VITE_SERVER=1): 数据在 Supabase, 要登录; q / call 都走 server.js
 export const SERVER = import.meta.env.VITE_SERVER === '1';
 import { exec as srvExec, openServer } from './server.js';
@@ -17,7 +20,7 @@ export const serverMe = () => srvMe;
 const files = import.meta.glob('../../supabase/migrations/*.sql', { query: '?raw', import: 'default', eager: true });
 const MIGRATIONS = Object.keys(files).sort().map((k) => [k.split('/').pop(), files[k]]);
 const SEED_VERSION = 'seed-15';
-const DB_NAME = REAL ? 'idb://la9s-real-v1' : 'idb://la9s-demo-v2';
+const DB_NAME = TEST ? 'idb://la9s-test-v1' : REAL ? 'idb://la9s-real-v1' : 'idb://la9s-demo-v2';
 
 function hash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0; return String(h >>> 0); }
 const FINGERPRINT = hash(MIGRATIONS.map(([n, s]) => n + s).join('\n') + SEED_VERSION);
@@ -58,6 +61,7 @@ async function freshInstall(d) {
     const data = await (await fetch('./real-data.json', { cache: 'no-store' })).json();
     r = await seedReal(d, data.import, data.as_of);
     await d.query(`insert into public.demo_meta values ('snapshot',$1)`, [data.as_of]);
+    if (TEST) { const rep = await seedScenarios(d, r.org); await d.query(`insert into public.demo_meta values ('test_report',$1)`, [JSON.stringify(rep)]); }
   } else r = await seedDemo(d);
   await d.query(`insert into public.demo_meta values ('fingerprint',$1),('org',$2)`, [FINGERPRINT, r.org]);
   return r.org;
@@ -83,7 +87,7 @@ export async function openDb(onProgress = () => {}) {
     const m = Object.fromEntries(r.rows.map((x) => [x.k, x.v]));
     fp = m.fingerprint; org = m.org;
   }
-  if (fp && fp !== FINGERPRINT && REAL) {
+  if (fp && fp !== FINGERPRINT && REAL && !TEST) {
     // 真实数据版: 不清空, 只补新的规则 (迁移). 中方确认导入的数据和在系统里录的东西都留着.
     onProgress('系统升级中：只加新功能，已有数据不动…');
     await upgradeInPlace(fp);
@@ -92,7 +96,7 @@ export async function openDb(onProgress = () => {}) {
     else onProgress(REAL ? '首次打开：正在导入金蝶 / 飞书数据（约 2400 个物料，要等十几秒）…' : '首次打开：正在加载业务规则和演示数据…');
     org = await freshInstall(db);
   }
-  if (REAL) await applyPacks(onProgress);
+  if (REAL && !TEST) await applyPacks(onProgress);
   return { org, persistent };
 }
 
