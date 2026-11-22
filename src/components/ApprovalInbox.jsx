@@ -42,7 +42,7 @@ export default function ApprovalInbox() {
     return (
       <div key={r.kind + r.ref} className="row between todo-row appr-row" onClick={() => open(r)}>
         <div className="stack" style={{ gap: 4, minWidth: 0 }}>
-          <div><span className="pill gray">{KIND[r.kind]}{r.direct ? ' · 直接下单' : ''}</span> <b>{r.customer_name || '—'}</b> <span className="muted small">{r.biz_no || ''} · {dt(r.at)}</span></div>
+          <div><span className="pill gray">{KIND[r.kind]}{r.direct ? ' · 直接下单' : ''}</span> {r.customer_name && <b>{r.customer_name}</b>} <span className="muted small">{r.biz_no || ''} · {dt(r.at)}</span></div>
           <div className="appr-why">{(r.reasons || []).map((x, i) => <span key={i} className="pill red">{x}</span>)}</div>
           <div className="small muted appr-imp">
             {r.amount != null && <span>金额 <b className="ink">{money(r.amount, r.currency)} {r.currency}</b></span>}
