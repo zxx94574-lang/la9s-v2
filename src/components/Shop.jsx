@@ -36,8 +36,7 @@ export function ShopPos() {
   const [buyer, setBuyer] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
-  const items = data?.items || [];
-  const shown = useMemo(() => { const t = text.trim().toUpperCase(); return items.filter((i) => i.qty > 0 && (!t || `${i.model} ${i.category} ${i.quality}`.toUpperCase().includes(t))).slice(0, 40); }, [items, text]);
+  const shown = useMemo(() => { const items = data?.items || []; const t = text.trim().toUpperCase(); return items.filter((i) => i.qty > 0 && (!t || `${i.model} ${i.category} ${i.quality}`.toUpperCase().includes(t))).slice(0, 40); }, [data, text]);
   if (!data) return <div className="empty">加载中…</div>;
   if (!data.me) return <div className="empty">客户账号才能用收银。</div>;
   const today = data.sales.filter((s) => !s.voided_at && s.sold_at.slice(0, 10) === todayIso());
