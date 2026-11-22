@@ -22,7 +22,7 @@ const hoursSince = (v) => (Date.now() - new Date(v).getTime()) / 36e5;
 export const DIR_TYPES = ['制单', '催款', '发货', '拜访', '回电话', '对账', '退货', '其他'];
 const PROOF_KIND = { deal: '订单', receipt: '收款单', shipment: '出库单', visit: '拜访记录', call: '热线记录', return: '退货单' };
 // 479: 期限 = 「还剩 / 超时多久」色块 + 下面一行小灰字时间 (红 = 超时, 黄 = 不到 2 小时, 灰 = 时间还够)
-const dueAt = (d) => (d.due_at ? new Date(d.due_at) : d.due_on ? new Date(`${String(d.due_on).slice(0, 10)}T23:59:00`) : null);
+const dueAt = (d) => { if (d.due_at) return new Date(d.due_at); if (!d.due_on) return null; const x = new Date(d.due_on); if (Number.isNaN(x.getTime())) return null; x.setHours(23, 59, 0, 0); return x; };
 const span = (ms) => { const m = Math.round(Math.abs(ms) / 6e4); return m < 60 ? `${m} 分钟` : m < 48 * 60 ? `${Math.round(m / 60)} 小时` : `${Math.round(m / 1440)} 天`; };
 export function DueChip({ d }) {
   const t = dueAt(d);

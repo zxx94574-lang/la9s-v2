@@ -25,14 +25,16 @@ $$;
 -- 下指令（带类型 / 客户）：在 issue_directive2 上再记类型和客户
 create or replace function app.issue_directive3(p_org uuid, p jsonb)
 returns uuid language plpgsql security definer set search_path = app, public as $$
-declare v_id uuid; v_t0 timestamptz := clock_timestamp(); v_cust uuid := nullif(p->>'customer_id', '')::uuid; v_cname text;
+declare v_id uuid; v_cust uuid := nullif(p->>'customer_id', '')::uuid; v_cname text; v_before uuid[];
 begin
+  -- 这一次新建出来的 = 调用前没有、调用后有的（下给部门会一次建好几条）
+  v_before := array(select id from app.directives where org_id = p_org and created_by = app.uid());
   v_id := app.issue_directive2(p_org, p);
   if v_cust is not null then select name into v_cname from app.customers where id = v_cust and org_id = p_org; end if;
   update app.directives set dir_type = nullif(trim(coalesce(p->>'dir_type', '')), ''),
     ref_kind = coalesce(ref_kind, case when v_cust is not null then 'customer' end), ref_id = coalesce(ref_id, v_cust),
     ref_customer_id = coalesce(ref_customer_id, v_cust), ref_label = coalesce(ref_label, v_cname)
-  where org_id = p_org and created_by = app.uid() and created_at >= v_t0 - interval '1 second' and (id = v_id or not is_template);
+  where org_id = p_org and created_by = app.uid() and not (id = any(v_before));
   return v_id;
 end $$;
 
