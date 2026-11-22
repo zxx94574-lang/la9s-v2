@@ -72,7 +72,7 @@ export async function openDb(onProgress = () => {}) {
   onProgress('正在启动数据库…');
   const opts = await pgliteOptions();
   try {
-    db = new PGlite(DB_NAME, { ...opts, relaxedDurability: false });
+    db = new PGlite(DB_NAME, { ...opts, relaxedDurability: TEST });   // 测试版: 写库不等落盘 (第一次生成几百张测试单从几分钟降到几十秒); 真实版照旧每次落盘
     await db.waitReady;
   } catch (e) {
     console.warn('IndexedDB unavailable, using memory', e);

@@ -241,6 +241,14 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allShown, groupDefs, folded]);
   const shown = useMemo(() => (groupSeq ? groupSeq.filter((x) => x.row).map((x) => x.row) : allShown), [groupSeq, allShown]);
+  // 11-22 卡顿: 长表 (物料 2000+ 行) 先画前 200 行, 往下滑到底自动再画 200 行 —— 筛选 / 排序 / 复制 / 全选照样作用在全部行上
+  const [lim, setLim] = useState(200);
+  const moreRef = useRef(null);
+  useEffect(() => {
+    const el = moreRef.current; if (!el || typeof IntersectionObserver === 'undefined') return undefined;
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) setLim((l) => l + 200); }, { rootMargin: '600px' });
+    io.observe(el); return () => io.disconnect();
+  });
   // 每个组头插在哪一行前面 (收起的组没有行 → 挂到后面第一行前; 最后剩下的挂在表尾)
   const groupHeads = useMemo(() => {
     if (!groupSeq) return null;
@@ -890,7 +898,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
           </thead>
           <tbody>
             {allShown.length === 0 && <tr><td colSpan={vis.length + 3} className="empty"><span className="sticky-left">{rows.length ? <>筛选以后没有符合条件的行 <button type="button" className="btn sm" onClick={() => setGf({ conds: [], any: false, q: '' })}>清除筛选</button></> : empty}</span></td></tr>}
-            {shown.map((row, r) => {
+            {(shown.length > lim ? shown.slice(0, lim) : shown).map((row, r) => {
               const k = rowKey(row);
               return (<React.Fragment key={k}>
                 {groupHeads?.before.get(k)?.map(groupHead)}
@@ -938,7 +946,8 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
                 </tr>
               </React.Fragment>);
             })}
-            {groupHeads?.tail.map(groupHead)}
+            {shown.length > lim && <tr ref={moreRef} className="grid-more"><td colSpan={vis.length + 3}><span className="sticky-left muted small">还有 {shown.length - lim} 行，往下滑自动显示…</span></td></tr>}
+            {shown.length <= lim && groupHeads?.tail.map(groupHead)}
           </tbody>
           {footObj && shown.length > 0 && (
             <tfoot><tr>
