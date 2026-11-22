@@ -1,4 +1,5 @@
 import { PurchaseTodo } from './Po.jsx';
+import ApprovalInbox, { ReceiptDigest } from '../components/ApprovalInbox.jsx';
 import { DealLink, CustLink } from '../components/Archives.jsx';
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
@@ -171,7 +172,7 @@ export default function Todo() {
       slot('returns', <OpenReturns />, true),
       slot('money', <><DirectHeld /><PlanTodo /><PublicHeld urgentOnly /><RemitTodo /><MoneyUrgent /></>),
       slot('issues', <IssueList />),
-      ex('approvals') > 0 && line('approvals', 'orders', `${ex('approvals')} 张单等中方审批`),
+      slot('approvals', <ApprovalInbox />, true),
       ex('cash') > 0 && line('cash', 'cash', `资金账户 ${ex('cash')} 笔要处理（认领到账 / 确认交款 / 批支出）`),
       ex('guest_new') > 0 && line('guest', 'orders', `${ex('guest_new')} 张游客询价还没跟进`),
       ex('pw_changed') > 0 && line('pw', 'customers', `${ex('pw_changed')} 个客户改了下单密码，确认是不是本人`),
@@ -203,6 +204,7 @@ export default function Todo() {
       <div className="pagehead"><div><div className="eyebrow">Mes tâches</div><h1 tabIndex={0}>我的待办 <Info>当前岗位：{ROLES[role].label}。只有三段：紧急 / 进行中 / 待跟进。下推一步，单子自动出现在下一个人的待办里；做完的自动消失。</Info></h1></div>
         {admin && <div className="row"><button type="button" className="btn sm" onClick={() => setRouteOpen(true)}>⚙ 归谁</button></div>}</div>
       {!data ? <div className="card"><div className="empty">加载中…</div></div> : <div className="stack" style={{ gap: 12 }}>
+        {admin && <ReceiptDigest />}
         {admin && <DirectiveBoard />}
         {SEC.map(([k, label, tip]) => (
           <div key={k} className={`card todo-sec todo-${k}`}>
@@ -239,7 +241,7 @@ export const SLOTS = {
   returns: { label: '退货没走完', roles: ['admin', 'manager', 'sales_manager', 'hotline', 'finance'] },
   money: { label: '钱要跟进的', roles: ['admin', 'finance'] },
   issues: { label: '员工上报的问题', roles: L },
-  approvals: { label: '等审批的单', roles: ['admin'] },
+  approvals: { label: '等我批的（订单 / 改价 / 退货 / 资金）', roles: ['admin'] },
   cash: { label: '资金账户要处理的', roles: ['admin'] },
   guest: { label: '游客询价', roles: ['hotline', 'manager', 'admin', 'sales_manager'] },
   pw: { label: '客户改了密码', roles: ['admin'] },

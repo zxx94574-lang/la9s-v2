@@ -393,7 +393,7 @@ function ApproveModal({ deal, lines, margin, onClose }) {
           { key: 'model', label: '型号', w: 150, value: (l) => l.model, render: (l) => <><ModelLink id={l.product_id} model={l.model} tier={deal.tier} /> <span className="muted small">{l.category}</span></> },
           { key: 'qty', label: '数量', w: 70, value: (l) => l.qty_req, render: (l) => qty(l.qty_req) },
           { key: 'tp', label: '档位价', w: 100, value: (l) => l.tier_price, render: (l) => (l.tier_price != null ? money(l.tier_price) : '—') },
-          { key: 'rp', label: '销售员申请', w: 100, value: (l) => l.requested_price, render: (l) => (l.requested_price != null ? <b className="amber-t2">{money(l.requested_price)}</b> : '') },
+          { key: 'rp', label: '销售员申请', w: 100, value: (l) => l.requested_price, render: (l) => (l.requested_price != null ? <span className="pill red" title="这一行要你批">{money(l.requested_price)}{l.tier_price != null && Number(l.requested_price) < Number(l.tier_price) ? ` · 比档位价低 ${money(Number(l.tier_price) - Number(l.requested_price))}` : ''}</span> : '') },
           { key: 'ap', label: '批的价（空 = 按档位价）', w: 150, fill: true, value: (l) => sp[l.id] ?? '', render: (l) => (sp[l.id] ? money(sp[l.id]) : <span className="muted">按档位价</span>),
             edit: (l) => (l.product_id ? { type: 'number', value: sp[l.id] ?? '', onChange: (v) => setSp((x) => ({ ...x, [l.id]: String(v ?? '').replace(/[^\d.]/g, '') })) } : null) },
         ]} />
