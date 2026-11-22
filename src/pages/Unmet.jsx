@@ -5,11 +5,12 @@ import { useApp, useData } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { qty, dDate } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
+import { WantsBoard } from '../components/Wants.jsx';
 
 export default function Unmet() {
   const { org, go } = useApp();
   const { data } = useData(() => q(Q.unmet, [org]), [org]);
-  const [kind, setKind] = useState('no_code');
+  const [kind, setKind] = useState('wants');
   const rows = (data || []).filter((r) => r.kind === kind);
   // 汇总：同种类+型号合并，作为备货依据
   const summary = useMemo(() => {
@@ -26,10 +27,12 @@ export default function Unmet() {
       <div className="pagehead"><div><div className="eyebrow">Demande non satisfaite</div><h1>未满足需求</h1>
         <div className="sub">两类分开统计：客户要了但我们没建档的型号；有货但不够（要 100 给 60 的 40）。每一条都留底：哪天、哪个客户（游客也记）、哪个销售员、从哪里来的，是备货的依据。</div></div>
         <div className="seg">
+          <button type="button" className={kind === 'wants' ? 'on' : ''} onClick={() => setKind('wants')}>想要 · 到货分配</button>
           <button type="button" className={kind === 'no_code' ? 'on' : ''} onClick={() => setKind('no_code')}>没建档的型号 {data && `(${data.filter((r) => r.kind === 'no_code').length})`}</button>
           <button type="button" className={kind === 'short' ? 'on' : ''} onClick={() => setKind('short')}>有货但不够 {data && `(${data.filter((r) => r.kind === 'short').length})`}</button>
         </div>
       </div>
+      {kind === 'wants' ? <WantsBoard /> : <>
       <div className="card">
         <div className="card-h"><h2>按型号汇总</h2></div>
         <Grid id={'unmet-sum-' + kind} rowKey={(r) => r.key} rows={summary} columns={[
@@ -51,6 +54,7 @@ export default function Unmet() {
           { key: 'qty_unmet', label: '缺口', w: 70, render: (r) => qty(r.qty_unmet) },
         ]} />
       </div>
+      </>}
     </>
   );
 }

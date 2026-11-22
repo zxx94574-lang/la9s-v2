@@ -280,6 +280,18 @@ export async function seedScenarios(db, org, log = () => {}) {
   });
   log('客户账号做完');
 
+  // ── 9. 想要 + 到货分配 (0078) ──
+  await run('想要·登记', async () => {
+    const ws = [];
+    for (let k = 0; k < 12; k++) ws.push(await val(USERS.hotline, `select app.add_want($1,$2,$3,$4,$5)`, [C[(k * 2) % C.length].id, k < 10 ? P[(k * 5) % P.length].id : null, k < 10 ? null : `SPARK ${40 + k}`, 20 + k * 5, `测试：客户说到货叫他 ${k + 1}`]));
+    await as(USERS.hotline, `select app.sync_wants($1)`, [org]);
+    await db.query(`update app.wants set expires_on = current_date - 1, created_at = now() - interval '20 days' where id = any($1)`, [ws.slice(10, 12)]);
+    await as(USERS.hotline, `select app.sync_wants($1)`, [org]);
+    for (const [k, id] of ws.slice(0, 6).entries()) await as(USERS.hotline, `select app.want_check($1,$2,$3)`, [id, ['yes', 'yes', 'yes', 'no', 'no_answer', 'yes'][k], k === 3 ? '找别人买了' : null]);
+    await as(USERS.admin, `select app.allocate_wants($1,$2,'测试：这批到货先给老客户')`, [org, JSON.stringify([{ want_id: ws[0], qty: 15 }, { want_id: ws[1], qty: 10 }])]);
+  });
+  log('想要做完');
+
   // ── 结束: 恢复规则, 做总账检查 ──
   await db.query(`update app.org_settings set value = '{"on":true}' where org_id = $1 and key in ('rep_debt_rules','credit_gate')`, [org]);
   report.ledger = await all(`select * from app.ledger_check($1)`, [org]).catch((e) => [{ err: e.message }]);

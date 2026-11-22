@@ -29,6 +29,7 @@ export function shipAlert(d) {
 import { HoldsCard, VolumeShift } from '../components/Batch2.jsx';
 import { MoneyUrgent, ChangeNotices } from '../components/Batch3.jsx';
 import { DirectHeld } from '../components/Direct.jsx';
+import { WantsTodo } from '../components/Wants.jsx';
 import { InquiryTodo } from './Inquiry.jsx';
 import { AddonTodo } from '../components/Addons.jsx';
 import { AnomalyHub } from '../components/Anomalies.jsx';
@@ -183,6 +184,7 @@ export default function Todo() {
       slot('purchase', <PurchaseTodo />),
       slot('holds', <HoldsCard compact />),
       ex('follow') > 0 && line('follow', 'hotline', `今天要回访 ${ex('follow')} 位客户`),
+      mine('wants') && <WantsTodo key="wants" />,
       ex('notices') > 0 && line('paynotice', 'cash', `${ex('notices')} 笔「客户说付了」还没对上到账`),
       ex('pr_new') > 0 && line('pr', 'purchase', `${ex('pr_new')} 张采购 / 物资申请还没下单`),
       ex('pr_eta') > 0 && line('pr', 'purchase', `${ex('pr_eta')} 张采购 / 物资申请 5 天内到或已过期`),
@@ -248,6 +250,7 @@ export const SLOTS = {
   purchase: { label: '采购与到货', roles: ['manager', 'cn_support'] },
   holds: { label: '冻结的库存', roles: ['admin', 'manager'] },
   follow: { label: '今天要回访的客户', roles: ['hotline', 'sales', 'manager'] },
+  wants: { label: '想要的货到了，问还要吗', roles: ['hotline', 'manager'] },
   paynotice: { label: '客户说付了、还没对上', roles: ['hotline', 'finance'] },
   pr: { label: '采购 / 物资申请', roles: ['manager', 'finance'] },
   fob_price: { label: 'FOB 等定价', roles: ['admin'] },
