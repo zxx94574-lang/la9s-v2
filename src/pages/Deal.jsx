@@ -218,7 +218,7 @@ export default function Deal({ id }) {
         </div>)}
       <DoneHost only={['shipment', 'ret']} />
       {custOpen && <CustomerDrawer id={deal.customer_id} onClose={() => setCustOpen(false)} />}
-      {!cancelled && seesPrice(role) && !['shipped'].includes(deal.status) && <DebtBanner customerId={deal.customer_id} deal={deal} />}
+      {!cancelled && seesPrice(role) && !['shipped'].includes(deal.status) && !(deal.direct && deal.status === 'quoted' && deal.approval === 'pending') && <DebtBanner customerId={deal.customer_id} deal={deal} />}
       {!cancelled && <PricePendingBar deal={deal} lines={data.lines} />}
       <DealTasks deal={deal} />
       {!cancelled && <LossGate deal={deal} margin={margin} />}
