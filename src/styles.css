@@ -1743,3 +1743,9 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 .pos-line { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line-2); min-width: 0; }
 .pos-line .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pos-sticky { position: sticky; bottom: 64px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 12px 12px; padding: 10px 12px; background: #fff; border: 1px solid var(--brand); border-radius: 10px; box-shadow: 0 2px 10px rgba(4,71,176,.15); }
+/* 479 / 480 指令: 期限色块 + 凭证选择 */
+.due-chip { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-right: 6px; white-space: nowrap; }
+.due-chip small { font-size: 11px; color: var(--muted); }
+.opt-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; text-align: left; cursor: pointer; min-width: 0; }
+.opt-row.on { border: 2px solid var(--brand); background: var(--brand-soft, #eef3fb); }
+.opt-row .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

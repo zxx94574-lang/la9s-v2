@@ -203,6 +203,7 @@ export default function Todo() {
       <div className="pagehead"><div><div className="eyebrow">Mes tâches</div><h1 tabIndex={0}>我的待办 <Info>当前岗位：{ROLES[role].label}。只有三段：紧急 / 进行中 / 待跟进。下推一步，单子自动出现在下一个人的待办里；做完的自动消失。</Info></h1></div>
         {admin && <div className="row"><button type="button" className="btn sm" onClick={() => setRouteOpen(true)}>⚙ 归谁</button></div>}</div>
       {!data ? <div className="card"><div className="empty">加载中…</div></div> : <div className="stack" style={{ gap: 12 }}>
+        {admin && <DirectiveBoard />}
         {SEC.map(([k, label, tip]) => (
           <div key={k} className={`card todo-sec todo-${k}`}>
             <div className="card-h"><h2><span className={`pill ${k}`}>{label}</span> {groups[k].length} 单 <Info>{tip}</Info></h2></div>
@@ -223,7 +224,6 @@ export default function Todo() {
             <div className="empty small sec-none">没有</div>
           </div>
         ))}
-        {admin && <DirectiveBoard />}
         {admin && <ChangeNotices />}
       </div>}
       {routeOpen && <RouteModal cur={routeSet || {}} onClose={() => setRouteOpen(false)} />}

@@ -246,10 +246,25 @@ export async function seedScenarios(db, org, log = () => {}) {
 
   // ── 7. 中方指令 / 任务 ──
   for (let k = 0; k < 6; k++) await run('中方指令', async () => {
-    const id = await val(USERS.admin, `select app.issue_directive2($1,$2)`, [org, JSON.stringify({ title: ['盘点 LA 仓电池', '给 KABRE 打电话催款', '整理 9S 仓货架', '核对昨天的出库单', '拍新到的屏幕照片', '回访上周的潜客'][k], body: '测试指令', assignees: [k % 2 ? E.picker : E.hotline], due_on: day(k % 3 - 1), report_mode: 'all' })]);
+    const id = await val(USERS.admin, `select app.issue_directive3($1,$2)`, [org, JSON.stringify({ dir_type: '其他', title: ['盘点 LA 仓电池', '给 KABRE 打电话催款', '整理 9S 仓货架', '核对昨天的出库单', '拍新到的屏幕照片', '回访上周的潜客'][k], body: '测试指令', assignees: [k % 2 ? E.picker : E.hotline], due_on: day(k % 3 - 1), report_mode: 'all' })]);
     const ids = await all(`select id from app.directives where group_id = (select group_id from app.directives where id = $1) or id = $1`, [id]).catch(() => [{ id }]);
     if (k >= 2) for (const x of ids) await as(k % 2 ? USERS.picker : USERS.hotline, `select app.ack_directive2($1,'测试：刚看到')`, [x.id]).catch(() => {});
     if (k >= 4) for (const x of ids) await as(k % 2 ? USERS.picker : USERS.hotline, `select app.complete_directive($1,'测试：做完了',$2)`, [x.id, photo('dir')]).catch(() => {});
+  });
+  // 478 / 480: 制单指令 —— 员工建好单, 交的时候选那张订单
+  for (let k = 0; k < 4; k++) await run('指令·制单（WhatsApp 下的单）', async () => {
+    const c = C[(k + 3) % C.length];
+    await as(USERS.admin, `select app.issue_directive3($1,$2)`, [org, JSON.stringify({ title: `制单：${c.name} 在群里下的单`, body: '客户在 WhatsApp 群里发了单，截图见附件', dir_type: '制单', customer_id: c.id, assignees: [E.manager], due_on: day(-(k % 2)) })]);
+    const dir = await one(`select id from app.directives where assignee_employee_id = $1 and dir_type = '制单' and status = 'sent' order by created_at desc limit 1`, [E.manager]);
+    if (k === 0) return;                       // 留一条还没做的
+    await as(USERS.manager, `select app.ack_directive2($1,null)`, [dir.id]).catch(() => {});
+    if (k === 1) return;                       // 留一条收到了在做的
+    const d = await S.quote(c.id, lines(k + 90, 3), '测试：照 WhatsApp 截图建的单');
+    await as(USERS.manager, `select app.complete_directive2($1,null,null,'deal',$2)`, [dir.id, d]);
+    if (k === 3) await as(USERS.admin, `select app.confirm_directive($1,true,'测试：单建得对')`, [dir.id]);
+  });
+  for (let k = 0; k < 3; k++) await run('指令·催款 / 回电话（不同期限）', async () => {
+    await as(USERS.admin, `select app.issue_directive3($1,$2)`, [org, JSON.stringify({ title: ['催 KABRE 把上周的钱付了', '给新客户回个电话', '问问 MODIBO 还要不要 BG6'][k], dir_type: ['催款', '回电话', '回电话'][k], customer_id: C[(k + 7) % C.length].id, assignees: [E.hotline], due_on: day(1 - k) })]);
   });
   log('指令做完');
 
