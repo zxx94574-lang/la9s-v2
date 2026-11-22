@@ -93,6 +93,8 @@ export async function openDb(onProgress = () => {}) {
     await upgradeInPlace(fp);
   } else if (fp !== FINGERPRINT) {
     if (fp) { onProgress('规则已更新，正在重建演示数据…'); await wipe(); }
+    // 上次第一次打开到一半就被关掉 / 刷新了 (库建了一半, 还没写指纹): 先清掉半成品再重来, 不然会报 "already exists"
+    else if ((await db.query(`select to_regnamespace('app') is not null as ok`)).rows[0].ok) await wipe();
     else onProgress(REAL ? '首次打开：正在导入金蝶 / 飞书数据（约 2400 个物料，要等十几秒）…' : '首次打开：正在加载业务规则和演示数据…');
     org = await freshInstall(db);
   }
