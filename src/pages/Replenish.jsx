@@ -23,7 +23,10 @@ export default function Replenish() {
   const [recv, setRecv] = useState(null);
   const [set, setSet] = useState(false);
   const { data } = useData(async () => {
-    const [rows, [s], pos, nocode] = await Promise.all([q(Q.replenish, [org]), q(Q.replenishSettings, [org]), q(Q.openPOs, [org]), q(Q.unmetNoCode, [org])]);
+    const [rows0, [s], pos, nocode, wants] = await Promise.all([q(Q.replenish, [org]), q(Q.replenishSettings, [org]), q(Q.openPOs, [org]), q(Q.unmetNoCode, [org]),
+      q(`select * from app.v_want_demand where org_id = $1`, [org]).catch(() => [])]);
+    const wm = Object.fromEntries(wants.map((w) => [w.product_id, w]));
+    const rows = rows0.map((r) => ({ ...r, want_open: N(wm[r.product_id]?.open_qty), want_weighted: N(wm[r.product_id]?.weighted_qty), want_customers: N(wm[r.product_id]?.customers) }));
     return { rows, s: s || { cover_days: 60, sea_days: 45, air_days: 10 }, pos, nocode };
   }, [org]);
   const cats = useMemo(() => [...new Set((data?.rows || []).map((r) => r.category))], [data]);
@@ -45,6 +48,7 @@ export default function Replenish() {
     { key: 'days_left', label: '能撑几天', w: 90, value: (r) => (r.days_left == null ? 9999 : N(r.days_left)),
       render: (r) => (r.days_left == null ? <span className="muted">没出过</span> : N(r.days_left) < s.sea_days ? <Pill tone="red">{r.days_left} 天</Pill> : `${r.days_left} 天`) },
     { key: 'short_qty', label: '欠客户', w: 90, value: (r) => N(r.short_qty), render: (r) => (N(r.short_qty) ? <span className="red-t2">{qty(r.short_qty)}<span className="muted small"> · {r.short_customers} 家</span></span> : '') },
+    { key: 'want_weighted', label: '想要（按兑现率）', w: 130, value: (r) => r.want_weighted, render: (r) => (r.want_open ? <span title={`开着的想要 ${r.want_open} 个 · ${r.want_customers} 家；按每家以前真要了几成折算`}>{qty(r.want_weighted)}<span className="muted small"> / {qty(r.want_open)}</span></span> : '') },
     { key: 'aged_180', label: '库龄 180+', w: 90, value: (r) => N(r.aged_180), render: (r) => (N(r.aged_180) ? <Pill tone="amber">{qty(r.aged_180)}</Pill> : '') },
     { key: 'suggest', label: '建议补', w: 90, value: (r) => N(r.suggest), render: (r) => (N(r.suggest) ? <b className="brand-t">{qty(r.suggest)}</b> : '') },
   ];
