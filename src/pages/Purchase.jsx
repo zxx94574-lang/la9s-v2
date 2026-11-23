@@ -71,10 +71,10 @@ export default function Purchase() {
     { key: 'kind', label: '用途', w: 110, value: (r) => PR_KIND[r.kind][0], render: (r) => <><Pill tone={PR_KIND[r.kind][1]}>{PR_KIND[r.kind][0]}</Pill>{r.fob_no && <span className="mono small"> {r.fob_no}</span>}</> },
     { key: 'title', label: '申请什么', w: 200, render: (r) => <b>{r.title}</b> },
     { key: 'lines', label: '明细', w: 240, value: (r) => r.lines.map((l) => `${l.item}${l.spec ? ' ' + l.spec : ''} ×${l.qty}`).join('，') },
+    { key: 'offer', label: '国内回复', w: 130, value: (r) => offerState(r)[0], render: (r) => { const [l, t] = offerState(r); return r.kind === 'supplies' ? '' : <Pill tone={t}>{l}</Pill>; } },
     { key: 'need_by', label: '要求到货', w: 100, render: (r) => dDate(r.need_by) },
     { key: 'planned_ship', label: '计划发货', w: 100, render: (r) => dDate(r.planned_ship) },
     { key: 'eta', label: '预计到货', w: 140, value: (r) => r.eta || '', render: (r) => <>{dDate(r.eta)} {etaPill(r)}</> },
-    { key: 'offer', label: '国内回复', w: 130, value: (r) => offerState(r)[0], render: (r) => { const [l, t] = offerState(r); return r.kind === 'supplies' ? '' : <Pill tone={t}>{l}</Pill>; } },
     { key: 'status', label: '进度', w: 100, value: (r) => PR_ST[r.status], render: (r) => <Pill tone={r.status === 'received' ? 'green' : r.status === 'cancelled' ? 'gray' : 'blue'}>{PR_ST[r.status]}</Pill> },
     { key: 'po_no', label: '采购单 / 柜号', w: 170, value: (r) => [r.po_no, r.container, r.tracking].filter(Boolean).join(' · '), render: (r) => <>{r.po_id ? <PoLink id={r.po_id} no={r.po_no} /> : r.po_no}{[r.container, r.tracking].filter(Boolean).map((x) => <span key={x} className="small muted"> · {x}</span>)}</> },
   ];
@@ -90,7 +90,7 @@ export default function Purchase() {
             { label: '建采购单', tone: 'primary', when: (r) => r.status === 'submitted' && r.kind !== 'supplies' && can(role, 'po_edit'), run: (r) => setPo(fromRequest(r, r.lines)) },
             ...Object.entries(next).map(([st, [to, label]]) => ({ label: `${label} →`, when: (r) => r.status === st && can(role, 'purchase_advance') && !(st === 'submitted' && r.kind !== 'supplies'), run: (r) => setAdv({ r, to, label }) })),
             { label: '取消', when: (r) => ['submitted', 'ordered'].includes(r.status) && can(role, 'purchase_advance'), tone: 'ghost', run: (r) => act('已取消', `select app.advance_purchase_request($1,'cancelled','{}')`, [r.id]) },
-          ]} onRowClick={(r) => ['draft', 'submitted'].includes(r.status) && setEdit(r)} empty="没有申请"
+          ]} onRowClick={(r) => (role === 'cn_business' ? r.kind !== 'supplies' && setOffer(r) : ['draft', 'submitted'].includes(r.status) && setEdit(r))} empty="没有申请"
           tools={<div className="chips">{[['open', '进行中'], ['stock', '本地备货'], ['fob', 'FOB'], ['supplies', '物资'], ['all', '全部']].map(([k, l]) =>
             <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l}</button>)}</div>} />
       </div>

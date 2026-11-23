@@ -346,12 +346,12 @@ export async function seedScenarios(db, org, log = () => {}) {
   const reqs = [];
   for (let k = 0; k < 6; k++) await run(`国内·备货申请（${['商务全回了', '商务全回了', '商务回了一半', '商务回了一半', '还没回', '还没回'][k]}）`, async () => {
     const ps = pick(k * 7 + 90, 3);
-    const r = await val(USERS.manager, `select app.save_purchase_request($1,null,$2,$3)`, [org, JSON.stringify({ kind: 'stock', title: `测试：${k + 1} 月备货`, need_by: day(60 + k) }),
+    const r = await val(USERS.manager, `select app.save_purchase_request($1,null,$2,$3)`, [org, JSON.stringify({ kind: 'stock', title: `测试：${k + 1} 月备货`, need_by: day(-60 - k) }),
       JSON.stringify(ps.map((p, n) => ({ product_id: p.id, item: p.model, qty: 300 + n * 100 })))]);
     const ls = await all(`select id, qty from app.purchase_request_lines where request_id = $1`, [r]);
     for (const [n, l] of ls.entries()) {
       if (k >= 4 || (k >= 2 && n > 0)) continue;
-      await as(USERS.cn_business, `select app.cn_offer($1,$2)`, [l.id, JSON.stringify({ qty: n === 1 ? l.qty - 50 : l.qty, price: 10 + n * 3.5, ship: day(20 + k), owner: n % 2 ? '9S' : 'LA', note: n === 1 ? '测试：工厂只够这么多' : '' })]);
+      await as(USERS.cn_business, `select app.cn_offer($1,$2)`, [l.id, JSON.stringify({ qty: n === 1 ? l.qty - 50 : l.qty, price: 10 + n * 3.5, ship: day(-20 - k), owner: n % 2 ? '9S' : 'LA', note: n === 1 ? '测试：工厂只够这么多' : '' })]);
     }
     reqs.push(r);
   });
