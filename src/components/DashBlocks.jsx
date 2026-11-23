@@ -44,7 +44,7 @@ function toCur(r, m) {
 function total(rows, m) {
   const t = { rev: 0, cost: 0, known: 0, qty: 0, miss: 0, deals: new Set(), custs: new Set(), missModels: new Map() };
   for (const r of rows) {
-    const c = toCur(r, m); t.rev += c.rev; t.cost += c.cost; t.known += c.known; t.qty += c.qty; t.miss += c.miss; t.deals.add(r.deal_id); t.custs.add(r.customer_id);
+    const c = toCur(r, m); t.rev += c.rev; t.cost += c.cost; t.known += c.known; t.qty += c.qty; t.miss += c.miss; t.deals.add(r.deal_id || r.fob_project_id); t.custs.add(r.customer_id);
     if (r.cost_missing) { const x = t.missModels.get(r.product_id) || { id: r.product_id, code: r.product_code, model: r.model, category: r.category, qty: 0 }; x.qty += N(r.qty); t.missModels.set(r.product_id, x); }
   }
   t.profit = t.known - t.cost; t.pct = t.known ? t.profit / t.known * 100 : null; t.n = t.deals.size; t.c = t.custs.size;
@@ -113,7 +113,7 @@ export function Overview({ rows }) {
 export function SalesSection({ kind, rows, transit }) {
   const { org, go } = useApp(); const { lowPct } = useMarginRules();
   const fob = kind === 'fob';
-  const groups = useMemo(() => { const g = {}; for (const r of rows) { const c = r.currency || 'XOF'; (g[c] = g[c] || new Set()).add(r.deal_id); } return CURS.filter((c) => g[c]).map((c) => [c, g[c].size]); }, [rows]);
+  const groups = useMemo(() => { const g = {}; for (const r of rows) { const c = r.currency || 'XOF'; (g[c] = g[c] || new Set()).add(r.deal_id || r.fob_project_id); } return CURS.filter((c) => g[c]).map((c) => [c, g[c].size]); }, [rows]);
   const [curS, setCur] = useLs(`la9s.dash.${kind}.cur`, null);
   const [merge, setMerge] = useState(fob ? { target: 'CNY' } : null);          // FOB 默认折人民币 (Frank 11-19); null | { target } | { target, rates }
   const [dlg, setDlg] = useState(false);
@@ -128,7 +128,7 @@ export function SalesSection({ kind, rows, transit }) {
   const t = total(list, m); const C = m.target;
 
   // 明细表: 父行 (按种类 / 按档位; FOB 按客户) 默认收起, 点 ▸ 展开另一个维度 (FOB 展开到订单)
-  const keyOf = fob ? { p: (r) => r.customer_id, pl: (r) => r.customer_name, c: (r) => r.deal_id, cl: (r) => r.biz_no }
+  const keyOf = fob ? { p: (r) => r.customer_id, pl: (r) => r.customer_name, c: (r) => r.deal_id || r.fob_project_id, cl: (r) => r.biz_no }
     : dim === 'category' ? { p: (r) => r.category || '（没种类）', pl: (r) => r.category || '（没种类）', c: (r) => r.tier || '-', cl: (r) => TIERS[r.tier] || '没定档' }
       : { p: (r) => r.tier || '-', pl: (r) => TIERS[r.tier] || '没定档', c: (r) => r.category || '（没种类）', cl: (r) => r.category || '（没种类）' };
   const table = useMemo(() => {
@@ -150,7 +150,7 @@ export function SalesSection({ kind, rows, transit }) {
     { key: 'label', label: fob ? '客户 / 订单' : dim === 'category' ? '种类 / 档位' : '档位 / 种类', w: 220, sortable: false, filterable: false, value: (r) => r.label,
       render: (r) => (r.lvl === 0
         ? <span className="dk-row0"><button type="button" className={`peek-eye dk-exp ${exp[r.pk] ? 'on' : ''}`} aria-label={exp[r.pk] ? '收起' : '展开'} onClick={(e) => { e.stopPropagation(); setExp((x) => ({ ...x, [r.pk]: !x[r.pk] })); }}>☰</button>{fob ? <CustLink id={r.ref.customer_id} name={r.label} /> : r.tier ? <TierPill tier={r.tier} /> : <b>{r.label}</b>}</span>
-        : <span className="dk-row1">{fob ? <DealLink id={r.ref.deal_id} no={r.label} /> : r.tier ? <TierPill tier={r.tier} /> : r.label}</span>) },
+        : <span className="dk-row1">{fob ? (r.ref.fob_project_id ? <button type="button" className="linkbtn mono" onClick={(e) => { e.stopPropagation(); go('fob/' + r.ref.fob_project_id); }}>{r.label}</button> : <DealLink id={r.ref.deal_id} no={r.label} />) : r.tier ? <TierPill tier={r.tier} /> : r.label}</span>) },
     { key: 'share', label: '占比', w: 110, sortable: false, filterable: false, value: (r) => (t.rev ? r.t.rev / t.rev * 100 : 0),
       render: (r) => { const p = t.rev ? r.t.rev / t.rev * 100 : 0; return <span className={`dbar ${r.lvl ? 'sub' : ''}`} data-tip={`占销售额 ${p.toFixed(1)}%`}><i style={{ width: `${Math.max(0, Math.min(100, p))}%` }} /></span>; } },
     { key: 'rev', label: `销售额 ${C}`, w: 130, type: 'money', sortable: false, value: (r) => r.t.rev, render: (r) => (r.lvl ? money(r.t.rev, C) : <b>{money(r.t.rev, C)}</b>) },

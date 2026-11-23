@@ -50,3 +50,12 @@ test('FOB 一片没出就全部转本地 = 项目取消; 订金不退只记录',
   assert.equal((await t.one(`select status from app.fob_projects where id=$1`, [f])).status, 'cancelled');
   assert.equal((await t.db.query(`select 1 from app.ar_entries where customer_id=$1 and kind='adjust'`, [t.ids.bigS])).rows.length, 0);
 });
+
+test('FOB 出库算进经营总览 (dash_rows)', async () => {
+  const t = await setup();
+  const { f, line } = await fobReady(t);
+  await t.as(U.admin, `select app.fob_release($1,'先放')`, [f]);
+  await t.as(U.manager, `select app.fob_ship2($1,$2,'s1.jpg')`, [f, JSON.stringify([{ line_id: line, qty: 100 }])]);
+  const rows = await t.as(U.admin, `select * from app.dash_rows($1) where fob_project_id = $2`, [t.ids.org, f]);
+  assert.equal(rows.length, 1); assert.equal(rows[0].supply, 'fob'); assert.equal(Number(rows[0].qty), 100); assert.equal(Number(rows[0].revenue), 100000);
+});
