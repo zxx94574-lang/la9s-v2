@@ -41,14 +41,15 @@ function OfferModal({ r, onClose }) {
         <div className="hint">{mine ? '每行填：能给多少、单价（人民币）、哪天能发、货从哪来（LA 工厂 / 9S 调货）。改一格存一格，科特这边马上看到。每行都填完 = 已回复，自动通知中方。' : '国内商务填的回复；有差的（给不够 / 价格变了）在这里一眼看到。'}</div>
         <Grid id="pr-offer" noTools rows={r.lines || []} rowKey={(l) => l.id} columns={[
           { key: 'code', label: '编码', w: 90, mono: true, value: (l) => l.code || '—' },
-          { key: 'item', label: '型号 / 物资', w: 160, value: (l) => `${l.item}${l.spec ? ' ' + l.spec : ''}` },
+          { key: 'item', label: '型号 / 物资', w: 130, value: (l) => `${l.item}${l.spec ? ' ' + l.spec : ''}` },
           { key: 'qty', label: '要多少', w: 80, value: (l) => Number(l.qty) },
           { key: 'offer_qty', label: '能给多少', w: 100, value: (l) => (l.offer_qty == null ? '' : Number(l.offer_qty)), edit: ed('offer_qty', 'number'),
             render: (l) => (l.offer_qty == null ? <span className="muted">—</span> : Number(l.offer_qty) < Number(l.qty) ? <Pill tone="amber">{l.offer_qty}（差 {Number(l.qty) - Number(l.offer_qty)}）</Pill> : l.offer_qty) },
+          { key: 'gap', label: '差', w: 70, value: (l) => (l.offer_qty == null ? '' : Number(l.qty) - Number(l.offer_qty)), render: (l) => (l.offer_qty != null && Number(l.offer_qty) < Number(l.qty) ? <Pill tone="amber">差 {Number(l.qty) - Number(l.offer_qty)}</Pill> : l.offer_qty != null ? <Pill tone="green">够</Pill> : '') },
           { key: 'offer_price', label: '单价 CNY', w: 100, value: (l) => (l.offer_price == null ? '' : Number(l.offer_price)), edit: ed('offer_price', 'number') },
-          { key: 'offer_ship', label: '哪天能发', w: 120, value: (l) => dDate(l.offer_ship) || '', edit: ed('offer_ship', 'date') },
+          { key: 'offer_ship', label: '哪天能发', w: 110, value: (l) => dDate(l.offer_ship) || '', edit: ed('offer_ship', 'date') },
           { key: 'offer_owner', label: '货从哪来', w: 110, value: (l) => ({ LA: 'LA 工厂', '9S': '9S 调货' })[l.offer_owner] || '', edit: ed('offer_owner', 'select', [['LA', 'LA 工厂'], ['9S', '9S 调货']]) },
-          { key: 'offer_note', label: '备注', w: 160, fill: true, value: (l) => l.offer_note || '', edit: ed('offer_note', 'text') },
+          { key: 'offer_note', label: '备注', w: 120, fill: true, value: (l) => l.offer_note || '', edit: ed('offer_note', 'text') },
         ]} />
       </div>
     </Modal>);
