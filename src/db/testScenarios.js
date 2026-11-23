@@ -368,6 +368,23 @@ export async function seedScenarios(db, org, log = () => {}) {
   log('国内做完');
 
 
+  // ── 看板要的「以前的数」(0084): 前 3 个月的历史单 (一部分没收款 → 超账期) + 销售员归属 + 库龄 ──
+  const reps = [];
+  for (const [n, nm] of ['测试销售 A', '测试销售 B', '测试销售 C'].entries()) reps.push(await mkEmp(nm, '销售', 'sales').catch(async () => (await one(`insert into app.employees (org_id, short_name, department, position) values ($1,$2,'销售','销售员') returning id`, [org, nm])).id));
+  for (const [n, c] of C.slice(12).entries()) await db.query(`update app.customers set owner_employee_id = $2 where id = $1`, [c.id, reps[n % reps.length]]);
+  for (let k = 0; k < 24; k++) await run(`历史单·${['上个月', '两个月前', '三个月前'][k % 3]}${k % 4 === 3 ? '（没收款）' : ''}`, async () => {
+    const c = C[(k * 5 + 3) % C.length]; const back = 32 + (k % 3) * 30 + (k % 9);
+    const d = await S.quote(c.id, lines(k + 200, 2 + (k % 3), 20), '测试：历史单'); await S.confirm(d); await S.pick(d); await S.cconfirm(d); await S.review(d);
+    await S.ship(d, null, new Date(Date.now() - back * 864e5).toISOString());
+    await db.query(`update app.deals set owner_employee_id = coalesce((select owner_employee_id from app.customers where id = $2), owner_employee_id) where id = $1`, [d, c.id]);
+    if (k % 4 === 3) return;
+    await S.sign(d); await S.balance(d); await S.pay(c.id, await due(d), { on: day(back - 3) });
+  });
+  // 库龄: 入库流水摊到 0–200 天前 (测试库都是今天导进来的, 不摊就全是「0–30 天」)
+  await db.query(`update app.stock_moves m set at = now() - ((abs(hashtext(m.stock_item_id::text)) % 200) || ' days')::interval
+    from app.stock_items si join app.products p on p.id = si.product_id where si.id = m.stock_item_id and p.org_id = $1 and m.qty > 0 and m.reason in ('opening', 'grn', 'adjust')`, [org]);
+  log('历史单 / 库龄做完');
+
   // ── 结束: 恢复规则, 做总账检查 ──
   await db.query(`update app.org_settings set value = '{"on":true}' where org_id = $1 and key in ('rep_debt_rules','credit_gate')`, [org]);
   report.ledger = await all(`select * from app.ledger_check($1)`, [org]).catch((e) => [{ err: e.message }]);

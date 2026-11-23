@@ -45,6 +45,19 @@ export const RULES = [
   ['freight.acct', 'freight_rules', 'account', '我们出的运费记在哪个账户', 'Wave-XOF', '', 'text', { page: 'cash', anchor: 'cash-rules', where: '资金账户' }],
   ['remit.diff', 'remit_rules', 'diff_pct', '回款：实际到账比应到差多少要标红、核对时必须写原因', 2, '%', 'num', { page: 'cash', anchor: 'remit-rules', where: '资金账户 · 回款（汇回国内）' }],
   ['remit.days', 'remit_rules', 'transit_days', '回款：交出去几天还没到账要提醒', 3, '天', 'num', { page: 'cash', anchor: 'remit-rules', where: '资金账户 · 回款（汇回国内）' }],
+  // 经营总览 (待改 487–506, Frank 11-23): 都在看板对应的板块上就地改
+  ['dash.budget', 'dash_rules', 'budget_cny', '销售：本月预算（国内给的月预算，0 = 不显示进度条）', 0, 'CNY', 'num', { page: 'dashboard', where: '经营总览 · 销售' }],
+  ['dash.age1', 'dash_rules', 'age1', '库龄：超过多少天标黄', 30, '天', 'num', { page: 'dashboard', where: '经营总览 · 库存' }],
+  ['dash.age2', 'dash_rules', 'age2', '库龄：超过多少天标红（严重超期）', 120, '天', 'num', { page: 'dashboard', where: '经营总览 · 库存' }],
+  ['dash.cover_lo', 'dash_rules', 'cover_lo', '可卖月数：低于多少算危机', 1.5, '个月', 'num', { page: 'dashboard', where: '经营总览 · 库存' }],
+  ['dash.cover_hi', 'dash_rules', 'cover_hi', '可卖月数：高于多少算积压', 6, '个月', 'num', { page: 'dashboard', where: '经营总览 · 库存' }],
+  ['dash.ar_days', 'dash_rules', 'ar_days', '账期：客户档案没填账期的按多少天算', 30, '天', 'num', { page: 'dashboard', where: '经营总览 · 账款' }],
+  ['dash.ar_red', 'dash_rules', 'ar_red', '欠款超期：超过多少天标红（严重超期）', 30, '天', 'num', { page: 'dashboard', where: '经营总览 · 账款' }],
+  ['dash.rr_lo', 'dash_rules', 'rr_lo', '回款率：低于多少标红', 70, '%', 'num', { page: 'dashboard', where: '经营总览 · 账款' }],
+  ['dash.rr_hi', 'dash_rules', 'rr_hi', '回款率：达到多少标绿', 90, '%', 'num', { page: 'dashboard', where: '经营总览 · 账款' }],
+  ['dash.silent', 'dash_rules', 'silent_days', '沉默客户：多少天没下单', 30, '天', 'num', { page: 'dashboard', where: '经营总览 · 人员' }],
+  ['dash.visit', 'dash_rules', 'visit_per_day', '拜访目标：每个销售员每天拜访几家', 5, '家', 'num', { page: 'dashboard', where: '经营总览 · 人员' }],
+  ['dash.pick', 'dash_rules', 'pick_pct', '热线拨通率目标', 80, '%', 'num', { page: 'dashboard', where: '经营总览 · 人员' }],
 ];
 const BY_ID = Object.fromEntries(RULES.map((r) => [r[0], r]));
 // 每条规则在「工作地图」上的位置 + 三句说明 (Frank 11-20: 一眼知道从哪来、作用在哪、触发后怎样)
@@ -70,6 +83,18 @@ export const META = {
   'wo.max': { area: 'pay', short: '抹零 · 一张单最多', src: 'Frank 定', apply: '收款时抹零', effect: '超过不让抹，要走坏账核销' },
   'margin.low': { area: 'cust', short: '毛利率低于多少标黄', src: 'Claude 先定', apply: '毛利分析、订单毛利（只中方看）', effect: '标黄；负数一律标红', me: 1 },
   'vol.pct': { area: 'cust', short: '月提货量涨跌 · 算变化大', src: 'Claude 先定', apply: '客户每月提货量对比', effect: '进中方待办「拿货量变化」', me: 1 },
+  'dash.budget': { area: 'sys', short: '看板 · 本月销售预算', src: '国内每月给的预算', apply: '经营总览销售卡片', effect: '显示预算达成进度条' },
+  'dash.age1': { area: 'po', short: '库龄 · 标黄天数', src: 'Frank 11-23 定', apply: '经营总览库存', effect: '这段库存标黄' },
+  'dash.age2': { area: 'po', short: '库龄 · 标红天数', src: 'Frank 11-23 定（国内严重超期线）', apply: '经营总览库存', effect: '这段库存标红' },
+  'dash.cover_lo': { area: 'po', short: '可卖月数 · 危机线', src: 'Claude 先定', apply: '（可售 + 在途）÷ 近 3 个月月均销量', effect: '型号标「危机」', me: 1 },
+  'dash.cover_hi': { area: 'po', short: '可卖月数 · 积压线', src: 'Claude 先定', apply: '同上', effect: '型号标「积压」', me: 1 },
+  'dash.ar_days': { area: 'pay', short: '没填账期按几天', src: 'Claude 先定', apply: '客户档案账期是空的客户', effect: '按这个天数算到期日', me: 1 },
+  'dash.ar_red': { area: 'pay', short: '欠款超期 · 标红天数', src: 'Frank 11-23 定', apply: '经营总览账款', effect: '超过算严重超期，标红' },
+  'dash.rr_lo': { area: 'pay', short: '回款率 · 红线', src: 'Claude 先定', apply: '收款 ÷ 出库', effect: '低于标红', me: 1 },
+  'dash.rr_hi': { area: 'pay', short: '回款率 · 绿线', src: 'Claude 先定', apply: '收款 ÷ 出库', effect: '达到标绿', me: 1 },
+  'dash.silent': { area: 'cust', short: '沉默客户天数', src: 'Claude 先定', apply: '每个客户最近一次出库', effect: '算进销售员的沉默客户', me: 1 },
+  'dash.visit': { area: 'visit', short: '每人每天拜访目标', src: 'Frank 11-23 定', apply: '经营总览拜访', effect: '没达标标红' },
+  'dash.pick': { area: 'hotline', short: '拨通率目标', src: 'Claude 先定', apply: '经营总览热线', effect: '没达标标红', me: 1 },
   'cash.held': { area: 'cash', short: '员工代收 · 几天没交算紧急', src: 'Frank 11-13 定', apply: '员工手上收的现金', effect: '进中方紧急待办' },
   'freight.acct': { area: 'cash', short: '我们出的运费记哪个账户', src: 'Frank 定', apply: '出库填运费「我们出」', effect: '自动记一笔本地物流费支出' },
   'remit.diff': { area: 'cash', short: '回款到账差 · 标红', src: 'Claude 先定', apply: '回款填到账时', effect: '标红 + 核对必须写原因', me: 1 },
@@ -96,6 +121,7 @@ export function useRuleValues(ids) {
   return data;
 }
 const valOf = (data, r) => { const v = data?.find((x) => x.key === r[1])?.value?.[r[2]]; return v ?? r[4]; };
+export const ruleNum = (data, id) => Number(valOf(data, BY_ID[id]));
 export const fmtRule = (data, id) => { const r = BY_ID[id]; const v = valOf(data, r); return r[6] === 'bool' ? (v ? '开' : '关') : r[6] === 'num' ? `${Number(v).toLocaleString('en-US')} ${r[5]}` : String(v); };
 
 // 一组规则的编辑行 (改一格存一格, 立即生效)

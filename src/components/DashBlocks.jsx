@@ -28,7 +28,7 @@ const Amt = ({ v, cur, tone }) => <span className={`dk-v ${tone || ''}`}>{v == n
 // ───────── 折算 ─────────
 // 行里的销售额 / 成本都是 XOF; k = 这张单 1 原币 = 多少 XOF; rmb_per_xof / xof_per_usd = 出库那天的记账汇率
 // m = { target, rates? }: rates (统一汇率, 手填) = { 源币种: 1 源币 = 多少目标币 }
-function toCur(r, m) {
+export function toCur(r, m) {
   const t = m.target; const cur = r.currency || 'XOF'; const k = N(r.k) || 1;
   const lock = (xof) => (t === 'XOF' ? xof : t === 'CNY' ? xof * N(r.rmb_per_xof) : N(r.xof_per_usd) ? xof / N(r.xof_per_usd) : 0);
   let rev, cost;
@@ -41,7 +41,7 @@ function toCur(r, m) {
   }
   return { rev, cost: r.cost_missing ? 0 : cost, known: r.cost_missing ? 0 : rev, qty: N(r.qty), miss: r.cost_missing ? N(r.qty) : 0 };
 }
-function total(rows, m) {
+export function total(rows, m) {
   const t = { rev: 0, cost: 0, known: 0, qty: 0, miss: 0, deals: new Set(), custs: new Set(), missModels: new Map() };
   for (const r of rows) {
     const c = toCur(r, m); t.rev += c.rev; t.cost += c.cost; t.known += c.known; t.qty += c.qty; t.miss += c.miss; t.deals.add(r.deal_id || r.fob_project_id); t.custs.add(r.customer_id);
@@ -50,8 +50,8 @@ function total(rows, m) {
   t.profit = t.known - t.cost; t.pct = t.known ? t.profit / t.known * 100 : null; t.n = t.deals.size; t.c = t.custs.size;
   return t;
 }
-const pctTone = (p, low) => (p == null ? '' : p < 0 ? 'red' : p < low ? 'amber' : 'green');
-const Pct = ({ p, low }) => (p == null ? <span className="muted">—</span> : <span className={`pill ${pctTone(p, low)}`}>{p.toFixed(1)}%</span>);
+export const pctTone = (p, low) => (p == null ? '' : p < 0 ? 'red' : p < low ? 'amber' : 'green');
+export const Pct = ({ p, low }) => (p == null ? <span className="muted">—</span> : <span className={`pill ${pctTone(p, low)}`}>{p.toFixed(1)}%</span>);
 // 看板卡片上的百分比 = 同一种色块, 大一号 (Frank 11-20: 和表格里的小块一样, 只是更大)
 export const BigPct = ({ p, low }) => (p == null ? <span className="dk-v muted">—</span> : <span className={`pill dk-pct ${pctTone(p, low)}`}>{p.toFixed(1)}<small>%</small></span>);
 
@@ -59,6 +59,13 @@ export function useDashRows(from, to) {
   const { org, role, tick } = useApp();
   const { data } = useData(() => (role === 'admin' ? call(role, `select * from app.dash_rows($1)`, [org]) : Promise.resolve(null)), [org, role, tick]);
   return useMemo(() => (data ? data.filter((r) => { const d = ymd(r.shipped_on); return d >= from && d <= to; }) : data), [data, from, to]);
+}
+
+// 全部出库行 (不按日期筛): 新版看板要拿前 3 期来比
+export function useDashAll() {
+  const { org, role, tick } = useApp();
+  const { data } = useData(() => (role === 'admin' ? call(role, `select * from app.dash_rows($1)`, [org]) : Promise.resolve(null)), [org, role, tick]);
+  return data;
 }
 
 // ───────── 总览 (本地 + FOB 合在一起, 只算已出库的) ─────────
@@ -192,7 +199,7 @@ export function SalesSection({ kind, rows, transit }) {
       {missOpen && <Modal title={`没成本的型号 · ${miss.length} 个`} onClose={() => setMissOpen(false)} footer={<><button type="button" className="btn" onClick={() => setMissOpen(false)}>关闭</button><button type="button" className="btn primary" onClick={() => go('pricing')}>去物料与定价补成本 ›</button></>}>
         <div className="small muted" style={{ marginBottom: 8 }}>这些型号出库时没有到岸成本，它们的销售额算了、成本和毛利没算。点型号打开档案，在「采购批次」里补上。</div>
         <Grid id="dash-miss" noTools maxHeight={360} rows={miss} columns={[
-          { key: 'model', label: '型号', w: 160, render: (r) => <ModelLink id={r.id} name={r.model} /> }, { key: 'category', label: '种类', w: 110 },
+          { key: 'model', label: '型号', w: 160, render: (r) => <ModelLink id={r.id} model={r.model} /> }, { key: 'category', label: '种类', w: 110 },
           { key: 'code', label: '编码', w: 150 }, { key: 'qty', label: '这段时间出了 片', w: 130, type: 'number', render: (r) => qty(r.qty) }]} />
       </Modal>}
     </div>);

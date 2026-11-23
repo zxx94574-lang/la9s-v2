@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { TierPill, useApp, useData, Pill, usePeriod, PeriodBar } from '../components/ui.jsx';
@@ -6,7 +6,8 @@ import Grid from '../components/Grid.jsx';
 import { money, qty, dDate } from '../lib/format.js';
 import { TIERS } from '../lib/domain.js';
 import { LayoutGrid, setLayoutEdit, useLayoutEdit } from '../components/Layout.jsx';
-import { useDashRows, Overview, SalesSection, MoneyBlock, PeopleBlock } from '../components/DashBlocks.jsx';
+import { useDashAll } from '../components/DashBlocks.jsx';
+import { SalesSec, StockSec, AcctSec, PeopleSec, Attention } from '../components/Dash2.jsx';
 
 const N = (v) => Number(v || 0);
 const shift = (d, days) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + days); return x.toISOString().slice(0, 10); };
@@ -26,26 +27,19 @@ export default function Dashboard() {
   const [pf, pt] = prevRange(from, to);
   const edit = useLayoutEdit();
   const admin = role === 'admin';
-  const rows = useDashRows(from, to);
+  const all = useDashAll();
+  const [alerts, setAlerts] = useState({});
+  const onAlert = useCallback((k, list) => setAlerts((a) => (JSON.stringify(a[k] || []) === JSON.stringify(list) ? a : { ...a, [k]: list })), []);
   const { data } = useData(async () => {
-    const [[k], rc, bal, orders, [cards], cmp, fobs] = await Promise.all([q(Q.dashboard, [org, from, to]), q(Q.receipts, [org, from, to]), q(Q.balances, [org]),
-      q(Q.orders, [org, '2000-01-01', '2999-12-31']), q(Q.dashCards, [org, from, to, pf, pt]), q(Q.customerCompare, [org]), q(Q.fobList, [org]).catch(() => [])]);
-    return { k, rc, bal, orders, cards, cmp, fobs };
+    const [[k], rc, bal, [cards], cmp, fobs] = await Promise.all([q(Q.dashboard, [org, from, to]), q(Q.receipts, [org, from, to]), q(Q.balances, [org]),
+      q(Q.dashCards, [org, from, to, pf, pt]), q(Q.customerCompare, [org]), q(Q.fobList, [org]).catch(() => [])]);
+    return { k, rc, bal, cards, cmp, fobs };
   }, [org, from, to]);
   const k = data?.k; const c = data?.cards;
   const jumpCompare = () => document.getElementById('cust-compare')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const transit = (data?.fobs || []).filter((f) => ['applied', 'purchasing', 'in_transit', 'arrived', 'released'].includes(f.status));
   const fobTransit = { n: transit.length, paid: transit.filter((f) => N(f.paid) > 0).length };   // 438: 紧急待办那行不放了 (进待办看); FOB 在途挪进 FOB 板块的小方框
   const more = !data ? [] : [
-    { id: 'c_wh', title: '仓库经营', span: 3, render: () => (
-      <div className="dcard">
-        <div className="h"><span>仓库</span><button type="button" className="btn sm ghost" onClick={() => go('stock')}>库存 →</button></div>
-        <div className="big">{role === 'admin' && N(c.stock_value) ? money(c.stock_value) : qty(c.stock_pcs)}<small>{role === 'admin' && N(c.stock_value) ? 'XOF 成本' : '件在库'}</small></div>
-        <div className="cmp">LA + 9S 在库 <b>{qty(c.stock_pcs)}</b> 件 · <b>{c.stock_sku}</b> 个编码{role === 'admin' && N(c.stock_pcs_nocost) > 0 && N(c.stock_value) > 0 ? <span className="muted">（{qty(c.stock_pcs_nocost)} 件没成本，没算进金额）</span> : ''}</div>
-        <div className="rows"><span>待出库 / 找货中<b>{c.to_ship} / {c.in_picking}</b></span>
-          <span>呆滞（库龄 180 天以上）<b>{c.aging_as_of ? `${qty(c.stale_pcs)} 件` : '没导库龄'}</b></span></div>
-        <div className="warn"><button type="button" onClick={() => go('replenish')}>⚠ 库存危机：判定规则还没定 → 先看备货看板</button></div>
-      </div>) },
     { id: 'c_sales', title: '销售工作', span: 3, render: () => (
       <div className="dcard">
         <div className="h"><span>销售工作</span><button type="button" className="btn sm ghost" onClick={() => go('visits')}>拜访 →</button></div>
@@ -76,20 +70,18 @@ export default function Dashboard() {
   ];
   const blocks = !data ? [] : [
     ...(admin ? [
-      { id: 'ov', title: '总览', span: 12, render: () => (rows ? <Overview rows={rows} /> : <div className="card card-b muted">加载中…</div>) },
-      { id: 'local', title: '本地销售与毛利', span: 12, render: () => (rows ? <SalesSection kind="local" rows={rows.filter((r) => r.supply !== 'fob')} /> : null) },
-      { id: 'fob', title: 'FOB 销售与毛利', span: 12, render: () => (rows ? <SalesSection kind="fob" rows={rows.filter((r) => r.supply === 'fob')} transit={fobTransit} /> : null) },
+      { id: 'ov', title: '销售', span: 12, render: () => (all ? <SalesSec all={all} from={from} to={to} transit={fobTransit} onAlert={onAlert} /> : <div className="d2-card muted small">加载中…</div>) },
+      { id: 'stock', title: '库存', span: 12, render: () => <StockSec all={all} onAlert={onAlert} /> },
     ] : [
       // 员工看不到成本 / 利润: 只有销售额和件数
       { id: 'ov', title: '销售', span: 12, render: () => (
-        <div className="card dash-sec"><div className="card-h"><h2>销售 <span className="muted small">已经出库的</span></h2></div>
-          <div className="card-b"><div className="dk-row"><div className="dk"><div className="dk-t">销售额 <small>XOF</small></div><span className="dk-v">{money(k.sales_amount)}<small>XOF</small></span></div></div>
-            <div className="dk-chips"><span className="dchip">出库 <b>{qty(k.sales_qty)}</b> 片</span><span className="dchip"><b>{k.order_count}</b> 单</span></div></div>
-        </div>) }]),
-    { id: 'money', title: '账款', span: 12, render: () => <MoneyBlock bal={data.bal} rc={data.rc} from={from} to={to} /> },
-    { id: 'people', title: '打卡 / 拜访 / 热线', span: 12, render: () => <PeopleBlock from={from} to={to} label={P.label} /> },
-    { id: 'more', title: '更多（仓库 / 销售工作 / 热线 / 客户）', span: 12, render: () => (
-      <details className="more-box"><summary>更多：仓库 · 销售工作 · 热线 · 客户对比</summary>
+        <div className="d2-sec"><div className="d2-card"><div className="d2-h"><span className="t">销售</span><span className="s">已经出库的</span></div>
+          <div className="d2-hero"><div className="d2-m main"><span className="k">销售额</span><span className="v"><b>{money(k.sales_amount)}</b><u>XOF</u></span><span className="d">{qty(k.sales_qty)} 片 · {k.order_count} 单</span></div></div>
+          <div className="d2-foot"><div className="f" /></div></div></div>) }]),
+    { id: 'money', title: '账款', span: 12, render: () => <AcctSec bal={data.bal} rc={data.rc} fobs={data.fobs} ship={c.sales} from={from} to={to} label={P.label} onAlert={onAlert} /> },
+    { id: 'people', title: '人员', span: 12, render: () => <PeopleSec all={all} from={from} to={to} label={P.label} cards={c} cmp={data.cmp} onAlert={onAlert} /> },
+    { id: 'more', title: '更多（销售工作 / 热线 / 客户）', span: 12, render: () => (
+      <details className="more-box"><summary>更多：销售工作 · 热线 · 客户对比</summary>
         <div className="more-grid">{more.map((m) => <React.Fragment key={m.id}>{m.render()}</React.Fragment>)}</div>
         <div style={{ marginTop: 12 }}><CustomerCompare rows={data.cmp} go={go} /></div>
       </details>) },
@@ -102,6 +94,7 @@ export default function Dashboard() {
           {admin && <button type="button" className={`btn sm ${edit ? 'primary' : ''}`} onClick={() => setLayoutEdit(!edit)} title="大板块和板块里小卡片的顺序、宽度、显示不显示（全员一样）">⚙ 配置看板</button>}
         </PeriodBar>
       </div>
+      {data && <Attention alerts={alerts} />}
       {!data ? <div className="empty">加载中…</div> : <LayoutGrid page="dash" blocks={blocks} />}
     </>
   );
