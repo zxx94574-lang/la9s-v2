@@ -20,8 +20,8 @@ LA&9S 在科特迪瓦做手机配件批发零售，要建一套自有的业务�
 - 真实数据私有版（Frank 日常用，数据存他浏览器）：https://claude.ai/artifact/JwjyRGoE23tc5iVjw6JwS7（slug `915000f1-a510-4606-a5d5-3e2a37ac1a80`），**现在 v93 `1795194047-f626`**（回退 = 重发上一版，版本号见 `docs/版本记录.md`）。
 - 线上测试环境 https://la9s.com（Supabase 免费版 `la9s-staging` + Cloudflare Pages，只有演示数据）**仍停在 v51**。
 - 代码以 GitHub 私有仓库 `zxx94574-lang/la9s-v2`（main）为准；Frank Mac 上的副本是旧的。
-- **测试版**（11-22 通宵跑通）：https://claude.ai/artifact/KBMVzkpBgWGuFuBTKy8KxA（slug `9336912e-0c15-4e17-87a1-33967185345f`，`1795392970-092d`），`VITE_TEST=1` 构建，单独的库 + 154 个场景造数；报告 https://claude.ai/artifact/G2Df2Gjt2ovjkGAxDtS4ch。0076–0082 只在测试版。**Frank 11-22 23:55：真实版先不动，先用测试版**；以后发真实版时同时换 la9s-logo.png 高清版，发前要重新从 main 构建并再做一次 v93→新版升级演练。
-- 迁移到 **0082**，下一个 **0083**；`npm test` **191** 个场景。
+- **测试版**（11-22 通宵跑通）：https://claude.ai/artifact/KBMVzkpBgWGuFuBTKy8KxA（slug `9336912e-0c15-4e17-87a1-33967185345f`，`1795394585-eefd`），`VITE_TEST=1` 构建，单独的库 + 154 个场景造数；报告 https://claude.ai/artifact/G2Df2Gjt2ovjkGAxDtS4ch。0076–0083 只在测试版。**Frank 11-22 23:55：真实版先不动，先用测试版**；以后发真实版时同时换 la9s-logo.png 高清版，发前要重新从 main 构建并再做一次 v93→新版升级演练。
+- 迁移到 **0083**，下一个 **0084**；`npm test` **192** 个场景。
 - 等 Frank 答：试测试版；店铺价可见性；国内：付工厂按入仓号还是月结、汇回按批次还是总额。其余见 `docs/待改清单.md`。
 
 **发布流程（大改动）**：示意图（定方向）→ 测试版（单独链接，Frank 照「点这几下」清单试）→ 真实版。小改 / 修 bug / 截图红框直接发真实版。
