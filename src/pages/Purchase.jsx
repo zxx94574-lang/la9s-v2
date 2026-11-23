@@ -27,12 +27,40 @@ export function etaPill(r) {
   return null;
 }
 
+// 481 (0082): 国内商务在申请单每行回复 —— 能给多少 / 单价 / 哪天发 / 货权; 改一格存一格; 每行都回了 = 已回复 (通知中方)
+const offerState = (r) => { const ls = r.lines || []; const n = ls.filter((l) => l.offer_qty != null && l.offer_price != null && l.offer_ship).length;
+  return r.offered_at || (ls.length && n === ls.length) ? ['已回复', 'green'] : n ? [`回了 ${n}/${ls.length} 行`, 'amber'] : ['等国内回复', 'gray']; };
+function OfferModal({ r, onClose }) {
+  const { role, toast, refresh } = useApp();
+  const mine = role === 'cn_business';
+  const save = async (l, patch, meta) => { try { await call(role, `select app.cn_offer($1,$2)`, [l.id, JSON.stringify(patch)]); if (!meta?.batch || meta.last) toast('已保存'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  const ed = (k, type, opts) => (mine ? (l) => ({ type, value: l[k] == null ? '' : type === 'date' ? dDate(l[k]) : String(l[k]), options: opts, onChange: (v, meta) => save(l, { [k.replace('offer_', '')]: v ?? '' }, meta) }) : null);
+  return (
+    <Modal wide title={`${r.req_no} · ${r.title} · 国内回复`} onClose={onClose} footer={<button type="button" className="btn" onClick={onClose}>关闭</button>}>
+      <div className="stack">
+        <div className="hint">{mine ? '每行填：能给多少、单价（人民币）、哪天能发、货从哪来（LA 工厂 / 9S 调货）。改一格存一格，科特这边马上看到。每行都填完 = 已回复，自动通知中方。' : '国内商务填的回复；有差的（给不够 / 价格变了）在这里一眼看到。'}</div>
+        <Grid id="pr-offer" noTools rows={r.lines || []} rowKey={(l) => l.id} columns={[
+          { key: 'code', label: '编码', w: 90, mono: true, value: (l) => l.code || '—' },
+          { key: 'item', label: '型号 / 物资', w: 160, value: (l) => `${l.item}${l.spec ? ' ' + l.spec : ''}` },
+          { key: 'qty', label: '要多少', w: 80, value: (l) => Number(l.qty) },
+          { key: 'offer_qty', label: '能给多少', w: 100, value: (l) => (l.offer_qty == null ? '' : Number(l.offer_qty)), edit: ed('offer_qty', 'number'),
+            render: (l) => (l.offer_qty == null ? <span className="muted">—</span> : Number(l.offer_qty) < Number(l.qty) ? <Pill tone="amber">{l.offer_qty}（差 {Number(l.qty) - Number(l.offer_qty)}）</Pill> : l.offer_qty) },
+          { key: 'offer_price', label: '单价 CNY', w: 100, value: (l) => (l.offer_price == null ? '' : Number(l.offer_price)), edit: ed('offer_price', 'number') },
+          { key: 'offer_ship', label: '哪天能发', w: 120, value: (l) => dDate(l.offer_ship) || '', edit: ed('offer_ship', 'date') },
+          { key: 'offer_owner', label: '货从哪来', w: 110, value: (l) => ({ LA: 'LA 工厂', '9S': '9S 调货' })[l.offer_owner] || '', edit: ed('offer_owner', 'select', [['LA', 'LA 工厂'], ['9S', '9S 调货']]) },
+          { key: 'offer_note', label: '备注', w: 160, fill: true, value: (l) => l.offer_note || '', edit: ed('offer_note', 'text') },
+        ]} />
+      </div>
+    </Modal>);
+}
+
 export default function Purchase() {
   const { org, role, toast, refresh } = useApp();
   const [f, setF] = useState('open');
   const [edit, setEdit] = useState(null);
   const [adv, setAdv] = useState(null);
   const [po, setPo] = useState(null);
+  const [offer, setOffer] = useState(null);
   const { data } = useData(() => q(Q.purchaseRequests, [org]), [org]);
   if (!data) return <div className="empty">加载中…</div>;
   const rows = data.filter((r) => (f === 'open' ? !['received', 'cancelled'].includes(r.status) : f === 'all' ? true : r.kind === f));
@@ -46,6 +74,7 @@ export default function Purchase() {
     { key: 'need_by', label: '要求到货', w: 100, render: (r) => dDate(r.need_by) },
     { key: 'planned_ship', label: '计划发货', w: 100, render: (r) => dDate(r.planned_ship) },
     { key: 'eta', label: '预计到货', w: 140, value: (r) => r.eta || '', render: (r) => <>{dDate(r.eta)} {etaPill(r)}</> },
+    { key: 'offer', label: '国内回复', w: 130, value: (r) => offerState(r)[0], render: (r) => { const [l, t] = offerState(r); return r.kind === 'supplies' ? '' : <Pill tone={t}>{l}</Pill>; } },
     { key: 'status', label: '进度', w: 100, value: (r) => PR_ST[r.status], render: (r) => <Pill tone={r.status === 'received' ? 'green' : r.status === 'cancelled' ? 'gray' : 'blue'}>{PR_ST[r.status]}</Pill> },
     { key: 'po_no', label: '采购单 / 柜号', w: 170, value: (r) => [r.po_no, r.container, r.tracking].filter(Boolean).join(' · '), render: (r) => <>{r.po_id ? <PoLink id={r.po_id} no={r.po_no} /> : r.po_no}{[r.container, r.tracking].filter(Boolean).map((x) => <span key={x} className="small muted"> · {x}</span>)}</> },
   ];
@@ -57,6 +86,7 @@ export default function Purchase() {
       <div className="card">
         <Grid id="purchase-req" table="purchase_requests" columns={cols} rows={rows}
           rowActions={[
+            { label: role === 'cn_business' ? '回复（能给多少 / 单价 / 哪天发）' : '看国内回复', tone: role === 'cn_business' ? 'primary' : undefined, when: (r) => r.kind !== 'supplies' && (role === 'cn_business' || role === 'admin' || can(role, 'po_edit')), run: (r) => setOffer(r) },
             { label: '建采购单', tone: 'primary', when: (r) => r.status === 'submitted' && r.kind !== 'supplies' && can(role, 'po_edit'), run: (r) => setPo(fromRequest(r, r.lines)) },
             ...Object.entries(next).map(([st, [to, label]]) => ({ label: `${label} →`, when: (r) => r.status === st && can(role, 'purchase_advance') && !(st === 'submitted' && r.kind !== 'supplies'), run: (r) => setAdv({ r, to, label }) })),
             { label: '取消', when: (r) => ['submitted', 'ordered'].includes(r.status) && can(role, 'purchase_advance'), tone: 'ghost', run: (r) => act('已取消', `select app.advance_purchase_request($1,'cancelled','{}')`, [r.id]) },
@@ -66,6 +96,7 @@ export default function Purchase() {
       </div>
       {edit && <EditPR r={edit} onClose={() => setEdit(null)} />}
       {po && <PoForm init={po} onClose={() => setPo(null)} />}
+      {offer && <OfferModal r={offer} onClose={() => setOffer(null)} />}
       {adv && <SimpleForm title={`${adv.r.req_no} · ${adv.label}`} onClose={() => setAdv(null)}
         fields={adv.to === 'ordered' ? [['po_no', '金蝶采购订单号', true], ['planned_ship', '计划发货日', false, 'date']]
           : adv.to === 'shipped' ? [['logistics', '物流公司'], ['tracking', '物流单号 / 入仓号'], ['container', '柜号 / 分柜说明'], ['eta', '预计到货', true, 'date']] : []}

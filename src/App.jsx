@@ -37,6 +37,7 @@ import Import from './pages/Import.jsx';
 import Fob from './pages/Fob.jsx';
 import Inquiry from './pages/Inquiry.jsx';
 import Purchase from './pages/Purchase.jsx';
+import CnFinance from './pages/CnFinance.jsx';
 import PoPage from './pages/Po.jsx';
 import Attendance from './pages/Attendance.jsx';
 import Staff from './pages/Staff.jsx';
@@ -211,12 +212,15 @@ export default function App() {
   if (portal && !page.startsWith('p/')) page = 'p/shop';
   // 中国支持: 打开不是给它的页 (订单 / 客户 / 钱) 一律回到待办
   if (role === 'cn_support' && !['todo', 'sop', 'stock', 'po', 'purchase', 'replenish'].includes(page)) page = 'todo';
+  if (role === 'cn_business' && !['todo', 'sop', 'stock', 'purchase'].includes(page)) page = 'todo';
+  if (role === 'cn_finance' && !['todo', 'sop', 'po', 'cnfin'].includes(page)) page = 'todo';
   let view;
   switch (page) {
     case 'fob': view = <Fob id={id} key={id || 'list'} />; break;
     case 'inquiry': view = <Inquiry />; break;
     case 'purchase': view = <Purchase />; break;
     case 'po': view = <PoPage />; break;
+    case 'cnfin': view = <CnFinance />; break;
     case 'attendance': view = <Attendance />; break;
     case 'kpi': view = <Kpi />; break;
     case 'margin': view = <MarginPage />; break;

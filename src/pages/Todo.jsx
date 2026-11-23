@@ -138,6 +138,11 @@ export default function Todo() {
       (select count(*) from app.deals d where d.org_id = $1 and d.approval = 'pending' and d.status = 'quoted') as approvals,
       (select count(*) from app.purchase_requests r where r.org_id = $1 and r.status in ('ordered','shipped') and r.eta is not null and r.eta <= current_date + 5) as pr_eta,
       (select count(*) from app.purchase_requests r where r.org_id = $1 and r.status = 'submitted') as pr_new,
+      (select count(*) from app.purchase_orders po where po.org_id = $1 and po.status = 'open' and po.eta is not null
+         and po.eta <= current_date + coalesce((select (value->>'eta_days')::int from app.org_settings where org_id = $1 and key = 'po_rules'), 7)
+         and exists (select 1 from app.po_lines l where l.po_id = po.id and l.qty_received + l.closed_qty < l.qty)) as po_eta,
+      (select count(*) from app.purchase_requests r where r.org_id = $1 and r.status in ('submitted','draft') and r.offered_at is null and r.kind <> 'supplies') as cn_offer,
+      (select count(*) from app.v_po_ledger g where g.org_id = $1 and g.goods_cny > g.paid_cny + 0.5) as cn_unpaid,
       (select count(*) from app.po_receipts g where g.org_id = $1 and g.kd_status = 'ready') as grn_ready,
       (select count(*) from app.account_events e join app.customer_accounts a on a.id = e.account_id where a.org_id = $1 and e.kind = 'pw_changed' and e.acked_at is null) as pw_changed,
       (select count(*) from app.deals d where d.org_id = $1 and d.source = 'guest' and d.status = 'quoted') as guest_new`, [org])]);
@@ -189,6 +194,9 @@ export default function Todo() {
       ex('notices') > 0 && line('paynotice', 'cash', `${ex('notices')} 笔「客户说付了」还没对上到账`),
       ex('pr_new') > 0 && line('pr', 'purchase', `${ex('pr_new')} 张采购 / 物资申请还没下单`),
       ex('pr_eta') > 0 && line('pr', 'purchase', `${ex('pr_eta')} 张采购 / 物资申请 5 天内到或已过期`),
+      ex('po_eta') > 0 && line('po_eta', 'po', `${ex('po_eta')} 张采购单快到港 / 已过预计到港，还没收完`),
+      ex('cn_offer') > 0 && line('cn_offer', 'purchase', `${ex('cn_offer')} 张备货申请等你回复（能给多少 / 单价 / 哪天发）`),
+      ex('cn_unpaid') > 0 && line('cn_pay', 'cnfin', `${ex('cn_unpaid')} 张采购单货款还没付清`),
       ex('fob_price') > 0 && line('fob_price', 'fob', `${ex('fob_price')} 个 FOB 申请等定价`),
       kdTodo > 0 && line('kd', 'kingdee', `还没录金蝶 ${kdTodo} 张`),
       ex('grn_ready') > 0 && line('kd', 'kingdee', `${ex('grn_ready')} 张收货单要录金蝶采购入库`),
@@ -237,7 +245,7 @@ export default function Todo() {
 const L = ['admin', 'manager', 'sales_manager'];
 export const SLOTS = {
   anomaly: { label: '异常的单', roles: ['admin', 'manager', 'sales_manager', 'hotline', 'finance', 'sales', 'picker'] },
-  directives: { label: '中方给我的指令 / 定期任务', roles: ['manager', 'sales_manager', 'hotline', 'finance', 'sales', 'picker', 'cn_support'] },
+  directives: { label: '中方给我的指令 / 定期任务', roles: ['manager', 'sales_manager', 'hotline', 'finance', 'sales', 'picker', 'cn_support', 'cn_business', 'cn_finance'] },
   returns: { label: '退货没走完', roles: ['admin', 'manager', 'sales_manager', 'hotline', 'finance'] },
   money: { label: '钱要跟进的', roles: ['admin', 'finance'] },
   issues: { label: '员工上报的问题', roles: L },
@@ -250,6 +258,9 @@ export const SLOTS = {
   addons: { label: '追加的货', roles: ['admin', 'manager', 'picker', 'hotline', 'sales_manager'] },
   tasks: { label: '派出去的任务', roles: ['admin', 'manager', 'sales_manager', 'hotline', 'finance', 'sales', 'picker'] },
   purchase: { label: '采购与到货', roles: ['manager', 'cn_support'] },
+  po_eta: { label: '采购单快到港', roles: ['manager', 'cn_support'] },
+  cn_offer: { label: '备货申请等国内商务回复', roles: ['cn_business'] },
+  cn_pay: { label: '采购单货款没付清', roles: ['cn_finance'] },
   holds: { label: '冻结的库存', roles: ['admin', 'manager'] },
   follow: { label: '今天要回访的客户', roles: ['hotline', 'sales', 'manager'] },
   wants: { label: '想要的货到了，问还要吗', roles: ['hotline', 'manager'] },

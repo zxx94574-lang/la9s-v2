@@ -1760,3 +1760,4 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 /* 审批收件箱: 原因红块一排, 影响一排 */
 .appr-why{display:flex;flex-wrap:wrap;gap:4px}.appr-imp{display:flex;flex-wrap:wrap;gap:4px 14px}.appr-imp .ink{color:var(--ink,#111)}
 .digest{padding:10px 14px;cursor:pointer}.digest-row{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline}.digest-row .k{min-width:5em;color:var(--muted,#667)}
+.fob-due{display:flex;flex-direction:column;gap:4px;margin-top:6px;font-size:13px}.fob-due .pill{font-size:13px;font-weight:600}

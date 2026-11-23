@@ -26,6 +26,12 @@ export async function seedScenarios(db, org, log = () => {}) {
   const mkEmp = async (name, dept, role) => (await one(`insert into app.employees (org_id, short_name, full_name, department, position, sys_role) values ($1,$2,$2,$3,$3,$4) returning id`, [org, name, dept, role])).id;
   E.p2 = await mkEmp('测试仓管 A', '仓库', 'picker').catch(async () => (await one(`insert into app.employees (org_id, short_name, department, position) values ($1,'测试仓管 A','仓库','仓管') returning id`, [org])).id);
   E.p3 = await mkEmp('测试仓管 B', '仓库', 'picker').catch(async () => (await one(`insert into app.employees (org_id, short_name, department, position) values ($1,'测试仓管 B','仓库','仓管') returning id`, [org])).id);
+  // 国内三个岗位账号 (采购 / 商务 / 财务), 右上角切过去看各自的界面
+  for (const [r, name] of [['cn_support', '国内采购（测试）'], ['cn_business', '国内商务（测试）'], ['cn_finance', '国内财务（测试）']]) {
+    if (!USERS[r] || (await all(`select 1 from app.members where user_id = $1`, [USERS[r]])).length) continue;
+    const e = (await one(`insert into app.employees (org_id, short_name, department, position) values ($1,$2,'国内',$2) returning id`, [org, name])).id;
+    await db.query(`insert into app.members (user_id, org_id, employee_id, roles) values ($1,$2,$3,$4)`, [USERS[r], org, e, `{${r}}`]);
+  }
   log('员工准备好了');
 
   // 有库存、四档价都有的本地物料
@@ -215,6 +221,36 @@ export async function seedScenarios(db, org, log = () => {}) {
       await as(USERS.manager, `select app.fob_ship($1,$2,'测试 FOB 出库')`, [f, photo('fobship')]);
     });
   }
+  // 0081: FOB 出库的几种情况 (Frank 11-22: 全出 / 分批出 / 不要了转本地)
+  const fobOut = [
+    ['FOB出库·全出（仓库控货）', 'warehouse', [['all']]],
+    ['FOB出库·只出一半（剩下的还在 FOB 仓）', 'warehouse', [['half']]],
+    ['FOB出库·分两批出完', 'warehouse', [['half'], ['all']]],
+    ['FOB出库·出一半后客户不要了，剩下转 9S 仓（多收订金转预付）', 'warehouse', [['half'], ['local', '9S', 'credit']]],
+    ['FOB出库·一片没出客户就不要了，全转 LA 仓（订金不退）', 'warehouse', [['local', 'LA', 'keep']]],
+    ['FOB出库·物流控货分批放货', 'logistics', [['half']]],
+    ['FOB出库·物流控货到了目的国客户不要了，转 LA 仓（订金要退）', 'logistics', [['local', 'LA', 'refund']]],
+  ];
+  for (const [k, [name, ctl, steps]] of fobOut.entries()) {
+    await run(name, async () => {
+      const c = C[(i++) % C.length];
+      const f = await val(USERS.sales, `select app.create_fob($1,$2,$3,$4,'XOF',$5,$6)`, [org, c.id, ctl === 'warehouse' ? 'CI' : 'TG', ctl,
+        JSON.stringify(pick(k + 70, 2).map((p, n) => ({ product_id: p.id, qty: 200 + n * 100 }))), `测试 ${name}`]);
+      for (const l of await all(`select id from app.fob_lines where project_id = $1`, [f])) await as(USERS.admin, `select app.set_fob_price($1,$2)`, [l.id, 2600 + k * 10]);
+      await as(USERS.manager, `select app.fob_advance($1,'purchasing',$2)`, [f, JSON.stringify({ po_no: `TEST-FOBOUT-${k}` })]);
+      await as(USERS.manager, `select app.fob_advance($1,'in_transit',$2)`, [f, JSON.stringify({ logistics: '测试物流', tracking: `TRKO${k}`, eta: day(-5) })]);
+      const tot = Number((await one(`select total from app.v_fob where id = $1`, [f])).total);
+      await as(USERS.finance, `select app.record_fob_payment($1,'deposit',$2,$3,'bank',$4)`, [f, Math.round(tot * 0.3), day(4), photo('fobdep')]);
+      if (ctl === 'warehouse') await as(USERS.manager, `select app.fob_receive($1,$2)`, [f, JSON.stringify((await all(`select id, qty from app.fob_lines where project_id = $1`, [f])).map((l) => ({ line_id: l.id, qty: l.qty })))]);
+      else await as(USERS.manager, `select app.fob_advance($1,'arrived','{}')`, [f]);
+      if (steps[0][0] !== 'local') await as(USERS.admin, `select app.fob_release($1,$2)`, [f, '测试：老客户先放，尾款跟上']);
+      for (const [what, wh, dep] of steps) {
+        if (what === 'all') await as(USERS.manager, `select app.fob_ship2($1,null,$2,'测试：剩下的全出')`, [f, photo('fobout')]);
+        else if (what === 'half') await as(USERS.manager, `select app.fob_ship2($1,$2,$3,'测试：先出一半')`, [f, JSON.stringify((await all(`select id, qty from app.fob_lines where project_id = $1`, [f])).map((l) => ({ line_id: l.id, qty: Math.floor(l.qty / 2) }))), photo('fobout')]);
+        else await as(USERS.admin, `select app.fob_to_local($1,null,$2,$3,$4)`, [f, wh, '测试：客户资金紧张不要了', dep]);
+      }
+    });
+  }
   log('FOB 做完');
 
   // ── 5. 拦截: 故意制造, 留着给中方看 ──
@@ -306,6 +342,31 @@ export async function seedScenarios(db, org, log = () => {}) {
     await as(USERS.admin, `select app.allocate_wants($1,$2,'测试：这批到货先给老客户')`, [org, JSON.stringify([{ want_id: ws[0], qty: 15 }, { want_id: ws[1], qty: 10 }])]);
   });
   log('想要做完');
+  // ── 10. 国内: 商务回复申请 / 采购建单 / 财务付款 + 运费 (0082) ──
+  const reqs = [];
+  for (let k = 0; k < 6; k++) await run(`国内·备货申请（${['商务全回了', '商务全回了', '商务回了一半', '商务回了一半', '还没回', '还没回'][k]}）`, async () => {
+    const ps = pick(k * 7 + 90, 3);
+    const r = await val(USERS.manager, `select app.save_purchase_request($1,null,$2,$3)`, [org, JSON.stringify({ kind: 'stock', title: `测试：${k + 1} 月备货`, need_by: day(60 + k) }),
+      JSON.stringify(ps.map((p, n) => ({ product_id: p.id, item: p.model, qty: 300 + n * 100 })))]);
+    const ls = await all(`select id, qty from app.purchase_request_lines where request_id = $1`, [r]);
+    for (const [n, l] of ls.entries()) {
+      if (k >= 4 || (k >= 2 && n > 0)) continue;
+      await as(USERS.cn_business, `select app.cn_offer($1,$2)`, [l.id, JSON.stringify({ qty: n === 1 ? l.qty - 50 : l.qty, price: 10 + n * 3.5, ship: day(20 + k), owner: n % 2 ? '9S' : 'LA', note: n === 1 ? '测试：工厂只够这么多' : '' })]);
+    }
+    reqs.push(r);
+  });
+  for (let k = 0; k < 5; k++) await run(`国内·采购单付款（${['货款付清 + 运费', '货款付清 + 运费', '只付了订金', '只付了订金', '还没付'][k]}）`, async () => {
+    const ps = pick(k * 5 + 120, 2);
+    const po = await val(USERS.cn_support, `select app.save_po($1,null,$2,$3)`, [org, JSON.stringify({ po_no: `TEST-CN-${k + 1}`, purpose: 'local', inbound_no: `CG26TEST${k}A`, shipped_on: day(-10 - k), eta: day(k * 3 - 2), batch_name: `测试-海运-${k + 1}` }),
+      JSON.stringify(ps.map((p, n) => ({ product_id: p.id, qty: 200 + n * 100, unit_price: 9 + n * 2.5 })))]);
+    const g = Number((await one(`select goods_cny from app.v_po_ledger where id = $1`, [po])).goods_cny);
+    if (k <= 1) {
+      await as(USERS.cn_finance, `select app.record_po_payment($1,$2)`, [po, JSON.stringify({ kind: 'goods', amount: g, currency: 'CNY', xof_per_unit: 85, proof: photo('cnpay'), on_date: day(-12) })]);
+      await as(USERS.cn_finance, `select app.record_po_payment($1,$2)`, [po, JSON.stringify({ kind: 'freight', amount: 1800 + k * 300, currency: 'CNY', xof_per_unit: 85, proof: photo('cnfrt'), on_date: day(-9) })]);
+    } else if (k <= 3) await as(USERS.cn_finance, `select app.record_po_payment($1,$2)`, [po, JSON.stringify({ kind: 'goods', amount: Math.round(g * 0.3), currency: 'CNY', xof_per_unit: 85, proof: photo('cnpay'), note: '测试：30% 订金' })]);
+  });
+  log('国内做完');
+
 
   // ── 结束: 恢复规则, 做总账检查 ──
   await db.query(`update app.org_settings set value = '{"on":true}' where org_id = $1 and key in ('rep_debt_rules','credit_gate')`, [org]);
