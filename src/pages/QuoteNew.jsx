@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { q, call, callValue } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, DatePicker, Modal, SortList, RateInput, Info, PageGear, Choice, PhotoInput } from '../components/ui.jsx';
+import { useApp, useData, DatePicker, Modal, SortList, RateInput, Info, PageGear, Choice, PhotoInput, ConfirmBtn } from '../components/ui.jsx';
 import ProductDrawer from '../components/ProductDrawer.jsx';
 import { CustomerDrawer } from './Customers.jsx';
 import { STEPS } from '../lib/domain.js';
@@ -264,7 +264,7 @@ export default function QuoteNew() {
         <div className="card card-b row between" style={{ background: 'var(--amber-bg)', borderColor: '#f3d9a8' }}>
           <span>这个客户有你上次没做完的报价草稿（{restore.n_lines} 行，{String(restore.updated_at || '').slice(0, 16).replace('T', ' ')}）</span>
           <span className="row"><button type="button" className="btn primary sm" onClick={() => applyDraft(restore)}>接着做</button>
-            <button type="button" className="btn sm" onClick={async () => { await call(role, `select app.delete_quote_draft($1)`, [restore.id]).catch(() => {}); setRestore(null); }}>丢弃，重新开始</button></span>
+            <ConfirmBtn title="丢弃这张草稿？" body="草稿删了就没了，找不回来。" okText="确认丢弃" onOk={async () => { await call(role, `select app.delete_quote_draft($1)`, [restore.id]).catch(() => {}); setRestore(null); }}>丢弃，重新开始</ConfirmBtn></span>
         </div>
       )}
       <LayoutGrid page="quote" blocks={blocks} defaultGap={10} />

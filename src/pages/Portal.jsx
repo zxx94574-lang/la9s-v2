@@ -5,7 +5,7 @@
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, MoneyIn } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, MoneyIn, ConfirmBtn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { balanceWords } from '../lib/domain.js';
@@ -130,7 +130,7 @@ export function PortalOrders() {
             {o.biz_no && <div className="small muted">LA&9S 单号 {o.biz_no}</div>}</div>
             <Pill tone={SOSTATUS[o.status][1]}>{SOSTATUS[o.status][0]}</Pill>
             {role === 'boss' && o.status === 'submitted' && <div className="row" style={{ gap: 4, flexBasis: '100%', justifyContent: 'flex-end' }}>
-              <button type="button" className="btn sm" onClick={() => decide(o, 'rejected')}>拒绝</button>
+              <ConfirmBtn title={`拒绝门店的订单 ${o.order_no}？`} body={`${o.store} 会看到这张单被拒绝，拒绝后不能改回来，要的话得让门店重新下。`} okText="确认拒绝" onOk={() => decide(o, 'rejected')}>拒绝</ConfirmBtn>
               <button type="button" className="btn sm" onClick={() => decide(o, 'accepted')}>我自己发</button>
               <button type="button" className="btn sm primary" onClick={() => decide(o, 'forward')}>转给 LA&9S</button></div>}
             {role === 'boss' && o.status === 'accepted' && <button type="button" className="btn sm" onClick={() => decide(o, 'delivered')}>已送达</button>}

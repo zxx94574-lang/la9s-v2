@@ -1868,3 +1868,39 @@ button.d2-m:hover .v b:not(.blk):not(.num-red):not(.num-grn):not(.num-amber) { c
 .t2-fs.nowok { background: #dbeafe; color: #1e3a8a; font-weight: 700; outline: 1.5px solid #93c5fd; }
 .t2-fs.skip { background: #f1f5f9; color: #64748b; }
 @media (max-width: 760px) { .t2-row { grid-template-columns: 1fr; } .t2-right { justify-content: flex-start; } .t2-cols { grid-template-columns: 1fr; } }
+
+/* ───────── 全站卡片向「看板总方向」靠 (Frank 11-23 23:37: 能靠的都靠, Grid 底层不动) ─────────
+   只换皮, 不动结构: 一组数 = 一张白卡, 格子之间细竖线; 标题灰色小字; 数字黑色中号; 颜色只留给红 / 黄 / 绿 */
+.mkpis, .bigsum, .kpis { background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 18px; margin-bottom: 12px; gap: 14px 0; }
+.mkpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.bigsum { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); border-bottom: 1px solid var(--line); }
+.card > .bigsum { border: 0; box-shadow: none; margin-bottom: 0; border-radius: 0; background: none; }
+.kpis, .kpis.k4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.mkpi, .bigsum > div, .kpis > .kpi { background: none; border: 0; border-left: 1px solid var(--line); border-radius: 0; box-shadow: none; padding: 2px 16px; min-width: 0; }
+.mkpi:first-child, .bigsum > div:first-child, .kpis > .kpi:first-child { border-left: 0; padding-left: 0; }
+.kpis > .kpi:hover, .kpis > .kpi.on { box-shadow: none; border-color: var(--line); }
+.kpis > .kpi.on .v, .kpis > .kpi.on .kv-num { color: var(--brand); }
+.mkpi .k, .bigsum .k, .kpis > .kpi .t { font-size: 12px; color: var(--muted); font-weight: 500; }
+.kpis > .kpi .t > span { color: inherit; font-size: 12px; font-weight: 500; }
+.mkpi .v, .bigsum .v, .kpis > .kpi .v, .kpis > .kpi .kv-num { font-size: 22px; font-weight: 750; letter-spacing: -.3px; color: var(--ink); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+.bigsum .v small, .kpis > .kpi .v small, .kpis > .kpi .kv-num small { font-size: 12px; color: #94a3b8; font-weight: 500; letter-spacing: 0; }
+.mkpi .s, .kpis > .kpi .f { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.mkpi.sm { padding: 2px 12px; } .mkpi.sm .v { font-size: 18px; }
+/* 指标卡 (各页顶上): 名字 = 灰色小字, 数 = 黑色; 只有红 / 黄才上色 */
+.mt-card { border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow); }
+.mt-name { font-size: 12px; font-weight: 500; color: var(--muted); }
+.mt-v { font-size: 22px; font-weight: 750; letter-spacing: -.3px; color: var(--ink); }
+.mt-card.t-green .mt-v { color: var(--ink); }
+/* 「更多」里的老卡片 */
+.dcard { border-radius: 14px; padding: 16px 18px 12px; }
+.dcard .h { font-size: 15px; font-weight: 800; }
+.dcard .big { font-size: 22px; font-weight: 750; letter-spacing: -.3px; }
+.dcard .cmp, .dcard .rows { font-size: 12px; color: var(--muted); } .dcard .rows b { color: var(--ink); }
+/* 小方框标签: 普通的不要底色不要框, 一行灰色小字; 红 / 黄 / 绿的照旧是色块 */
+.dchip:not(.red):not(.amber):not(.green) { border: 0; background: none; padding: 0; margin-right: 8px; }
+button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: pointer; }
+/* 资金账户卡 / 普通卡片标题 */
+.card { border-radius: 14px; }
+.card-h h2 { font-weight: 800; }
+.sumbar .s .v { font-weight: 750; }
+@media (max-width: 560px) { .mkpis, .bigsum, .kpis, .kpis.k4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mkpi:nth-child(odd), .bigsum > div:nth-child(odd), .kpis > .kpi:nth-child(odd) { border-left: 0; padding-left: 0; } }

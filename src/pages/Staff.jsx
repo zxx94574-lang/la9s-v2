@@ -8,7 +8,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import AttCalendar from '../components/AttCalendar.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop , PhoneInput, phoneValid, Choice, Info, Assumed, FRow } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop , PhoneInput, phoneValid, Choice, Info, Assumed, FRow, ConfirmBtn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { ROLE_LABELS } from '../lib/domain.js';
 import { staffOptions, optLabel, SYS_ROLES } from '../lib/staffOptions.js';
@@ -209,7 +209,7 @@ export function EmpModal({ e, opts, onClose }) {
             <div key={p.id || `q${p.i}`} className="stack" style={{ gap: 4, alignItems: 'center' }}>
               <Thumb src={p.src} size={96} group={all.map((x) => ({ src: x.src, label: KIND[x.kind] }))} label={KIND[p.kind]} />
               <span className="small">{KIND[p.kind] || p.kind}{p.saved ? '' : '（保存后上传）'}</span>
-              {p.saved ? <button type="button" className="btn sm ghost" onClick={() => removeFile(p.id)}>移除</button>
+              {p.saved ? <ConfirmBtn className="btn sm ghost" title="移除这份文件？" body={'移除后档案里就看不到了（审计里留着「谁、什么时候移除的」）。'} okText="确认移除" onOk={() => removeFile(p.id)}>移除</ConfirmBtn>
                 : <button type="button" className="btn sm ghost" onClick={() => setQueued((x) => x.filter((_, j) => j !== p.i))}>×</button>}
             </div>))}
         </div>

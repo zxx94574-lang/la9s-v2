@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { ProductSales } from './SalesStats.jsx';
 import { q, call } from '../db/client.js';
 import { PoLink } from '../pages/Po.jsx';
-import { TierPill, TierText, useApp, useData, Drawer, Pill, BigNum, DatePicker, Modal, Info, Bang, MoneyIn } from './ui.jsx';
+import { TierPill, TierText, useApp, useData, Drawer, Pill, BigNum, DatePicker, Modal, Info, Bang, MoneyIn, ConfirmBtn } from './ui.jsx';
 import { TIERS, can } from '../lib/domain.js';
 import Grid from './Grid.jsx';
 import { DealLink } from './Archives.jsx';
@@ -309,7 +309,7 @@ function CostBlocks({ p, ps, batches, tier, priceOf, lockedOf, ed, setEd, onChan
         {adding && <div className="tscroll"><table className="t"><tbody><BatchForm p={p} f={adding} setF={setAdding} role={role} toast={toast} onDone={() => { setAdding(null); onChanged(); }} /></tbody></table></div>}
         {role === 'admin' && batches.length > 0 && <div className="row" style={{ gap: 6, margin: '6px 0' }}>
           <button type="button" className="btn sm" disabled={bsel.size !== 1} title={bsel.size === 1 ? '' : '先勾选一批'} onClick={() => { const b = batches.find((x) => bsel.has(x.id)); setAdding({ ...b, id: b.id, freight_total: b.freight_total ?? '', freight_pieces: b.freight_pieces ?? '', unit_price: String(b.unit_price), qty: String(b.qty) }); }}>填这批的运费</button>
-          <button type="button" className="btn sm soft-red" disabled={bsel.size !== 1} title={bsel.size === 1 ? '' : '先勾选一批'} onClick={async () => { const b = batches.find((x) => bsel.has(x.id)); try { await call(role, `select app.delete_product_batch($1)`, [b.id]); toast('已删掉这批'); setBsel(new Set()); onChanged(); } catch (e) { toast(friendlyError(e), 'err'); } }}>删掉这批</button>
+          <ConfirmBtn className="btn sm soft-red" disabled={bsel.size !== 1} tip={bsel.size === 1 ? '' : '先勾选一批'} title="删掉这一批采购记录？" body={'删了找不回来。这个型号的到岸成本会按剩下的批次重新算，挂牌价可能跟着变。'} okText="确认删掉" risk="red" onOk={async () => { const b = batches.find((x) => bsel.has(x.id)); try { await call(role, `select app.delete_product_batch($1)`, [b.id]); toast('已删掉这批'); setBsel(new Set()); onChanged(); } catch (e) { toast(friendlyError(e), 'err'); } }}>删掉这批</ConfirmBtn>
           <span className="small muted">默认按日期，最新的在最上面</span></div>}
         <Grid id="pd-batches" compactTools rows={[...batches].sort((a, b) => String(dDate(b.ordered_on) || '').localeCompare(String(dDate(a.ordered_on) || '')))} empty="还没有批次。点「＋ 加一批」，或在「数据导入 → 采购批次」导金蝶采购订单。"
           selectable={role === 'admin' ? { selected: bsel, onChange: setBsel } : undefined} rowClass={(b) => (maxB && b.id === maxB.id && batches.length > 1 ? 'pd-max' : '')} columns={[

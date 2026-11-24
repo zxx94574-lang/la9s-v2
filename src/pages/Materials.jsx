@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, OptionNote, Shared } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, OptionNote, Shared, ConfirmBtn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { can, NOTE_OPTIONS } from '../lib/domain.js';
 import { friendlyError } from '../lib/format.js';
@@ -131,7 +131,7 @@ function CatGrid({ data, run }) {
   const one = sel.size === 1 ? data.find((c) => sel.has(c.id)) : null;
   const canDel = one && Number(one.n) === 0 && Number(one.used) === 0;
   return (<>
-    <div className="row" style={{ gap: 8 }}><button type="button" className="btn sm soft-red" disabled={!canDel} title={canDel ? '' : '勾选一个没有物料、也没被用过的空种类'} onClick={() => { run(`已删掉空种类「${one.name}」`, `select app.delete_category($1)`, [one.id]); setSel(new Set()); }}>删掉选中的空种类</button></div>
+    <div className="row" style={{ gap: 8 }}><ConfirmBtn className="btn sm soft-red" disabled={!canDel} tip={canDel ? '' : '勾选一个没有物料、也没被用过的空种类'} title={`删掉空种类「${one?.name}」？`} body="删了找不回来，要用得重新建。" okText="确认删掉" onOk={() => { run(`已删掉空种类「${one.name}」`, `select app.delete_category($1)`, [one.id]); setSel(new Set()); }}>删掉选中的空种类</ConfirmBtn></div>
     <Grid id="cat-admin" rows={data} empty="还没有种类" selectable={{ selected: sel, onChange: setSel }} rowClass={(c) => (Number(c.n) === 0 ? 'muted' : '')} columns={[
       { key: 'name', label: '种类', w: 220, edit: (c) => ({ type: 'text', value: c.name, onChange: (v) => { const t = String(v || '').trim(); if (t && t !== c.name) run(`已改名：${c.name} → ${t}`, `select app.rename_category($1,$2)`, [c.id, t]); } }) },
       { key: 'n', label: '物料数', w: 90, type: 'number' },

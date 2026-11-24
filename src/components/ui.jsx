@@ -55,6 +55,18 @@ export function Modal({ title, onClose, children, footer, wide, risk }) {
   );
 }
 
+// 502 (Frank 11-23): 影响大 / 撤不回的操作一律先弹确认 —— 写清「点了会发生什么」. 用法和普通按钮一样, 多给 title + body.
+export function ConfirmBtn({ className = 'btn sm', title, body, okText = '确认', risk = 'yellow', onOk, disabled, tip, children }) {
+  const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false);
+  const go = async () => { setBusy(true); try { await onOk(); } finally { setBusy(false); setOpen(false); } };
+  return (<>
+    <button type="button" className={className} disabled={disabled} title={tip} onClick={(e) => { e.stopPropagation(); setOpen(true); }}>{children}</button>
+    {open && <Modal risk={risk} title={title} onClose={() => setOpen(false)} footer={<><button type="button" className="btn" onClick={() => setOpen(false)}>先不动</button><button type="button" className="btn primary" disabled={busy} onClick={go}>{okText}</button></>}>
+      <div className="small" style={{ whiteSpace: 'pre-wrap' }}>{body}</div>
+    </Modal>}
+  </>);
+}
+
 // 客户档位固定配色 (Frank 11-09, 同飞书): S 黄 / Wholesale 红 / Retail 蓝 / Repair 绿
 export const TIER_TONE = { S: 'amber', WHOLESALE: 'red', RETAIL: 'blue', REPAIR: 'green' };
 const TIER_NAME = { S: 'S', WHOLESALE: 'Wholesale shop', RETAIL: 'Retail shop', REPAIR: 'Repair shop' };

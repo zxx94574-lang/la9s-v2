@@ -1,7 +1,7 @@
 // 先出库、价格以后再定 (Q8③, Frank 11-16 / 11-17): 很少用、必须是急单、只中方批. 没定价不能对账; 从出库起挂在中方待办最顶上.
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Modal, FRow, PhotoInput, Pill, Assumed, MoneyIn } from './ui.jsx';
+import { useApp, useData, Modal, FRow, PhotoInput, Pill, Assumed, MoneyIn, ConfirmBtn } from './ui.jsx';
 import { DealLink } from './Archives.jsx';
 import { money, friendlyError, dDate } from '../lib/format.js';
 
@@ -39,7 +39,7 @@ export function PricePendingBar({ deal, lines }) {
         <span><b>⚠ 价格待定：</b>中方批准这张单先出库、价格以后再定（{deal.price_pending_note}）。{shipped ? <b>货已经发了，价格没定之前不能确认对账。</b> : '还没出库。'}</span>
         <span className="grow" />
         {role === 'admin' && shipped && <button type="button" className="btn sm primary" onClick={() => setOpen(true)}>定价</button>}
-        {role === 'admin' && !shipped && <><button type="button" className="btn sm" onClick={() => setOpen(true)}>现在就定价</button><button type="button" className="btn sm" onClick={cancel}>取消「价格待定」</button></>}
+        {role === 'admin' && !shipped && <><button type="button" className="btn sm" onClick={() => setOpen(true)}>现在就定价</button><ConfirmBtn title="取消「价格待定」？" body={'这张单会回到正常流程：价格没定好就不能出库。'} okText="确认取消" onOk={cancel}>取消「价格待定」</ConfirmBtn></>}
       </div>
       {open && <SettleModal deal={deal} lines={lines} onClose={() => setOpen(false)} />}
     </div>);

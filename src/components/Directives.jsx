@@ -4,7 +4,7 @@ import { RuleGear } from './Rules.jsx';
 import React, { useEffect, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
-import { useApp, useData, Modal, FRow, Info, PhotoInput, Thumb, DatePicker, FileDrop, Choice, MoneyIn, MultiChoice, Assumed } from './ui.jsx';
+import { useApp, useData, Modal, FRow, Info, PhotoInput, Thumb, DatePicker, FileDrop, Choice, MoneyIn, MultiChoice, Assumed, ConfirmBtn } from './ui.jsx';
 import { EmpLink, DealLink } from './Archives.jsx';
 import { dt, dDate, friendlyError } from '../lib/format.js';
 import { OptChoice, OptNote } from './Opts.jsx';
@@ -205,7 +205,7 @@ export default function DirectiveBoard() {
           {tab === 'rec' && <>
             {(issued?.tpl.length ? issued.tpl.map((d) => (
               <div key={d.id} className="row between todo-row" style={{ cursor: 'default' }}><div><span className="pill blue">{REPEAT[d.repeat]}</span> <b>{d.title}</b> <span className="muted small">→ {tplWho(d)}{tplWhen(d)}{d.require_photo ? ' · 要拍照' : ''}</span></div>
-                <button type="button" className="btn sm" onClick={() => run('已停掉这个定期任务', `select app.stop_directive($1)`, [d.id])}>停掉</button></div>)) : <div className="card-b small muted">还没有定期任务。点「＋ 定期任务」建一个（打扫卫生、整理仓库、客户回访这类）。</div>)}
+                <ConfirmBtn title={`停掉定期任务「${d.title}」？`} body={'以后不再自动生成这个任务。\n已经生成、还没做完的那几条不受影响，要撤得一条条撤。'} okText="确认停掉" onOk={() => run('已停掉这个定期任务', `select app.stop_directive($1)`, [d.id])}>停掉</ConfirmBtn></div>)) : <div className="card-b small muted">还没有定期任务。点「＋ 定期任务」建一个（打扫卫生、整理仓库、客户回访这类）。</div>)}
             {openRec.length > 0 && <div className="card-b small muted" style={{ paddingBottom: 0 }}>生成了、还没做完的：</div>}
             <div className="t2-list">{openRec.map(issuedRow)}</div>
           </>}
