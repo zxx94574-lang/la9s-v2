@@ -15,22 +15,23 @@ export function useRooms() {
   return useData(async () => (await q(`select app.bin_rooms($1) as r`, [org]))[0]?.r || DEFAULT_ROOMS, [org]).data || DEFAULT_ROOMS;
 }
 export const allBinCodes = (rooms) => rooms.flatMap((r) => (r.shelves ? [...r.shelves].flatMap((s) => Array.from({ length: Number(r.levels) || 0 }, (_, i) => `${r.room}-${s}-${i + 1}`)) : [r.room]));
-const parse = (code) => { const m = String(code || '').match(/^([A-Z0-9]+)(?:-([A-Z])-(\d+))?$/); return m ? { room: m[1], shelf: m[2] || '', level: m[3] || '' } : { room: '', shelf: '', level: '' }; };
+// 没选完的写成 SS- / SS-A- (binDone 不认), 选完 = SS-A-1 或 LR
+const parse = (code) => { const m = String(code || '').match(/^([A-Z0-9]+)(?:-([A-Z])?(?:-(\d+)?)?)?$/); return m ? { room: m[1], shelf: m[2] || '', level: m[3] || '' } : { room: '', shelf: '', level: '' }; };
 
 // 选库位: 房间 → 货架 → 层 (手机上点三下, 不用打字)
 export function BinPick({ value, onChange }) {
   const rooms = useRooms();
   const p = parse(value); const r = rooms.find((x) => x.room === p.room);
-  const set = (room, shelf, level) => { const rr = rooms.find((x) => x.room === room); if (!rr) return onChange(''); if (!rr.shelves) return onChange(rr.room); onChange(shelf && level ? `${room}-${shelf}-${level}` : `${room}${shelf ? `-${shelf}` : ''}`); };
+  const set = (room, shelf, level) => { const rr = rooms.find((x) => x.room === room); if (!rr) return onChange(''); if (!rr.shelves) return onChange(rr.room); onChange(shelf && level ? `${room}-${shelf}-${level}` : shelf ? `${room}-${shelf}-` : `${room}-`); };
   return (
     <div className="binpick">
       <Choice value={p.room} onChange={(v) => set(v, '', '')} placeholder="房间" options={rooms.map((x) => [x.room, `${x.room} · ${x.name}`])} />
       {r?.shelves && <Choice value={p.shelf} onChange={(v) => set(p.room, v, p.level)} placeholder="货架" options={[...r.shelves].map((s) => [s, `货架 ${s}`])} />}
       {r?.shelves && <Choice value={p.level} onChange={(v) => set(p.room, p.shelf, v)} placeholder="层" options={Array.from({ length: Number(r.levels) || 0 }, (_, i) => [String(i + 1), `第 ${i + 1} 层`])} />}
-      {value && <b className="binpick-code">{value}</b>}
+      {binDone(value) && <b className="binpick-code">{value}</b>}
     </div>);
 }
-export const binDone = (code) => /^([A-Z0-9]+)(-[A-Z]-\d+)?$/.test(code || '') && (!code.includes('-') || /-\d+$/.test(code));
+export const binDone = (code) => /^[A-Z0-9]+(-[A-Z]-\d+)?$/.test(code || '');
 
 // 选型号: 输编码 / 型号, 点一下选中
 export function ProdPick({ products, value, onChange, autoFocus }) {
@@ -51,7 +52,7 @@ export default function Bins() {
   const { org, role, toast, refresh } = useApp();
   const admin = role === 'admin';
   const rooms = useRooms();
-  const [room, setRoom] = useState('*'); const [put, setPut] = useState(null); const [mv, setMv] = useState(null); const [hist, setHist] = useState(null); const [lay, setLay] = useState(false);
+  const [room, setRoom] = useState('*'); const [put, setPut] = useState(null); const [mv, setMv] = useState(null); const [hist, setHist] = useState(null); const [lay, setLay] = useState(false); const [unbOpen, setUnbOpen] = useState(false);
   const { data } = useData(async () => {
     const [items, unb] = await Promise.all([
       q(`select b.id as bin_id, b.code, b.room, i.product_id, i.qty, i.updated_at, p.code as pcode, p.model, p.variant, c.name as category,
@@ -71,10 +72,10 @@ export default function Bins() {
       <div className="pagehead"><div><div className="eyebrow">Emplacements</div><h1>库位与上架 <Info>库位 = 房间-货架-层（例 SS-A-1）；LR / SLR 只写房间名。出到 0 的位置显示「空」，可以放别的型号，以前放过什么点开能看到。</Info></h1></div>
         {admin && <button type="button" className="btn" onClick={() => setLay(true)}>⚙ 库位布局</button>}</div>
       {(data?.unb || []).length > 0 && <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-h"><h2>待上架 <span className="muted small">{data.unb.length} 个型号，{qty(data.unb.reduce((a, r) => a + Number(r.free), 0))} 片还没放到库位上</span> <Info>新到的货、退货检验好回原仓的货、出库作废退回的货，系统里有但还没放到库位上。放好后点「上架」。</Info></h2></div>
-        <Grid id="bins-unbinned" compactTools rows={data.unb} rowKey={(r) => r.product_id} rowActions={can ? [{ label: '上架', run: (r) => setPut({ product_id: r.product_id, max: Number(r.free), label: `${r.category} ${r.model}` }) }] : undefined} columns={[
+        <div className="card-h"><h2>待上架 <span className="muted small">{data.unb.length} 个型号，{qty(data.unb.reduce((a, r) => a + Number(r.free), 0))} 片还没放到库位上</span> <Info>新到的货、退货检验好回原仓的货、出库作废退回的货，系统里有但还没放到库位上。放好后点「上架」。</Info></h2><span className="grow" /><button type="button" className="btn sm" onClick={() => setUnbOpen(!unbOpen)}>{unbOpen ? '收起' : '展开上架'}</button></div>
+        {unbOpen && <Grid id="bins-unbinned" compactTools rows={data.unb} rowKey={(r) => r.product_id} rowActions={can ? [{ label: '上架', run: (r) => setPut({ product_id: r.product_id, max: Number(r.free), label: `${r.category} ${r.model}` }) }] : undefined} columns={[
           { key: 'code', label: '编码', w: 100 }, { key: 'category', label: '种类', w: 90 }, { key: 'model', label: '型号', w: 150, render: (r) => <ModelLink id={r.product_id} model={r.model} /> },
-          { key: 'variant', label: '区分', w: 90 }, { key: 'on_hand', label: '实存', w: 80, type: 'number' }, { key: 'binned', label: '已上架', w: 80, type: 'number' }, { key: 'free', label: '待上架', w: 80, type: 'number', sum: true, render: (r) => <b>{qty(r.free)}</b> }]} />
+          { key: 'variant', label: '区分', w: 90 }, { key: 'on_hand', label: '实存', w: 80, type: 'number' }, { key: 'binned', label: '已上架', w: 80, type: 'number' }, { key: 'free', label: '待上架', w: 80, type: 'number', sum: true, render: (r) => <b>{qty(r.free)}</b> }]} />}
       </div>}
       <div className="card">
         <div className="card-h" style={{ flexWrap: 'wrap', gap: 8 }}><h2>库位 <span className="muted small">{shown.length} 个，空 {empty} 个</span></h2><span className="grow" />

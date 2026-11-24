@@ -12,7 +12,7 @@ import LineEntry, { lineTotals, finalizeLines, tierPrice, usePromos } from '../c
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { can, whoCan, seesPriceList } from '../lib/domain.js';
 import { LayoutGrid, setLayoutEdit, useLayoutEdit } from '../components/Layout.jsx';
-import { money, qty, today, friendlyError } from '../lib/format.js';
+import { money, qty, today, friendlyError, dt } from '../lib/format.js';
 
 // 草稿 (Frank 11-13 294): 选了客户、填够 N 行 (规则参数 draft_rules.min_lines, 默认 5) 才自动存进系统; 一人一个客户只有一张;
 // 订单总览「草稿」里能看到、点开接着做; 保存报价 = 草稿删掉, 单子进「进行中」; N 天没动自动删 (draft_rules.days).
@@ -44,6 +44,7 @@ export default function QuoteNew() {
   const [busy, setBusy] = useState(false);
   const [restore, setRestore] = useState(null);        // 选了客户后发现有自己的草稿 → 问恢复不恢复
   const [draftId, setDraftId] = useState(null);
+  const [draftAsked, setDraftAsked] = useState(false);
   const [openId] = useState(takeOpenDraft);              // 从订单总览「草稿」点进来的
   const [cellErrs, setCellErrs] = useState(null);     // {rowKey: {col: msg}} → 表格里红框 (Frank 11-09 第 4 条)
   const [prodOpen, setProdOpen] = useState(null);
@@ -253,13 +254,14 @@ export default function QuoteNew() {
       {custOpen && cust && <CustomerDrawer id={cust.id} onClose={() => setCustOpen(false)} />}
       {catOrderOpen && <CatOrderModal categories={data.categories} onClose={() => setCatOrderOpen(false)} />}
 
-      {/* 387 (Frank 11-18): 一打开新订单就告诉他有几张草稿没做完, 不用等选到同一个客户才冒出来 */}
-      {!customer && !openId && (myDrafts || []).length > 0 && (
-        <div className="card card-b row" style={{ gap: 8, flexWrap: 'wrap', background: 'var(--amber-bg)', borderColor: '#f3d9a8' }}>
-          <span>你有 <b>{myDrafts.length}</b> 张草稿没做完：</span>
-          {myDrafts.slice(0, 6).map((d) => <button type="button" key={d.id} className="btn sm" onClick={() => applyDraft(d)}>{d.customer_name} · {d.n_lines} 行</button>)}
-          {myDrafts.length > 6 && <span className="small muted">…其余在订单总览 →「草稿」</span>}
-        </div>)}
+      {/* 511 (Frank 11-24): 点「新订单」时有没完结的草稿 → 先问要不要前往; 前往 = 接着做, 不前往 = 草稿作废、开新的 (什么时候算草稿不变: 填够 N 行) */}
+      {!customer && !openId && !draftAsked && (myDrafts || []).length > 0 && (
+        <Modal title="你有草稿没完结，要不要前往？" onClose={() => setDraftAsked(true)} footer={<><button type="button" className="btn" onClick={async () => { for (const d of myDrafts) await call(role, `select app.delete_quote_draft($1)`, [d.id]).catch(() => {}); setDraftAsked(true); toast(`${myDrafts.length} 张草稿已作废，开一张新的`); }}>不前往（草稿作废，开新的）</button></>}>
+          <div className="stack" style={{ gap: 6 }}>
+            {myDrafts.map((d) => <div key={d.id} className="row" style={{ gap: 8, flexWrap: 'wrap' }}><b>{d.customer_name}</b><span className="small muted">{d.n_lines} 行 · {dt(d.updated_at)} 存的</span><span className="grow" /><button type="button" className="btn primary sm" onClick={() => { setDraftAsked(true); applyDraft(d); }}>前往</button></div>)}
+            <div className="small muted">不前往的话，上面{myDrafts.length > 1 ? '这几张' : '这张'}草稿会作废，找不回来。</div>
+          </div>
+        </Modal>)}
       {restore && (
         <div className="card card-b row between" style={{ background: 'var(--amber-bg)', borderColor: '#f3d9a8' }}>
           <span>这个客户有你上次没做完的报价草稿（{restore.n_lines} 行，{String(restore.updated_at || '').slice(0, 16).replace('T', ' ')}）</span>

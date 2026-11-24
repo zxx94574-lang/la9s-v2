@@ -1971,3 +1971,4 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .count-form{display:flex;flex-direction:column;gap:10px}
 .count-form .in.qty{font-size:20px;width:140px;text-align:right}
 .count-warn{background:#fff8e6;border:1px solid #f5dfa6;border-radius:8px;padding:6px 10px;font-size:13px}
+.bin-cell>.linkbtn{align-self:flex-start}
