@@ -8,6 +8,7 @@ import { sumMargin, MarginPill, MarginKpis, useMarginRules } from '../components
 import { normPhone, fmtPhone } from '../lib/phone.js';
 import { ConfirmEdit, HistoryBlock } from '../components/ProductDrawer.jsx';
 import React, { useMemo, useState } from 'react';
+import { ordersJump } from '../lib/dirWork.js';
 import { useShare, SHARE_RANGES, shareRange, ShareNote } from '../components/SalesStats.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -119,26 +120,38 @@ export default function Customers() {
 
 // 343: 档案知道「从哪来」—— 现在开着的是哪张订单 (网址 #/deal/<id>)
 export const fromDealId = () => { const m = String(window.location.hash).match(/deal\/([0-9a-f-]{36})/); return m ? m[1] : null; };
-// 客户档案: 这个客户的单 (全部, 最近 12 张); 从某张单点开的 → 那张打「本单」排最前; 单号都能点
+// 507 (Frank 11-24): 客户档案里的单 —— 没走完的 (没出库 / 出库了还欠钱) 永远排最上面、不受日期影响; 日期只筛已完结的;
+// 「共 N 张」点了跳订单总览、自动带上这个客户; 从某张单点开的 → 那张打「本单」排最前
+const CD_RANGE = [['90', '近 3 个月'], ['365', '近一年'], ['all', '全部']];
 function CustDeals({ customerId, fromDeal }) {
-  const { role } = useApp();
+  const { role, go, openArchive } = useApp();
   const price = seesPrice(role);
+  const [rg, setRg] = useState('90'); const [more, setMore] = useState(12);
   const { data } = useData(() => q(`select d.id, d.biz_no, d.status, d.created_at, d.currency, t.shipped_amount, t.due,
-      (select coalesce(sum(coalesce(nullif(l.qty_supply, 0), l.qty_req)), 0)::int from app.deal_lines l where l.deal_id = d.id) as qty,
-      (select count(*)::int from app.deals x where x.customer_id = d.customer_id and x.kind <> 'opening') as total
-    from app.deals d left join app.v_deal_due t on t.deal_id = d.id where d.customer_id = $1 and d.kind <> 'opening' order by (d.id = $2) desc, d.created_at desc limit 12`, [customerId, fromDeal]), [customerId, fromDeal]);
+      (select coalesce(sum(coalesce(nullif(l.qty_supply, 0), l.qty_req)), 0)::int from app.deal_lines l where l.deal_id = d.id) as qty
+    from app.deals d left join app.v_deal_due t on t.deal_id = d.id where d.customer_id = $1 and d.kind <> 'opening' order by d.created_at desc`, [customerId]), [customerId]);
   if (!data?.length) return null;
+  const openOf = (d) => d.status !== 'cancelled' && (d.status !== 'shipped' || Number(d.due) > 0);
+  const since = rg === 'all' ? 0 : Date.now() - Number(rg) * 864e5;
+  const open = data.filter(openOf); const closed = data.filter((d) => !openOf(d) && new Date(d.created_at).getTime() >= since);
+  const list = [...data.filter((d) => d.id === fromDeal), ...open.filter((d) => d.id !== fromDeal), ...closed.filter((d) => d.id !== fromDeal)];
+  const toOrders = () => ordersJump(go, { cust: customerId }, openArchive);
+  const line = (d) => (
+    <div key={d.id} className={`todo-line ${d.id === fromDeal ? 'this-doc' : ''}`}>
+      {d.id === fromDeal && <span className="pill blue">本单</span>}
+      <DealLink id={d.id} no={d.biz_no} /><span className="small muted">{dDate(d.created_at)}</span>
+      <span className={`pill ${STATUS[d.status]?.tone || 'gray'}`}>{STATUS[d.status]?.label || d.status}</span>
+      <span className="grow" /><span className="small">{qty(d.qty)} 片</span>
+      {price && <span className="small">{Number(d.shipped_amount) > 0 ? `出库 ${money(d.shipped_amount, d.currency)}` : ''}{Number(d.due) > 0 ? <b className="red-t2"> · 还欠 {money(d.due, d.currency)}</b> : ''}</span>}
+    </div>);
   return (
     <div className="pd-sec">
-      <div className="pd-h">这个客户的单 <span className="small muted" style={{ fontWeight: 400 }}>共 {data[0].total} 张{data[0].total > 12 ? '，这里列最近 12 张' : ''}</span></div>
-      {data.map((d) => (
-        <div key={d.id} className={`todo-line ${d.id === fromDeal ? 'this-doc' : ''}`}>
-          {d.id === fromDeal && <span className="pill blue">本单</span>}
-          <DealLink id={d.id} no={d.biz_no} /><span className="small muted">{dDate(d.created_at)}</span>
-          <span className={`pill ${STATUS[d.status]?.tone || 'gray'}`}>{STATUS[d.status]?.label || d.status}</span>
-          <span className="grow" /><span className="small">{qty(d.qty)} 片</span>
-          {price && <span className="small">{Number(d.shipped_amount) > 0 ? `出库 ${money(d.shipped_amount, d.currency)}` : ''}{Number(d.due) > 0 ? <b className="red-t2"> · 还欠 {money(d.due, d.currency)}</b> : ''}</span>}
-        </div>))}
+      <div className="pd-h row" style={{ gap: 8, flexWrap: 'wrap' }}>这个客户的单 <button type="button" className="linkbtn small" data-tip="去订单总览，自动筛这个客户" onClick={toOrders}>共 {data.length} 张 ↗</button>
+        <span className="grow" /><span className="seg sm">{CD_RANGE.map(([k, l]) => <button type="button" key={k} className={rg === k ? 'on' : ''} onClick={() => { setRg(k); setMore(12); }}>{l}</button>)}</span></div>
+      {open.length > 0 && <div className="small muted" style={{ margin: '2px 0' }}>没走完的 {open.length} 张（一直显示，不受日期影响）</div>}
+      {list.slice(0, Math.max(more, open.length + (fromDeal ? 1 : 0))).map(line)}
+      {!closed.length && <div className="small muted">{CD_RANGE.find((x) => x[0] === rg)[1]}没有已完结的单{rg !== 'all' ? '，点「全部」看更早的' : ''}</div>}
+      {list.length > more && list.length > open.length && <button type="button" className="btn sm ghost" onClick={() => setMore(more + 30)}>再看 {Math.min(30, list.length - more)} 张</button>}
     </div>);
 }
 

@@ -302,6 +302,19 @@ export async function seedScenarios(db, org, log = () => {}) {
   for (let k = 0; k < 3; k++) await run('指令·催款 / 回电话（不同期限）', async () => {
     await as(USERS.admin, `select app.issue_directive3($1,$2)`, [org, JSON.stringify({ title: ['催 KABRE 把上周的钱付了', '给新客户回个电话', '问问 MODIBO 还要不要 BG6'][k], dir_type: ['催款', '回电话', '回电话'][k], customer_id: C[(k + 7) % C.length].id, assignees: [E.hotline], due_on: day(1 - k) })]);
   });
+  // 508: 一批客户 (回电话, 逐个提交) + 催款: 客户说哪天付, 一条还没到期、一条过了没付 (打开待办自动变紧急)
+  await run('指令·一批客户回电话', async () => {
+    await as(USERS.admin, `select app.issue_directive4($1,$2)`, [org, JSON.stringify({ title: '回访 30 天没下单的 S / Wholesale 客户', body: '问清楚为什么没下单、缺什么货，记进热线反馈', dir_type: '回电话', customers: C.slice(0, 4).map((c) => c.id), assignees: [E.hotline], due_on: day(0) })]);
+    const it = await one(`select i.id from app.directive_items i join app.directives d on d.id = i.directive_id where d.title like '回访 30 天%' order by i.customer_id limit 1`);
+    await as(USERS.hotline, `select app.directive_item_done($1,null,null,'测试：缺 BG6M 屏，等到货再下')`, [it.id]);
+  });
+  for (let k = 0; k < 2; k++) await run('指令·催款（客户说哪天付）', async () => {
+    const c = C[(k + 2) % C.length];
+    await as(USERS.admin, `select app.issue_directive3($1,$2)`, [org, JSON.stringify({ title: `催 ${c.name} 的欠款`, dir_type: '催款', customer_id: c.id, assignees: [E.hotline], due_on: day(2) })]);
+    const dir = await one(`select id from app.directives where title = $1 order by created_at desc limit 1`, [`催 ${c.name} 的欠款`]);
+    await as(USERS.hotline, `select app.directive_promise($1,null,current_date + 3,'测试：客户说这周付')`, [dir.id]);
+    if (k === 1) await db.query(`update app.directives set promise_on = current_date - 1 where id = $1`, [dir.id]);
+  });
   log('指令做完');
 
   // ── 8. 客户账号 + 店里收银 (0077): 一个客户开账号, 老板 + 门店店员, 店里卖货 ──

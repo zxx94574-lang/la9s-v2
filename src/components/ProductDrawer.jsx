@@ -1,3 +1,4 @@
+import { ordersJump } from '../lib/dirWork.js';
 // 物料档案 (点型号弹出; 订单里、物料与定价页都打开这一个, 以后档案怎么调各入口一起变).
 // 员工: 基本信息 + 库存 + 这单客户档位的价. 中方 (see_cost):
 //   分块 (Frank 11-11 206): ① 基本信息 ② 成本 (采购价 + 运费 = 到岸, 实际值 → 进位) ③ 利润 ④ 各档售价 ⑤ 采购批次 ⑥ 库存 ⑦ 修改记录
@@ -55,7 +56,7 @@ export function priceChecks(prices, cm, old = {}) {
 }
 
 export default function ProductDrawer({ product, tier, onClose }) {
-  const { org, role, toast, refresh } = useApp();
+  const { org, role, toast, refresh, go, openArchive } = useApp();
   const seeAll = can(role, 'see_cost');
   const seeTier = can(role, 'see_tier_price');
   const [tick, setTick] = useState(0);
@@ -184,7 +185,7 @@ export default function ProductDrawer({ product, tier, onClose }) {
         </section>
         {seeAll && data?.recent?.length > 0 && (
           <section className="pd-sec">
-            <div className="pd-h">最近成交（出库）</div>
+            <div className="pd-h row" style={{ gap: 8 }}>最近成交（出库）<span className="grow" /><button type="button" className="linkbtn small" data-tip="去订单总览，自动筛这个机型" onClick={() => ordersJump(go, { model: data.p?.model || product.model }, openArchive)}>看这个机型的全部订单 ↗</button></div>
             <Grid id="pd-recent" compactTools rows={[...data.recent].sort((x, y) => (y.deal_id === fromDeal0()) - (x.deal_id === fromDeal0()))} rowKey={(x) => String(x.created_at) + x.customer + x.qty_supply} columns={[
               { key: 'biz_no', label: '订单', w: 190, value: (x) => x.biz_no, render: (x) => <>{x.deal_id === fromDeal0() && <span className="pill blue" style={{ marginRight: 4 }}>本单</span>}<DealLink id={x.deal_id} no={x.biz_no} /></> },
               { key: 'created_at', label: '日期', w: 110, value: (x) => dDate(x.created_at) }, { key: 'customer', label: '客户', w: 170 },

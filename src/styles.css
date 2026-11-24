@@ -1937,3 +1937,21 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .rp-pre { white-space: pre-wrap; font: inherit; font-size: 13px; background: #f8fafc; border-radius: 8px; padding: 10px 12px; margin: 0; user-select: all; }
 @media (max-width: 700px) { .rp-top { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 12px; } .rp-top > div:nth-child(odd) { border-left: 0; padding-left: 0; } .rp-two { grid-template-columns: 1fr; } }
 @media print { body * { visibility: hidden; } .rp, .rp * { visibility: visible; } .rp { position: absolute; left: 0; top: 0; width: 100%; } .rp-bar, .rp-pre { display: none; } .rp-sec { break-inside: avoid; } }
+/* 508 正在办的指令条 */
+.dirbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--blue-50,#e8effb);border:1px solid #c9d8f3;border-radius:10px;padding:8px 12px;margin:0 0 12px;position:sticky;top:0;z-index:30}
+.dirbar .dirbar-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40ch}
+.t2-subs{display:flex;flex-direction:column;gap:4px;margin:4px 0 6px;padding-left:12px}
+.t2-sub{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:5px 10px;border:1px solid var(--line,#eef0f3);border-radius:8px}
+.t2-sub.done{opacity:.6}
+.t2-items{display:flex;flex-direction:column;gap:4px}
+.t2-it{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0;border-bottom:1px dashed var(--line,#eef0f3)}
+.batch-f{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;background:#f8f9fc;border-radius:10px;padding:10px}
+.batch-f>div>span{display:block;font-size:12px;color:var(--muted,#888);margin-bottom:3px}
+.batch-f select{width:100%}
+.batch-list{max-height:240px;overflow:auto;border:1px solid var(--line,#eef0f3);border-radius:8px}
+.batch-it{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:5px 10px;border-bottom:1px solid var(--line,#eef0f3);cursor:pointer}
+.brand-t{color:var(--brand,#0447b0)}
+.gear-mini{border:none;background:none;cursor:pointer;color:var(--muted,#888);font-size:14px;padding:0 2px}
+.pd-h .seg.sm button{padding:3px 9px;font-size:12px;min-height:26px}
+.chip.tierchip{padding:3px 6px;background:#fff;opacity:.45}
+.chip.tierchip.on{background:#fff;border-color:var(--brand);opacity:1;box-shadow:0 0 0 1px var(--brand) inset}

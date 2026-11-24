@@ -1,5 +1,6 @@
 // 销售拜访 (Frank 2026-10-29): 照飞书 Fiche de visite 的字段. 新店现场建潜客 (临时编码), 门店照片必拍.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { takeWorkCust } from '../lib/dirWork.js';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -16,6 +17,7 @@ export default function Visits() {
   const { org, role } = useApp();
   const P = usePeriod('visits'); const range = [P.from, P.to];
   const [form, setForm] = useState(false);
+  useEffect(() => { const c = takeWorkCust('visits'); if (c) setForm({ cust: c }); }, []);   // 508: 从指令「去做」跳过来 → 直接记这个客户的拜访
   const [open, setOpen] = useState(null);
   const { data } = useData(() => q(Q.visitsList, [org, range[0], range[1]]), [org, range[0], range[1]]);
   if (!data) return <div className="empty">加载中…</div>;
@@ -44,16 +46,16 @@ export default function Visits() {
         <Grid id="visits" table="visits" columns={cols} rows={data} onRowClick={(r) => setOpen(r.customer_id)} empty="这段时间没有拜访记录"
           tools={<><span className="small muted">{data.length} 次拜访 · {new Set(data.map((r) => r.customer_id)).size} 家店</span></>} />
       </div>
-      {form && <VisitModal onClose={() => setForm(false)} />}
+      {form && <VisitModal initCust={form.cust} onClose={() => setForm(false)} />}
       {open && <CustomerDrawer id={open} onClose={() => setOpen(null)} />}
     </>
   );
 }
 
-function VisitModal({ onClose }) {
+function VisitModal({ onClose, initCust }) {
   const { org, role, toast, refresh } = useApp();
-  const [mode, setMode] = useState('new');
-  const [cust, setCust] = useState('');
+  const [mode, setMode] = useState(initCust ? 'old' : 'new');
+  const [cust, setCust] = useState(initCust || '');
   const [p, setP] = useState({ name: '', phone: '', city: '', market: '', shop_type: '' });
   const [f, setF] = useState({ photo: '', location: '', activity: '', products_wanted: '', monthly_qty: '', buys_from: '', transport: '', nearby_suppliers: '', result: '', note: '', next_follow_on: '' });
   const [busy, setBusy] = useState(false);

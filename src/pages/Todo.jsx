@@ -274,7 +274,7 @@ export const SLOTS = {
 };
 
 // 一类事 = 一行: 有事才出现, 点一下展开看明细 / 处理. 里面没东西时整行不出现.
-const ITEM = '.todo-row, .todo-line, tbody tr[data-row]';
+const ITEM = '.todo-row, .todo-line, .t2-item, tbody tr[data-row]';
 const BUSY = ITEM + ', .card-h .pill.red, .card-h .pill.amber, .card-h .pill.blue';   // 常驻的板块 (空着也画一张卡) 靠这个判断「里面有没有事」
 function Slot({ title, children, open0 }) {
   const ref = useRef(null); const [n, setN] = useState(0); const [has, setHas] = useState(false); const [open, setOpen] = useState(!!open0);

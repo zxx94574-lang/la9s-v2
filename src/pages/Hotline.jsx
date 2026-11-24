@@ -1,7 +1,8 @@
 // 热线回访 (Frank 2026-10-29): 热线每天打开就看到「今天要打谁」，打完点一下记结果，不用再录飞书.
 // 今天要打 = 约好今天或更早跟进的 + 正式客户 14 天没联系也没下单的 (沉睡). 备件、回收分开.
 import { fmtPhone, telHref } from '../lib/phone.js';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { takeWorkCust } from '../lib/dirWork.js';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, DatePicker, usePeriod, PeriodBar } from '../components/ui.jsx';
@@ -28,6 +29,8 @@ export default function Hotline() {
     const [cust, calls] = await Promise.all([q(Q.customerProfiles, [org]), q(Q.hotlineCalls, [org, range[0], range[1]])]);
     return { cust, calls };
   }, [org, range[0], range[1]]);
+  // 508: 从指令「去做」跳过来 → 直接打开这个客户的热线记录
+  useEffect(() => { if (!data) return; const c = takeWorkCust('hotline'); const x = c && data.cust.find((y) => y.id === c); if (x) setCallFor(x); }, [data]);
   const td = today();
   const queue = useMemo(() => {
     if (!data) return [];

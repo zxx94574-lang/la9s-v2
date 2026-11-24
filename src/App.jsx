@@ -7,7 +7,7 @@ import Kpi from './pages/Kpi.jsx';
 import MarginPage from './pages/MarginPage.jsx';
 import RulesPage from './pages/RulesPage.jsx';
 import CodeReview from './pages/CodeReview.jsx';
-import { DirectiveGate } from './components/Directives.jsx';
+import { DirectiveGate, DirBar } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info, useStickyPagehead, useInstantTips } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
 import { ExportPanel } from './components/SettingsPanels.jsx';
@@ -241,7 +241,7 @@ export default function App() {
     case 'quote/new': view = <QuoteNew />; break;
     case 'orders': view = <Orders />; break;
     case 'deal': view = <Deal id={id} key={id} />; break;
-    case 'receipts': view = <Receipts preset={id} />; break;
+    case 'receipts': view = <Receipts preset={id} key={id || 'r'} />; break;
     case 'balances': view = <Balances />; break;
     case 'customer': view = <CustomerLedger id={id} key={id} />; break;
     case 'stock': view = <Stock />; break;
@@ -336,6 +336,7 @@ export default function App() {
           <main className="content">
             {/* Frank 11-11 (224 ⑤): 说明小字不占版面, 收进右上角 ⓘ; 只有「存不住数据」这种真问题才显示红条 */}
             {!isPersistent() && <div className="demo-banner"><span className="dot warn" /><span>浏览器禁止存储，关闭页面后数据会重置</span></div>}
+            {org && !portal && page !== 'todo' && <DirBar />}
             {view}
             {org && !['boss', 'clerk'].includes(role) && <DirectiveGate />}
             <FlowPrompt role={role} />

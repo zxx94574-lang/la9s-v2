@@ -4,13 +4,14 @@ import { RuleGear } from './Rules.jsx';
 import React, { useEffect, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
-import { useApp, useData, Modal, FRow, Info, PhotoInput, Thumb, DatePicker, FileDrop, Choice, MoneyIn, MultiChoice, Assumed, ConfirmBtn } from './ui.jsx';
+import { useApp, useData, Modal, FRow, Info, PhotoInput, Thumb, DatePicker, FileDrop, Choice, MoneyIn, MultiChoice, Assumed, ConfirmBtn, TierPill } from './ui.jsx';
 import { EmpLink, DealLink } from './Archives.jsx';
 import { dt, dDate, friendlyError } from '../lib/format.js';
-import { OptChoice, OptNote } from './Opts.jsx';
+import { OptChoice, OptNote, useOptList } from './Opts.jsx';
 import OrderFlow, { FlowBadge } from './OrderFlow.jsx';
 import CustomerSelect from './CustomerSelect.jsx';
 import * as Q from '../db/queries.js';
+import { JUMPS, JUMP_LABEL, NEEDS_CUST, jumpOf, startWork, getWork, setWork } from '../lib/dirWork.js';
 import { staffOptions, optLabel } from '../lib/staffOptions.js';
 
 const ST = { sent: ['还没点收到', 'red'], acked: ['已收到，在做', 'amber'], done: ['做完了，等中方确认', 'amber'], closed: ['已关闭', 'green'] };
@@ -39,13 +40,25 @@ const after = (a, b) => `+${span(new Date(b) - new Date(a))}`;
 const SEL = `select d.*, e.short_name as assignee_name, ce.short_name as issuer_name from app.directives d left join app.employees e on e.id = d.assignee_employee_id
   left join app.members cm on cm.org_id = d.org_id and cm.user_id = d.created_by left join app.employees ce on ce.id = cm.employee_id`;
 
+// 508: 一批客户的指令 —— 每位客户一项
+const loadItems = async (rows) => {
+  const ids = rows.filter((d) => d.batch).map((d) => d.id); if (!ids.length) return {};
+  const rs = await q(`select i.*, c.name as customer_name, c.code as customer_code, c.tier, c.city from app.directive_items i join app.customers c on c.id = i.customer_id where i.directive_id = any($1::uuid[]) order by (i.status = 'todo') desc, c.name`, [ids]);
+  const by = {}; for (const r of rs) (by[r.directive_id] = by[r.directive_id] || []).push(r); return by;
+};
+export function useJumpMap() {
+  const { org } = useApp();
+  return useData(async () => (await q(`select value from app.org_settings where org_id = $1 and key = 'directive_jump'`, [org]))[0]?.value || {}, [org]).data || {};
+}
+const isLate = (on) => !!on && dDate(on) < dDate(new Date());
+
 function useMine() {
   const { org, role } = useApp();
   return useData(async () => {
     const [m] = await q(`select employee_id from app.members where org_id = $1 and user_id = $2`, [org, USERS[role]]);
     if (!m?.employee_id) return { emp: null, rows: [] };
     const rows = await q(`${SEL} where d.org_id = $1 and d.assignee_employee_id = $2 and not d.is_template and d.status <> 'closed' order by d.urgent desc, d.created_at`, [org, m.employee_id]);
-    return { emp: m.employee_id, rows };
+    return { emp: m.employee_id, rows, items: await loadItems(rows) };
   }, [org, role]).data;
 }
 
@@ -90,16 +103,52 @@ export function DirectiveGate() {
   );
 }
 
+// 503 / 508: 「当初怎么下的 + 经过」—— 中方和员工两边点开都是这一块
+function DirDetail({ d, g, late, items }) {
+  const who = d.target_dept ? `部门 ${d.target_dept}` : '单人';
+  return (
+    <div className="t2-exp"><div className="t2-cols">
+          <div className="t2-box"><h4>当初怎么下的</h4><div className="t2-kv">
+            <span>编号</span><span>{d.no || '—'}</span><span>分类</span><span>{d.dir_type || '其他'}</span><span>下达人</span><span>{d.issuer_name || '中方'}</span>
+            <span>截止</span><span>{dueAt(d) ? <>{dt(dueAt(d))}<span className="muted">（下达后 {span(dueAt(d) - new Date(d.created_at))} 内做完）</span></> : '没设期限'}{d.urgent && <span className="pill red" style={{ marginLeft: 6 }}>紧急 · 每小时提醒</span>}</span>
+            <span>给谁</span><span>{who} · <EmpLink id={d.assignee_employee_id} name={d.assignee_name} /></span>
+            <span>谁汇报</span><span>{d.reporter === false ? '只需点收到，不用交结果' : g ? `这次 ${g.length} 人都要交` : '本人交结果'}</span>
+            <span>要交</span><span>{[d.require_photo && '照片', d.dir_type === '制单' && '订单'].filter(Boolean).join(' + ') || '文字结果'}</span>
+            {d.ref_label && <><span>{d.ref_kind === 'customer' || d.batch ? '客户' : '挂在'}</span><span>{d.ref_kind === 'deal' ? <DealLink id={d.ref_id} no={d.ref_label} /> : d.ref_label}</span></>}
+            <span>内容</span><span style={{ whiteSpace: 'pre-wrap' }}>{d.body || '—'}</span></div><AttList items={d.attachments} /></div>
+          <div className="t2-box"><h4>经过</h4><div className="t2-steps">
+            <div className="t2-st done"><i /><div><b>下达</b><small>{dt(d.created_at)}</small></div></div>
+            <div className={`t2-st ${d.ack_at ? 'done' : 'now'}`}><i /><div><b>收到</b><small>{d.ack_at ? `${dt(d.ack_at)}（下达后 ${span(new Date(d.ack_at) - new Date(d.created_at))}）` : '还没点收到'}</small>{d.ack_reason && <small>晚收到的原因：{d.ack_reason}</small>}</div>{late && <span className="pill red">超 4 小时没收到，打电话</span>}</div>
+            <div className={`t2-st ${d.done_at ? 'done' : d.ack_at ? 'now' : ''}`}><i /><div><b>完成</b><small>{d.done_at ? `${dt(d.done_at)}（下达后 ${span(new Date(d.done_at) - new Date(d.created_at))}）` : '—'}</small>{d.done_note && <small>结果：{d.done_note}</small>}{d.done_photo && <Thumb src={d.done_photo} size={56} label="完成照片" />}</div></div>
+            {d.promise_on && <div className={`t2-st ${isLate(d.promise_on) ? 'now' : 'done'}`}><i /><div><b>客户说 {dDate(d.promise_on)} 付</b>{d.promise_note && <small>{d.promise_note}</small>}</div>{isLate(d.promise_on) && <span className="pill red">过了没付 · 已转紧急</span>}</div>}
+            <div className={`t2-st ${d.status === 'done' ? 'now' : ''}`}><i /><div><b>中方确认</b><small>{d.status === 'done' ? '等你确认' : '—'}</small>{d.confirm_note && <small>上次退回：{d.confirm_note}</small>}</div></div>
+          </div></div>
+    </div>
+    {items?.length > 0 && <ItemTable items={items} />}
+    </div>);
+}
+const IST = { todo: ['还没交', 'gray'], done: ['已交', 'green'], promised: ['客户说会付', 'amber'] };
+function ItemTable({ items }) {
+  return (<div className="t2-box" style={{ marginTop: 10 }}><h4>每位客户 · 已交 {items.filter((i) => i.status !== 'todo').length} / {items.length}</h4>
+    <div className="t2-items">{items.map((i) => <div key={i.id} className="t2-it"><b>{i.customer_name}</b><span className="muted small">{i.city || ''}</span>
+      <span className={`pill ${i.status === 'promised' && isLate(i.promise_on) ? 'red' : IST[i.status][1]}`}>{i.status === 'promised' ? `客户说 ${dDate(i.promise_on)} 付` : IST[i.status][0]}</span>
+      <span className="small">{i.proof_id ? <>{PROOF_KIND[i.proof_kind] || '记录'} {i.proof_kind === 'deal' ? <DealLink id={i.proof_id} no={i.proof_label} /> : i.proof_label}</> : i.note || ''}</span>
+      {i.done_at && <span className="muted small">{dt(i.done_at)}</span>}</div>)}</div></div>);
+}
+
 export default function DirectiveBoard() {
-  const { org, role, toast, refresh } = useApp();
+  const { org, role, toast, refresh, go } = useApp();
   const admin = role === 'admin';
   const mine = useMine();
   const [nw, setNw] = useState(false); const [done, setDone] = useState(null); const [rej, setRej] = useState(null); const [tab, setTab] = useState('dir');
   const [openId, setOpenId] = useState(null); const [stop, setStop] = useState(null); const [shut, setShut] = useState({});
   const lateN = (list) => list.filter((d) => { const t = dueAt(d); return t && t < new Date() && !['done', 'closed'].includes(d.status); }).length;
-  useEffect(() => { if (org) call(role, `select app.spawn_directives($1)`, [org]).then((r) => { if (Number(Object.values(r?.[0] || {})[0]) > 0) refresh(); }, () => {}); }, [org]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const { data: issued } = useData(async () => (admin ? { open: await q(`${SEL} where d.org_id = $1 and not d.is_template and d.status <> 'closed' order by (d.status = 'done') desc, d.urgent desc, d.created_at`, [org]),
-    tpl: await q(`${SEL} where d.org_id = $1 and d.is_template and d.active order by d.created_at`, [org]) } : null), [org, role]);
+  useEffect(() => { if (org) Promise.all([call(role, `select app.spawn_directives($1)`, [org]), call(role, `select app.directive_sweep($1)`, [org])]).then((rs) => { if (rs.some((r) => Number(Object.values(r?.[0] || {})[0]) > 0)) refresh(); }, () => {}); }, [org]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const { data: issued } = useData(async () => { if (!admin) return null; const open = await q(`${SEL} where d.org_id = $1 and not d.is_template and d.status <> 'closed' order by (d.status = 'done') desc, d.urgent desc, d.created_at`, [org]);
+    return { open, items: await loadItems(open), tpl: await q(`${SEL} where d.org_id = $1 and d.is_template and d.active order by d.created_at`, [org]) }; }, [org, role]);
+  const jmap = useJumpMap();
+  const [mOpen, setMOpen] = useState(null); const [prom, setProm] = useState(null);
+  const doIt = (d, it) => { const target = jumpOf(d.dir_type, jmap); go(startWork({ id: d.id, item: it?.id || null, cust: it?.customer_id || d.ref_customer_id || null, cname: it?.customer_name || d.ref_label || '', deal: d.ref_kind === 'deal' ? d.ref_id : null, type: d.dir_type, no: d.no, title: d.title, target })); };
   const run = async (msg, sql, args) => { try { await call(role, sql, args); toast(msg); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
   const allMine = mine?.rows || [];
   const my = allMine.filter((d) => !d.parent_id); const myRec = allMine.filter((d) => d.parent_id);
@@ -133,22 +182,7 @@ export default function DirectiveBoard() {
             {d.status !== 'done' && <button type="button" className="btn sm ghost" onClick={() => setStop(d)}>撤销</button>}
           </div>
         </div>
-        {on && <div className="t2-exp"><div className="t2-cols">
-          <div className="t2-box"><h4>当初怎么下的</h4><div className="t2-kv">
-            <span>编号</span><span>{d.no || '—'}</span><span>分类</span><span>{d.dir_type || '其他'}</span><span>下达人</span><span>{d.issuer_name || '中方'}</span>
-            <span>截止</span><span>{dueAt(d) ? <>{dt(dueAt(d))}<span className="muted">（下达后 {span(dueAt(d) - new Date(d.created_at))} 内做完）</span></> : '没设期限'}{d.urgent && <span className="pill red" style={{ marginLeft: 6 }}>紧急 · 每小时提醒</span>}</span>
-            <span>给谁</span><span>{who} · <EmpLink id={d.assignee_employee_id} name={d.assignee_name} /></span>
-            <span>谁汇报</span><span>{d.reporter === false ? '只需点收到，不用交结果' : g ? `这次 ${g.length} 人都要交` : '本人交结果'}</span>
-            <span>要交</span><span>{[d.require_photo && '照片', d.dir_type === '制单' && '订单'].filter(Boolean).join(' + ') || '文字结果'}</span>
-            {d.ref_label && <><span>{d.ref_kind === 'customer' ? '客户' : '挂在'}</span><span>{d.ref_kind === 'deal' ? <DealLink id={d.ref_id} no={d.ref_label} /> : d.ref_label}</span></>}
-            <span>内容</span><span style={{ whiteSpace: 'pre-wrap' }}>{d.body || '—'}</span></div><AttList items={d.attachments} /></div>
-          <div className="t2-box"><h4>经过</h4><div className="t2-steps">
-            <div className="t2-st done"><i /><div><b>下达</b><small>{dt(d.created_at)}</small></div></div>
-            <div className={`t2-st ${d.ack_at ? 'done' : 'now'}`}><i /><div><b>收到</b><small>{d.ack_at ? `${dt(d.ack_at)}（下达后 ${span(new Date(d.ack_at) - new Date(d.created_at))}）` : '还没点收到'}</small>{d.ack_reason && <small>晚收到的原因：{d.ack_reason}</small>}</div>{late && <span className="pill red">超 4 小时没收到，打电话</span>}</div>
-            <div className={`t2-st ${d.done_at ? 'done' : d.ack_at ? 'now' : ''}`}><i /><div><b>完成</b><small>{d.done_at ? `${dt(d.done_at)}（下达后 ${span(new Date(d.done_at) - new Date(d.created_at))}）` : '—'}</small>{d.done_note && <small>结果：{d.done_note}</small>}{d.done_photo && <Thumb src={d.done_photo} size={56} label="完成照片" />}</div></div>
-            <div className={`t2-st ${d.status === 'done' ? 'now' : ''}`}><i /><div><b>中方确认</b><small>{d.status === 'done' ? '等你确认' : '—'}</small>{d.confirm_note && <small>上次退回：{d.confirm_note}</small>}</div></div>
-          </div></div>
-        </div></div>}
+        {on && <DirDetail d={d} g={g} late={late} items={issued?.items?.[d.id]} />}
       </div>);
   };
   // 503: 同一类放一组, 组里从老到新
@@ -163,34 +197,54 @@ export default function DirectiveBoard() {
       </div>);
     });
   };
-  const mineRow = (d) => (
-            <div key={d.id} className="row between todo-row" style={{ cursor: 'default', flexWrap: 'wrap' }}>
-              <div className="stack" style={{ gap: 3, minWidth: 0, flex: 1 }}>
-                <div>{d.no && <span className="t2-no" style={{ marginRight: 6 }}>{d.no}</span>}{d.urgent && <span className="pill red" style={{ marginRight: 6 }}>紧急</span>}{d.dir_type && d.dir_type !== '其他' && <span className="pill blue" style={{ marginRight: 6 }}>{d.dir_type}</span>}<b>{d.title}</b> <span className={`pill ${ST[d.status][1]}`}>{ST[d.status][0]}</span></div>
-                {d.body && <div className="small" style={{ whiteSpace: 'pre-wrap' }}>{d.body}</div>}
-                {d.ref_label && <div className="small">{d.ref_kind === 'customer' ? '客户：' : '挂在：'}{d.ref_kind === 'deal' ? <DealLink id={d.ref_id} no={d.ref_label} /> : <b>{d.ref_label}</b>}</div>}
-                <AttList items={d.attachments} />
-                <div className="small muted">{dt(d.created_at)}{d.require_photo ? ' · 要拍照' : ''}{d.at_time ? ` · 大概 ${d.at_time} 做` : ''}{d.target_dept ? ` · 下给部门：${d.target_dept}` : ''}</div>
-                {d.reporter === false && <div className="small muted">这条你只要点「收到」，不用交结果。</div>}
-                {d.status === 'acked' && d.confirm_note && <div className="pill red" style={{ whiteSpace: 'normal' }}>中方退回：{d.confirm_note}</div>}
-              </div>
-              <div className="row" style={{ flexShrink: 0 }}>
-                <DueChip d={d} />
-                {d.status === 'sent' && <button type="button" className="btn primary" onClick={() => run('已收到', `select app.ack_directive2($1,$2)`, [d.id, lateMin(d) >= ACK_MIN ? '在待办页点的收到' : null])}>收到</button>}
-                {d.reporter !== false && ['sent', 'acked'].includes(d.status) && <button type="button" className="btn" onClick={() => setDone(d)}>做完了，填结果</button>}
-              </div>
-            </div>);
+  // 508: 员工这边也能点开看「当初怎么下的 + 经过」; 按类型「去做」直接跳过去, 办完在那页顶上点「提交指令」; 系统里没对应页面的才手动交
+  const mineRow = (d) => {
+    const on = mOpen === d.id; const target = jumpOf(d.dir_type, jmap); const its = mine?.items?.[d.id] || [];
+    const canGo = d.reporter !== false && ['sent', 'acked'].includes(d.status) && target !== 'none' && (!NEEDS_CUST.includes(target) || d.ref_customer_id || d.batch || (target === 'orders' && d.ref_kind === 'deal'));
+    const promLate = isLate(d.promise_on);
+    return (
+      <div key={d.id} className={`t2-item ${on ? 'on' : ''}`}>
+        <div className="t2-row" onClick={() => setMOpen(on ? null : d.id)}>
+          <div className="t2-main">
+            <div className="t2-l1">{d.no && <span className="t2-no">{d.no}</span>}{d.urgent && <span className="pill red">紧急</span>}{d.dir_type && d.dir_type !== '其他' && <span className="pill blue">{d.dir_type}</span>}<b className="t2-ttl">{d.title}</b>
+              {d.ref_label && <span className="muted" onClick={(e) => e.stopPropagation()}>· {d.ref_kind === 'deal' ? <DealLink id={d.ref_id} no={d.ref_label} /> : d.ref_label}</span>}
+              <span className={`pill ${ST[d.status][1]}`}>{ST[d.status][0]}</span>
+              {d.promise_on && <span className={`pill ${promLate ? 'red' : 'amber'}`}>{promLate ? `客户说 ${dDate(d.promise_on)} 付，过了没到 · 再反馈一次` : `进行中 · 客户说 ${dDate(d.promise_on)} 付`}</span>}
+              {d.batch && its.length > 0 && <span className="pill gray">已交 {its.filter((i) => i.status !== 'todo').length} / {its.length}</span>}</div>
+            <div className="t2-times"><TC k="下达" tip={d.issuer_name ? `${d.issuer_name} 下的` : undefined}>{dt(d.created_at)}</TC>{d.require_photo && <span className="muted small">要拍照</span>}
+              {d.reporter === false && <span className="muted small">这条只要点「收到」，不用交结果</span>}
+              {d.status === 'acked' && d.confirm_note && <span className="pill red" style={{ whiteSpace: 'normal' }}>中方退回：{d.confirm_note}</span>}</div>
+          </div>
+          <div className="t2-right" onClick={(e) => e.stopPropagation()}>
+            <DueChip d={d} />
+            {d.status === 'sent' && <button type="button" className="btn" onClick={() => run('已收到', `select app.ack_directive2($1,$2)`, [d.id, lateMin(d) >= ACK_MIN ? '在待办页点的收到' : null])}>收到</button>}
+            {canGo && !d.batch && <button type="button" className="btn primary" data-tip={`跳到「${JUMP_LABEL[target]}」，办完在那页顶上点「提交指令」就交了`} onClick={() => doIt(d)}>去做 →</button>}
+            {canGo && !d.batch && d.dir_type === '催款' && <button type="button" className="btn" onClick={() => setProm({ d })}>客户说哪天付</button>}
+            {d.reporter !== false && ['sent', 'acked'].includes(d.status) && !d.batch && <button type="button" className={`btn ${canGo ? 'ghost sm' : ''}`} onClick={() => setDone(d)}>{canGo ? '手动交' : '做完了，填结果'}</button>}
+          </div>
+        </div>
+        {d.batch && its.length > 0 && <div className="t2-subs">{its.map((i) => {
+          const pl = i.status === 'promised' && isLate(i.promise_on);
+          return (<div key={i.id} className={`t2-sub ${i.status !== 'todo' ? 'done' : ''}`}>
+            <b>{i.customer_name}</b><TierPill tier={i.tier} short empty='' /><span className="muted small">{i.city || ''}</span>
+            {i.status === 'done' && <span className="pill green">已交</span>}{i.status === 'promised' && <span className={`pill ${pl ? 'red' : 'amber'}`}>客户说 {dDate(i.promise_on)} 付</span>}
+            <span className="small muted">{i.proof_label || i.note || ''}</span><span className="grow" />
+            {i.status === 'todo' && canGo && <><button type="button" className="btn primary sm" onClick={() => doIt(d, i)}>去做 →</button>{d.dir_type === '催款' && <button type="button" className="btn sm" onClick={() => setProm({ d, it: i })}>客户说哪天付</button>}</>}
+          </div>); })}</div>}
+        {on && <DirDetail d={d} g={null} late={false} items={d.batch ? its : null} />}
+      </div>);
+  };
   return (
     <>
-      {!admin && (
+      {(!admin || my.length > 0) && (
         <div className={`card todo-sec ${my.some((d) => d.urgent) ? 'todo-red' : my.length ? 'todo-amber' : ''}`} style={{ marginBottom: 12 }}>
-          <div className="card-h"><h2>中方给我的指令 {my.length} 条 <Info>每一条都要自己点「收到」，做完自己点「完成」并填结果；中方确认后才算完。</Info></h2></div>
-          {my.length === 0 ? <div className="card-b small muted">没有没做完的指令。</div> : my.map(mineRow)}
+          <div className="card-h"><h2>中方给我的指令 {my.length} 条 <Info>每一条都要自己点「收到」。点「去做」直接跳到要办的页面，办完在那页顶上点「提交指令」就交了；中方确认后才算完。</Info></h2></div>
+          {my.length === 0 ? <div className="card-b small muted">没有没做完的指令。</div> : <div className="t2-list">{my.map(mineRow)}</div>}
         </div>)}
       {!admin && (
         <div className={`card todo-sec ${myRec.length ? 'todo-amber' : ''}`} style={{ marginBottom: 12 }}>
           <div className="card-h"><h2>我的定期任务 {myRec.length} 条没做 <Info>到日子自动出现（打扫、整理、回访这类）。做完要拍照交上来；没做完就一直挂在这里。</Info></h2></div>
-          {myRec.length === 0 ? <div className="card-b small muted">今天没有没做的定期任务。</div> : myRec.map(mineRow)}
+          {myRec.length === 0 ? <div className="card-b small muted">今天没有没做的定期任务。</div> : <div className="t2-list">{myRec.map(mineRow)}</div>}
         </div>)}
       {admin && (
         <div className="card todo-sec" style={{ marginBottom: 12 }}>
@@ -215,6 +269,7 @@ export default function DirectiveBoard() {
       {done && <DoneModal d={done} onClose={() => setDone(null)} />}
       {rej && <RejectModal d={rej} onClose={() => setRej(null)} />}
       {stop && <StopModal d={stop} onClose={() => setStop(null)} />}
+      {prom && <PromiseModal d={prom.d} it={prom.it} onClose={() => setProm(null)} />}
     </>
   );
 }
@@ -231,7 +286,8 @@ function NewDirective({ onClose, recurring }) {
   const emps = data?.emps || [];
   const depts = [...new Set(emps.map((e) => e.department).filter(Boolean))];
   const deptName = (v) => optLabel(data?.opts.departments || [], v) || v;
-  const [f, setF] = useState({ dir_type: '其他', customer_id: '', title: '', body: '', who: [], urgent: false, require_photo: !!recurring, due_on: '', attachments: [], report_mode: 'named', reporters: [], freq: 'daily', weekdays: [1], month_days: [1], at: '' });
+  const jmap = useJumpMap(); const [jg, setJg] = useState(false); const [many, setMany] = useState(false); const [batch, setBatch] = useState([]);
+  const [f, setF] = useState({ dir_type: (() => { try { return localStorage.getItem('la9s.dir.lastType') || '其他'; } catch { return '其他'; } })(), customer_id: '', title: '', body: '', who: [], urgent: false, require_photo: !!recurring, due_on: '', attachments: [], report_mode: 'named', reporters: [], freq: 'daily', weekdays: [1], month_days: [1], at: '' });
   const [errs, setErrs] = useState(false);
   const dept = f.who.map(String).find((v) => v.startsWith('dept:'))?.slice(5) || '';
   const people = f.who.filter((v) => !String(v).startsWith('dept:'));
@@ -245,12 +301,13 @@ function NewDirective({ onClose, recurring }) {
     setF((x) => ({ ...x, who: keep, reporters: nd && nd !== dept ? boss(emps.filter((e) => e.department === nd)) : nd ? x.reporters : [] }));
   };
   const needRep = dept && f.report_mode === 'named' && !f.reporters.length;
-  const ok = f.title.trim() && f.who.length && !(f.dir_type === '制单' && !recurring && !f.customer_id) && !needRep && (!recurring || f.freq !== 'weekly' || f.weekdays.length) && (!recurring || f.freq !== 'monthly' || f.month_days.length);
+  const target = jumpOf(f.dir_type, jmap); const custy = !recurring && NEEDS_CUST.includes(target); const useBatch = custy && many;
+  const ok = f.title.trim() && f.who.length && !(f.dir_type === '制单' && !recurring && !f.customer_id && !useBatch) && !(useBatch && !batch.length) && !needRep && (!recurring || f.freq !== 'weekly' || f.weekdays.length) && (!recurring || f.freq !== 'monthly' || f.month_days.length);
   const go = async () => {
-    if (!ok) { setErrs(true); return toast(`还差：${[!f.who.length && '给谁', !recurring && f.dir_type === '制单' && !f.customer_id && '客户', !f.title.trim() && '做什么', needRep && '谁来汇报', recurring && f.freq === 'weekly' && !f.weekdays.length && '每周几', recurring && f.freq === 'monthly' && !f.month_days.length && '每月几号'].filter(Boolean).join('、')}`, 'err'); }
-    const p = { dir_type: recurring ? null : f.dir_type, customer_id: recurring ? null : f.customer_id || null, title: f.title, body: f.body, urgent: f.urgent, require_photo: f.require_photo, due_on: f.due_on, attachments: f.attachments, assignees: people, dept: dept || null, report_mode: f.report_mode, reporters: f.reporters,
+    if (!ok) { setErrs(true); return toast(`还差：${[!f.who.length && '给谁', !recurring && f.dir_type === '制单' && !f.customer_id && !useBatch && '客户', useBatch && !batch.length && '挑客户', !f.title.trim() && '做什么', needRep && '谁来汇报', recurring && f.freq === 'weekly' && !f.weekdays.length && '每周几', recurring && f.freq === 'monthly' && !f.month_days.length && '每月几号'].filter(Boolean).join('、')}`, 'err'); }
+    const p = { dir_type: recurring ? null : f.dir_type, customer_id: recurring || useBatch ? null : f.customer_id || null, customers: useBatch ? batch : undefined, title: f.title, body: f.body, urgent: f.urgent, require_photo: f.require_photo, due_on: f.due_on, attachments: f.attachments, assignees: people, dept: dept || null, report_mode: f.report_mode, reporters: f.reporters,
       ...(recurring ? { recurring: { freq: f.freq, weekdays: f.weekdays, month_days: f.month_days, at: f.at || null } } : {}) };
-    try { await call(role, `select app.${recurring ? 'issue_directive2' : 'issue_directive3'}($1,$2)`, [org, JSON.stringify(p)]); toast(recurring ? '定期任务已建，到日子自动生成' : `已下达${dept ? `给 ${deptName(dept)} 全员` : `给 ${people.length} 个人`}`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
+    try { await call(role, `select app.${recurring ? 'issue_directive2' : 'issue_directive4'}($1,$2)`, [org, JSON.stringify(p)]); if (!recurring) { try { localStorage.setItem('la9s.dir.lastType', f.dir_type); } catch { /* ignore */ } } toast(recurring ? '定期任务已建，到日子自动生成' : `已下达${dept ? `给 ${deptName(dept)} 全员` : `给 ${people.length} 个人`}${useBatch ? `，挂了 ${batch.length} 位客户` : ''}`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
   const whoOpts = [...depts.map((d) => ({ v: `dept:${d}`, l: `部门 · ${deptName(d)}`, hint: `${emps.filter((e) => e.department === d).length} 人，全员收到通知`, group: '部门' })),
     ...emps.map((e) => ({ v: e.id, l: `${e.emp_no ? `${e.emp_no} ` : ''}${e.short_name}`, hint: [e.full_name !== e.short_name ? e.full_name : '', deptName(e.department)].filter(Boolean).join(' · '), group: '员工' }))];
   return (
@@ -263,9 +320,12 @@ function NewDirective({ onClose, recurring }) {
             options={members.map((e) => ({ v: e.id, l: `${e.emp_no ? `${e.emp_no} ` : ''}${e.short_name}`, hint: e.position || '' }))} />}
           <div className="small muted">{deptName(dept)} 的 {members.length} 个人都会收到通知、要点「收到」；{f.report_mode === 'all' ? '每个人各交一份结果，全部交齐才算完成。' : '只有点名的人要交结果。'}{f.report_mode === 'named' && !boss(members).length ? ' 这个部门里没找到主管，请自己点名。' : ''}</div>
         </div></FRow>}
-        {!recurring && <FRow label="类型"><OptChoice optKey="directive_type" title="指令类型" value={f.dir_type} onChange={(v) => setF({ ...f, dir_type: v })} options={DIR_TYPES} /></FRow>}
-        {!recurring && <FRow label="客户" req={f.dir_type === '制单'}><div style={{ flex: 1, minWidth: 0 }}><CustomerSelect customers={data?.customers || []} value={f.customer_id} onChange={(v) => setF({ ...f, customer_id: v })} />
-          {f.dir_type === '制单' && <div className="small muted" style={{ marginTop: 4 }}>员工建好这个客户的单，交的时候直接选那张单；客户在群里发的截图贴到下面附件。</div>}</div></FRow>}
+        {!recurring && <FRow label="类型"><div className="stack" style={{ gap: 4, flex: 1, minWidth: 0 }}><OptChoice optKey="directive_type" title="指令类型" value={f.dir_type} onChange={(v) => setF({ ...f, dir_type: v })} options={DIR_TYPES} />
+          <div className="small muted row" style={{ gap: 6 }}>{target === 'none' ? '这类在系统里没有对应页面，员工手动交结果' : <>员工点「去做」跳到：<b>{JUMP_LABEL[target]}</b>，办完在那页点「提交指令」就交了</>}<button type="button" className="gear-mini" title="每种类型跳到哪" onClick={() => setJg(true)}>⚙</button></div></div></FRow>}
+        {!recurring && <FRow label="客户" req={f.dir_type === '制单'}><div className="stack" style={{ gap: 6, flex: 1, minWidth: 0 }}>
+          {custy && <Choice value={many ? 'y' : 'n'} onChange={(v) => setMany(v === 'y')} options={[['n', '一个客户'], ['y', '一批客户']]} />}
+          {useBatch ? <BatchPick value={batch} onChange={setBatch} /> : <CustomerSelect customers={data?.customers || []} value={f.customer_id} onChange={(v) => setF({ ...f, customer_id: v })} />}
+          {f.dir_type === '制单' && !useBatch && <div className="small muted">员工点「去做」直接进这个客户的新建报价；客户在群里发的截图贴到下面附件。</div>}</div></FRow>}
         <FRow label="做什么" req><input className={`in ${errs && !f.title.trim() ? 'err-in' : ''}`} style={{ width: '100%' }} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder={recurring ? '一句话，例如 打扫仓库卫生' : '一句话，例如 今天下班前把 A 架盘点一遍'} /></FRow>
         <FRow label="说明"><textarea className="in" rows={2} style={{ width: '100%' }} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} placeholder="要注意什么、做到什么算完成" /></FRow>
         <FRow label="附件"><Attach value={f.attachments} onChange={(v) => setF({ ...f, attachments: v })} /></FRow>
@@ -280,7 +340,54 @@ function NewDirective({ onClose, recurring }) {
         {!recurring && <FRow label="什么时候前做完"><DatePicker value={f.due_on} onChange={(v) => setF({ ...f, due_on: v })} /></FRow>}
         <div className="hint">{recurring ? '到日子系统自动生成（每天的周日不生成）；完成必须拍照交凭证；没点完成就一直挂在待办里，直到做完或你停掉这个定期任务。' : '一下达就必须完成：员工做完交结果，你确认才关闭；不会自己结束。'}</div>
       </div>
+      {jg && <JumpGear onClose={() => setJg(false)} />}
     </Modal>
+  );
+}
+// 508: 每种指令类型跳到哪 (存 org_settings directive_jump; 新加的类型也在这里挑)
+function JumpGear({ onClose }) {
+  const { org, role, toast, refresh } = useApp();
+  const jmap = useJumpMap(); const { list } = useOptList('directive_type', DIR_TYPES);
+  const [m, setM] = useState(null); const cur = m || Object.fromEntries(list.map(([v]) => [v, jumpOf(v, jmap)]));
+  const save = async () => { try { await call(role, `select app.set_org_setting($1,'directive_jump',$2)`, [org, JSON.stringify(cur)]); toast('已保存，立即生效'); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (
+    <Modal title="每种指令类型，员工点「去做」跳到哪" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><button type="button" className="btn primary" onClick={save}>保存</button></>}>
+      <div className="stack" style={{ gap: 8 }}>
+        {list.map(([v, l]) => <div key={v} className="row" style={{ gap: 10 }}><b style={{ width: 90 }}>{l}</b><select className="in" style={{ flex: 1, minWidth: 0 }} value={cur[v]} onChange={(e) => setM({ ...cur, [v]: e.target.value })}>{JUMPS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></div>)}
+        <div className="small muted">类型本身（新增 / 改名 / 删除）还在「类型」旁边的 ⚙ 里改；这里只定跳到哪。选「不跳」的，员工还是手动交结果。</div>
+      </div>
+    </Modal>
+  );
+}
+// 508: 一批客户 —— 粗略只点档位; 要细再加 多少天没下单 / 归哪个销售员 / 城市 / 欠款; 人数实时变, 不要的取消勾选
+const TIERS4 = ['S', 'WHOLESALE', 'RETAIL', 'REPAIR'];
+function BatchPick({ value, onChange }) {
+  const { org } = useApp();
+  const all = useData(() => q(Q.customerProfiles, [org]), [org]).data || [];
+  const [tiers, setTiers] = useState(['S', 'WHOLESALE']); const [quiet, setQuiet] = useState('0'); const [owner, setOwner] = useState('*'); const [city, setCity] = useState('*'); const [debt, setDebt] = useState('*');
+  const [off, setOff] = useState([]);
+  const days = (v) => (v ? Math.floor((Date.now() - new Date(v).getTime()) / 864e5) : null);
+  const hit = all.filter((c) => c.status === 'active' && (!tiers.length || tiers.includes(c.tier)) && (quiet === '0' || (days(c.last_deal) ?? 9999) >= Number(quiet))
+    && (owner === '*' || c.owner === owner) && (city === '*' || c.city === city) && (debt === '*' || (debt === 'due' ? Number(c.balance) > 0 : Number(c.over_days) > 0)));
+  const ids = hit.map((c) => c.id).filter((id) => !off.includes(id));
+  const key = ids.join(',');
+  useEffect(() => { if (key !== value.join(',')) onChange(ids); }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const owners = [...new Set(all.map((c) => c.owner).filter(Boolean))].sort(); const cities = [...new Set(all.map((c) => c.city).filter(Boolean))].sort();
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <div className="batch-f">
+        <div><span>档位</span><div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>{TIERS4.map((t) => <button type="button" key={t} className={`chip tierchip ${tiers.includes(t) ? 'on' : ''}`} onClick={() => setTiers(tiers.includes(t) ? tiers.filter((x) => x !== t) : [...tiers, t])}><TierPill tier={t} short /></button>)}</div></div>
+        <div><span>多少天没下单</span><Choice value={quiet} onChange={setQuiet} options={[['0', '不限'], ['15', '超过 15 天'], ['30', '超过 30 天'], ['60', '超过 60 天'], ['90', '超过 90 天']]} /></div>
+        <div><span>归哪个销售员</span><Choice value={owner} onChange={setOwner} options={[['*', '全部'], ...owners.map((o) => [o, o])]} /></div>
+        <div><span>城市</span><Choice value={city} onChange={setCity} options={[['*', '全部'], ...cities.map((o) => [o, o])]} /></div>
+        <div><span>欠款</span><Choice value={debt} onChange={setDebt} options={[['*', '不限'], ['due', '有欠款'], ['over', '超账期']]} /></div>
+      </div>
+      <div className="small">符合 <b className="brand-t">{hit.length}</b> 位，挂上 <b className="brand-t">{ids.length}</b> 位 <span className="muted">（每位一项，员工逐个去做、逐个提交；不要的取消勾选）</span></div>
+      <div className="batch-list">{hit.map((c) => { const d = days(c.last_deal); return (
+        <label key={c.id} className="batch-it"><input type="checkbox" checked={!off.includes(c.id)} onChange={() => setOff(off.includes(c.id) ? off.filter((x) => x !== c.id) : [...off, c.id])} />
+          <b>{c.name}</b><TierPill tier={c.tier} short empty="" /><span className="muted small">{c.city || ''}{c.owner ? ` · ${c.owner}` : ''} · {d == null ? '没下过单' : `${d} 天没下单`}{Number(c.balance) > 0 ? ` · 欠 ${Number(c.balance).toLocaleString('en-US')}` : ''}</span></label>); })}
+        {!hit.length && <div className="small muted">没有符合的客户，放宽一点条件。</div>}</div>
+    </div>
   );
 }
 function DoneModal({ d, onClose }) {
@@ -353,5 +460,59 @@ function RejectModal({ d, onClose }) {
     <Modal title={`退回：${d.title}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!note.trim()} onClick={go}>退回重做</button></>}>
       <FRow label="哪里不行" req><input className="in" style={{ width: '100%' }} autoFocus value={note} onChange={(e) => setNote(e.target.value)} /></FRow>
     </Modal>
+  );
+}
+
+// 508: 催款反馈 —— 客户说哪天付; 到那天前算进行中, 过了还没到自动变紧急、回到你手里再反馈一次
+function PromiseModal({ d, it, onClose }) {
+  const { role, toast, refresh } = useApp();
+  const [on, setOn] = useState(''); const [note, setNote] = useState('');
+  const go = async () => { try { await call(role, `select app.directive_promise($1,$2,$3,$4)`, [d.id, it?.id || null, on, note || null]); toast(`已反馈：客户说 ${dDate(on)} 付`); setWork(null); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (
+    <Modal title={`客户说哪天付 · ${it?.customer_name || d.ref_label || ''}`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><button type="button" className="btn primary" disabled={!on} onClick={go}>一键反馈</button></>}>
+      <div className="stack">
+        <FRow label="哪天付" req><DatePicker value={on} onChange={setOn} /></FRow>
+        <FRow label="客户原话"><OptNote optKey="dir.promise_note" title="催款快捷原话" options={['这周五付', '等货卖完再付', '月底统一付', '先付一半']} value={note} onChange={setNote} placeholder="可不填" /></FRow>
+        <div className="small muted">到那天之前这条显示「进行中」；过了那天钱还没到，自动变紧急，要你再反馈一次。当场付了就去「收款登记」登记，回来点「提交指令」。</div>
+      </div>
+    </Modal>
+  );
+}
+
+// 508: 正在办的指令 —— 从待办「去做」跳过来后, 每一页顶上都有这条; 办完点「提交指令」= 自动挂上这次建的单 / 记录, 不用再回去传凭证
+const RECORD_TARGETS = { quote: '报价单', hotline: '热线记录', visits: '拜访记录', orders: '出库 / 退货记录' };
+export function DirBar() {
+  const { role, toast, refresh, go } = useApp();
+  const [w, setW] = useState(getWork);
+  const [busy, setBusy] = useState(false); const [prom, setProm] = useState(false);
+  useEffect(() => { const f = () => setW(getWork()); window.addEventListener('la9s-dirwork', f); return () => window.removeEventListener('la9s-dirwork', f); }, []);
+  if (!w) return null;
+  const done = (msg) => { setWork(null); toast(msg); refresh(); go('todo'); };
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const cands = w.cust ? await call(role, `select * from app.directive_candidates2($1,$2)`, [w.id, w.cust]) : [];
+      const x = (w.type === '催款' ? cands.filter((c) => c.kind === 'receipt') : cands)[0];
+      if (x) {
+        if (w.item) await call(role, `select app.directive_item_done($1,$2,$3,null)`, [w.item, x.kind, x.id]);
+        else await call(role, `select app.complete_directive2($1,null,null,$2,$3)`, [w.id, x.kind, x.id]);
+        return done(`已交：${PROOF_KIND[x.kind] || '记录'} ${x.label}，等中方确认`);
+      }
+      if (RECORD_TARGETS[w.target] || w.type === '催款') { setBusy(false); return toast(w.type === '催款' ? '还没登记这位客户的收款：当场付了先去登记；没付就点「客户说哪天付」' : `指令下达以后还没找到 ${w.cname || '这位客户'} 的新${RECORD_TARGETS[w.target]}：先在这页做完、保存，再点提交`, 'err'); }
+      const note = `在「${JUMP_LABEL[w.target]}」页办完了`;
+      if (w.item) await call(role, `select app.directive_item_done($1,null,null,$2)`, [w.item, note]);
+      else await call(role, `select app.complete_directive2($1,$2,null)`, [w.id, note]);
+      done('已交，等中方确认');
+    } catch (e) { setBusy(false); toast(friendlyError(e), 'err'); }
+  };
+  return (
+    <div className="dirbar">
+      <span className="pill blue">正在办指令</span>{w.no && <span className="t2-no">{w.no}</span>}{w.type && <b>{w.type}</b>}{w.cname && <span>· {w.cname}</span>}<span className="muted dirbar-t">{w.title}</span>
+      <span className="grow" />
+      {w.type === '催款' && <button type="button" className="btn sm" onClick={() => setProm(true)}>客户说哪天付</button>}
+      <button type="button" className="btn primary sm" disabled={busy} data-tip={RECORD_TARGETS[w.target] ? `自动挂上指令下达后这位客户最新的${RECORD_TARGETS[w.target]}` : '直接算交了'} onClick={submit}>提交指令</button>
+      <button type="button" className="btn ghost sm" onClick={() => { setWork(null); go('todo'); }}>先不交，回待办</button>
+      {prom && <PromiseModal d={{ id: w.id, ref_label: w.cname }} it={w.item ? { id: w.item, customer_name: w.cname } : null} onClose={() => { setProm(false); if (!getWork()) go('todo'); }} />}
+    </div>
   );
 }
