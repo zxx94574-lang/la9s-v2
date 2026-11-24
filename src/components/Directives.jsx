@@ -136,6 +136,7 @@ export default function DirectiveBoard() {
         {on && <div className="t2-exp"><div className="t2-cols">
           <div className="t2-box"><h4>当初怎么下的</h4><div className="t2-kv">
             <span>编号</span><span>{d.no || '—'}</span><span>分类</span><span>{d.dir_type || '其他'}</span><span>下达人</span><span>{d.issuer_name || '中方'}</span>
+            <span>截止</span><span>{dueAt(d) ? <>{dt(dueAt(d))}<span className="muted">（下达后 {span(dueAt(d) - new Date(d.created_at))} 内做完）</span></> : '没设期限'}{d.urgent && <span className="pill red" style={{ marginLeft: 6 }}>紧急 · 每小时提醒</span>}</span>
             <span>给谁</span><span>{who} · <EmpLink id={d.assignee_employee_id} name={d.assignee_name} /></span>
             <span>谁汇报</span><span>{d.reporter === false ? '只需点收到，不用交结果' : g ? `这次 ${g.length} 人都要交` : '本人交结果'}</span>
             <span>要交</span><span>{[d.require_photo && '照片', d.dir_type === '制单' && '订单'].filter(Boolean).join(' + ') || '文字结果'}</span>
