@@ -30,7 +30,7 @@ const daysBetween = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(
 // 数字: 全数 = 千分位; 简写 = ≥ 100 万写 M (两位小数), ≥ 1 万写 K (一位小数)
 export function fmtN(v, cur, short) {
   if (v == null || Number.isNaN(Number(v))) return '—';
-  v = Number(v);
+  v = Number(v); if (Math.abs(v) < 0.005) v = 0;
   if (!short) return money(v, cur);
   const a = Math.abs(v);
   if (a >= 1e6) return `${(v / 1e6).toFixed(2).replace(/\.?0+$/, '')}M`;
