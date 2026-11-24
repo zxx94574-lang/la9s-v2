@@ -368,6 +368,17 @@ export async function seedScenarios(db, org, log = () => {}) {
   log('国内做完');
 
 
+  // ── 定期任务 (503): 做完的 / 还没做的 / 超时的 各一条 ──
+  await run('定期任务·做完 / 没做 / 超时', async () => {
+    const mk = (title, who, freq) => as(USERS.admin, `select app.issue_directive2($1,$2)`, [org, JSON.stringify({ title, body: '测试：定期任务', require_photo: true, assignees: [who], report_mode: 'named', reporters: [], recurring: { freq, weekdays: [1, 2, 3, 4, 5, 6, 7], month_days: [1], at: '09:00' } })]);
+    await mk('早上拍仓库门口和货架照片', E.picker, 'daily'); await mk('下班前对一遍当天出库单', E.hotline, 'daily'); await mk('把上周没付款的客户列出来', E.manager, 'weekly');
+    await as(USERS.admin, `select app.spawn_directives($1)`, [org]);
+    const kids = await all(`select d.id, d.title, d.assignee_employee_id from app.directives d where d.org_id = $1 and d.parent_id is not null and d.status = 'sent' order by d.created_at`, [org]);
+    const a = kids.find((x) => x.title.startsWith('早上')); const c = kids.find((x) => x.title.startsWith('把上周'));
+    if (a) { await as(USERS.picker, `select app.ack_directive2($1,null)`, [a.id]); await as(USERS.picker, `select app.complete_directive($1,'测试：拍了',$2)`, [a.id, photo('dir')]); }
+    if (c) await db.query(`update app.directives set due_on = current_date - 1, due_at = now() - interval '10 hours', created_at = now() - interval '2 days' where id = $1`, [c.id]);
+  });
+
   // ── 看板要的「以前的数」(0084): 前 3 个月的历史单 (一部分没收款 → 超账期) + 销售员归属 + 库龄 ──
   const reps = [];
   for (const [n, nm] of ['测试销售 A', '测试销售 B', '测试销售 C'].entries()) reps.push(await mkEmp(nm, '销售', 'sales').catch(async () => (await one(`insert into app.employees (org_id, short_name, department, position) values ($1,$2,'销售','销售员') returning id`, [org, nm])).id));
@@ -383,6 +394,11 @@ export async function seedScenarios(db, org, log = () => {}) {
   // 库龄: 入库流水摊到 0–200 天前 (测试库都是今天导进来的, 不摊就全是「0–30 天」)
   await db.query(`update app.stock_moves m set at = now() - ((abs(hashtext(m.stock_item_id::text)) % 200) || ' days')::interval
     from app.stock_items si join app.products p on p.id = si.product_id where si.id = m.stock_item_id and p.org_id = $1 and m.qty > 0 and m.reason in ('opening', 'grn', 'adjust')`, [org]);
+  // 待办「订单」(503): 把一部分没走完的单往前挪几个 / 几十个小时, 看得到「卡在哪一步」(不挪就全是刚建的)
+  const openD = await all(`select d.id from app.deals d where d.org_id = $1 and d.status not in ('cancelled','shipped') order by d.created_at limit 40`, [org]);
+  for (const [k, d] of openD.entries()) { if (k % 3 === 2) continue; const h = [5, 9, 26, 31, 50, 74][k % 6];
+    await db.query(`update app.deal_events set at = at - ($2 || ' hours')::interval where deal_id = $1`, [d.id, h]);
+    await db.query(`update app.deals set created_at = created_at - ($2 || ' hours')::interval where id = $1`, [d.id, h]); }
   log('历史单 / 库龄做完');
 
   // ── 结束: 恢复规则, 做总账检查 ──

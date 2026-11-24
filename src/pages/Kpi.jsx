@@ -14,7 +14,7 @@ import { periodRange, PERIODS } from '../lib/format.js';
 import { workMinutes, fmtMin } from '../lib/worktime.js';
 
 // [段名, 起事件, 止事件, 算谁的, 人从哪来]
-const SEGS = [
+export const SEGS = [
   ['建报价 → 联系上客户确认', 'quote_created', 'hotline_confirmed', '热线', (ev) => ev.to.short_name],
   ['下推找货 → 初检完成', 'picking_started', 'pick_submitted', '找货人', (ev, emp) => emp(ev.to.detail?.picker) || ev.to.short_name],
   ['初检完 → 出销售单（定价）', 'pick_submitted', 'sales_order_created', '中方', (ev) => ev.to.short_name],

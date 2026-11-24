@@ -7,7 +7,8 @@ import { USERS } from '../db/bootstrap.js';
 import { useApp, useData, Modal, FRow, Info, PhotoInput, Thumb, DatePicker, FileDrop, Choice, MoneyIn, MultiChoice, Assumed } from './ui.jsx';
 import { EmpLink, DealLink } from './Archives.jsx';
 import { dt, dDate, friendlyError } from '../lib/format.js';
-import { OptChoice } from './Opts.jsx';
+import { OptChoice, OptNote } from './Opts.jsx';
+import OrderFlow, { FlowBadge } from './OrderFlow.jsx';
 import CustomerSelect from './CustomerSelect.jsx';
 import * as Q from '../db/queries.js';
 import { staffOptions, optLabel } from '../lib/staffOptions.js';
@@ -27,11 +28,14 @@ const span = (ms) => { const m = Math.round(Math.abs(ms) / 6e4); return m < 60 ?
 export function DueChip({ d }) {
   const t = dueAt(d);
   if (!t) return <span className="muted small">没设期限</span>;
-  if (['done', 'closed'].includes(d.status)) return <span className="due-chip"><span className="pill gray">已交</span><small>{dt(t)}</small></span>;
+  if (['done', 'closed'].includes(d.status)) return <span className="due-chip" data-tip={`截止 ${dt(t)}`}><span className="pill gray">已交</span></span>;
   const ms = t.getTime() - Date.now();
-  const tone = ms < 0 ? 'red' : ms < 2 * 36e5 ? 'amber' : 'gray';
-  return <span className="due-chip"><span className={`pill ${tone}`}>{ms < 0 ? `超时 ${span(ms)}` : `还剩 ${span(ms)}`}</span><small>{dt(t)}</small></span>;
+  const tone = ms < 0 ? 'red' : ms < 2 * 36e5 ? 'amber' : 'green';
+  return <span className="due-chip" data-tip={`截止 ${dt(t)}`}><span className={`pill ${tone}`}>{ms < 0 ? `超时 ${span(ms)}` : `还剩 ${span(ms)}`}</span></span>;
 }
+// 503: 时间小方块 —— 同一种颜色, 前面小字标是什么; 「下达」写完整时间, 收到 / 完成写下达后多久
+const TC = ({ k, tip, dim, children }) => <span className={`t2-tc ${dim ? 'dim' : ''}`} data-tip={tip || undefined}><i>{k}</i>{children}</span>;
+const after = (a, b) => `+${span(new Date(b) - new Date(a))}`;
 const SEL = `select d.*, e.short_name as assignee_name, ce.short_name as issuer_name from app.directives d left join app.employees e on e.id = d.assignee_employee_id
   left join app.members cm on cm.org_id = d.org_id and cm.user_id = d.created_by left join app.employees ce on ce.id = cm.employee_id`;
 
@@ -91,6 +95,7 @@ export default function DirectiveBoard() {
   const admin = role === 'admin';
   const mine = useMine();
   const [nw, setNw] = useState(false); const [done, setDone] = useState(null); const [rej, setRej] = useState(null); const [tab, setTab] = useState('dir');
+  const [openId, setOpenId] = useState(null); const [stop, setStop] = useState(null); const [shut, setShut] = useState({});
   const lateN = (list) => list.filter((d) => { const t = dueAt(d); return t && t < new Date() && !['done', 'closed'].includes(d.status); }).length;
   useEffect(() => { if (org) call(role, `select app.spawn_directives($1)`, [org]).then((r) => { if (Number(Object.values(r?.[0] || {})[0]) > 0) refresh(); }, () => {}); }, [org]);   // eslint-disable-line react-hooks/exhaustive-deps
   const { data: issued } = useData(async () => (admin ? { open: await q(`${SEL} where d.org_id = $1 and not d.is_template and d.status <> 'closed' order by (d.status = 'done') desc, d.urgent desc, d.created_at`, [org]),
@@ -104,26 +109,63 @@ export default function DirectiveBoard() {
   const openDir = (issued?.open || []).filter((d) => !d.parent_id); const openRec = (issued?.open || []).filter((d) => d.parent_id);
   const issuedRow = (d) => {
     const g = grp(d);
-            const late = d.status === 'sent' && hoursSince(d.created_at) > 4;
-            return (
-              <div key={d.id} className="row between todo-row" style={{ cursor: 'default', flexWrap: 'wrap' }}>
-                <div className="stack" style={{ gap: 3, minWidth: 0, flex: 1 }}>
-                  <div>{d.urgent && <span className="pill red" style={{ marginRight: 6 }}>紧急</span>}{d.dir_type && d.dir_type !== '其他' && <span className="pill blue" style={{ marginRight: 6 }}>{d.dir_type}</span>}<b>{d.title}</b>{d.ref_label && d.ref_kind === 'customer' && <span className="muted small"> · {d.ref_label}</span>}{d.target_dept && <span className="pill blue" style={{ marginLeft: 6 }}>部门 {d.target_dept}</span>}{d.reporter === false && <span className="pill gray" style={{ marginLeft: 6 }}>只需收到</span>} <span className="muted small">→ </span><EmpLink id={d.assignee_employee_id} name={d.assignee_name} /> <span className={`pill ${late ? 'red' : ST[d.status][1]}`}>{late ? `${Math.floor(hoursSince(d.created_at))} 小时没点收到 · 打电话` : ST[d.status][0]}</span></div>
-                  {g && <div className="small">这一次下给 {g.length} 人要汇报：<b>已交 {g.filter((x) => ['done', 'closed'].includes(x.status)).length} / 共 {g.length}</b>{g.some((x) => !['done', 'closed'].includes(x.status)) ? <span className="red-t2"> · 没交：{g.filter((x) => !['done', 'closed'].includes(x.status)).map((x) => x.assignee_name).join('、')}</span> : null}</div>}
-                  <div className="small muted">下达 {dt(d.created_at)}{d.ack_at ? ` · 收到 ${dt(d.ack_at)}（${Math.max(0, Math.round((new Date(d.ack_at) - new Date(d.created_at)) / 60e3))} 分钟）` : ''}{d.ack_reason ? ` · 晚收到的原因：${d.ack_reason}` : ''}{d.done_at ? ` · 完成 ${dt(d.done_at)}` : ''}{d.reject_count ? ` · 退回过 ${d.reject_count} 次` : ''}</div>
-                  {d.status === 'done' && <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><span className="small">结果：{d.proof_id ? <>交了{PROOF_KIND[d.proof_kind] || '单据'} {d.proof_kind === 'deal' ? <DealLink id={d.proof_id} no={d.proof_label} /> : <b>{d.proof_label}</b>}{d.done_note ? ` · ${d.done_note}` : ''}</> : (d.done_note || '（只传了照片）')}</span>{d.done_photo && <Thumb src={d.done_photo} size={44} label="完成照片" />}</div>}
-                </div>
-                <div className="row" style={{ flexShrink: 0 }}>
-                  <DueChip d={d} />
-                  {d.status === 'done' && <><button type="button" className="btn primary" onClick={() => run('已确认，这条关闭', `select app.confirm_directive($1,true,null)`, [d.id])}>确认</button><button type="button" className="btn" onClick={() => setRej(d)}>退回</button></>}
-                  {d.status !== 'done' && <button type="button" className="btn sm ghost" onClick={() => run('已撤销', `select app.stop_directive($1)`, [d.id])}>撤销</button>}
-                </div>
-              </div>);
+    const late = d.status === 'sent' && hoursSince(d.created_at) > 4;
+    const on = openId === d.id;
+    const who = d.target_dept ? `部门 ${d.target_dept}` : '单人';
+    return (
+      <div key={d.id} className={`t2-item ${on ? 'on' : ''}`}>
+        <div className="t2-row" onClick={() => setOpenId(on ? null : d.id)}>
+          <div className="t2-main">
+            <div className="t2-l1">{d.no && <span className="t2-no" data-tip="T = Tâche / Task（法语、英语都是 T）· 月日 · 当天第几条">{d.no}</span>}{d.urgent && <span className="pill red">紧急</span>}<b className="t2-ttl">{d.title}</b>
+              {d.ref_label && d.ref_kind === 'customer' && <span className="muted">· {d.ref_label}</span>}<span className="muted">→</span><span onClick={(e) => e.stopPropagation()}><EmpLink id={d.assignee_employee_id} name={d.assignee_name} /></span>
+              {d.target_dept && <span className="muted">（{d.target_dept}）</span>}{d.reporter === false && <span className="pill gray">只需收到</span>}
+              <span className={`pill ${late ? 'red' : ST[d.status][1]}`}>{late ? `${Math.floor(hoursSince(d.created_at))} 小时没点收到 · 打电话` : ST[d.status][0]}</span></div>
+            {g && <div className="small">这一次下给 {g.length} 人要汇报：<b>已交 {g.filter((x) => ['done', 'closed'].includes(x.status)).length} / 共 {g.length}</b>{g.some((x) => !['done', 'closed'].includes(x.status)) ? <span className="red-t2"> · 没交：{g.filter((x) => !['done', 'closed'].includes(x.status)).map((x) => x.assignee_name).join('、')}</span> : null}</div>}
+            <div className="t2-times"><TC k="下达">{dt(d.created_at)}</TC>
+              {d.ack_at ? <TC k="收到" tip={`下达后多久点了收到 · ${dt(d.ack_at)}`}>{after(d.created_at, d.ack_at)}</TC> : <TC k="收到" dim>还没</TC>}
+              {d.done_at && <TC k="完成" tip={`下达后多久交了结果 · ${dt(d.done_at)}`}>{after(d.created_at, d.done_at)}</TC>}
+              {d.reject_count > 0 && <span className="pill amber">退回过 {d.reject_count} 次</span>}
+              {d.status === 'done' && <span className="pill green" onClick={(e) => e.stopPropagation()}>✓ {d.proof_id ? <>交了{PROOF_KIND[d.proof_kind] || '单据'} {d.proof_kind === 'deal' ? <DealLink id={d.proof_id} no={d.proof_label} /> : d.proof_label}</> : (d.done_note || '传了照片')}</span>}</div>
+          </div>
+          <div className="t2-right" onClick={(e) => e.stopPropagation()}>
+            <DueChip d={d} />
+            {d.status === 'done' && <><button type="button" className="btn primary" onClick={() => run('已确认，这条关闭', `select app.confirm_directive($1,true,null)`, [d.id])}>确认</button><button type="button" className="btn" onClick={() => setRej(d)}>退回</button></>}
+            {d.status !== 'done' && <button type="button" className="btn sm ghost" onClick={() => setStop(d)}>撤销</button>}
+          </div>
+        </div>
+        {on && <div className="t2-exp"><div className="t2-cols">
+          <div className="t2-box"><h4>当初怎么下的</h4><div className="t2-kv">
+            <span>编号</span><span>{d.no || '—'}</span><span>分类</span><span>{d.dir_type || '其他'}</span><span>下达人</span><span>{d.issuer_name || '中方'}</span>
+            <span>给谁</span><span>{who} · <EmpLink id={d.assignee_employee_id} name={d.assignee_name} /></span>
+            <span>谁汇报</span><span>{d.reporter === false ? '只需点收到，不用交结果' : g ? `这次 ${g.length} 人都要交` : '本人交结果'}</span>
+            <span>要交</span><span>{[d.require_photo && '照片', d.dir_type === '制单' && '订单'].filter(Boolean).join(' + ') || '文字结果'}</span>
+            {d.ref_label && <><span>{d.ref_kind === 'customer' ? '客户' : '挂在'}</span><span>{d.ref_kind === 'deal' ? <DealLink id={d.ref_id} no={d.ref_label} /> : d.ref_label}</span></>}
+            <span>内容</span><span style={{ whiteSpace: 'pre-wrap' }}>{d.body || '—'}</span></div><AttList items={d.attachments} /></div>
+          <div className="t2-box"><h4>经过</h4><div className="t2-steps">
+            <div className="t2-st done"><i /><div><b>下达</b><small>{dt(d.created_at)}</small></div></div>
+            <div className={`t2-st ${d.ack_at ? 'done' : 'now'}`}><i /><div><b>收到</b><small>{d.ack_at ? `${dt(d.ack_at)}（下达后 ${span(new Date(d.ack_at) - new Date(d.created_at))}）` : '还没点收到'}</small>{d.ack_reason && <small>晚收到的原因：{d.ack_reason}</small>}</div>{late && <span className="pill red">超 4 小时没收到，打电话</span>}</div>
+            <div className={`t2-st ${d.done_at ? 'done' : d.ack_at ? 'now' : ''}`}><i /><div><b>完成</b><small>{d.done_at ? `${dt(d.done_at)}（下达后 ${span(new Date(d.done_at) - new Date(d.created_at))}）` : '—'}</small>{d.done_note && <small>结果：{d.done_note}</small>}{d.done_photo && <Thumb src={d.done_photo} size={56} label="完成照片" />}</div></div>
+            <div className={`t2-st ${d.status === 'done' ? 'now' : ''}`}><i /><div><b>中方确认</b><small>{d.status === 'done' ? '等你确认' : '—'}</small>{d.confirm_note && <small>上次退回：{d.confirm_note}</small>}</div></div>
+          </div></div>
+        </div></div>}
+      </div>);
+  };
+  // 503: 同一类放一组, 组里从老到新
+  const grouped = (list) => {
+    const by = {}; for (const d of list) (by[d.dir_type || '其他'] = by[d.dir_type || '其他'] || []).push(d);
+    const keys = [...DIR_TYPES.filter((k) => by[k]), ...Object.keys(by).filter((k) => !DIR_TYPES.includes(k))];
+    return keys.map((k) => {
+      const items = by[k].slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at)); const ln = lateN(items);
+      return (<div key={k} className="t2-grp">
+        <button type="button" className={`t2-gh ${shut[k] ? 'shut' : ''}`} onClick={() => setShut((x) => ({ ...x, [k]: !x[k] }))} data-tip="组里从老到新排"><b>{k}</b><span className="c">{items.length}</span>{ln > 0 && <span className="pill red">{ln} 超时</span>}<span className="ar">▾</span></button>
+        {!shut[k] && items.map(issuedRow)}
+      </div>);
+    });
   };
   const mineRow = (d) => (
             <div key={d.id} className="row between todo-row" style={{ cursor: 'default', flexWrap: 'wrap' }}>
               <div className="stack" style={{ gap: 3, minWidth: 0, flex: 1 }}>
-                <div>{d.urgent && <span className="pill red" style={{ marginRight: 6 }}>紧急</span>}{d.dir_type && d.dir_type !== '其他' && <span className="pill blue" style={{ marginRight: 6 }}>{d.dir_type}</span>}<b>{d.title}</b> <span className={`pill ${ST[d.status][1]}`}>{ST[d.status][0]}</span></div>
+                <div>{d.no && <span className="t2-no" style={{ marginRight: 6 }}>{d.no}</span>}{d.urgent && <span className="pill red" style={{ marginRight: 6 }}>紧急</span>}{d.dir_type && d.dir_type !== '其他' && <span className="pill blue" style={{ marginRight: 6 }}>{d.dir_type}</span>}<b>{d.title}</b> <span className={`pill ${ST[d.status][1]}`}>{ST[d.status][0]}</span></div>
                 {d.body && <div className="small" style={{ whiteSpace: 'pre-wrap' }}>{d.body}</div>}
                 {d.ref_label && <div className="small">{d.ref_kind === 'customer' ? '客户：' : '挂在：'}{d.ref_kind === 'deal' ? <DealLink id={d.ref_id} no={d.ref_label} /> : <b>{d.ref_label}</b>}</div>}
                 <AttList items={d.attachments} />
@@ -155,20 +197,23 @@ export default function DirectiveBoard() {
             <span className="grow" /><div className="row"><button type="button" className="btn primary" onClick={() => setNw(true)}>＋ 下指令</button><button type="button" className="btn" onClick={() => setNw('rec')}>＋ 定期任务</button></div></div>
           <div className="tabs" style={{ padding: '0 12px' }}>
             <button type="button" className={tab === 'dir' ? 'on' : ''} onClick={() => setTab('dir')}>指令 {openDir.length}{lateN(openDir) > 0 && <span className="pill red" style={{ marginLeft: 6 }}>{lateN(openDir)} 超时</span>}</button>
+            <button type="button" className={tab === 'flow' ? 'on' : ''} onClick={() => setTab('flow')}>订单<FlowBadge /></button>
             <button type="button" className={tab === 'rec' ? 'on' : ''} onClick={() => setTab('rec')}>定期任务 {issued?.tpl.length || 0}{openRec.length > 0 && <span className="pill amber" style={{ marginLeft: 6 }}>{openRec.length} 条没做完</span>}</button>
           </div>
-          {tab === 'dir' && (openDir.length === 0 ? <div className="card-b small muted">没有没关的指令</div> : openDir.map(issuedRow))}
+          {tab === 'dir' && (openDir.length === 0 ? <div className="card-b small muted">没有没关的指令</div> : <div className="t2-list">{grouped(openDir)}</div>)}
+          {tab === 'flow' && <OrderFlow />}
           {tab === 'rec' && <>
             {(issued?.tpl.length ? issued.tpl.map((d) => (
               <div key={d.id} className="row between todo-row" style={{ cursor: 'default' }}><div><span className="pill blue">{REPEAT[d.repeat]}</span> <b>{d.title}</b> <span className="muted small">→ {tplWho(d)}{tplWhen(d)}{d.require_photo ? ' · 要拍照' : ''}</span></div>
                 <button type="button" className="btn sm" onClick={() => run('已停掉这个定期任务', `select app.stop_directive($1)`, [d.id])}>停掉</button></div>)) : <div className="card-b small muted">还没有定期任务。点「＋ 定期任务」建一个（打扫卫生、整理仓库、客户回访这类）。</div>)}
             {openRec.length > 0 && <div className="card-b small muted" style={{ paddingBottom: 0 }}>生成了、还没做完的：</div>}
-            {openRec.map(issuedRow)}
+            <div className="t2-list">{openRec.map(issuedRow)}</div>
           </>}
         </div>)}
       {nw && <NewDirective recurring={nw === 'rec'} onClose={() => setNw(false)} />}
       {done && <DoneModal d={done} onClose={() => setDone(null)} />}
       {rej && <RejectModal d={rej} onClose={() => setRej(null)} />}
+      {stop && <StopModal d={stop} onClose={() => setStop(null)} />}
     </>
   );
 }
@@ -284,6 +329,21 @@ function DoneModal({ d, onClose }) {
   );
 }
 
+// 502: 撤销先确认 —— 写清会发生什么, 必须选 / 写原因 (员工能看到)
+const STOP_REASONS = ['下错人', '不用做了', '重新下', '其他'];
+function StopModal({ d, onClose }) {
+  const { role, toast, refresh } = useApp();
+  const [note, setNote] = useState('');
+  const go = async () => { try { await call(role, `select app.stop_directive2($1,$2)`, [d.id, note]); toast('已撤销，记进操作记录了'); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (
+    <Modal risk="yellow" title={`撤销 ${d.no || ''}「${d.title}」？`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>不撤了</button><button type="button" className="btn primary" disabled={!note.trim()} onClick={go}>确认撤销</button></>}>
+      <div className="stack">
+        <div className="small">这条会从 <b>{d.assignee_name}</b> 的待办里消失；撤销后不能恢复，还要做就得重新下。</div>
+        <FRow label="原因" req><OptNote optKey="dir.stop_reason" title="撤销原因" options={STOP_REASONS} value={note} onChange={setNote} placeholder="为什么撤（他能看到）" /></FRow>
+      </div>
+    </Modal>
+  );
+}
 function RejectModal({ d, onClose }) {
   const { role, toast, refresh } = useApp();
   const [note, setNote] = useState('');
