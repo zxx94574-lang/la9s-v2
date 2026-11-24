@@ -20,7 +20,7 @@ LA&9S 在科特迪瓦做手机配件批发零售，要建一套自有的业务�
 - 真实数据私有版（Frank 日常用，数据存他浏览器）：https://claude.ai/artifact/JwjyRGoE23tc5iVjw6JwS7（slug `915000f1-a510-4606-a5d5-3e2a37ac1a80`），**现在 v93 `1795194047-f626`**（回退 = 重发上一版，版本号见 `docs/版本记录.md`）。
 - 线上测试环境 https://la9s.com（Supabase 免费版 `la9s-staging` + Cloudflare Pages，只有演示数据）**仍停在 v51**。
 - 代码以 GitHub 私有仓库 `zxx94574-lang/la9s-v2`（main）为准；Frank Mac 上的副本是旧的。
-- **测试版**（11-22 通宵跑通）：https://claude.ai/artifact/KBMVzkpBgWGuFuBTKy8KxA（slug `9336912e-0c15-4e17-87a1-33967185345f`，**`1795481547-a35a`**，11-24 00:52 发），`VITE_TEST=1` 构建，单独的库 + 约 180 个场景造数；报告 https://claude.ai/artifact/G2Df2Gjt2ovjkGAxDtS4ch。0076–0087 只在测试版（11-24：经营总览 0084、待办 0085、请假 0086、月报 0087）。**Frank 11-22 23:55：真实版先不动，先用测试版**；以后发真实版时同时换 la9s-logo.png 高清版，发前要重新从 main 构建并再做一次 v93→新版升级演练。
+- **测试版**（11-22 通宵跑通）：https://claude.ai/artifact/KBMVzkpBgWGuFuBTKy8KxA（slug `9336912e-0c15-4e17-87a1-33967185345f`，**`1795518796-315a`**，11-24 11:13 发），`VITE_TEST=1` 构建，单独的库 + 约 180 个场景造数；报告 https://claude.ai/artifact/G2Df2Gjt2ovjkGAxDtS4ch。0076–0087 只在测试版（11-24：经营总览 0084、待办 0085、请假 0086、月报 0087）。**Frank 11-22 23:55：真实版先不动，先用测试版**；以后发真实版时同时换 la9s-logo.png 高清版，发前要重新从 main 构建并再做一次 v93→新版升级演练。
 - 迁移到 **0087**，下一个 **0088**；`npm test` **196** 个场景。本地看测试版：`/home/claude/devbuild.sh`（工作区直接构建到 `/home/claude/art-dev`，要把 art-test 里的数据文件拷过去）+ `python3 -m http.server 5177`；`vite dev` 在 artifact 模式下跑不起来。
 - **每次回复开头放两个链接（Frank 11-23）**：真实版 + 测试版，一行：`[LA&9S 真实数据版](https://claude.ai/artifact/JwjyRGoE23tc5iVjw6JwS7) · [测试版](https://claude.ai/artifact/KBMVzkpBgWGuFuBTKy8KxA)`。
 - 等 Frank 答：试测试版；店铺价可见性；国内：付工厂按入仓号还是月结、汇回按批次还是总额。其余见 `docs/待改清单.md`。
