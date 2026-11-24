@@ -379,6 +379,13 @@ export async function seedScenarios(db, org, log = () => {}) {
     if (c) await db.query(`update app.directives set due_on = current_date - 1, due_at = now() - interval '10 hours', created_at = now() - interval '2 days' where id = $1`, [c.id]);
   });
 
+  // ── 请假 / 迟到报备 (501) ──
+  await run('请假 / 迟到报备', async () => {
+    await as(USERS.picker, `select app.take_leave($1,$2)`, [org, JSON.stringify({ from: day(-1), to: day(-2), kind: 'full', reason: '测试：家里有事' })]);
+    await as(USERS.hotline, `select app.take_leave($1,$2)`, [org, JSON.stringify({ from: day(0), kind: 'hours', from_time: '10:00', to_time: '12:00', reason: '测试：办事' })]).catch(() => {});
+    await as(USERS.manager, `select app.report_late($1,'测试：堵车',null)`, [org]);
+  });
+
   // ── 看板要的「以前的数」(0084): 前 3 个月的历史单 (一部分没收款 → 超账期) + 销售员归属 + 库龄 ──
   const reps = [];
   for (const [n, nm] of ['测试销售 A', '测试销售 B', '测试销售 C'].entries()) reps.push(await mkEmp(nm, '销售', 'sales').catch(async () => (await one(`insert into app.employees (org_id, short_name, department, position) values ($1,$2,'销售','销售员') returning id`, [org, nm])).id));

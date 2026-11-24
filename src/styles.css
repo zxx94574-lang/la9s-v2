@@ -1904,3 +1904,18 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .card-h h2 { font-weight: 800; }
 .sumbar .s .v { font-weight: 750; }
 @media (max-width: 560px) { .mkpis, .bigsum, .kpis, .kpis.k4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mkpi:nth-child(odd), .bigsum > div:nth-child(odd), .kpis > .kpi:nth-child(odd) { border-left: 0; padding-left: 0; } }
+
+/* ───────── 手机端: 整页不许左右滑, 只有表格自己能滑; 放不下就换行, 不许竖排字 (待改 485 / 486, Frank 11-23) ───────── */
+.substep { flex-wrap: wrap; min-width: 0; }
+.substep > .grow { flex: 1 1 200px; min-width: min(100%, 200px); }
+.substep > .row, .substep > .doc-actions, .substep > div:not(.grow):not(.sn) { flex-wrap: wrap; max-width: 100%; }
+@media (max-width: 760px) {
+  html, body { overflow-x: clip; max-width: 100%; }
+  .main, .content, .page { min-width: 0; max-width: 100vw; overflow-x: clip; }
+  .card-h, .card-b > .row, .pagehead, .modal-f, .toolbar { flex-wrap: wrap; }
+  .card-h > *, .pagehead > * { min-width: 0; max-width: 100%; }
+  h1, h2, h3, label, .btn { overflow-wrap: anywhere; }
+  .btn { white-space: normal; }
+  .field > label, .frow > label { min-width: min(100%, 4em); }
+  .rule-row { flex-wrap: wrap; } .rule-row > .grow { flex: 1 1 200px; min-width: min(100%, 200px); }
+}

@@ -6,7 +6,9 @@ import AttCalendar from '../components/AttCalendar.jsx';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, DatePicker, MonthPicker, Drawer, MoneyIn } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, DatePicker, MonthPicker, Drawer, MoneyIn, Choice, PhotoInput, FRow, ConfirmBtn } from '../components/ui.jsx';
+import { OptNote } from '../components/Opts.jsx';
+import { RuleGear } from '../components/Rules.jsx';
 import { staffOptions, optLabel } from '../lib/staffOptions.js';
 import { EmpLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
@@ -41,17 +43,22 @@ export default function Attendance() {
   const [site, setSite] = useState(null);
   const [appeal, setAppeal] = useState(null);
   const [early, setEarly] = useState(null);   // 450: 提前下班 → 弹窗写原因
+  const [leave, setLeave] = useState(false); const [lateDlg, setLateDlg] = useState(false);   // 501: 请假 / 迟到报备
   const admin = role === 'admin';
   const canName = ['admin', 'manager', 'sales_manager'].includes(role);
   const { data } = useData(async () => {
     const since = new Date(); since.setMonth(since.getMonth() - 2);
+    const [myLv, dayLv, myRep] = await Promise.all([
+      q(`select l.* from app.leaves l where l.org_id = $1 and l.user_id = $2 and l.day >= date_trunc('month', current_date)::date order by l.day`, [org, USERS[role]]),
+      admin ? q(`select l.*, coalesce(e.short_name, e.full_name) as short_name from app.leaves l join app.employees e on e.id = l.employee_id where l.org_id = $1 and l.day = $2::date order by e.short_name`, [org, day]) : [],
+      q(`select r.day from app.late_reports r where r.org_id = $1 and r.user_id = $2 and r.day = (now() at time zone 'Africa/Abidjan')::date`, [org, USERS[role]])]);
     const [mine, sites, dayRows, monthRows, [st], myAp, allAp] = await Promise.all([q(Q.attendanceMine, [org, USERS[role]]), q(Q.workSites, [org]),
       admin ? q(Q.attendanceDay, [org, day]) : [], admin ? q(Q.attendanceMonth, [org, month]) : [], q(Q.attendanceSettings, [org]),
       q(Q.myAppeals, [org, USERS[role]]), admin ? q(Q.appeals, [org, since.toISOString().slice(0, 10)]) : []]);
     const [{ ps }] = await call(role, `select app.punch_state($1) as ps`, [org]);
     // 448: 下班打卡时提示还有几件待办没做完 (紧急 + 进行中, 按这个岗位算)
     const left = ps?.next === 'out' ? (await q(Q.orders, [org, '2000-01-01', '2999-12-31'])).filter((d) => todoFor(role, d) && todoLevel(d) !== 'green').length : 0;
-    return { mine, sites, dayRows, monthRows, st, myAp, allAp, ps, left };
+    return { mine, sites, dayRows, monthRows, st, myAp, allAp, ps, left, myLv, dayLv, reported: myRep.length > 0 };
   }, [org, role, day, month]);
   if (!data) return <div className="empty">加载中…</div>;
   // 450: 只有一个按键. 这一下是上班还是下班, 后台按今天的状态定 (app.punch), 不按钟点.
@@ -98,6 +105,9 @@ export default function Attendance() {
   const mCols = [
     { key: 'short_name', label: '员工', w: 100, render: (e) => <b><EmpLink id={e.employee_id || e.id} name={e.short_name} /></b> }, { key: 'department', label: '部门', w: 80 },
     { key: 'days', label: '出勤天数', w: 110, value: (e) => Number(e.days), render: (e) => { const due = workdaysSoFar(month); const n = Number(e.days); return <span className={`pill ${n >= due ? 'green' : n >= due - 2 ? 'amber' : 'red'}`} title={`到今天应到 ${due} 天`}>{n} / {due}</span>; } }, { key: 'late', label: '迟到次数', w: 90, value: (e) => Number(e.late), render: (e) => (Number(e.late) ? <span className="amber-t2">{e.late}</span> : 0) },
+    { key: 'worked', label: '算出勤 天', w: 100, type: 'number', value: (e) => Number(e.worked), render: (e) => <b>{Number(e.worked)}</b> },
+    { key: 'leave_days', label: '请假 天', w: 90, type: 'number', value: (e) => Number(e.leave_days), render: (e) => (Number(e.leave_days) ? Number(e.leave_days) : '') },
+    { key: 'late_rep', label: '迟到报备 次', w: 110, type: 'number', value: (e) => Number(e.late_rep), render: (e) => (Number(e.late_rep) ? <Pill tone="amber">{e.late_rep}</Pill> : '') },
     { key: 'off_site', label: '不在地点次数', w: 110, value: (e) => Number(e.off_site), render: (e) => (Number(e.off_site) ? <span className="red-t2">{e.off_site}</span> : 0) },
   ];
   const sCols = [
@@ -121,6 +131,11 @@ export default function Attendance() {
             {ps.next !== 'done'
               ? <div><button type="button" className={`btn lg ${ps.next === 'in' ? 'primary' : ''}`} style={{ minWidth: 180, minHeight: 56, fontSize: 18 }} disabled={busy} onClick={() => punch()}>{ps.next === 'in' ? '打卡' : '下班打卡'}</button></div>
               : <div className="muted small">今天的卡打完了</div>}
+            <div className="row" style={{ justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="btn" onClick={() => setLeave(true)}>请假</button>
+              {data.reported ? <Pill tone="amber">今天的迟到已报备</Pill> : <button type="button" className="btn" onClick={() => setLateDlg(true)}>迟到报备</button>}
+              {admin && <RuleGear ids={['att.late_free', 'att.late_deduct']} title="迟到规则" />}
+            </div>
             {ps.next === 'out' && ps.early && <div className="small muted">还没到下班时间（{String(ps.end_time || '').slice(0, 5)}）。现在打下班卡要写原因，会记一次早退。</div>}
             {busy && <div className="muted small">正在拿定位…</div>}
             {fail && <div className="banner warn">{fail}</div>}
@@ -132,10 +147,14 @@ export default function Attendance() {
                 <span className="grow" />{a.ok ? <Pill tone="green">在地点</Pill> : <Pill tone="red">不在地点</Pill>}{a.late && <Pill tone="amber">迟到</Pill>}{a.early && <Pill tone="red">早退</Pill>}</div>)}
             </div>
           </div>
+          {data.myLv.length > 0 && <div className="card card-b" style={{ marginTop: 12 }}><div className="pd-h">我这个月的请假</div>
+            <div className="stack" style={{ gap: 6 }}>{data.myLv.map((l) => <div key={l.id} className="row" style={{ gap: 8, flexWrap: 'wrap' }}><b>{String(l.day).slice(0, 10)}</b><Pill tone="gray">{LV_KIND(l)}</Pill><span className="muted small">{l.reason || ''}</span><span className="grow" />
+              {String(l.day).slice(0, 10) >= today() && <ConfirmBtn className="btn sm ghost" title="撤掉这天的请假？" body="撤掉以后这天照常要打卡。" okText="确认撤掉" onOk={async () => { try { await call(role, `select app.cancel_leave($1)`, [l.id]); toast('已撤掉'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } }}>撤掉</ConfirmBtn>}</div>)}</div></div>}
           {/* 226: 我这个月的打卡日历, 点某一天看明细 / 申诉 */}
           <div className="card card-b" style={{ marginTop: 12 }}><div className="pd-h">我这个月的打卡</div><AttCalendar compact /></div>
         </div>)}
       {tab === 'cal' && <EmpCalList />}
+      {tab === 'day' && data.dayLv.length > 0 && <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}><span className="small muted">这天请假：</span>{data.dayLv.map((l) => <span key={l.id} className="pill gray" title={l.reason || ''}>{l.short_name} · {LV_KIND(l)}</span>)}</div>}
       {tab === 'day' && <div className="card"><Grid id="att-day" table="attendance" columns={dCols} rows={data.dayRows} empty="这一天没人打卡" tools={<DatePicker value={day} onChange={setDay} />} /></div>}
       {tab === 'month' && <div className="card"><Grid id="att-month" columns={mCols} rows={data.monthRows} tools={<MonthPicker value={month} onChange={setMonth} label="月份" />} /></div>}
       {tab === 'appeals' && <div className="card">
@@ -147,6 +166,8 @@ export default function Attendance() {
         tools={<>{admin && <button type="button" className="btn sm primary" onClick={() => setSite({})}>＋ 新地点</button>}{admin && <button type="button" className="btn sm" onClick={() => setSite('rules')}>打卡规则</button>}</>} /></div>}
       {site && site !== 'rules' && (admin ? <SiteModal s={site} onClose={() => setSite(null)} /> : <NameModal s={site} onClose={() => setSite(null)} />)}
       {appeal && <AppealModal onClose={() => setAppeal(null)} />}
+      {leave && <LeaveModal onClose={() => setLeave(false)} />}
+      {lateDlg && <LateModal onClose={() => setLateDlg(false)} />}
       {early && <Modal title={ps.early ? '提前下班' : '下班打卡'} risk="yellow" onClose={() => setEarly(null)} footer={<><button type="button" className="btn" onClick={() => setEarly(null)}>先不打</button>{data.left > 0 && <button type="button" className="btn" onClick={() => { setEarly(null); go('todo'); }}>去待办</button>}<button type="button" className="btn primary" disabled={busy || (ps.early && !early.note.trim())} onClick={() => punch(early.pos, early.note.trim())}>确认下班打卡</button></>}>
         {data.left > 0 && <div className="banner warn">还有 <b>{data.left}</b> 件待办没做完（紧急 + 进行中）。今天的事今天做完；现在下班，没做完的明天会升成紧急，中方看得到。</div>}
         {ps.early && <><div className="hint">还没到下班时间（{String(ps.end_time || '').slice(0, 5)}）。可以打，但要写原因，这一天会记「早退」，算一次异常。</div>
@@ -155,6 +176,41 @@ export default function Attendance() {
       {site === 'rules' && <RulesModal st={data.st} onClose={() => setSite(null)} />}
     </>
   );
+}
+
+// 501 (Frank 11-23): 请假 —— 全天 / 半天 / 按小时, 自己填不用批; 请的那部分不算出勤
+const LV_KIND = (l) => ({ full: '全天', am: '上午', pm: '下午' })[l.kind] || `${String(l.from_time || '').slice(0, 5)}–${String(l.to_time || '').slice(0, 5)}（${Number(l.hours)} 小时）`;
+function LeaveModal({ onClose }) {
+  const { org, role, toast, refresh } = useApp();
+  const [f, setF] = useState({ kind: 'full', from: today(), to: today(), from_time: '10:00', to_time: '12:00', reason: '' });
+  const hrs = f.kind === 'hours' ? (new Date(`2000-01-01T${f.to_time}`) - new Date(`2000-01-01T${f.from_time}`)) / 36e5 : 0;
+  const ok = f.from && (f.kind !== 'hours' ? f.to >= f.from : hrs > 0) && f.reason.trim();
+  const go = async () => { try { const [{ n }] = await call(role, `select app.take_leave($1,$2) as n`, [org, JSON.stringify(f)]); toast(`已登记请假 ${n} 天`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (
+    <Modal title="请假" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!ok} onClick={go}>登记</button></>}>
+      <div className="stack">
+        <FRow label="请多久" req><Choice value={f.kind} onChange={(v) => setF({ ...f, kind: v })} options={[['full', '全天'], ['am', '上午'], ['pm', '下午'], ['hours', '按小时']]} /></FRow>
+        <FRow label={f.kind === 'hours' ? '哪天' : '从哪天'} req><DatePicker value={f.from} onChange={(v) => setF({ ...f, from: v, to: f.to < v ? v : f.to })} /></FRow>
+        {f.kind !== 'hours' && <FRow label="到哪天" req><DatePicker value={f.to} onChange={(v) => setF({ ...f, to: v })} /></FRow>}
+        {f.kind === 'hours' && <FRow label="几点到几点" req><span className="row" style={{ gap: 6 }}><input type="time" className="in" value={f.from_time} onChange={(e) => setF({ ...f, from_time: e.target.value })} /><span>到</span><input type="time" className="in" value={f.to_time} onChange={(e) => setF({ ...f, to_time: e.target.value })} />{hrs > 0 && <span className="muted small">{hrs.toFixed(1)} 小时</span>}</span></FRow>}
+        <FRow label="原因" req><OptNote optKey="att.leave_reason" title="请假原因" options={['生病', '家里有事', '办事', '其他']} value={f.reason} onChange={(v) => setF({ ...f, reason: v })} placeholder="写一句" /></FRow>
+        <div className="hint">不用审批，登记了就生效。请假的那部分不算出勤（全天不算、半天算半天、按小时折算），当天没打卡不算异常。</div>
+      </div>
+    </Modal>);
+}
+// 迟到报备: 只报今天; 报备过的迟到标黄, 每月前几次不扣
+function LateModal({ onClose }) {
+  const { org, role, toast, refresh } = useApp();
+  const [reason, setReason] = useState(''); const [proof, setProof] = useState(null);
+  const go = async () => { try { await call(role, `select app.report_late($1,$2,$3)`, [org, reason, proof]); toast('已报备今天的迟到'); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (
+    <Modal title="迟到报备" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!reason.trim()} onClick={go}>报备</button></>}>
+      <div className="stack">
+        <FRow label="原因" req><OptNote optKey="att.late_reason" title="迟到原因" options={['堵车', '下雨', '车坏了', '家里有事', '其他']} value={reason} onChange={setReason} placeholder="写一句" /></FRow>
+        <FRow label="截图（可以不传）"><PhotoInput value={proof} onChange={setProof} label="拍照 / 截图" /></FRow>
+        <div className="hint">只能报今天的。报备过的迟到每个月前几次不扣；没报备的迟到扣当天。</div>
+      </div>
+    </Modal>);
 }
 
 function SiteModal({ s, onClose }) {

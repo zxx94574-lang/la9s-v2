@@ -571,7 +571,10 @@ export const attendanceMonth = `
 select e.id, e.short_name, e.department,
   count(distinct (a.at at time zone 'Africa/Abidjan')::date) filter (where a.kind = 'in') as days,
   count(*) filter (where a.kind = 'in' and a.late) as late,
-  count(*) filter (where not a.ok) as off_site
+  count(*) filter (where not a.ok) as off_site,
+  (select coalesce(sum(app.leave_frac(l.kind, l.hours)), 0) from app.leaves l where l.employee_id = e.id and to_char(l.day, 'YYYY-MM') = $2) as leave_days,
+  (select count(*) from app.late_reports r where r.employee_id = e.id and to_char(r.day, 'YYYY-MM') = $2) as late_rep,
+  app.worked_days($1, e.id, ($2 || '-01')::date) as worked
 from app.employees e left join app.attendance a on a.employee_id = e.id and to_char(a.at at time zone 'Africa/Abidjan', 'YYYY-MM') = $2
 where e.org_id = $1 and e.active group by e.id order by e.department, e.short_name`;
 export const attendanceSettings = `select * from app.attendance_settings where org_id = $1`;

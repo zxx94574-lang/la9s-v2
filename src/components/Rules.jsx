@@ -45,6 +45,8 @@ export const RULES = [
   ['freight.acct', 'freight_rules', 'account', '我们出的运费记在哪个账户', 'Wave-XOF', '', 'text', { page: 'cash', anchor: 'cash-rules', where: '资金账户' }],
   ['remit.diff', 'remit_rules', 'diff_pct', '回款：实际到账比应到差多少要标红、核对时必须写原因', 2, '%', 'num', { page: 'cash', anchor: 'remit-rules', where: '资金账户 · 回款（汇回国内）' }],
   ['remit.days', 'remit_rules', 'transit_days', '回款：交出去几天还没到账要提醒', 3, '天', 'num', { page: 'cash', anchor: 'remit-rules', where: '资金账户 · 回款（汇回国内）' }],
+  ['att.late_free', 'late_rules', 'free', '迟到报备：每个月前几次报备过的迟到不扣', 2, '次', 'num', { page: 'attendance', where: '打卡' }],
+  ['att.late_deduct', 'late_rules', 'deduct', '没报备 / 超过次数的迟到：扣当天出勤', true, '', 'bool', { page: 'attendance', where: '打卡' }],
   // 经营总览 (待改 487–506, Frank 11-23): 都在看板对应的板块上就地改
   ['dash.budget', 'dash_rules', 'budget_cny', '销售：本月预算（国内给的月预算，0 = 不显示进度条）', 0, 'CNY', 'num', { page: 'dashboard', where: '经营总览 · 销售' }],
   ['dash.age1', 'dash_rules', 'age1', '库龄：超过多少天标黄', 30, '天', 'num', { page: 'dashboard', where: '经营总览 · 库存' }],
@@ -83,6 +85,8 @@ export const META = {
   'wo.max': { area: 'pay', short: '抹零 · 一张单最多', src: 'Frank 定', apply: '收款时抹零', effect: '超过不让抹，要走坏账核销' },
   'margin.low': { area: 'cust', short: '毛利率低于多少标黄', src: 'Claude 先定', apply: '毛利分析、订单毛利（只中方看）', effect: '标黄；负数一律标红', me: 1 },
   'vol.pct': { area: 'cust', short: '月提货量涨跌 · 算变化大', src: 'Claude 先定', apply: '客户每月提货量对比', effect: '进中方待办「拿货量变化」', me: 1 },
+  'att.late_free': { area: 'staff', short: '报备的迟到 · 每月免扣几次', src: 'Frank 11-23 定', apply: '员工点了「迟到报备」的迟到', effect: '前几次标黄不扣，超过照扣当天' },
+  'att.late_deduct': { area: 'staff', short: '迟到扣当天', src: 'Frank 11-23 定', apply: '没报备 / 超过次数的迟到', effect: '那天不算出勤，工资少一天' },
   'dash.budget': { area: 'sys', short: '看板 · 本月销售预算', src: '国内每月给的预算', apply: '经营总览销售卡片', effect: '显示预算达成进度条' },
   'dash.age1': { area: 'po', short: '库龄 · 标黄天数', src: 'Frank 11-23 定', apply: '经营总览库存', effect: '这段库存标黄' },
   'dash.age2': { area: 'po', short: '库龄 · 标红天数', src: 'Frank 11-23 定（国内严重超期线）', apply: '经营总览库存', effect: '这段库存标红' },
