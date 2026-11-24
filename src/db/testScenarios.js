@@ -316,6 +316,14 @@ export async function seedScenarios(db, org, log = () => {}) {
     if (k === 1) await db.query(`update app.directives set promise_on = current_date - 1 where id = $1`, [dir.id]);
   });
   log('指令做完');
+  // 510: 库位 —— 挑 12 个本地有货的型号放到库位上 (其余算「待上架」), 一个库位放过又出空
+  await run('库位·上架', async () => {
+    const rs = await all(`select s.product_id, sum(s.qty_on_hand)::int q from app.stock_items s join app.warehouses w on w.id = s.warehouse_id where w.org_id = $1 and w.kind = 'local' and s.qty_on_hand > 0 group by s.product_id order by 2 desc limit 12`, [org]);
+    const bins = ['TXI-A-1', 'TXI-A-2', 'TXI-B-1', 'TXI-C-3', 'SS-A-1', 'SS-A-2', 'SS-B-4', 'AA-A-1', 'AA-D-2', 'LR', 'SLR', 'TXI-G-4'];
+    for (let k = 0; k < rs.length; k++) await as(USERS.admin, `select app.bin_putaway($1,$2,$3,$4,'测试：首批上架')`, [org, bins[k], rs[k].product_id, Math.max(1, Math.floor(rs[k].q * 0.8))]);
+    const last = rs[rs.length - 1];
+    if (last) await as(USERS.admin, `select app.bin_move($1,'TXI-G-4','SS-D-1',$2,$3)`, [org, last.product_id, Math.max(1, Math.floor(last.q * 0.8))]);
+  });
 
   // ── 8. 客户账号 + 店里收银 (0077): 一个客户开账号, 老板 + 门店店员, 店里卖货 ──
   await run('客户账号·开账号和门店', async () => {

@@ -7,6 +7,8 @@ import Kpi from './pages/Kpi.jsx';
 import MarginPage from './pages/MarginPage.jsx';
 import RulesPage from './pages/RulesPage.jsx';
 import CodeReview from './pages/CodeReview.jsx';
+import Count from './pages/Count.jsx';
+import Bins from './pages/Bins.jsx';
 import { DirectiveGate, DirBar } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info, useStickyPagehead, useInstantTips } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
@@ -245,6 +247,8 @@ export default function App() {
     case 'balances': view = <Balances />; break;
     case 'customer': view = <CustomerLedger id={id} key={id} />; break;
     case 'stock': view = <Stock />; break;
+    case 'count': view = <Count />; break;
+    case 'bins': view = <Bins />; break;
     case 'unmet': view = <Unmet />; break;
     case 'materials': view = <Materials />; break;
     case 'pricing': view = <Pricing />; break;

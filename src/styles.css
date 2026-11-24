@@ -1955,3 +1955,19 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .pd-h .seg.sm button{padding:3px 9px;font-size:12px;min-height:26px}
 .chip.tierchip{padding:3px 6px;background:#fff;opacity:.45}
 .chip.tierchip.on{background:#fff;border-color:var(--brand);opacity:1;box-shadow:0 0 0 1px var(--brand) inset}
+/* 510 库位 / 盘点 */
+.binpick{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.binpick-code{font-family:ui-monospace,Menlo,monospace;color:var(--brand);font-size:15px;margin-left:4px}
+.prodpick{display:flex;flex-direction:column;gap:3px;max-height:260px;overflow:auto}
+.pp-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;text-align:left;background:#fff;border:1px solid var(--line-2,#e3e7ee);border-radius:8px;padding:7px 10px;cursor:pointer;font:inherit}
+.pp-row:hover{border-color:var(--brand)}
+.bin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;padding:12px}
+.bin-cell{border:1px solid var(--line,#eef0f3);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.bin-cell.empty{background:#fafbfc}
+.bin-line{display:flex;gap:4px;align-items:baseline;flex-wrap:wrap}
+.bin-acts{margin-left:auto}
+.lay-row{display:grid;grid-template-columns:90px minmax(0,1fr) 140px 70px 70px;gap:6px;align-items:center}
+@media (max-width:640px){.lay-row{grid-template-columns:70px minmax(0,1fr) 90px 50px 60px}}
+.count-form{display:flex;flex-direction:column;gap:10px}
+.count-form .in.qty{font-size:20px;width:140px;text-align:right}
+.count-warn{background:#fff8e6;border:1px solid #f5dfa6;border-radius:8px;padding:6px 10px;font-size:13px}
