@@ -8,6 +8,7 @@ import { TIERS } from '../lib/domain.js';
 import { LayoutGrid, setLayoutEdit, useLayoutEdit } from '../components/Layout.jsx';
 import { useDashAll } from '../components/DashBlocks.jsx';
 import { SalesSec, StockSec, AcctSec, PeopleSec, Attention } from '../components/Dash2.jsx';
+import MonthReport from '../components/MonthReport.jsx';
 
 const N = (v) => Number(v || 0);
 const shift = (d, days) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + days); return x.toISOString().slice(0, 10); };
@@ -28,7 +29,7 @@ export default function Dashboard() {
   const edit = useLayoutEdit();
   const admin = role === 'admin';
   const all = useDashAll();
-  const [alerts, setAlerts] = useState({});
+  const [alerts, setAlerts] = useState({}); const [report, setReport] = useState(false);
   const onAlert = useCallback((k, list) => setAlerts((a) => (JSON.stringify(a[k] || []) === JSON.stringify(list) ? a : { ...a, [k]: list })), []);
   const { data } = useData(async () => {
     const [[k], rc, bal, [cards], cmp, fobs] = await Promise.all([q(Q.dashboard, [org, from, to]), q(Q.receipts, [org, from, to]), q(Q.balances, [org]),
@@ -91,9 +92,11 @@ export default function Dashboard() {
       <div className="pagehead">
         <div><div className="eyebrow">LA&9S / Votre partenaire</div><h1>经营总览</h1></div>
         <PeriodBar p={P}>
+          {admin && <button type="button" className="btn sm primary" onClick={() => setReport(true)}>出月报</button>}
           {admin && <button type="button" className={`btn sm ${edit ? 'primary' : ''}`} onClick={() => setLayoutEdit(!edit)} title="大板块和板块里小卡片的顺序、宽度、显示不显示（全员一样）">⚙ 配置看板</button>}
         </PeriodBar>
       </div>
+      {report && <MonthReport all={all} onClose={() => setReport(false)} />}
       {data && <Attention alerts={alerts} />}
       {!data ? <div className="empty">加载中…</div> : <LayoutGrid page="dash" blocks={blocks} />}
     </>

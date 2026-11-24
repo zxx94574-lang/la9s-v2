@@ -14,6 +14,7 @@ import { RuleGear, useRuleValues, ruleNum } from './Rules.jsx';
 import Grid from './Grid.jsx';
 import { Fold, total, pctTone, Pct } from './DashBlocks.jsx';
 import { money, qty, dDate, today } from '../lib/format.js';
+import { Spark, weekly } from './MonthReport.jsx';
 import { TIERS } from '../lib/domain.js';
 
 const N = (v) => Number(v || 0);
@@ -147,11 +148,17 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
       and not (coalesce(m.category, '') = '本地物流费' and coalesce(m.note, '') like '运费 %')
       and m.receipt_id is null and coalesce(m.category, '') not like '%退款%'
     group by 1, 2`, [org, from, to]).catch(() => []), [org, from, to, tick]);
+  // 工资 (公司成本 = 实发 + 社保): 这段时间里的那几个月的工资表 (草稿也算, 没建工资表的月份就没有)
+  const { data: pay } = useData(() => q(`select coalesce(sum(coalesce(p.net, 0) + coalesce(p.cnps, 0)), 0) as v, count(*) as n, count(distinct p.month) as months
+    from app.payroll p where p.org_id = $1 and p.month >= date_trunc('month', $2::date)::date and p.month <= $3::date`, [org, from, to]).catch(() => []), [org, from, to, tick]);
   const { data: psd } = useData(() => q(`select rmb_per_xof, xof_per_usd from app.price_settings where org_id = $1`, [org]), [org, tick]);
   const ps = psd?.[0];
   const conv = (xof) => (s.cur === 'XOF' ? xof : s.cur === 'CNY' ? xof * N(ps?.rmb_per_xof) : N(ps?.xof_per_usd) ? xof / N(ps.xof_per_usd) : 0);
   const expRows = useMemo(() => { const by = {}; for (const e of exps || []) { const x = by[e.category] || (by[e.category] = { id: e.category, name: e.category, v: 0, n: 0 }); x.v += conv(toXof(N(e.amount), e.currency, ps)); x.n += N(e.n); } return Object.values(by).sort((a, b) => b.v - a.v); }, [exps, ps, s.cur]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const expT = expRows.reduce((a, e) => a + e.v, 0);
+  const payV = conv(N(pay?.[0]?.v)); const hasPay = N(pay?.[0]?.n) > 0;
+  // 有工资表就用工资表, 资金账户里记的「工资」支出不重复算
+  const expShown = hasPay ? [{ id: '__pay', name: `工资（工资表 ${N(pay[0].months)} 个月，公司成本）`, v: payV, n: N(pay[0].n) }, ...expRows.filter((e) => !/工资|薪|salaire|CNPS|社保/i.test(e.name))] : expRows;
+  const expT = expShown.reduce((a, e) => a + e.v, 0);
   const budget = ruleNum(rv, 'dash.budget'); const inMonth = from.slice(8) === '01' && from.slice(0, 7) === to.slice(0, 7);
   const revCny = useMemo(() => (budget > 0 && inMonth ? total(rows, { target: 'CNY' }).rev : 0), [rows, budget, inMonth]);
   const miss = [...T.all.missModels.values()].sort((a, b) => b.qty - a.qty);
@@ -194,7 +201,7 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
   const pl = [
     { id: 'rev', name: '销售额', v: T.all.rev, b: 1 }, { id: 'cost', name: '− 货的成本', v: -T.all.cost },
     { id: 'gp', name: '= 毛利', v: T.all.profit, b: 1, pct: T.all.pct },
-    ...expRows.map((e) => ({ id: 'e:' + e.id, name: `− ${e.name}`, v: -e.v, n: e.n, sub: 1 })),
+    ...expShown.map((e) => ({ id: 'e:' + e.id, name: `− ${e.name}`, v: -e.v, n: e.n, sub: 1 })),
     { id: 'exp', name: '− 日常开支合计', v: -expT },
     { id: 'net', name: '= 净利', v: T.all.profit - expT, b: 1, pct: T.all.known ? (T.all.profit - expT) / T.all.known * 100 : null },
   ];
@@ -222,7 +229,7 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
             { key: 'v', label: `金额 ${C}`, w: 160, type: 'money', sortable: false, value: (r) => r.v, render: (r) => <span className={r.v < 0 && r.b ? 'red-t2' : ''}>{r.b ? <b>{s.f(r.v)}</b> : s.f(r.v)}</span> },
             { key: 'pct', label: '占销售额', w: 110, type: 'number', sortable: false, value: (r) => r.pct, render: (r) => (r.pct == null ? '' : <Pct p={r.pct} low={r.id === 'net' ? 0 : lowPct} />) },
             { key: 'n', label: '笔', w: 70, type: 'number', sortable: false, value: (r) => r.n || '' }]} />
-          <div className="small muted" style={{ marginTop: 6 }} data-tip="开支 = 资金账户里已批的支出（按科目）。订单运费已经在毛利里扣过、退给客户的钱不算开支，都不重复算。工资表还没接进来。">开支只算在「资金账户」里记了、已经批了的支出；没记进系统的减不掉。工资还没接进来。</div></>}
+          <div className="small muted" style={{ marginTop: 6 }} data-tip="开支 = 资金账户里已批的支出（按科目）+ 工资表（实发 + 社保）。订单运费已经在毛利里扣过、退给客户的钱不算开支，都不重复算。">{hasPay ? '' : '这段时间还没建工资表，净利里没扣工资。'}开支只算系统里记了的；没记进来的减不掉。</div></>}
       </Detail>}
       <div className="d2-row">
         <DCard small title="本地备货" open={o1 === 'local'} onFold={() => { setExp({}); tg1('local'); }} foot={<span>{T.loc.n} 单 · {T.loc.c} 位客户</span>}><div className="d2-sub">{cells(T.loc, 'local', false)}</div></DCard>
@@ -254,7 +261,8 @@ export function StockSec({ all, onAlert }) {
     const [st, tr, rep, snap] = await Promise.all([
       call(role, `select * from app.dash_stock($1)`, [org]), call(role, `select * from app.dash_transit($1)`, [org]), q(Q.replenish, [org]).catch(() => []),
       q(`select key, value from app.dash_snapshots where org_id = $1 and day = (select max(day) from app.dash_snapshots where org_id = $1 and day < date_trunc('month', current_date)::date)`, [org]).catch(() => [])]);
-    return { st, tr, rep, snap: Object.fromEntries(snap.map((x) => [x.key, N(x.value)])) };
+    const hist = await q(`select day::text as day, key, value from app.dash_snapshots where org_id = $1 and key in ('stock_cost', 'q120_cost') order by day`, [org]).catch(() => []);
+    return { st, tr, rep, hist, snap: Object.fromEntries(snap.map((x) => [x.key, N(x.value)])) };
   }, [org, role, tick]);
   const a1 = ruleNum(rv, 'dash.age1'), a2 = ruleNum(rv, 'dash.age2'), lo = ruleNum(rv, 'dash.cover_lo'), hi = ruleNum(rv, 'dash.cover_hi');
   // 各档出货占比 (近 90 天本地出库片数), 用来把四档价加权成一个预估
@@ -341,7 +349,7 @@ export function StockSec({ all, onAlert }) {
         {allT.cost > 0 && <><div className="d2-bar">{agep.map(([l, v, t]) => <i key={l} className={t} style={{ width: `${v / allT.cost * 100}%` }} data-tip={`${l} ${X(v)} ${s.cur}`} />)}</div>
           <div className="d2-barl">{agep.map(([l, v, t]) => <span key={l} className={t}>{l} {X(v)}</span>)}</div></>}
       </DCard>
-      {o0 === 'st' && <Detail title="库存明细" right={<Seg value={tab} onChange={setTab} options={[['wh', '按仓'], ['tier', '按档位'], ['cat', '按种类'], ['tr', '在途']]} />}>
+      {o0 === 'st' && <Detail title="库存明细" right={<Seg value={tab} onChange={setTab} options={[['wh', '按仓'], ['tier', '按档位'], ['cat', '按种类'], ['tr', '在途'], ['line', '走势']]} />}>
         {tab === 'wh' && <><Grid id="d2-wh" noTools rows={calc.byWh} columns={whCols('仓')} foot={() => sumRow(allT)} />
           {calc.oth.length > 0 && <div style={{ marginTop: 10 }}><div className="small muted" style={{ marginBottom: 4 }}>不参与出货的仓（待检 / 报废 / 回收…），不算进上面的库存</div>
             <Grid id="d2-wh2" noTools rows={calc.oth} columns={whCols('仓').slice(0, 3)} /></div>}</>}
@@ -363,6 +371,8 @@ export function StockSec({ all, onAlert }) {
           { key: 'fob_pcs', label: '其中 FOB 片', w: 110, type: 'number', value: (p) => N(p.fob_pcs), render: (p) => qty(p.fob_pcs) },
           { key: 'cost', label: `成本 ${s.cur}`, w: 140, type: 'money', value: (p) => N(p.cost_xof), render: (p) => <>{X(N(p.cost_xof))}{N(p.nocost_pcs) > 0 && <span className="pill red" style={{ marginLeft: 4 }} title={`${qty(p.nocost_pcs)} 片没成本`}>缺</span>}</> }]}
           foot={() => ({ po_no: '合计', pcs: qty(tr.pcs), fob_pcs: qty(tr.fob), cost: X(tr.cost) })} />}
+        {tab === 'line' && <div className="rp-two"><div><div className="small muted">库存成本 {s.cur}（每周一个点）</div><Spark pts={weekly((data.hist || []).filter((x) => x.key === 'stock_cost').map((x) => [x.day, cv(N(x.value), s.cur)]))} fmt={(v) => fmtN(v, s.cur, true)} /></div>
+          <div><div className="small muted">超 {a2} 天的库存成本 {s.cur}</div><Spark pts={weekly((data.hist || []).filter((x) => x.key === 'q120_cost').map((x) => [x.day, cv(N(x.value), s.cur)]))} fmt={(v) => fmtN(v, s.cur, true)} color="#dc2626" /></div></div>}
       </Detail>}
       <div className="d2-row">
         <DCard small title="本地备货" open={o1 === 'loc'} onFold={() => tg1('loc')} foot={<span>LA + 9S · {loc.sku.size} 个编码</span>}>

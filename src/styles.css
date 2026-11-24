@@ -1919,3 +1919,21 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
   .field > label, .frow > label { min-width: min(100%, 4em); }
   .rule-row { flex-wrap: wrap; } .rule-row > .grow { flex: 1 1 200px; min-width: min(100%, 200px); }
 }
+
+/* ───────── 月报 (496 / 498) ───────── */
+.rp-bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 12px; }
+.rp-top { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; margin-bottom: 12px; }
+.rp-top > div { padding: 2px 16px; border-left: 1px solid var(--line); min-width: 0; } .rp-top > div:first-child { border-left: 0; padding-left: 0; }
+.rp-top span { display: block; font-size: 12px; color: var(--muted); } .rp-top b { display: block; font-size: 28px; font-weight: 800; letter-spacing: -.5px; margin-top: 2px; }
+.rp-top b small { font-size: 12px; color: #94a3b8; font-weight: 500; margin-left: 4px; } .rp-top em { display: block; font-style: normal; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.rp-sec { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; }
+.rp-sec > summary { cursor: pointer; font-weight: 800; color: var(--brand); font-size: 14px; }
+.rp-sec[open] > summary { margin-bottom: 8px; }
+.rp-t { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.rp-t th, .rp-t td { border-bottom: 1px solid var(--line); padding: 6px 12px; text-align: right; white-space: nowrap; font-size: 13px; }
+.rp-t th:first-child { text-align: left; font-weight: 500; } .rp-t thead th { font-size: 12px; color: var(--muted); background: #f8fafc; font-weight: 600; }
+.rp-sec { overflow-x: auto; }
+.rp-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; } .rp-spark { width: 100%; height: auto; display: block; }
+.rp-pre { white-space: pre-wrap; font: inherit; font-size: 13px; background: #f8fafc; border-radius: 8px; padding: 10px 12px; margin: 0; user-select: all; }
+@media (max-width: 700px) { .rp-top { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 12px; } .rp-top > div:nth-child(odd) { border-left: 0; padding-left: 0; } .rp-two { grid-template-columns: 1fr; } }
+@media print { body * { visibility: hidden; } .rp, .rp * { visibility: visible; } .rp { position: absolute; left: 0; top: 0; width: 100%; } .rp-bar, .rp-pre { display: none; } .rp-sec { break-inside: avoid; } }

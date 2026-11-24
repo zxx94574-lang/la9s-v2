@@ -406,6 +406,15 @@ export async function seedScenarios(db, org, log = () => {}) {
   for (const [k, d] of openD.entries()) { if (k % 3 === 2) continue; const h = [5, 9, 26, 31, 50, 74][k % 6];
     await db.query(`update app.deal_events set at = at - ($2 || ' hours')::interval where deal_id = $1`, [d.id, h]);
     await db.query(`update app.deals set created_at = created_at - ($2 || ' hours')::interval where id = $1`, [d.id, h]); }
+  // 看板「比上月底」和走势线 (489 / 498): 往前补 12 周的库存快照 (测试数: 库存慢慢降、超 120 天的慢慢降)
+  await run('库存快照（走势）', async () => {
+    const st = await as(USERS.admin, `select * from app.dash_stock($1)`, [org]);
+    const cost = st.filter((r) => ['local', 'fob'].includes(r.wh_kind)).reduce((a, r) => a + Number(r.qty) * Number(r.unit_cost || 0), 0);
+    const old = st.filter((r) => ['local', 'fob'].includes(r.wh_kind)).reduce((a, r) => a + Number(r.q120) * Number(r.unit_cost || 0), 0);
+    const [{ ar }] = await all(`select coalesce(sum(due), 0) as ar from app.v_deal_due where org_id = $1 and currency = 'XOF' and due > 0`, [org]);
+    for (let w = 12; w >= 1; w--) for (const [k, v] of [['stock_cost', cost * (1 + w * 0.012)], ['q120_cost', old * (1 + w * 0.03)], ['transit_cost', cost * 0.4], ['ar', Number(ar) * (1 - w * 0.02)]])
+      await db.query(`insert into app.dash_snapshots (org_id, day, key, value) values ($1, current_date - $2::int, $3, $4) on conflict do nothing`, [org, w * 7, k, Math.round(v)]);
+  });
   log('历史单 / 库龄做完');
 
   // ── 结束: 恢复规则, 做总账检查 ──

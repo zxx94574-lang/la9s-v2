@@ -18,6 +18,10 @@ test('库存看板: 库龄按入库先进先出, 只有中方能看', async () =
   await t.db.query(`update app.stock_moves set at = now() - interval '200 days' where stock_item_id = $1 and qty > 0`, [r0.stock_item_id]);
   const r1 = (await t.as(U.admin, `select * from app.dash_stock($1)`, [t.ids.org])).find((r) => r.stock_item_id === r0.stock_item_id);
   assert.equal(Number(r1.q120), Number(r1.qty)); assert.ok(r1.oldest_days >= 200);
+  // 月报用的「按层」库龄: 每个库存行各层加起来 = 现有
+  const lay = await t.as(U.admin, `select * from app.dash_stock_layers($1)`, [t.ids.org]);
+  const sumL = lay.filter((x) => x.stock_item_id === r1.stock_item_id).reduce((a, x) => a + Number(x.qty), 0);
+  assert.equal(sumL, Number(r1.qty));
   // 在途 + 快照
   await t.as(U.admin, `select * from app.dash_transit($1)`, [t.ids.org]);
   await t.as(U.admin, `select app.dash_snap($1,$2)`, [t.ids.org, JSON.stringify({ stock_cost: 100, ar: 5 })]);

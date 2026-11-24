@@ -31,18 +31,23 @@ function useFlow() {
       from app.deals d join app.customers c on c.id = d.customer_id left join app.v_deal_due t on t.deal_id = d.id
       where d.org_id = $1 and d.status <> 'cancelled' and d.created_at > now() - interval '120 days'
         and not (d.status = 'shipped' and coalesce(t.due, 0) <= 0)`, [org]);
-    if (!deals.length) return { deals: [], events: [], target: DEF };
+    // 没走完的退货: 收货·发起 → 中方审批 → 核验·对账 (整条都列出来)
+    const rets = await q(`select r.id, r.rt_no, r.deal_id, r.status, r.amount, r.received_at, r.requested_at, r.decided_at, r.reconciled_at, d.biz_no, d.currency, c.id as customer_id, c.name as customer_name
+      from app.returns r join app.deals d on d.id = r.deal_id join app.customers c on c.id = r.customer_id
+      where r.org_id = $1 and r.status in ('requested', 'approved') and r.reconciled_at is null`, [org]).catch(() => []);
+    const retNotes = rets.length ? await q(`select deal_id, detail from app.deal_events where deal_id = any($1::uuid[]) and action = 'delay_note' order by at`, [rets.map((r) => r.deal_id)]) : [];
+    if (!deals.length) return { deals: [], events: [], rets, retNotes, target: DEF };
     const events = await q(`select e.deal_id, e.at, e.action, e.detail, emp.id as emp_id, emp.short_name
       from app.deal_events e left join app.members m on m.user_id = e.user_id and m.org_id = $1 left join app.employees emp on emp.id = m.employee_id
       where e.deal_id = any($2::uuid[]) and e.action = any($3) order by e.at`, [org, deals.map((d) => d.id), [...new Set(STEPS.flatMap((s) => [s[1], s[2]]).filter(Boolean)), 'delay_note']]);
     const tg = (await q(`select value from app.org_settings where org_id = $1 and key = 'kpi_targets'`, [org]))[0]?.value || {};
-    return { deals, events, target: Object.fromEntries(Object.entries({ ...DEF, ...tg }).map(([k, v]) => [k, Number(v)])) };
+    return { deals, events, rets, retNotes, target: Object.fromEntries(Object.entries({ ...DEF, ...tg }).map(([k, v]) => [k, Number(v)])) };
   }, [org, tick]);
   return useMemo(() => {
     if (!data) return null;
     const by = {}; for (const e of data.events) (by[e.deal_id] = by[e.deal_id] || []).push(e);
     const now = new Date();
-    return data.deals.map((d) => {
+    const rows = data.deals.map((d) => {
       const ev = by[d.id] || []; let prevEnd = null; let cur = -1;
       const lastDone = STEPS.reduce((a, s, i) => (s[2] && ev.some((x) => x.action === s[2]) ? i : a), -1);
       const steps = STEPS.map(([name, a, b, tk, owner], i) => {
@@ -62,7 +67,22 @@ function useFlow() {
       if (cur < 0) { const k = steps.findIndex((x) => x.st !== 'done'); if (k >= 0) { steps[k].st = 'now'; cur = k; } }
       const c = steps[cur];
       return { ...d, steps, cur, c, stuck: !!c?.over, resp: steps[0].used, total: workMinutes(d.created_at, now), needNote: steps.filter((x) => x.over && !x.note).length };
-    }).filter((d) => d.cur >= 0).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    }).filter((d) => d.cur >= 0);
+    // 退货
+    const RS = [['收货·发起', 60, '仓库'], ['中方审批', 240, '中方'], ['核验·对账', 480, '仓库 / 财务']];
+    const retRows = (data.rets || []).map((r) => {
+      const pts = [r.received_at || r.requested_at, r.requested_at, r.decided_at, r.reconciled_at].map((x) => (x ? new Date(x) : null));
+      let cur = -1;
+      const steps = RS.map(([name, target, owner], i) => {
+        const start = pts[i], end = pts[i + 1]; const done = !!end; const isNow = !done && cur < 0; if (isNow) cur = i;
+        const used = start && end ? workMinutes(start, end) : isNow && start ? workMinutes(start, now) : null;
+        const note = (data.retNotes || []).filter((x) => x.deal_id === r.deal_id && Number(x.detail?.seg) === 100 + i).map((x) => x.detail?.reason).pop();
+        return { i: 100 + i, name, owner, target, used, st: done ? 'done' : isNow ? 'now' : 'todo', note, over: used != null && used > target, far: used != null && used > target * 1.5, start, end };
+      });
+      const c = steps[cur];
+      return { id: r.deal_id, key: 'r:' + r.id, ret: r.rt_no, biz_no: r.biz_no, currency: r.currency, amount: -Number(r.amount), customer_id: r.customer_id, customer_name: r.customer_name, created_at: r.received_at || r.requested_at, steps, cur, c, stuck: !!c?.over, resp: steps[0].used, total: workMinutes(r.received_at || r.requested_at, now), needNote: steps.filter((x) => x.over && !x.note).length };
+    }).filter((d) => d.cur >= 0);
+    return [...rows.map((d) => ({ ...d, key: d.id })), ...retRows].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   }, [data]);
 }
 
@@ -79,7 +99,7 @@ export default function OrderFlow() {
   if (!rows) return <div className="card-b small muted">加载中…</div>;
   // 卡住的排最前, 其余从老到新; 一次先显示 30 张
   const full = (only ? rows.filter((d) => d.stuck) : rows).slice().sort((a, b) => (b.stuck ? 1 : 0) - (a.stuck ? 1 : 0) || new Date(a.created_at) - new Date(b.created_at)); const list = full.slice(0, lim);
-  const save = async (d, s) => { const v = (notes[`${d.id}:${s.i}`] || '').trim(); if (!v) return; try { await call(role, `select app.deal_delay_note($1,$2,$3)`, [d.id, s.i, v]); toast('原因记下了'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  const save = async (d, s) => { const v = (notes[`${d.key}:${s.i}`] || '').trim(); if (!v) return; try { await call(role, `select app.deal_delay_note($1,$2,$3)`, [d.id, s.i, v]); toast('原因记下了'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
   const cls = (s) => (s.st === 'now' ? (s.over ? 'now' : 'nowok') : s.st === 'todo' ? 'todo' : s.skipped ? 'skip' : s.far ? 'late' : s.over ? 'slow' : 'ok');
   return (
     <div className="t2-list">
@@ -87,16 +107,16 @@ export default function OrderFlow() {
         <span className="grow" /><RuleGear ids={['kpi.s0', 'kpi.s1', 'kpi.s2', 'kpi.s4', 'kpi.s5']} title="每一步的目标时间" /></div>
       {list.length === 0 && <div className="card-b small muted">{only ? '没有卡住的订单 ✓' : '没有没走完的订单'}</div>}
       {list.map((d) => {
-        const on = open === d.id; const c = d.c;
+        const on = open === d.key; const c = d.c;
         return (
-          <div key={d.id} className={`t2-item ${on ? 'on' : ''}`}>
-            <div className="t2-row" onClick={() => setOpen(on ? null : d.id)}>
+          <div key={d.key} className={`t2-item ${on ? 'on' : ''}`}>
+            <div className="t2-row" onClick={() => setOpen(on ? null : d.key)}>
               <div className="t2-main">
-                <div className="t2-l1"><span onClick={(e) => e.stopPropagation()}><DealLink id={d.id} no={d.biz_no} /></span><span onClick={(e) => e.stopPropagation()}><CustLink id={d.customer_id} name={d.customer_name} /></span>
-                  {['admin', 'finance', 'manager', 'sales_manager'].includes(role) && Number(d.amount) > 0 && <span className="muted">· {money(d.amount, d.currency)} {d.currency}</span>}
+                <div className="t2-l1"><span onClick={(e) => e.stopPropagation()}><DealLink id={d.id} no={d.biz_no} /></span>{d.ret && <span className="pill gray">退货 {d.ret}</span>}<span onClick={(e) => e.stopPropagation()}><CustLink id={d.customer_id} name={d.customer_name} /></span>
+                  {['admin', 'finance', 'manager', 'sales_manager'].includes(role) && Number(d.amount) !== 0 && <span className="muted">· {money(d.amount, d.currency)} {d.currency}</span>}
                   {d.needNote > 0 && <span className="pill red">{d.needNote} 步超时没写原因</span>}</div>
-                <div className="t2-times"><span className="t2-tc"><i>下单</i>{dt(d.created_at)}</span>
-                  {d.resp != null && <span className="t2-tc" data-tip="建报价到联系上客户确认，用了多久（只算上班时间）"><i>响应</i>{fmtMin(d.resp)}</span>}
+                <div className="t2-times"><span className="t2-tc"><i>{d.ret ? '收到退货' : '下单'}</i>{dt(d.created_at)}</span>
+                  {d.resp != null && !d.ret && <span className="t2-tc" data-tip="建报价到联系上客户确认，用了多久（只算上班时间）"><i>响应</i>{fmtMin(d.resp)}</span>}
                   <span className="t2-tc" data-tip="从下单到现在（只算上班时间）"><i>到现在</i>{fmtMin(d.total)}</span></div>
                 <div className="t2-flow">{d.steps.map((s, i) => <React.Fragment key={i}>{i > 0 && <span className="ar">→</span>}
                   <span className={`t2-fs ${cls(s)}`} data-tip={`${s.name} · ${s.who || s.owner}${s.target ? ` · 目标 ${fmtMin(s.target)}` : ' · 不设目标'}${s.used != null ? ` · 用了 ${fmtMin(s.used)}` : ''}${s.note ? ` · 原因：${s.note}` : ''}`}>{s.name}{s.used != null && s.st !== 'todo' ? ` ${fmtMin(s.used)}` : ''}</span></React.Fragment>)}</div>
@@ -110,8 +130,8 @@ export default function OrderFlow() {
                   <div><b>{s.name} <span className="muted" style={{ fontWeight: 400 }}>· {s.whoId ? <EmpLink id={s.whoId} name={s.who} /> : (s.who || s.owner)}</span></b>
                     <small>{s.skipped ? '这一步没有记录' : s.used != null ? `${fmtMin(s.used)}${s.target ? ` / 目标 ${fmtMin(s.target)}` : ''}` : '—'}{s.end ? ` · ${dt(s.end)}` : ''}</small>
                     {s.over && (s.note ? <small>原因：{s.note}</small>
-                      : <div className="t2-why" onClick={(e) => e.stopPropagation()}><span className="pill red">写原因</span><OptNote optKey="flow.delay_reason" title="超时原因" options={DELAY} value={notes[`${d.id}:${s.i}`] || ''} onChange={(v) => setNotes((x) => ({ ...x, [`${d.id}:${s.i}`]: v }))} placeholder="为什么慢了" />
-                        <button type="button" className="btn sm primary" disabled={!(notes[`${d.id}:${s.i}`] || '').trim()} onClick={() => save(d, s)}>记下</button></div>)}</div>
+                      : <div className="t2-why" onClick={(e) => e.stopPropagation()}><span className="pill red">写原因</span><OptNote optKey="flow.delay_reason" title="超时原因" options={DELAY} value={notes[`${d.key}:${s.i}`] || ''} onChange={(v) => setNotes((x) => ({ ...x, [`${d.key}:${s.i}`]: v }))} placeholder="为什么慢了" />
+                        <button type="button" className="btn sm primary" disabled={!(notes[`${d.key}:${s.i}`] || '').trim()} onClick={() => save(d, s)}>记下</button></div>)}</div>
                   {s.used != null && s.target != null && <span className={`pill ${s.far ? 'red' : s.over ? 'amber' : 'green'}`}>{s.over ? `超 ${fmtMin(s.used - s.target)}` : '按时'}</span>}
                 </div>))}
             </div></div></div>}
