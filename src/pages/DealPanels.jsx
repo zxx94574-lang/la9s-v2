@@ -276,7 +276,7 @@ export function PickPanel({ deal, lines, employees, events, act, role }) {
   const cols = [
     ...baseCols({ price: false }),
     { key: 'warehouse', label: '仓库', w: 50 },
-    { key: 'bin', label: '库位', w: 70, render: (l) => <b>{l.bin}</b> },
+    { key: 'bin', label: '库位 · 片数', w: 150, value: (l) => l.bins || l.bin || '', render: (l) => <span className="small" data-tip={l.bins ? `这个型号放在：${l.bins}` : undefined}><b>{l.bins || l.bin || '—'}</b></span> },   // 513: 一个型号在几个库位都列出来
     { key: 'qty_req', label: '需求数量', w: 70, render: (l) => qty(l.qty_req) },
     { key: 'qty_reserved_line', label: '预占数量', w: 70, value: (l) => (picking ? l.qty_supply : l.qty_picked ?? l.qty_supply), render: (l) => qty(picking ? l.qty_supply : (l.qty_picked ?? l.qty_supply)) },
     { key: 'qty_supply', label: '实际供货', w: 100, ...(picking && part === 'picked'
@@ -382,7 +382,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
   const e = evOf(events, 'pick_reviewed');
   const cols = [
     ...baseCols({ price: false }),
-    { key: 'bin', label: '库位', w: 70 },
+    { key: 'bin', label: '库位 · 片数', w: 150, value: (l) => l.bins || l.bin || '' },
     { key: 'qty_picked', label: '订单数量', w: 80, value: (l) => l.qty_supply, render: (l) => qty(l.qty_supply) },
     { key: 'rqty', label: reviewing ? '实点数' : '复检数量', w: 100, ...(reviewing
       ? { edit: (l) => ({ type: 'number', value: get(l).qty, invalid: errs && !fixOk(l), title: '实点数和该有的不一样，在表格下面处理', onChange: (v) => set(l, { qty: v.replace(/\D/g, ''), act: '', fphoto: '', reason: '' }, '改实点数') }) }
@@ -460,7 +460,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
                 <button type="button" className="tick-main" onClick={tap} aria-pressed={!!a.seen}>
                   <span className="tick-box">{a.seen ? '✓' : ''}</span>
                   <span className="tick-info"><b className="tick-model">{l.model}</b><span className="tick-sub">{l.category} · {l.code} · 该有 {qty(l.qty_supply)} 片{dq !== 0 ? ` · ${dq > 0 ? '多' : '少'} ${qty(Math.abs(dq))}` : ''}</span></span>
-                  <span className="tick-bin">{l.warehouse}<b>{l.bin || '—'}</b></span>
+                  <span className="tick-bin">{l.warehouse}<b>{l.bins || l.bin || '—'}</b></span>
                 </button>
                 <span className="tick-qty">
                   <button type="button" className="step" disabled={N(a.qty) <= 0} onClick={() => step(-1)} aria-label="少一片">−</button>

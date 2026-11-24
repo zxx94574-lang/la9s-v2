@@ -113,7 +113,8 @@ select l.*, p.code, p.brand, coalesce(p.model, l.req_model) as model, p.variant,
         from app.product_batches b where b.product_id = p.id))
    from app.price_settings ps where ps.org_id = dd.org_id) as cost_xof,
   (select coalesce(jsonb_agg(jsonb_build_object('result', pc.result, 'note', pc.note, 'at', pc.at) order by pc.at), '[]') from app.pick_checks pc where pc.deal_line_id = l.id) as checks,
-  w.code as warehouse, s.bin, s.qty_on_hand, s.qty_reserved, s.qty_on_hand - s.qty_reserved as qty_available
+  w.code as warehouse, s.bin, s.qty_on_hand, s.qty_reserved, s.qty_on_hand - s.qty_reserved as qty_available,
+  (select string_agg(b.code || ' ' || i.qty, ' · ' order by i.qty desc) from app.bin_items i join app.bins b on b.id = i.bin_id where b.org_id = dd.org_id and i.product_id = l.product_id and i.qty > 0) as bins
 from app.deal_lines l
 join app.deals dd on dd.id = l.deal_id
 join app.customers cu on cu.id = dd.customer_id

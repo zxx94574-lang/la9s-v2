@@ -65,6 +65,8 @@ export default function ProductDrawer({ product, tier, onClose }) {
     const [[p], recent, batches, [ps], cats, hist, transit] = await Promise.all([
       q(`select p.*, c.name as category,
            coalesce((select jsonb_object_agg(pp.tier, jsonb_build_object('price', pp.price, 'locked', pp.locked)) from app.product_prices pp where pp.product_id = p.id and pp.currency = 'XOF'), '{}') as prices,
+           (select string_agg(b.code || ' ' || i.qty, ' · ' order by i.qty desc) from app.bin_items i join app.bins b on b.id = i.bin_id where b.org_id = p.org_id and i.product_id = p.id and i.qty > 0) as bins_at,
+           (select jsonb_build_object('no', c2.no, 'at', c2.closed_at, 'diff', d.diff) from app.count_diffs d join app.counts c2 on c2.id = d.count_id where d.product_id = p.id and c2.status = 'closed' order by c2.closed_at desc limit 1) as last_count,
            coalesce((select jsonb_agg(jsonb_build_object('warehouse', w.code, 'bin', s.bin, 'on_hand', s.qty_on_hand, 'reserved', s.qty_reserved) order by w.code)
              from app.stock_items s join app.warehouses w on w.id = s.warehouse_id where s.product_id = p.id), '[]') as stock
          from app.products p join app.categories c on c.id = p.category_id where p.id = $1`, [product.id]),
@@ -170,6 +172,7 @@ export default function ProductDrawer({ product, tier, onClose }) {
         {/* ⑥ 库存 */}
         <section className="pd-sec">
           <div className="pd-h">⑥ 库存 <span className="muted small">LA / 9S 可售 <b>{qty(avail)}</b></span></div>
+          <div className="small" style={{ margin: '2px 0 6px' }}><span className="muted">放在：</span><b className="mono">{data?.p?.bins_at || '还没上架到库位'}</b>{data?.p?.last_count && <span className="muted">　上次盘点 {data.p.last_count.no}{Number(data.p.last_count.diff) ? `，系统比实物${Number(data.p.last_count.diff) > 0 ? '多' : '少'} ${qty(Math.abs(Number(data.p.last_count.diff)))} 片` : '，对上了'}</span>}</div>
           <Grid id="pd-stock" compactTools rows={stock} rowKey={(x) => x.warehouse + (x.bin || '')} empty="没有库存记录" columns={[
             { key: 'warehouse', label: '仓库', w: 100 }, { key: 'bin', label: '库位', w: 90, render: (x) => <span className="mono">{x.bin || ''}</span> },
             { key: 'on_hand', label: '实存', w: 90, type: 'number', render: (x) => qty(x.on_hand) }, { key: 'reserved', label: '预占', w: 90, type: 'number', render: (x) => qty(x.reserved) },

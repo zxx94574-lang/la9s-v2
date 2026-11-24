@@ -49,3 +49,21 @@ test('盘点: 库位格式 / 错码进消耗池 / 盘亏 / 确认后系统 = 实
   const deal = await t.val(U.manager, `select app.create_quote($1,$2,'XOF',$3)`, [org, t.ids.camaraAbobo, JSON.stringify([{ product_id: t.ids.bg6mCover, qty_req: 1 }])]);
   await assert.rejects(t.db.query(`insert into app.shipments (org_id, deal_id, out_no) values ($1,$2,'T1')`, [org, deal]), /正在盘点/);
 });
+
+test('盘点任务: 货架 + 种类, 一个货架只派一个人; 确认后金蝶已录完', async () => {
+  const t = await setup();
+  const org = t.ids.org;
+  const c = await t.val(U.admin, `select app.count_start($1,'x',true)`, [org]);
+  await t.val(U.admin, `select app.count_task_set2($1,$2,$3,$4)`, [c, t.ids.sales, ['ss-a', 'SS-B'], t.ids.catScreen]);
+  await assert.rejects(t.as(U.admin, `select app.count_task_set2($1,$2,$3,null)`, [c, t.ids.sales, ['SS-B', 'LR']]), /已经派给/);
+  await assert.rejects(t.as(U.admin, `select app.count_task_set2($1,$2,$3,null)`, [c, t.ids.sales, ['SS-E']]), /没有货架/);
+  await assert.rejects(t.as(U.admin, `select app.count_task_set2($1,$2,$3,null)`, [c, t.ids.sales, ['SS']]), /没有货架/);
+  await t.val(U.admin, `select app.count_task_set2($1,$2,$3,null)`, [c, t.ids.sales, ['LR']]);
+  const tk = await t.one(`select shelves, category_id from app.count_tasks where count_id = $1 order by created_at limit 1`, [c]);
+  assert.deepEqual(tk.shelves.sort(), ['SS-A', 'SS-B']); assert.equal(tk.category_id, t.ids.catScreen);
+  await t.as(U.picker, `select app.count_add($1,'SS-A-1',$2,5,null)`, [c, t.ids.bg6mScreen]);
+  await assert.rejects(t.as(U.admin, `select app.count_kd_done($1)`, [c]), /还没确认/);
+  await t.val(U.admin, `select app.count_apply($1)`, [c]);
+  await t.as(U.admin, `select app.count_kd_done($1)`, [c]);
+  assert.ok((await t.one(`select kd_done_at from app.counts where id = $1`, [c])).kd_done_at);
+});

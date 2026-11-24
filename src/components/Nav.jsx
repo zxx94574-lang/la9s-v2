@@ -35,8 +35,7 @@ export const ITEMS = {
   cash: ['⇄', '资金账户', 'fin', ['admin', 'finance', 'hotline', 'manager', 'sales']],
   kingdee: ['⇆', '金蝶同步', 'fin', ['admin', 'finance', 'manager']],
   stock: ['▦', '库存（实存/预占/可售）', 'wh', []],
-  bins: ['▤', '库位与上架', 'wh', ['admin', 'manager', 'picker']],   // 510
-  count: ['☑', '盘点', 'wh', STAFF],   // 509 / 510: 大家拿手机盘
+  bins: ['▤', '库位与盘点', 'wh', STAFF],   // 510 / 513: 库位图 + 待上架 + 盘点 一页 (大家拿手机盘)
   po: ['⇵', '采购单与到货', 'wh', ['admin', 'manager', 'cn_support', 'cn_finance', 'finance', 'picker']],
   replenish: ['⇡', '备货看板', 'wh', ['admin', 'manager', 'picker']],
   unmet: ['◇', '未满足需求', 'wh', ['admin', 'manager', 'sales_manager', 'hotline', 'picker', 'finance', 'sales']],
