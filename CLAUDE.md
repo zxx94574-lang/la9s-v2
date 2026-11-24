@@ -20,8 +20,8 @@ LA&9S 在科特迪瓦做手机配件批发零售，要建一套自有的业务�
 - 真实数据私有版（Frank 日常用，数据存他浏览器）：https://claude.ai/artifact/JwjyRGoE23tc5iVjw6JwS7（slug `915000f1-a510-4606-a5d5-3e2a37ac1a80`），**现在 v93 `1795194047-f626`**（回退 = 重发上一版，版本号见 `docs/版本记录.md`）。
 - 线上测试环境 https://la9s.com（Supabase 免费版 `la9s-staging` + Cloudflare Pages，只有演示数据）**仍停在 v51**。
 - 代码以 GitHub 私有仓库 `zxx94574-lang/la9s-v2`（main）为准；Frank Mac 上的副本是旧的。
-- **测试版**（11-22 通宵跑通）：https://claude.ai/artifact/KBMVzkpBgWGuFuBTKy8KxA（slug `9336912e-0c15-4e17-87a1-33967185345f`，**`1795518796-315a`**，11-24 11:13 发），`VITE_TEST=1` 构建，单独的库 + 约 180 个场景造数；报告 https://claude.ai/artifact/G2Df2Gjt2ovjkGAxDtS4ch。0076–0087 只在测试版（11-24：经营总览 0084、待办 0085、请假 0086、月报 0087）。**Frank 11-22 23:55：真实版先不动，先用测试版**；以后发真实版时同时换 la9s-logo.png 高清版，发前要重新从 main 构建并再做一次 v93→新版升级演练。
-- 迁移到 **0087**，下一个 **0088**；`npm test` **196** 个场景。本地看测试版：`/home/claude/devbuild.sh`（工作区直接构建到 `/home/claude/art-dev`，要把 art-test 里的数据文件拷过去）+ `python3 -m http.server 5177`；`vite dev` 在 artifact 模式下跑不起来。
+- **测试版**（11-22 通宵跑通）：https://claude.ai/artifact/KBMVzkpBgWGuFuBTKy8KxA（slug `9336912e-0c15-4e17-87a1-33967185345f`，**`1795525112-a895`**，11-24 12:58 发），`VITE_TEST=1` 构建，单独的库 + 约 180 个场景造数；报告 https://claude.ai/artifact/G2Df2Gjt2ovjkGAxDtS4ch。0076–0088 只在测试版（11-24：经营总览 0084、待办 0085、请假 0086、月报 0087、指令一键去做 0088）。**Frank 11-22 23:55：真实版先不动，先用测试版**；以后发真实版时同时换 la9s-logo.png 高清版，发前要重新从 main 构建并再做一次 v93→新版升级演练。
+- 迁移到 **0088**，下一个 **0089**；`npm test` **198** 个场景。本地看测试版：`/home/claude/devbuild.sh`（工作区直接构建到 `/home/claude/art-dev`，要把 art-test 里的数据文件拷过去）+ `python3 -m http.server 5177`；`vite dev` 在 artifact 模式下跑不起来。
 - **每次回复开头放两个链接（Frank 11-23）**：真实版 + 测试版，一行：`[LA&9S 真实数据版](https://claude.ai/artifact/JwjyRGoE23tc5iVjw6JwS7) · [测试版](https://claude.ai/artifact/KBMVzkpBgWGuFuBTKy8KxA)`。
 - 等 Frank 答：试测试版；店铺价可见性；国内：付工厂按入仓号还是月结、汇回按批次还是总额。其余见 `docs/待改清单.md`。
 
@@ -45,6 +45,7 @@ LA&9S 在科特迪瓦做手机配件批发零售，要建一套自有的业务�
 - 指标：`components/Metric.jsx` 的 `METRICS` 加一行 + `useMetricData` 里 `put(...)`；各页顶上 `MetricStrip`。
 - 日期：`PeriodBar` / `RangePicker`（ui.jsx）；单号预览 `DocPeek` / `DealLink`；档案链接 `ModelLink` / `CustLink` / `EmpLink`；档位 `TierPill` / `tierOpt` / `TierText`；明细折叠 `Fold`（只有 ☰）；结果卡 `showDone`；动账对比 `AcctImpact`；风险弹窗 `Modal risk="red|yellow"`；撤不回 / 影响大的按钮一律 `ConfirmBtn`（ui.jsx，自带确认框，写清会发生什么）；Claude 先定的地方挂蓝色 `Assumed`。
 - **看板卡片（11-24，全站向这套靠，Frank：「就按这一套来，不用我确认」，但 Grid 底层不动）**：`components/Dash2.jsx` —— `useSec`（每段币种 + 全数）、`Tog`、`Cell`（标题悬停看算法 / 主数 / 色块 / 下面一行小字 / 数字自动缩小）、`DCard`、`Cmp`（比前 3 期平均）、`Seg`、`Detail`、`useSlot`（同一排共用一个明细位）、`fmtN`（M / K）；样式 `.d2-*`。待办行 `.t2-*`（`Directives.jsx` 的 `TC` 时间小方块、`OrderFlow.jsx` 订单整条流程）。
+- 指令「去做」：`lib/dirWork.js`（类型 → 跳到哪、`startWork` / `takeWorkCust`、`ordersJump` 跳订单总览带客户 / 机型）+ 每页顶上 `DirBar`「提交指令」。待办 `Slot` 只认 `.todo-row / .todo-line / .t2-item`，新行样式要加进 `ITEM`，不然整段被藏。
 - 工作地图 `WorkMap`；待办 `Slot`（紧急 / 进行中 / 待跟进三段，`SLOTS` 归谁）；指令 `Directives.jsx` / 任务 `Tasks.jsx`。
 
 **上线前还差的（P1，见待改清单 319–325）**：换掉 `exec_sql` 临时通道、工号登录页、法语、照片移出数据库、收口、影子周、选数据库方案（真实数据上线那天才花钱：Supabase 专业版 25 美元 / 月 或自租约 8 美元 / 月二选一，之前免费版够用，别催 Frank 花钱）。要操作 Frank 电脑的三件事：钥匙 → 更新 la9s.com、DeepL、金蝶成本算法（遇到要他确认就停住等）。
