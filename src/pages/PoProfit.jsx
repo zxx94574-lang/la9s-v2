@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { call } from '../db/client.js';
 import { useApp, useData, Info, Choice, Pill } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
-import { ModelLink } from '../components/Archives.jsx';
+import { ModelLink, CustLink, DealLink } from '../components/Archives.jsx';
 import { money, qty, dt, dDate } from '../lib/format.js';
 import { useMarginRules } from '../components/Margin.jsx';
 
@@ -75,6 +75,7 @@ export default function PoProfit() {
           { key: 'cost_left', label: '还压着的成本', w: 130, type: 'number', sum: true, render: (g) => (g.left ? money(g.cost_left) : <Pill tone="green">卖完</Pill>) },
           { key: 'est', label: '汇率', w: 80, value: (g) => (g.est ? '估' : '实付'), render: (g) => (g.est ? <Pill tone="amber">有估的</Pill> : <Pill tone="green">实付</Pill>) },
         ]} />}</div>}
+      {one && <PoTrace po={one.po_no} />}
       {one && <CnyPricing rows={detail} />}
     </>);
 }
@@ -127,4 +128,38 @@ function PoCard({ g, Mg }) {
       <div><div className="small muted">还压着</div><div style={{ fontSize: 20, fontWeight: 600 }}>{qty(g.left)} 片 · {money(g.cost_left)}</div></div>
       {g.est && <div className="small"><Pill tone="amber">有批次没填付款汇率，成本是估的</Pill></div>}
     </div></div></div>);
+}
+
+// 订单里每一行出掉的货来自哪张采购单（先进先出推出来的）；点单号跳到那张采购单的利润
+export function DealSources({ deal, lines }) {
+  const { role } = useApp();
+  const { data } = useData(() => (role === 'admin' ? call(role, `select * from app.deal_line_sources($1)`, [deal.id]) : Promise.resolve([])), [deal.id, role]);
+  if (role !== 'admin' || !data?.length) return null;
+  const by = new Map(); for (const r of data) { if (!by.has(r.deal_line_id)) by.set(r.deal_line_id, []); by.get(r.deal_line_id).push(r); }
+  const go = (po) => { try { localStorage.setItem('la9s.poProfit', po); } catch { /* */ } window.location.hash = '#/poprofit'; };
+  return (
+    <div className="card"><div className="card-h"><h2>货从哪来</h2><Info>按先进先出推算：这张单出掉的每一行，用的是哪张采购单（批次）的货。点单号看那张采购单赚了多少、还卖给了谁。退货已经扣掉。</Info></div>
+      <div className="card-b stack" style={{ gap: 4 }}>{(lines || []).filter((l) => by.has(l.id)).map((l) => (
+        <div key={l.id} className="row" style={{ gap: 8, flexWrap: 'wrap' }}><span style={{ minWidth: 160 }}><ModelLink id={l.product_id} model={l.model} /> <span className="small muted">{l.category}</span></span>
+          {by.get(l.id).map((r) => <button key={r.po_no} type="button" className="chip" onClick={() => go(r.po_no)}><span className="mono">{r.po_no}</span> · {qty(r.qty)} 片</button>)}</div>))}
+      </div></div>);
+}
+
+// 这张采购单卖给了谁
+export function PoTrace({ po }) {
+  const { org, role, tick } = useApp();
+  const { data } = useData(() => call(role, `select * from app.po_trace($1,$2)`, [org, po]), [org, role, po, tick]);
+  const rows = useMemo(() => (data || []).map((r, i) => ({ ...r, id: `${r.deal_id}-${r.product_id}-${i}` })), [data]);
+  if (!data) return null;
+  return (
+    <div className="card"><div className="card-h"><h2>这单的货卖给了谁</h2></div>
+      <Grid id="po-trace" rows={rows} empty="还没卖出去" columns={[
+        { key: 'shipped_at', label: '出库', w: 120, render: (r) => dt(r.shipped_at) },
+        { key: 'customer', label: '客户', w: 150, render: (r) => <CustLink id={r.customer_id} name={r.customer} /> },
+        { key: 'biz_no', label: '订单', w: 140, render: (r) => <DealLink id={r.deal_id} no={r.out_no || r.biz_no} /> },
+        { key: 'model', label: '型号', w: 130, render: (r) => <ModelLink id={r.product_id} model={r.model} /> },
+        { key: 'qty', label: '片数', w: 80, type: 'number', sum: true },
+        { key: 'px', label: '单价 XOF', w: 100, type: 'number', render: (r) => money(r.px) },
+        { key: 'amt', label: '金额', w: 120, type: 'number', sum: true, value: (r) => N(r.qty) * N(r.px), render: (r) => money(N(r.qty) * N(r.px)) },
+      ]} /></div>);
 }

@@ -96,3 +96,23 @@ test('0097 退货坏货按原来出货的仓进对应报废仓: 9S 的进 SCRAP-
   const r = await t.one(`select w.code, s.qty_on_hand from app.stock_items s join app.warehouses w on w.id=s.warehouse_id where w.kind='scrap' and s.product_id=$1 and s.qty_on_hand > 0`, [t.ids.x6516]);
   assert.equal(r.code, 'SCRAP-9S'); assert.equal(r.qty_on_hand, 2);
 });
+
+test('0098 先进先出追溯: 退货扣回去 / 卖给了谁 / 订单行来自哪张采购单', async () => {
+  const t = await setup();
+  const org = t.ids.org;
+  await t.as(U.admin, `select app.save_product_batch($1,null,$2)`, [t.ids.bg6mCover, JSON.stringify({ po_no: 'PO-A', ordered_on: '2026-09-01', qty: 6, currency: 'XOF', unit_price: 1000 })]);
+  await t.as(U.admin, `select app.save_product_batch($1,null,$2)`, [t.ids.bg6mCover, JSON.stringify({ po_no: 'PO-B', ordered_on: '2026-10-01', qty: 10, currency: 'XOF', unit_price: 1200 })]);
+  const d = await t.toConfirmed(t.ids.camaraAbobo, [{ product_id: t.ids.bg6mCover, qty_req: 10 }]);
+  await t.shipAll(d);
+  const [l] = await t.lines(d);
+  const rt = await t.val(U.hotline, `select app.request_return($1,'quality','坏',$2)`, [d, JSON.stringify([{ line_id: l.id, qty: 3 }])]);
+  await t.as(U.admin, `select app.decide_return($1,true)`, [rt]);
+  const rows = await t.as(U.admin, `select * from app.po_profit($1)`, [org]);
+  assert.equal(rows.find((r) => r.po_no === 'PO-A').sold, 6);
+  assert.equal(rows.find((r) => r.po_no === 'PO-B').sold, 1, '退 3 片 → 卖出净 7 片, PO-B 只剩 1 片算卖出');
+  const tr = await t.as(U.admin, `select * from app.po_trace($1,'PO-A')`, [org]);
+  assert.equal(tr.length, 1); assert.equal(tr[0].customer_id, t.ids.camaraAbobo); assert.equal(tr[0].qty, 6);
+  const src = await t.as(U.admin, `select * from app.deal_line_sources($1)`, [d]);
+  assert.deepEqual(src.map((r) => [r.po_no, r.qty]), [['PO-A', 6], ['PO-B', 1]]);
+  await assert.rejects(t.as(U.manager, `select * from app.deal_line_sources($1)`, [d]), /PERMISSION/);
+});

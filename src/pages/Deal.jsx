@@ -1,3 +1,4 @@
+import { DealSources } from './PoProfit.jsx';
 import { DoneHost } from '../components/Done.jsx';
 // One business (业务号) = one page. Fixed workflow bar on top; every step has its own page:
 // the current step shows its action, a finished step shows a read-only record (待改 13).
@@ -266,6 +267,7 @@ export default function Deal({ id }) {
       {curKey === 'sign' && <SignPanel {...ctx} />}
       {curKey === 'pay' && <PayPanel {...ctx} />}
       {curKey === 'return' && <ReturnPanel {...ctx} />}
+      {['ship', 'sign', 'pay', 'return'].includes(curKey) && <DealSources deal={deal} lines={data.lines} />}
 
       <div className="card">
         <button type="button" className="card-h fold-h" aria-expanded={logOpen} onClick={() => setLogOpen((o) => !o)}>
