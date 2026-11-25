@@ -20,8 +20,8 @@ LA&9S 在科特迪瓦做手机配件批发零售，要建一套自有的业务�
 - 真实数据私有版（Frank 日常用，数据存他浏览器）：https://claude.ai/artifact/JwjyRGoE23tc5iVjw6JwS7（slug `915000f1-a510-4606-a5d5-3e2a37ac1a80`），**现在 v93 `1795194047-f626`**（回退 = 重发上一版，版本号见 `docs/版本记录.md`）。
 - 线上测试环境 https://la9s.com（Supabase 免费版 `la9s-staging` + Cloudflare Pages，只有演示数据）**仍停在 v51**。
 - 代码以 GitHub 私有仓库 `zxx94574-lang/la9s-v2`（main）为准；Frank Mac 上的副本是旧的。
-- **测试版**（11-22 通宵跑通）：https://claude.ai/artifact/KBMVzkpBgWGuFuBTKy8KxA（slug `9336912e-0c15-4e17-87a1-33967185345f`，**`1795534750-1e6f`**，11-24 15:39 发），`VITE_TEST=1` 构建，单独的库 + 约 180 个场景造数；报告 https://claude.ai/artifact/G2Df2Gjt2ovjkGAxDtS4ch。0076–0090 只在测试版（11-24：经营总览 0084、待办 0085、请假 0086、月报 0087、指令一键去做 0088、盘点 + 库位 0089、盘点任务改版 0090）。**Frank 11-22 23:55：真实版先不动，先用测试版**；以后发真实版时同时换 la9s-logo.png 高清版，发前要重新从 main 构建并再做一次 v93→新版升级演练。
-- 迁移到 **0090**，下一个 **0091**；`npm test` **200** 个场景。本地看测试版：`/home/claude/devbuild.sh`（工作区直接构建到 `/home/claude/art-dev`，要把 art-test 里的数据文件拷过去）+ `python3 -m http.server 5177`；`vite dev` 在 artifact 模式下跑不起来。
+- **测试版**（11-22 通宵跑通）：https://claude.ai/artifact/KBMVzkpBgWGuFuBTKy8KxA（slug `9336912e-0c15-4e17-87a1-33967185345f`，**`1795566344-8b93`**，11-25 00:25 发），`VITE_TEST=1` 构建，单独的库 + 约 180 个场景造数；报告 https://claude.ai/artifact/G2Df2Gjt2ovjkGAxDtS4ch。0076–0091 只在测试版（11-25：找货选库位 0091；11-24：经营总览 0084、待办 0085、请假 0086、月报 0087、指令一键去做 0088、盘点 + 库位 0089、盘点任务改版 0090）。**Frank 11-22 23:55：真实版先不动，先用测试版**；以后发真实版时同时换 la9s-logo.png 高清版，发前要重新从 main 构建并再做一次 v93→新版升级演练。
+- 迁移到 **0091**，下一个 **0092**；`npm test` **201** 个场景。本地看测试版：`/home/claude/devbuild.sh`（工作区直接构建到 `/home/claude/art-dev`，要把 art-test 里的数据文件拷过去）+ `python3 -m http.server 5177`；`vite dev` 在 artifact 模式下跑不起来。
 - **每次回复开头放两个链接（Frank 11-23）**：真实版 + 测试版，一行：`[LA&9S 真实数据版](https://claude.ai/artifact/JwjyRGoE23tc5iVjw6JwS7) · [测试版](https://claude.ai/artifact/KBMVzkpBgWGuFuBTKy8KxA)`。
 - **11-24 下午收尾**：Frank 定了「本地运营是完整公司、中方 / 国内财务只是辅助对金蝶」——盘点确认写进系统后出货立即恢复，金蝶要录的单财务事后录（`count_kd_done`）。他要求：没说「直接改」前不动代码；回复只写结论 + 要他定的；示意图用聊天文字画，不做网页。
 - 等 Frank 答：试测试版；店铺价可见性；国内：付工厂按入仓号还是月结、汇回按批次还是总额。其余见 `docs/待改清单.md`。
@@ -48,6 +48,8 @@ LA&9S 在科特迪瓦做手机配件批发零售，要建一套自有的业务�
 - **看板卡片（11-24，全站向这套靠，Frank：「就按这一套来，不用我确认」，但 Grid 底层不动）**：`components/Dash2.jsx` —— `useSec`（每段币种 + 全数）、`Tog`、`Cell`（标题悬停看算法 / 主数 / 色块 / 下面一行小字 / 数字自动缩小）、`DCard`、`Cmp`（比前 3 期平均）、`Seg`、`Detail`、`useSlot`（同一排共用一个明细位）、`fmtN`（M / K）；样式 `.d2-*`。待办行 `.t2-*`（`Directives.jsx` 的 `TC` 时间小方块、`OrderFlow.jsx` 订单整条流程）。
 - 指令「去做」：`lib/dirWork.js`（类型 → 跳到哪、`startWork` / `takeWorkCust`、`ordersJump` 跳订单总览带客户 / 机型）+ 每页顶上 `DirBar`「提交指令」。待办 `Slot` 只认 `.todo-row / .todo-line / .t2-item`，新行样式要加进 `ITEM`，不然整段被藏。
 - 库位 / 盘点（一页「库位与盘点」，页签 库位图 / 待上架 / 盘点；`#/count` = 盘点页签）：`Bins.jsx` 的 `ShelfMap`（房间一行、货架一列、层竖排，悬停看型号片数）、`brandOf`（型号前缀 = 品牌）；`Count.jsx` 的 `CountPanel`（中方：现状 → 派任务〔货架 + 种类，一个货架一人〕→ 库位图叠进度 → 差异 → 确认；员工：任务 → 一层一层 → 品牌分组点型号）；`BinPick`（房间 → 货架 → 层，布局 `app.bin_rooms` / org_settings `bin_rooms`）、`ProdPick`（输型号点选）；库位片数 `bin_items` + 日志 `bin_log`；出库 trigger 自动扣库位、捞消耗池（`stock_pool` / `pool_uses`）；盘点中 trigger 拦出库。
+- **侧栏合并（11-25 Frank「能合并的直接合并」）**：`Nav.jsx` 的 `HUBS` / `HUB_LABEL` / `HubTabs`——库存与库位、备货与采购、客户档案、热线与拜访、收款与总账、物料与定价、报告（月报 / 毛利 / 时效）各一个入口，页面顶上一排页签；原地址照样能打开。新页面属于哪一块就加进 `HUBS`。
+- **月报**：`pages/Report.jsx`（`#/report`，报告入口第一个页签）：一句话 → 8 个关键数 → 销售（业务 / 按周 / 种类 / 档位 / 前十客户 / 销售员）→ 利润表 → 回款与应收 → 库存（7 段库龄 / 在途 / 滞销前十）→ 运营 → 走势 → 文字版；打印即报告。经营总览上不再有「出月报」按钮。
 - 工作地图 `WorkMap`；待办 `Slot`（紧急 / 进行中 / 待跟进三段，`SLOTS` 归谁）；指令 `Directives.jsx` / 任务 `Tasks.jsx`。
 
 **上线前还差的（P1，见待改清单 319–325）**：换掉 `exec_sql` 临时通道、工号登录页、法语、照片移出数据库、收口、影子周、选数据库方案（真实数据上线那天才花钱：Supabase 专业版 25 美元 / 月 或自租约 8 美元 / 月二选一，之前免费版够用，别催 Frank 花钱）。要操作 Frank 电脑的三件事：钥匙 → 更新 la9s.com、DeepL、金蝶成本算法（遇到要他确认就停住等）。
