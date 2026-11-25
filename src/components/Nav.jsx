@@ -17,6 +17,7 @@ export const ITEMS = {
   sop: ['▣', '培训与 SOP', 'work', []],
   attendance: ['⏱', '打卡', 'work', STAFF],
   kpi: ['⏲', '时效与准确率', 'work', ['admin']],
+  report: ['▤', '月报', 'cn', ['admin']],   // 11-25: 从经营总览挪出来, 单独一页
   margin: ['％', '毛利分析', 'cn', ['admin']],
   rules: ['⚙', '规则参数', 'cn', ['admin']],   // 350
   codes: ['⧉', '编码甄别', 'cn', ['admin']],   // 11-18 Frank 第 9 点: 同型号多编码, 一组一组定是不是同一种货
@@ -53,6 +54,20 @@ export const ITEMS = {
   'p/balance': ['₣', '我的对账', 'portal', ['boss']],
   'p/stores': ['⌂', '我的门店', 'portal', ['boss']],
 };
+// 11-25 Frank「能合并的就直接合并」: 同一件事的几页并成一个侧栏入口, 进去上面一排页签切换 (原来的地址照样能打开)
+export const HUBS = {
+  stock: [['stock', '库存'], ['bins', '库位与盘点']],
+  replenish: [['replenish', '备货看板'], ['unmet', '未满足需求'], ['purchase', '物资申请'], ['po', '采购单与到货']],
+  customers: [['customers', '客户档案'], ['stores', '门店'], ['accounts', '客户账号']],
+  hotline: [['hotline', '热线回访'], ['visits', '客户拜访']],
+  receipts: [['receipts', '收款与冲账'], ['balances', '客户总账'], ['cash', '资金账户']],
+  pricing: [['pricing', '物料与定价'], ['materials', '物料名称'], ['codes', '编码甄别']],
+  report: [['report', '月报'], ['margin', '毛利分析'], ['kpi', '时效与准确率']],
+};
+export const HUB_LABEL = { stock: '库存与库位', replenish: '备货与采购', customers: '客户档案', hotline: '热线与拜访', receipts: '收款与总账', pricing: '物料与定价', report: '报告' };
+const HUB_CHILD = Object.fromEntries(Object.entries(HUBS).flatMap(([h, xs]) => xs.filter(([r]) => r !== h).map(([r]) => [r, h])));
+export const hubOf = (route) => (HUBS[route] ? route : HUB_CHILD[route] || null);
+
 export const DEFAULT_GROUPS = [
   { id: 'work', label: '工作台' }, { id: 'sales', label: '销售主链' }, { id: 'cust', label: '客户' }, { id: 'fin', label: '财务' },
   { id: 'wh', label: '仓库' }, { id: 'cn', label: '中方' }, { id: 'portal', label: '客户下单端' },
@@ -70,8 +85,9 @@ export function buildNav(cfg, role) {
   const hidden = new Set(cfg?.hidden || []);
   return groups.map((g) => ({
     ...g,
-    items: g.items.filter((r) => ITEMS[r] && !hidden.has(r) && visibleTo(r, role, cfg))
-      .map((r) => ({ route: r, ico: ITEMS[r][0], label: cfg?.labels?.[r] || ITEMS[r][1] })),
+    // 合并进别的入口的页不单独出现; 入口本身: 里面有一页能看就显示, 点了去能看的第一页
+    items: g.items.filter((r) => ITEMS[r] && !hidden.has(r) && !HUB_CHILD[r] && (HUBS[r] ? HUBS[r].some(([x]) => ITEMS[x] && visibleTo(x, role, cfg)) : visibleTo(r, role, cfg)))
+      .map((r) => ({ route: HUBS[r] ? HUBS[r].find(([x]) => ITEMS[x] && visibleTo(x, role, cfg))[0] : r, hub: HUBS[r] ? r : null, ico: ITEMS[r][0], label: cfg?.labels?.[r] || HUB_LABEL[r] || ITEMS[r][1] })),
   })).filter((g) => g.items.length);
 }
 export function visibleTo(route, role, cfg) {
@@ -149,3 +165,12 @@ function buildNavAll(cfg) {
   return groups;
 }
 export const navLabel = (s) => t(s);
+
+// 合并入口的页签 (放在页面最上面)
+export function HubTabs({ page, role, cfg, go }) {
+  const h = hubOf(page); if (!h) return null;
+  const tabs = HUBS[h].filter(([r]) => ITEMS[r] && visibleTo(r, role, cfg));
+  if (tabs.length < 2) return null;
+  const cur = page === 'count' ? 'bins' : page;
+  return <div className="hub-tabs">{tabs.map(([r, l]) => <button type="button" key={r} className={cur === r ? 'on' : ''} onClick={() => go(r)}>{l}</button>)}</div>;
+}

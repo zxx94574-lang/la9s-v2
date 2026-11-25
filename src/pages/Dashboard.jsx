@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { TierPill, useApp, useData, Pill, usePeriod, PeriodBar } from '../components/ui.jsx';
@@ -8,7 +8,6 @@ import { TIERS } from '../lib/domain.js';
 import { LayoutGrid, setLayoutEdit, useLayoutEdit } from '../components/Layout.jsx';
 import { useDashAll } from '../components/DashBlocks.jsx';
 import { SalesSec, StockSec, AcctSec, PeopleSec, Attention } from '../components/Dash2.jsx';
-import MonthReport from '../components/MonthReport.jsx';
 
 const N = (v) => Number(v || 0);
 const shift = (d, days) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + days); return x.toISOString().slice(0, 10); };
@@ -23,14 +22,18 @@ function Delta({ cur, prev, money: isMoney }) {
 
 // 426–437 (Frank 11-19): 经营总览重做 —— 紧急待办一行 → 总览 → 本地 → FOB → 账款 → 人 → 更多. 大板块和板块里的小卡片顺序中方可调 (437).
 export default function Dashboard() {
-  const { org, go, role } = useApp();
+  const { org, go, role, tick } = useApp();
   const P = usePeriod('dash'); const { from, to } = P;
   const [pf, pt] = prevRange(from, to);
   const edit = useLayoutEdit();
   const admin = role === 'admin';
   const all = useDashAll();
-  const [alerts, setAlerts] = useState({}); const [report, setReport] = useState(false);
+  const [alerts, setAlerts] = useState({});
   const onAlert = useCallback((k, list) => setAlerts((a) => (JSON.stringify(a[k] || []) === JSON.stringify(list) ? a : { ...a, [k]: list })), []);
+  // 11-25: 仓库 / 盘点这条链上要注意的也进「要你注意的」(盘点进行中、盘点金蝶待录、找货选了库位但库位空了 → 先不做)
+  const { data: ops } = useData(async () => q(`select (select count(*) from app.counts where org_id = $1 and status = 'open')::int as open_cnt,
+      (select count(*) from app.counts c where c.org_id = $1 and c.status = 'closed' and c.kd_done_at is null and exists (select 1 from app.count_diffs d where d.count_id = c.id and d.diff <> 0))::int as kd_cnt`, [org]).then((r) => r[0]).catch(() => null), [org, tick]);
+  useEffect(() => { if (!ops) return; onAlert('ops', [...(ops.open_cnt ? [{ tone: 'red', text: '正在盘点 · 出货暂停', go: 'count' }] : []), ...(ops.kd_cnt ? [{ tone: 'amber', text: `${ops.kd_cnt} 次盘点金蝶没录完`, go: 'count' }] : [])]); }, [ops, onAlert]);
   const { data } = useData(async () => {
     const [[k], rc, bal, [cards], cmp, fobs] = await Promise.all([q(Q.dashboard, [org, from, to]), q(Q.receipts, [org, from, to]), q(Q.balances, [org]),
       q(Q.dashCards, [org, from, to, pf, pt]), q(Q.customerCompare, [org]), q(Q.fobList, [org]).catch(() => [])]);
@@ -92,11 +95,9 @@ export default function Dashboard() {
       <div className="pagehead">
         <div><div className="eyebrow">LA&9S / Votre partenaire</div><h1>经营总览</h1></div>
         <PeriodBar p={P}>
-          {admin && <button type="button" className="btn sm primary" onClick={() => setReport(true)}>出月报</button>}
           {admin && <button type="button" className={`btn sm ${edit ? 'primary' : ''}`} onClick={() => setLayoutEdit(!edit)} title="大板块和板块里小卡片的顺序、宽度、显示不显示（全员一样）">⚙ 配置看板</button>}
         </PeriodBar>
       </div>
-      {report && <MonthReport all={all} onClose={() => setReport(false)} />}
       {data && <Attention alerts={alerts} />}
       {!data ? <div className="empty">加载中…</div> : <LayoutGrid page="dash" blocks={blocks} />}
     </>

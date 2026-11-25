@@ -20,7 +20,7 @@ import { ImpactFor } from '../components/Impact.jsx';
 import PickTicks, { AssignBar } from '../components/PickTicks.jsx';
 import { ContactPick, useContacts, rememberContact, contactRole } from '../components/Contacts.jsx';
 import { can, whoCan, seesPrice, dealPriceVisible, NOTE_OPTIONS, SHIP_METHODS, PAY_METHODS, RETURN_REASONS, RETURN_BASES, FREIGHT_BASES, CONFIRM_METHODS, CHECK_RESULTS, priceLevel, getThresholds, balanceWords, TIERS } from '../lib/domain.js';
-import { money, qty, dt, dDate, today, pad, ymd } from '../lib/format.js';
+import { money, qty, dt, dDate, today, pad, ymd, friendlyError } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
 
 const N = (v) => Number(v || 0);
@@ -277,6 +277,7 @@ export function PickPanel({ deal, lines, employees, events, act, role }) {
     ...baseCols({ price: false }),
     { key: 'warehouse', label: '仓库', w: 50 },
     { key: 'bin', label: '库位 · 片数', w: 150, value: (l) => l.bins || l.bin || '', render: (l) => <span className="small" data-tip={l.bins ? `这个型号放在：${l.bins}` : undefined}><b>{l.bins || l.bin || '—'}</b></span> },   // 513: 一个型号在几个库位都列出来
+    { key: 'pick_bin', label: '从哪拿', w: 90, render: (l) => l.pick_bin || '' },
     { key: 'qty_req', label: '需求数量', w: 70, render: (l) => qty(l.qty_req) },
     { key: 'qty_reserved_line', label: '预占数量', w: 70, value: (l) => (picking ? l.qty_supply : l.qty_picked ?? l.qty_supply), render: (l) => qty(picking ? l.qty_supply : (l.qty_picked ?? l.qty_supply)) },
     { key: 'qty_supply', label: '实际供货', w: 100, ...(picking && part === 'picked'
@@ -467,6 +468,7 @@ export function ReviewPanel({ deal, lines, employees, events, act, role }) {
                   <button type="button" className="num" title="点这里直接输入实点数" onClick={() => setNumFor(l)}>{qty(a.qty)}<small>/ {qty(l.qty_supply)}</small></button>
                   <button type="button" className="step" onClick={() => step(1)} aria-label="多一片">＋</button>
                 </span>
+                {String(l.bins || '').includes(' · ') && <BinChoose l={l} />}
                 {(mu || sg || a.check) && <div className="tick-why">
                   <span className={`pill ${mu ? 'red' : 'amber'}`}>{mu ? `必抽检 · ${must.get(l.id)}` : sg ? `建议抽检 · ${suggest.get(l.id)}` : '抽检'}</span>
                   {Object.entries(CHECK_RESULTS).map(([k, n]) => <button type="button" key={k} className={`chip ${a.check === k ? 'on' : ''} ${errs && mu && !a.check ? 'err' : ''}`} onClick={() => set(l, { check: a.check === k ? '' : k, seen: false }, '抽检')}>{n}</button>)}
@@ -1616,4 +1618,12 @@ function SignRow({ s, act, role, discs = [], lines = [], deal }) {
       {decide && <DiscDecide x={decide} s={s} deal={deal} act={act} onClose={() => setDecide(null)} />}
     </div>
   );
+}
+
+// 11-25: 一个型号放在几个库位 → 找货时点一下「从哪拿」, 出库先扣这个库位 (不点就先扣片数少的)
+function BinChoose({ l }) {
+  const { role, toast, refresh } = useApp();
+  const set = async (v) => { try { await call(role, `select app.set_pick_bin($1,$2)`, [l.id, v]); toast(v ? `${l.model} 从 ${v} 拿` : '已清掉'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (<div className="tick-bins"><span className="small muted">从哪拿：</span>{String(l.bins).split(' · ').map((x) => { const c = x.split(' ')[0]; return (
+    <button type="button" key={c} className={`chip sm ${l.pick_bin === c ? 'on' : ''}`} onClick={() => set(l.pick_bin === c ? null : c)}>{x}</button>); })}</div>);
 }

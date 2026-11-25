@@ -252,7 +252,9 @@ where t.customer_id = $1 and t.currency = coalesce($2, 'XOF') and t.due > 0 and 
 order by coalesce(t.first_shipped_at, '-infinity'::timestamptz), t.deal_id`;
 
 export const stock = `
-select v.*, w.name as warehouse_name from app.v_stock v join app.warehouses w on w.code = v.warehouse and w.org_id = v.org_id
+select v.*, w.name as warehouse_name,
+  case when v.warehouse_kind = 'local' then (select string_agg(b.code || ' ' || i.qty, ' · ' order by i.qty desc) from app.bin_items i join app.bins b on b.id = i.bin_id where b.org_id = v.org_id and i.product_id = v.product_id and i.qty > 0) end as bins
+from app.v_stock v join app.warehouses w on w.code = v.warehouse and w.org_id = v.org_id
 where v.org_id = $1
 order by case v.warehouse_kind when 'local' then 0 when 'fob' then 1 else 2 end, v.warehouse, v.category, v.model`;
 

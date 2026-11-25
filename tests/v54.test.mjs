@@ -67,3 +67,18 @@ test('盘点任务: 货架 + 种类, 一个货架只派一个人; 确认后金�
   await t.as(U.admin, `select app.count_kd_done($1)`, [c]);
   assert.ok((await t.one(`select kd_done_at from app.counts where id = $1`, [c])).kd_done_at);
 });
+
+test('找货选了库位: 出库先扣那个库位', async () => {
+  const t = await setup();
+  const org = t.ids.org;
+  const st = (await t.one(`select s.id from app.stock_items s join app.warehouses w on w.id = s.warehouse_id where w.kind = 'local' and s.product_id = $1 limit 1`, [t.ids.bg6mCover])).id;
+  await t.as(U.picker, `select app.bin_putaway($1,'SS-A-1',$2,10,null)`, [org, t.ids.bg6mCover]);
+  await t.as(U.picker, `select app.bin_putaway($1,'SS-B-1',$2,50,null)`, [org, t.ids.bg6mCover]);
+  const deal = await t.val(U.manager, `select app.create_quote($1,$2,'XOF',$3)`, [org, t.ids.camaraAbobo, JSON.stringify([{ product_id: t.ids.bg6mCover, qty_req: 5 }])]);
+  const line = (await t.one(`select id from app.deal_lines where deal_id = $1`, [deal])).id;
+  await t.as(U.picker, `select app.set_pick_bin($1,'ss-b-1')`, [line]);
+  const sh = (await t.one(`insert into app.shipments (org_id, deal_id, out_no, shipped_at, method, contact_phone, address, proof_path, amount) select $1,$2,'T9',now(),(enum_range(null::app.ship_method))[1],'0','x','p',0 returning id`, [org, deal])).id;
+  await t.db.query(`select app.move_stock($1,-5,'ship','shipment',$2)`, [st, sh]);
+  const q = async (c) => Number((await t.one(`select i.qty from app.bin_items i join app.bins b on b.id = i.bin_id where b.code = $1 and i.product_id = $2`, [c, t.ids.bg6mCover])).qty);
+  assert.equal(await q('SS-B-1'), 45); assert.equal(await q('SS-A-1'), 10);
+});

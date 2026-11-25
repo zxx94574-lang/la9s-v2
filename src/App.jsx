@@ -7,6 +7,7 @@ import Kpi from './pages/Kpi.jsx';
 import MarginPage from './pages/MarginPage.jsx';
 import RulesPage from './pages/RulesPage.jsx';
 import CodeReview from './pages/CodeReview.jsx';
+import Report from './pages/Report.jsx';
 import Bins from './pages/Bins.jsx';
 import { DirectiveGate, DirBar } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info, useStickyPagehead, useInstantTips } from './components/ui.jsx';
@@ -46,7 +47,7 @@ import Sop from './pages/Sop.jsx';
 import Kingdee from './pages/Kingdee.jsx';
 import { StoresHq, PortalShop, PortalOrders, PortalBalance, PortalStores } from './pages/Portal.jsx';
 import { ShopPos, ShopStock, CustomerAccounts } from './components/Shop.jsx';
-import { buildNav, NavEditor } from './components/Nav.jsx';
+import { buildNav, NavEditor, HubTabs, hubOf } from './components/Nav.jsx';
 
 const store = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
@@ -225,6 +226,7 @@ export default function App() {
     case 'attendance': view = <Attendance />; break;
     case 'kpi': view = <Kpi />; break;
     case 'margin': view = <MarginPage />; break;
+    case 'report': view = <Report />; break;
     case 'rules': view = <RulesPage />; break;
     case 'codes': view = <CodeReview />; break;
     case 'staff': view = <Staff />; break;
@@ -259,7 +261,7 @@ export default function App() {
     case 'import': view = <Import />; break;
     default: view = <Dashboard />;
   }
-  const active = (p) => page === p || (p === 'orders' && page === 'deal') || (p === 'balances' && page === 'customer');
+  const active = (p) => page === p || (p === 'orders' && page === 'deal') || (p === 'balances' && page === 'customer') || (hubOf(p) && hubOf(p) === hubOf(page === 'count' ? 'bins' : page === 'customer' ? 'balances' : page));
   // 客户下单端: 底部导航换成 下单 / 订单 / 对账
 
   return (
@@ -339,6 +341,7 @@ export default function App() {
           <main className="content">
             {/* Frank 11-11 (224 ⑤): 说明小字不占版面, 收进右上角 ⓘ; 只有「存不住数据」这种真问题才显示红条 */}
             {!isPersistent() && <div className="demo-banner"><span className="dot warn" /><span>浏览器禁止存储，关闭页面后数据会重置</span></div>}
+            {org && !portal && <HubTabs page={page} role={role} cfg={navCfg} go={go} />}
             {org && !portal && page !== 'todo' && <DirBar />}
             {view}
             {org && !['boss', 'clerk'].includes(role) && <DirectiveGate />}

@@ -19,7 +19,7 @@ export default function Stock() {
   const s = (f) => rows.reduce((a, r) => a + Number(r[f]), 0);
   const cols = [
     { key: 'warehouse', label: '仓库', w: 70, render: (r) => <Pill tone={r.warehouse_kind === 'local' ? 'blue' : 'gray'}>{r.warehouse_name}</Pill> },
-    { key: 'bin', label: '库位', w: 70, render: (r) => <b>{r.bin}</b> },
+    { key: 'bin', label: '库位 · 片数', w: 150, value: (r) => r.bins || r.bin || '', render: (r) => <span className="small" data-tip={r.bins ? `放在：${r.bins}` : undefined}><b>{r.bins || r.bin || ''}</b></span> },   // 11-25: 盘点 / 上架后的真实库位
     { key: 'code', label: '编码', w: 64, render: (r) => <span className="mono">{r.code}</span> },
     { key: 'category', label: '种类', w: 100 },
     { key: 'model', label: '型号', w: 90, render: (r) => <ModelLink id={r.product_id} model={r.model} /> },

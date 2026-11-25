@@ -714,7 +714,7 @@ export function PeopleSec({ all, from, to, label, cards, cmp, onAlert }) {
 // 全页一行「要你注意的」: 只写异常, 没有就不显示
 export function Attention({ alerts }) {
   const { go } = useApp();
-  const list = ['sale', 'stock', 'acct', 'people'].flatMap((k) => alerts[k] || []).sort((a, b) => (a.tone === 'red' ? 0 : 1) - (b.tone === 'red' ? 0 : 1)).slice(0, 6);
+  const list = ['ops', 'sale', 'stock', 'acct', 'people'].flatMap((k) => alerts[k] || []).sort((a, b) => (a.tone === 'red' ? 0 : 1) - (b.tone === 'red' ? 0 : 1)).slice(0, 6);
   if (!list.length) return null;
   return <div className="d2-attn"><b>要你注意的</b>{list.map((a, i) => <button type="button" key={i} className={`pill ${a.tone}`} onClick={() => go(a.go)}>{a.text}</button>)}</div>;
 }
