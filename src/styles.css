@@ -2131,3 +2131,42 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .ask-tr:hover { background: var(--brand-soft); }
 .ask-tl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .of-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/* 顶栏 11-25 14:12：语言 / 岗位进设置；中间一条宽的智能搜索；＋新建；设置按钮带岗位名 */
+.top-left { flex: 0 1 auto; }
+.ask-bar { flex: 1 1 auto; min-width: 0; max-width: 620px; margin: 0 auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 6px 0 5px; border-radius: 999px; border: 2px solid var(--brand); background: #fff; color: var(--muted); font: inherit; font-size: 14px; cursor: text; box-shadow: 0 2px 12px rgba(4,71,176,.14); transition: box-shadow .15s, transform .15s var(--spring); }
+.ask-bar:hover { box-shadow: 0 4px 18px rgba(4,71,176,.24); }
+.ask-bar:active { transform: scale(.99); }
+.ask-bar .ask-ico { background: var(--brand); color: #fff; width: 28px; height: 28px; flex: 0 0 auto; }
+.ask-ph { flex: 1 1 auto; min-width: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ask-kbd { flex: 0 0 auto; font: 600 11px/1 ui-monospace, monospace; color: var(--brand); background: var(--brand-soft); border-radius: 6px; padding: 5px 7px; }
+@media (max-width: 760px) { .ask-bar { flex: 0 0 auto; width: 40px; max-width: 40px; padding: 0; justify-content: center; margin: 0 0 0 auto; } .ask-bar .ask-ph, .ask-bar .ask-kbd { display: none; } }
+.new-wrap { position: relative; }
+.new-btn { height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--brand-line); background: var(--brand-soft); color: var(--brand); font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.new-btn:active { transform: scale(.95); }
+.new-menu { right: 0; top: 115%; width: 240px; padding: 6px; }
+@media (max-width: 1100px) { .new-l { display: none; } }
+.set-btn { height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font: inherit; font-size: 15px; cursor: pointer; white-space: nowrap; }
+.set-btn .set-role { font-size: 12.5px; font-weight: 600; color: var(--brand); }
+@media (max-width: 1100px) { .set-btn .set-role { display: none; } }
+.role-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.role-opt { text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 7px 9px; font: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.role-opt small { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role-opt.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
+/* 搜索面板：一边打一边出 */
+.ask-body { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+.ask-sec { font-size: 11.5px; font-weight: 700; color: var(--muted); letter-spacing: .04em; padding: 8px 4px 2px; }
+.ask-hit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; text-align: left; border: 1px solid transparent; background: #fff; border-radius: 10px; padding: 7px 10px; font: inherit; cursor: pointer; min-width: 0; }
+.ask-hit:hover, .ask-hit.ask-hi, .ask-jump.ask-hi { border-color: var(--brand); background: var(--brand-soft); }
+.ask-jump.main.ask-hi { background: var(--brand-2); }
+.ask-hit .ask-sh { flex-basis: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ask-ans { display: flex; flex-direction: column; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+/* 清单页顶上的小总览（和经营总览同一套数，点了筛下面的表） */
+.pgsum { margin-bottom: 12px; }
+.pgsum .bigsum > .sb-i { cursor: pointer; transition: background .12s; }
+.pgsum .bigsum > .sb-i:not(.static) .k { color: var(--brand); }
+.pgsum .bigsum > .sb-i:hover { background: var(--brand-soft); }
+.pgsum .bigsum > .sb-i.on { background: var(--brand-soft); border-radius: 8px; }
+.pgsum .bigsum > .sb-i.static { cursor: default; } .pgsum .bigsum > .sb-i.static:hover { background: none; }
+.pgsum .sb-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.d2-to { border: 0; background: none; color: var(--brand); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
+.d2-to:hover { background: var(--brand-soft); }

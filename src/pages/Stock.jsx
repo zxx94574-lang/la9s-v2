@@ -1,3 +1,4 @@
+import SumBar from '../components/SumBar.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -17,8 +18,12 @@ export default function Stock() {
     window.addEventListener('la9s-stock-q', f); return () => window.removeEventListener('la9s-stock-q', f); }, []);
   const [pick, setPick] = useState(new Set()); const [freeze, setFreeze] = useState(null);
   const { role } = useApp();
-  const rows = useMemo(() => (data || []).filter((r) => (wh === 'all' || (wh === 'local' ? r.warehouse_kind === 'local' : r.warehouse_kind !== 'local'))
+  const [sf, setSf] = useState('');   // 11-25 顶上小总览点了筛：预占的 / 断货的
+  const rows0 = useMemo(() => (data || []).filter((r) => (wh === 'all' || (wh === 'local' ? r.warehouse_kind === 'local' : r.warehouse_kind !== 'local'))
     && (!text || [r.code, r.model, r.category, r.bin, ...(r.shared_models || [])].some((x) => String(x || '').toUpperCase().includes(text.toUpperCase())))), [data, wh, text]);
+  const SF = { res: (r) => Number(r.qty_reserved) > 0, out: (r) => Number(r.qty_available) <= 0 };
+  const rows = useMemo(() => (sf ? rows0.filter(SF[sf]) : rows0), [rows0, sf]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const s0 = (f) => rows0.reduce((a, r) => a + Number(r[f]), 0);
   const s = (f) => rows.reduce((a, r) => a + Number(r[f]), 0);
   const cols = [
     { key: 'warehouse', label: '仓库', w: 70, render: (r) => <Pill tone={r.warehouse_kind === 'local' ? 'blue' : 'gray'}>{r.warehouse_name}</Pill> },
@@ -40,6 +45,13 @@ export default function Stock() {
           <input className="in" style={{ width: 220 }} placeholder="⌕ 型号 / 编码 / 库位 / 通用型号" value={text} onChange={(e) => setText(e.target.value)} />{text && <button type="button" className="btn sm" onClick={() => setText('')}>清除筛选</button>}
         </div>
       </div>
+      <SumBar items={[
+        { k: '编码', v: qty(new Set(rows0.map((r) => r.product_id)).size), unit: '个', sub: `${rows0.length} 行（同一编码在几个仓算几行）` },
+        { k: '实存', v: qty(s0('qty_on_hand')), unit: '片' },
+        { k: '可售', v: qty(s0('qty_available')), unit: '片', sub: '实存 − 预占' },
+        { k: '预占（已有单要走）', v: qty(s0('qty_reserved')), unit: '片', sub: `${rows0.filter(SF.res).length} 行`, tone: 'amber', on: sf === 'res', onClick: () => setSf(sf === 'res' ? '' : 'res') },
+        { k: '可售为 0', v: qty(rows0.filter(SF.out).length), unit: '行', sub: '断货或全被预占', tone: rows0.some(SF.out) ? 'red' : null, on: sf === 'out', onClick: () => setSf(sf === 'out' ? '' : 'out') },
+      ]} />
       <HoldsCard />
       <div className="card">
         {['admin', 'manager'].includes(role) && <div className="card-h"><h2>库存</h2><button type="button" className="btn sm soft-red" disabled={pick.size !== 1} title={pick.size === 1 ? '' : '先在下面勾选一行'} onClick={() => setFreeze(rows.find((r) => pick.has(r.stock_item_id)))}>⏸ 暂停出库（问题库存）</button></div>}

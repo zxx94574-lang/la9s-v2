@@ -1,3 +1,4 @@
+import SumBar from '../components/SumBar.jsx';
 import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 import React, { useMemo, useState } from 'react';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
@@ -16,8 +17,13 @@ const N = (v) => Number(v || 0);
 export default function Balances() {
   const { org, go, role } = useApp();
   const { data } = useData(() => q(Q.balances, [org]), [org]);
+  const [sf, setSf] = useState('');   // 11-25 顶上小总览点了筛下面的表
   if (!seesPrice(role)) return <div className="card card-b lock">当前岗位看不到账款。</div>;
-  const rows = data || [];
+  const all = data || [];
+  const old = (r) => N(r.d91_180) + N(r.d180);
+  const over = (r) => r.oldest_days != null && r.credit_days != null && r.oldest_days > r.credit_days;
+  const F = { debt: (r) => N(r.balance) > 0, pre: (r) => N(r.balance) < 0, old: (r) => old(r) > 0, over };
+  const rows = sf ? all.filter(F[sf]) : all;
   const cols = [
     { key: 'code', label: '客户编码', w: 70, render: (r) => <b className="mono">{r.code}</b> },
     { key: 'name', label: '客户', w: 160, render: (r) => <><CustLink id={r.customer_id || r.id} name={r.name} /> <span className="muted small">{r.city}</span></> },
@@ -34,16 +40,22 @@ export default function Balances() {
     { key: 'oldest_days', label: '最老欠款', w: 105, value: (r) => N(r.oldest_days),
       render: (r) => (r.oldest_days == null ? '' : r.credit_days != null && r.oldest_days > r.credit_days ? <Pill tone="red">{r.oldest_days} 天 · 超账期</Pill> : `${r.oldest_days} 天`) },
   ];
-  const debt = rows.reduce((a, r) => a + Math.max(0, N(r.balance)), 0), pre = rows.reduce((a, r) => a + Math.max(0, -N(r.balance)), 0);
+  const debt = all.reduce((a, r) => a + Math.max(0, N(r.balance)), 0), pre = all.reduce((a, r) => a + Math.max(0, -N(r.balance)), 0);
+  const tg = (k) => () => setSf(sf === k ? '' : k);
   return (
     <>
       <div className="pagehead"><div><div className="eyebrow">Balance clients</div><h1>客户总账 Balance</h1>
         <div className="sub">总账只在出库后增加；收款、退货、抹零冲减。点一行看逐笔明细。</div></div></div>
+      <SumBar items={[
+        { k: '欠款合计', v: money(debt), unit: 'XOF', sub: `${all.filter(F.debt).length} 位客户欠款`, tone: debt ? 'red' : null, on: sf === 'debt', onClick: tg('debt') },
+        { k: '90 天以上没收', v: money(all.reduce((a, r) => a + old(r), 0)), unit: 'XOF', sub: `${all.filter(F.old).length} 位`, tone: all.some(F.old) ? 'red' : null, on: sf === 'old', onClick: tg('old') },
+        { k: '超账期', v: qty(all.filter(over).length), unit: '位', sub: '最老一笔超过客户账期', tone: all.some(over) ? 'amber' : null, on: sf === 'over', onClick: tg('over') },
+        { k: '预付合计', v: money(pre), unit: 'XOF', sub: `${all.filter(F.pre).length} 位 · 下次出库自动抵扣`, tone: pre ? 'green' : null, on: sf === 'pre', onClick: tg('pre') },
+      ]} />
       <div className="card">
         <Grid id="balances" table="customers" columns={cols} rows={rows} onRowClick={(r) => go('customer/' + r.id)}
           foot={(rs) => ({ code: `${rs.length} 位`, total_sold: money(rs.reduce((a, r) => a + N(r.total_sold), 0)), total_paid: money(rs.reduce((a, r) => a + N(r.total_paid), 0)),
             balance: `欠 ${money(rs.reduce((a, r) => a + Math.max(0, N(r.balance)), 0))} · 预付 ${money(rs.reduce((a, r) => a + Math.max(0, -N(r.balance)), 0))}` })} />
-        <div className="card-b hint">全部客户：欠款合计 <b className="red-t2">{money(debt)} XOF</b>；预付合计 <b className="green-t2">{money(pre)} XOF</b>（预付在下次出库时自动抵扣）。</div>
       </div>
     </>
   );

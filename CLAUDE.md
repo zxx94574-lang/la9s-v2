@@ -42,7 +42,7 @@ LA&9S 在科特迪瓦做手机配件批发零售，要建一套自有的业务�
 
 **底层组件速查（新做东西先找这里，有就复用）**
 - 表格一律 `Grid`（`components/Grid.jsx`）：`table=` 自动长自定义列；`rowActions`（`danger:true` 先勾选再确认）；`parentOf` 父子行；列 `head` / `tint` / `plain` / `sum`；分组、筛选方案、导出、多列拖动都在底层。
-- **种类筛选一律 `CatFilter`**（`components/CatFilter.jsx`；只有名字的页面用 `CatFilterByName`；`useCatPrefs` 读 org_settings `cat_order` / `cat_main` / `cat_hidden`，选货场景 forSale 去掉「不卖」的）；智能搜索 `AskButton`（components/AskBox.jsx，顶栏；跳转用 `ordersJump` 带 `ask:true` + cust / emp / cat / model / from / to，库存页 sessionStorage `la9s.stock.q`）；工资里的 KPI 奖扣 `lib/kpiPay.js`。
+- **种类筛选一律 `CatFilter`**（`components/CatFilter.jsx`；只有名字的页面用 `CatFilterByName`；`useCatPrefs` 读 org_settings `cat_order` / `cat_main` / `cat_hidden`，选货场景 forSale 去掉「不卖」的）；清单页顶上小总览一律 `SumBar`（components/SumBar.jsx，跟着筛选变、能点的数点了筛表；样式类 `.pgsum`，**别用 `.sumbar`——那是单据合计条的老类名**）；看板卡片 `DCard to={[页面, 名字]}` 联动到清单；顶栏只剩 智能搜索 / ＋新建 / 🔔 / ⚙（语言、岗位在设置里）；智能搜索 `AskButton`（components/AskBox.jsx，顶栏，一边打一边出 单号 / 客户 / 型号 / 员工 / 页面 + 问一句；跳转用 `ordersJump` 带 `ask:true` + cust / emp / cat / model / from / to，库存页 sessionStorage `la9s.stock.q`）；工资里的 KPI 奖扣 `lib/kpiPay.js`。
 - 选项一律 `Choice` / `OptChoice`（`Opts.jsx`，⚙ 新增 / 改名 / 删除 / 排序 / 颜色）；快捷原因 `OptNote`。
 - 规则参数：在 `components/Rules.jsx` 的 `RULES` + `META` 登记一行，用到的地方放 `<RuleGear ids={[…]} />`。
 - 指标：`components/Metric.jsx` 的 `METRICS` 加一行 + `useMetricData` 里 `put(...)`；各页顶上 `MetricStrip`。

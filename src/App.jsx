@@ -1,4 +1,4 @@
-import { AskButton } from './components/AskBox.jsx';
+import { AskButton, NewMenu } from './components/AskBox.jsx';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { openDb, resetDemo, q, isPersistent, REAL, TEST, SERVER, serverMe, setCustomerSession, customerSession } from './db/client.js';
 import { StaffLogin, doLogout } from './components/StaffLogin.jsx';
@@ -14,7 +14,7 @@ import Decisions from './pages/Decisions.jsx';
 import PoProfit from './pages/PoProfit.jsx';
 import Bins from './pages/Bins.jsx';
 import { DirectiveGate, DirBar } from './components/Directives.jsx';
-import { Ctx, Modal, useToasts, useOutside, Info, useStickyPagehead, useInstantTips } from './components/ui.jsx';
+import { Ctx, Modal, useToasts, Info, useStickyPagehead, useInstantTips } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
 import { ExportPanel } from './components/SettingsPanels.jsx';
 import { loadAllOpts } from './components/Opts.jsx';
@@ -77,7 +77,6 @@ export default function App() {
   const [tick, setTick] = useState(0);
   const [toast, toastView] = useToasts();
   const [settings, setSettings] = useState(false);
-  const [roleMenu, setRoleMenu] = useState(false);
   const [drawer, setDrawer] = useState(false);
   const [openGroups, setOpenGroups] = useState(() => store.get('la9s.navgroups3', {}));
   const [navCfg, setNavCfg] = useState(null);
@@ -87,9 +86,6 @@ export default function App() {
   const [overdueN, setOverdueN] = useState(0);
   const [lang, setLangState] = useState(getLang);
   useEffect(() => { domTranslate(); }, [lang]);
-  const [askLang, setAskLang] = useState(null);
-  const langRef = useOutside(!!askLang, () => setAskLang(null));
-  const roleRef = useOutside(roleMenu, () => setRoleMenu(false));
 
   useEffect(() => {
     openDb((msg) => setBoot((b) => ({ ...b, msg }))).then(({ org }) => {
@@ -180,11 +176,11 @@ export default function App() {
   // quiet = 客户自己登录 (不清登录状态, 不弹提示); 右上角手动切岗位 = 演示身份, 退出客户登录
   const setRole = useCallback((r, quiet) => {
     if (!quiet) setCustomerSession(null);
-    setRoleState(r); store.set('la9s.role', r); setRoleMenu(false);
+    setRoleState(r); store.set('la9s.role', r);
     if (!quiet) toast(`已切换为「${ROLES[r].label}」岗位`);
     setTick((x) => x + 1);
   }, [toast]);
-  const changeLang = (l) => { setLangStore(l); setLangState(l); setAskLang(null); toast(t('语言') + ' · ' + LANGS.find((x) => x[0] === l)[1]); };
+  const changeLang = (l) => { setLangStore(l); setLangState(l); toast(t('语言') + ' · ' + LANGS.find((x) => x[0] === l)[1]); };
   const [arch, setArch] = useState(null);   // 点名字出档案 (全站一个宿主)
   const openArchive = useCallback((a) => setArch(a), []);
   useEffect(() => { archRef.current = arch; }, [arch]);
@@ -311,40 +307,14 @@ export default function App() {
                 <button type="button" className="btn sm hide-m" disabled={!navPos.fwd} onClick={navFwd} title="回到刚才那一页"><span className="nh-l">前进 </span>→</button>
               </span>}
             </div>
+            {!portal && <AskButton />}
             <div className="top-actions">
-              <span style={{ position: 'relative' }} ref={langRef} className="lang-switch">
-                <span className="seg sm">{LANGS.map(([k, l]) => <button type="button" key={k} className={lang === k ? 'on' : ''} title={l} onClick={() => k !== lang && setAskLang(k)}>{k === 'zh' ? '中' : k.toUpperCase()}</button>)}</span>
-                {askLang && (
-                  <div className="menu" style={{ right: 0, top: '115%', width: 230, padding: 10 }}>
-                    <div className="small" style={{ marginBottom: 8 }}>切换到 <b>{LANGS.find((x) => x[0] === askLang)[1]}</b>？当前页面和填写内容不会丢。</div>
-                    <div className="row" style={{ gap: 6, justifyContent: 'flex-end' }}><button type="button" className="btn sm" onClick={() => setAskLang(null)}>取消</button><button type="button" className="btn sm primary" onClick={() => changeLang(askLang)}>切换</button></div>
-                  </div>
-                )}
-              </span>
-              <span style={{ position: 'relative' }} ref={roleRef}>
-                <button type="button" className="role-pill" onClick={() => setRoleMenu(!roleMenu)} title={SERVER ? '切换我的岗位 / 退出登录' : '演示用：切换岗位体验不同权限'}>
-                  <span className="hide-m">{t('岗位')}：</span>{t(ROLES[role].label)} ▾
-                </button>
-                {roleMenu && (
-                  <div className="menu" style={{ right: 0, top: '115%', width: 290 }}>
-                    {SERVER ? <div className="hint" style={{ padding: '6px 10px' }}>{serverMe()?.email}</div> : <div className="hint" style={{ padding: '6px 10px' }}>演示用：切换岗位，看每个人能做什么</div>}
-                    {!SERVER && <button type="button" className="mi" onClick={() => { setRoleMenu(false); go('login'); }}><div><b>客户入口（登录 / 游客）</b><div className="small muted">销售员发给客户的那个总链接打开就是这一页</div></div></button>}
-                    {Object.entries(ROLES).filter(([k]) => !SERVER || serverMe()?.roles.includes(k)).map(([k, r]) => (
-                      <button type="button" key={k} className={`mi ${k === role ? 'focus' : ''}`} onClick={() => setRole(k)}>
-                        <div><b>{r.label}</b><div className="small muted">{r.desc}</div></div>
-                      </button>
-                    ))}
-                    {SERVER && <button type="button" className="mi" onClick={doLogout}><div><b>退出登录</b></div></button>}
-                  </div>
-                )}
-              </span>
               {cust && <button type="button" className="btn sm" onClick={() => { setCustomerSession(null); go('login'); setTick((x) => x + 1); }} title={cust.login}>退出登录</button>}
+              {!portal && <NewMenu />}
               {!portal && <button type="button" className="btn icon-btn hide-m" onClick={() => go('todo')} aria-label="待办" title="我的待办">
                 🔔{(overdueN > 0 || todoCount > 0) && <span className={`badge ${overdueN ? 'hot' : ''}`} title={overdueN ? `${overdueN} 张超过 24 小时没发货` : ''}>{overdueN || todoCount}</span>}
               </button>}
-              <span className="hide-m"><Info>{REAL ? '真实数据快照（金蝶 10-19 库存 / 在途，飞书物料与客户；应收还没导）。在这里操作只存在本浏览器，不会写回金蝶 / 飞书。' : '演示版 · 虚构数据。'}数据保存在本浏览器，刷新不丢。未连接金蝶 / WhatsApp。</Info></span>
-              {!portal && <AskButton />}
-              <button type="button" className="btn icon-btn" onClick={() => setSettings(true)} aria-label="设置" title="设置">⚙</button>
+              <button type="button" className="set-btn" onClick={() => setSettings(true)} aria-label="设置" title="设置：语言、岗位、规则、导出、数据">⚙<span className="set-role">{t(ROLES[role]?.label || '')}</span></button>
             </div>
           </header>
 
@@ -383,12 +353,20 @@ export default function App() {
               <div className="seg">{LANGS.map(([k, l]) => <button type="button" key={k} className={lang === k ? 'on' : ''} onClick={() => changeLang(k)}>{l}</button>)}</div>
 
             </div>
+            {/* 11-25 Frank：语言、岗位从顶栏挪进设置，给智能搜索腾地方 */}
+            <div className="field"><label>{SERVER ? '我的岗位' : '当前岗位（演示：切换看每个人能做什么）'}</label>
+              {SERVER && <div className="small muted" style={{ marginBottom: 6 }}>{serverMe()?.email}</div>}
+              <div className="role-grid">{Object.entries(ROLES).filter(([k]) => !SERVER || serverMe()?.roles.includes(k)).map(([k, r]) => (
+                <button type="button" key={k} className={`role-opt ${k === role ? 'on' : ''}`} onClick={() => { setRole(k); setSettings(false); }}><b>{t(r.label)}</b><small>{r.desc}</small></button>))}</div>
+              <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                {!SERVER && <button type="button" className="btn sm" onClick={() => { setSettings(false); go('login'); }}>客户入口（登录 / 游客）</button>}
+                {SERVER && <button type="button" className="btn sm" onClick={doLogout}>退出登录</button>}</div>
+            </div>
+            <div className="small muted">{REAL ? '真实数据快照：在这里操作只存在本浏览器，不会写回金蝶 / 飞书。' : '演示版 · 虚构数据。'}数据保存在本浏览器，刷新不丢。</div>
             {role === 'admin' && <LayoutSwitch onDone={() => setSettings(false)} />}
             {role === 'admin' && <div className="field"><label>规则与系统参数 <Info>所有阈值、开关、权限表、发货文件都在这一页：顶上按订单流程和日常工作排好，点哪个环节只看那里的规则。</Info></label><div><button type="button" className="btn" onClick={() => { setSettings(false); go('rules'); }}>打开规则与系统参数 ›</button> <button type="button" className="btn" onClick={() => { try { sessionStorage.setItem('la9s.rules.area', 'sys'); } catch { /* */ } setSettings(false); go('rules'); }}>权限表 · 发货文件 ›</button></div></div>}
             <ExportPanel />
-            {!SERVER && <><div className="field"><label>当前岗位（演示）</label>
-              <select className="in" value={role} onChange={(e) => setRole(e.target.value)}>{Object.entries(ROLES).map(([k, r]) => <option key={k} value={k}>{r.label} — {r.desc}</option>)}</select>
-            </div>
+            {!SERVER && <>
             <div className="field"><label>演示数据 <Info>{isPersistent() ? '数据存在本浏览器（IndexedDB），换设备不同步。' : '当前浏览器不允许存储。'}</Info></label>
               <div className="row">
                 <ResetButton onReset={async () => { const o = await resetDemo(); setOrg(o); setSettings(false); refresh(); go('dashboard'); toast('演示数据已重置'); }} />

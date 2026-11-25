@@ -71,10 +71,12 @@ function Cell({ label, tip, main, cur, unit, tone, block, sub, onClick, children
       <span className="d">{sub}</span>
     </C>);
 }
-function DCard({ title, sub, tog, gear, children, foot, open, onFold, small }) {
+// to = [页面, 名字]：看板 ↔ 清单联动（11-25 Frank）—— 标题旁「订单总览 →」直接到那一页（那一页顶上同一套总数）
+function DCard({ title, sub, tog, gear, children, foot, open, onFold, small, to }) {
+  const { go } = useApp();
   return (
     <div className={`d2-card ${small ? 'sub' : ''}`}>
-      <div className="d2-h"><span className="t">{title}</span>{sub && <span className="s">{sub}</span>}{gear}{tog}</div>
+      <div className="d2-h"><span className="t">{title}</span>{sub && <span className="s">{sub}</span>}{gear}{to && <button type="button" className="d2-to" onClick={() => go(to[0])}>{to[1]} →</button>}{tog}</div>
       {children}
       <div className="d2-foot"><div className="f">{foot}</div>{onFold && <Fold open={open} onClick={onFold} />}</div>
     </div>);
@@ -207,7 +209,7 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
   ];
   return (
     <div className="d2-sec">
-      <DCard title="销售" sub="销售额与毛利 · 只算已经出库的" tog={<Tog s={s} />} gear={<RuleGear ids={['dash.budget', 'margin.low']} title="销售看板的规则" />} open={o0 === 'ov'} onFold={() => tg0('ov')}
+      <DCard title="销售" sub="销售额与毛利 · 只算已经出库的" to={['orders', '订单总览']} tog={<Tog s={s} />} gear={<RuleGear ids={['dash.budget', 'margin.low']} title="销售看板的规则" />} open={o0 === 'ov'} onFold={() => tg0('ov')}
         foot={<>{budget > 0 && inMonth && <span className="d2-goal" data-tip={`本月预算 ${money(budget, 'CNY')} CNY，已完成 ${money(revCny, 'CNY')} CNY`}><i><em style={{ width: `${Math.min(100, revCny / budget * 100)}%` }} /></i>预算 {Math.round(revCny / budget * 100)}%</span>}
           <span>{T.all.n} 单 · {T.all.c} 位客户</span>
           {T.all.miss > 0 && <button type="button" className="d2-warn" onClick={() => setMissOpen(true)} data-tip="这些货出库时没有到岸成本，销售额算了，成本和毛利没算">{qty(T.all.miss)} 片没成本</button>}</>}>
@@ -233,7 +235,7 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
       </Detail>}
       <div className="d2-row">
         <DCard small title="本地备货" open={o1 === 'local'} onFold={() => { setExp({}); tg1('local'); }} foot={<span>{T.loc.n} 单 · {T.loc.c} 位客户</span>}><div className="d2-sub">{cells(T.loc, 'local', false)}</div></DCard>
-        <DCard small title="FOB" open={o1 === 'fob'} onFold={() => { setExp({}); tg1('fob'); }}
+        <DCard small title="FOB" to={['fob', 'FOB 项目']} open={o1 === 'fob'} onFold={() => { setExp({}); tg1('fob'); }}
           foot={<><span>{T.fob.n} 单 · {T.fob.c} 位客户</span>{transit?.n > 0 && <button type="button" className="d2-link" onClick={() => go('fob')}>在途 {transit.n} 单 · 订金已收 {transit.paid} ›</button>}</>}><div className="d2-sub">{cells(T.fob, 'fob', false)}</div></DCard>
       </div>
       {o1 && <Detail title={kind1 === 'fob' ? 'FOB · 客户 → 订单 → 型号' : '本地备货'} right={kind1 === 'local' && <Seg value={dim} onChange={(k) => { setDim(k); setExp({}); }} options={[['category', '按种类'], ['tier', '按档位']]} />}>
@@ -335,7 +337,7 @@ export function StockSec({ all, onAlert }) {
   const fobRows = data.st.filter((r) => r.wh_kind === 'fob').map((r) => ({ ...r, id: r.stock_item_id }));
   return (
     <div className="d2-sec">
-      <DCard title="库存" sub="现有 + 在途 · 金额 = 到岸成本" tog={<Tog s={s} />} gear={<RuleGear ids={['dash.age1', 'dash.age2', 'dash.cover_lo', 'dash.cover_hi']} title="库存看板的规则" />} open={o0 === 'st'} onFold={() => tg0('st')}
+      <DCard title="库存" sub="现有 + 在途 · 金额 = 到岸成本" to={['stock', '库存']} tog={<Tog s={s} />} gear={<RuleGear ids={['dash.age1', 'dash.age2', 'dash.cover_lo', 'dash.cover_hi']} title="库存看板的规则" />} open={o0 === 'st'} onFold={() => tg0('st')}
         foot={<><span>{calc.byWh.map((x) => x.name).join(' · ')} {calc.byWh.length} 个仓 · {allT.sku.size} 个编码</span>
           {e0.w ? <span data-tip="按现在的挂牌价把现有库存卖完，大概能赚多少。四档价按近 90 天各档出货片数占比加权。">按现价卖完预估毛利 <b className="ink">{X(e0.w.gp)}</b> <Pct p={e0.w.pct} low={lowPct} /></span> : <span data-tip="自己的出货不满 30 天，各档占比还不准">预估毛利：数据不足</span>}
           {allT.nocost > 0 && <button type="button" className="d2-warn" onClick={() => go('pricing')}>{qty(allT.nocost)} 片没成本</button>}
@@ -482,7 +484,7 @@ export function AcctSec({ bal, rc, fobs, ship, from, to, label, onAlert }) {
   const dueList = ageF == null ? due : ageF === 7 ? due.filter((r) => r.left != null && r.left >= 0 && r.left <= 7) : due.filter((r) => r.seg === ageF || (ageF === 12 && r.seg > 0));
   return (
     <div className="d2-sec">
-      <DCard title="账款" sub="应收 · 现在的数，不跟日期走" tog={<Tog s={s} />} gear={<RuleGear ids={['dash.ar_days', 'dash.ar_red', 'dash.rr_lo', 'dash.rr_hi']} title="账款看板的规则" />} open={o0 === 'ar'} onFold={() => tg0('ar')}
+      <DCard title="账款" sub="应收 · 现在的数，不跟日期走" to={['balances', '客户总账']} tog={<Tog s={s} />} gear={<RuleGear ids={['dash.ar_days', 'dash.ar_red', 'dash.rr_lo', 'dash.rr_hi']} title="账款看板的规则" />} open={o0 === 'ar'} onFold={() => tg0('ar')}
         foot={<span>{byCust.length} 个客户有欠款{due.length > 0 && ` · 最老一笔 ${Math.max(0, ...due.map((r) => (r.shipped ? daysBetween(r.shipped, td) : 0)))} 天`}</span>}>
         <div className="d2-hero">
           <Cell label="应收总额" main cur={s.cur} tip="所有客户现在欠我们的钱 = 本地欠款 + FOB 订金还差 + FOB 尾款未收。出库后增加，收款后减少；客户预付不在里面。" onClick={() => go('balances')} sub={data.arBase != null && <Cmp now={AR} base={data.arBase} goodUp={false} f={X} what="比上月底" />}>{X(AR)}</Cell>
@@ -544,7 +546,7 @@ export function AcctSec({ bal, rc, fobs, ship, from, to, label, onAlert }) {
           foot={() => ({ project_no: '合计', totalX: X(fl.reduce((a, f) => a + f.totalX, 0)), paidX: X(fobPaid), dep: X(fobDep), tail: X(fobTail) })} />
       </Detail>}
       <div className="d2-row">
-        <DCard small title="收款" sub={label} open={o2 === 'rc'} onFold={() => tg2('rc')} foot={<>{remP.length > 0 && <span>回款 {remP.length} 笔</span>}{remFlag.length > 0 && <button type="button" className="d2-warn" onClick={() => { setRcTab('remit'); if (o2 !== 'rc') tg2('rc'); }}>{remFlag.length} 笔回款要看</button>}</>}>
+        <DCard small title="收款" sub={label} to={['receipts', '收款']} open={o2 === 'rc'} onFold={() => tg2('rc')} foot={<>{remP.length > 0 && <span>回款 {remP.length} 笔</span>}{remFlag.length > 0 && <button type="button" className="d2-warn" onClick={() => { setRcTab('remit'); if (o2 !== 'rc') tg2('rc'); }}>{remFlag.length} 笔回款要看</button>}</>}>
           <div className="d2-sub c3">
             <Cell label="收到" onClick={() => go('receipts')} sub={`${live.length} 笔 · ${new Set(live.map((r) => r.customer_id)).size} 位客户`}>{X(rcT)}</Cell>
             <Cell label="待核对" unit="笔" tone={pend.length ? 'num-amber' : ''} tip="员工已经录了、中方还没对过凭证的收款。" onClick={() => go('receipts')}>{pend.length}</Cell>
