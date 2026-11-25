@@ -49,6 +49,7 @@ const D = {
   '全部': ['All', 'Tout'], '关闭': ['Close', 'Fermer'], '确定': ['OK', 'OK'], '知道了': ['Got it', 'Compris'], '再看看': ['Not now', 'Plus tard'], '记下': ['Save', 'Noter'],
   '✎ 修改': ['✎ Edit', '✎ Modifier'], '保存选项': ['Save options', 'Enregistrer'], '恢复默认': ['Reset', 'Par défaut'], '处理': ['Handle', 'Traiter'], '批准': ['Approve', 'Approuver'], '解锁': ['Unlock', 'Déverrouiller'],
   '筛选': ['Filter', 'Filtrer'], '分组': ['Group', 'Grouper'], '导出': ['Export', 'Exporter'], '列': ['Columns', 'Colonnes'], '筛选方案': ['Saved filters', 'Filtres'], '卡片': ['Cards', 'Cartes'], '表格': ['Table', 'Tableau'],
+  '昨天': ['Yesterday', 'Hier'], '上周': ['Last week', 'Sem. dernière'], '上月': ['Last month', 'Mois dernier'], '今年': ['This year', 'Cette année'], '全部时间': ['All time', 'Tout'], '复制全部': ['Copy all', 'Tout copier'], '已复制': ['Copied', 'Copié'],
   '本日': ['Today', 'Aujourd’hui'], '本周': ['This week', 'Semaine'], '本月': ['This month', 'Mois'], '本季度': ['Quarter', 'Trimestre'], '本年度': ['Year', 'Année'], '自定义': ['Custom', 'Personnalisé'],
   '订单': ['Orders', 'Commandes'], '订单号': ['Order no.', 'N° commande'], '单号': ['No.', 'N°'], '单': ['orders', 'cmd'], '笔': ['items', 'lignes'], '下单': ['Order', 'Commander'], '询单': ['Inquiries', 'Demandes'], '询单号': ['Inquiry no.', 'N° demande'],
   '出库单': ['Delivery notes', 'Bons de sortie'], '出库单号': ['Delivery no.', 'N° bon de sortie'], '出库数量': ['Qty shipped', 'Qté sortie'], '出库片数': ['Pcs shipped', 'Pcs sorties'], '出库日': ['Ship date', 'Date sortie'], '出库日期': ['Ship date', 'Date sortie'], '最近出库': ['Last shipped', 'Dernière sortie'],
@@ -121,6 +122,12 @@ export const coverage = () => Object.keys(D).length;
 // 句子 / 带数字的文字不动 —— 那些要页面自己用 t()。
 // 带数字的整句（待办 / 收款 / 订单里最常见的几种）
 const RX = [
+  [/^(\d+) 月第 (\d+) 周$/, 'Wk $2 · month $1', 'Sem. $2 · mois $1'],
+  [/^(\d{4}) 年 (\d+) 月第 (\d+) 周$/, 'Wk $3 · $2/$1', 'Sem. $3 · $2/$1'],
+  [/^第 (\d+) 周$/, 'Wk $1', 'Sem. $1'],
+  [/^(\d{4}) 年 (\d+) 月$/, '$2/$1', '$2/$1'],
+  [/^(\d+) 月$/, 'Month $1', 'Mois $1'],
+  [/^(\d{4}) 年$/, '$1', '$1'],
   [/^更多 (\d+) 种$/, '$1 more', '$1 de plus'],
   [/^看全部 (\d+) 个（上面那句话是全部的合计）$/, 'Show all $1', 'Tout voir ($1)'],
   [/^只发了一部分，还有 ([\d,]+) 片没发$/, 'Partly shipped, $1 pcs left', 'Envoyé en partie, reste $1 pcs'],

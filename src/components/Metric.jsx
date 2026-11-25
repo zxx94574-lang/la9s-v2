@@ -198,12 +198,12 @@ function MetricGear({ id, anchor, onClose, cfg }) {
 }
 
 // 一排指标卡 (各页面顶上用): ids = 这一页要的几个
-export function MetricStrip({ ids, from, to, extra }) {
+export function MetricStrip({ ids, from, to, extra, tag }) {   // tag：这一页没有日期按钮、指标固定算本月时，在卡片上写明「本月」
   const cfg = useMetricCfg(); const data = useMetricData(from, to, extra);
   const { role } = useApp();
   const list = ids.filter((id) => METRIC[id] && !cfg.get(id).hidden && (id !== 'cust.price' || role === 'admin'));
   if (!data || !cfg.ready || !list.length) return null;
-  return <div className="mt-strip">{list.map((id) => <MetricCard key={id} id={id} d={data[id]} cfg={cfg} />)}</div>;
+  return <div className="mt-strip">{list.map((id) => <MetricCard key={id} id={id} d={data[id]} cfg={cfg} tag={tag} />)}</div>;
 }
 // 隐藏了的指标列出来, 中方可以点回来
 export function HiddenMetrics({ area }) {

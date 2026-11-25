@@ -35,7 +35,7 @@ from app.inquiries i left join app.customers c on c.id = i.customer_id left join
 where i.org_id = $1 order by i.created_at desc limit 500`;
 const whoOf = (i) => (i.customer_id ? i.customer_name : `${i.guest_info?.contact || ''}${i.guest_info?.shop ? ` · ${i.guest_info.shop}` : ''}`);
 
-export default function Inquiry({ embedded } = {}) {
+export default function Inquiry({ embedded, from, to } = {}) {   // from / to：嵌在订单总览里时跟右上角的时间段（按建单日期）；没处理的条数（页签上的数）不受时间段影响
   const { org, role, toast, refresh, tick } = useApp();
   const [tab, setTab] = useState(role === 'admin' ? 'list' : 'new');
   const [cust, setCust] = useState(''); const [lines, setLines] = useState([]); const [note, setNote] = useState('');
@@ -67,7 +67,8 @@ export default function Inquiry({ embedded } = {}) {
   };
   const mark = async (i, st, reason) => { try { await call(role, `select app.inquiry_mark($1,$2,$3)`, [i.id, st, reason || null]); toast(st === 'contacted' ? '已标记：联系过客户了' : '已记为没成交'); setLost(null); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
   const voidInq = async (i, act, reason) => { try { await call(role, `select app.inquiry_void($1,$2,$3)`, [i.id, act, reason || null]); toast(act === 'restore' ? '已恢复' : '已标无效，不算进转化率'); setInv(null); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
-  const rows = data.list.filter((i) => !mineOnly || !data.me || i.owner_employee_id === data.me || i.creator_emp === data.me);
+  const inRange = (i) => { if (!from) return true; const d = new Date(i.created_at); const s = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; return s >= from && s <= to; };
+  const rows = data.list.filter((i) => inRange(i) && (!mineOnly || !data.me || i.owner_employee_id === data.me || i.creator_emp === data.me));
   const cols = [
     { key: 'iq_no', label: '询单号', w: 130, mono: true },
     { key: 'status', label: '状态', w: 100, value: (i) => INQ_STATUS[i.status][0], render: (i) => <Pill tone={INQ_STATUS[i.status][1]}>{INQ_STATUS[i.status][0]}</Pill> },
@@ -86,7 +87,7 @@ export default function Inquiry({ embedded } = {}) {
       {!embedded && <div className="pagehead"><div><div className="eyebrow">Demandes</div>
         <h1>询单 <Info>询单 = 客户想要什么、还没定价。游客、开了账号的大客户、外跑销售都从这里进；中方看一眼价格、点「转成报价」才变成订单（单号 CI-…），之后流程和现在一样。销售只能给自己名下的客户建询单；价格只有中方定。</Info> <RuleGear anchor="inquiry-rules" title="询单规则" ids={['guest.low']} /></h1></div>
         <span className="grow" /><button type="button" className="btn" onClick={() => setNewP(true)}>＋ 新客户（潜客）</button></div>}
-      {!embedded && <MetricStrip ids={['inq.win', 'inq.fast']} from={periodRange('month')[0]} to={periodRange('month')[1]} />}
+      {!embedded && <MetricStrip tag="本月" ids={['inq.win', 'inq.fast']} from={periodRange('month')[0]} to={periodRange('month')[1]} />}
       <div className="tabs"><button type="button" className={tab === 'new' ? 'on' : ''} onClick={() => setTab('new')}>＋ 建询单</button>
         <button type="button" className={tab === 'list' ? 'on' : ''} onClick={() => setTab('list')}>询单列表 <b>{data.list.filter((i) => ['new', 'contacted'].includes(i.status)).length}</b></button></div>
       {tab === 'new' && <div className="card">

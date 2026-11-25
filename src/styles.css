@@ -2176,3 +2176,10 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .per-wk { display: flex; gap: 10px; align-items: center; font-variant-numeric: tabular-nums; }
 .per-wk .per-wn { color: var(--muted); font-size: 12px; min-width: 44px; }
 .per-wk.on .per-wn { color: rgba(255,255,255,.85); }
+/* 11-25 智能搜索：没听懂的提示 + 没听懂的问法清单 */
+.ask-miss { background: var(--amber-bg); color: var(--amber); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin: 6px 0; }
+.ask-range { white-space: nowrap; }
+.ask-misslist { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.ask-missrows { max-height: 160px; overflow: auto; width: 100%; display: flex; flex-direction: column; gap: 2px; }
+/* 11-25 手机：标题右边一排里既有按钮又有日期条（订单总览）时，日期条自己占一行，起止日期不被挤到屏幕外 */
+@media (max-width: 760px) { .content .pagehead > .row:has(> .period-bar) { flex-wrap: wrap !important; overflow: visible; width: 100%; } .content .pagehead > .row > .period-bar { flex: 0 0 100%; max-width: 100%; } }

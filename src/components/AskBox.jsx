@@ -8,121 +8,12 @@ import { q } from '../db/client.js';
 import { useApp, useData, Choice } from './ui.jsx';
 import { ordersJump } from '../lib/dirWork.js';
 import { ITEMS, visibleTo } from './Nav.jsx';
-import { monthWeeks, weekOf } from '../lib/format.js';
 import { presetPeriod } from './ui.jsx';
+import { periodRange, ymd } from '../lib/format.js';
+import { parse, METRIC, NOW, GROUP, looksLikeQuestion } from '../lib/askParse.js';   // 关键词全在 lib/askParse.js（纯函数，tests/ask.test.mjs 回归）
 
-const pad = (n) => String(n).padStart(2, '0');
-const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const addD = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const fmt = (n) => Math.round(Number(n || 0)).toLocaleString('en-US');
 const norm = (s) => String(s || '').toUpperCase().replace(/[\s_\-·.]+/g, '');
-
-// 时间：返回 [from, to, 说法, 页面日期按钮的值]（第 4 个 = 跳到清单页时直接点亮「本日 / 本周 / 本月 / 本季度 / 本年度」那一格，不是一段自定义日期）
-// 中 / 英 / 法都认；先认具体的（某一天、第几周、某季度），再认笼统的；都没有 = 本月。
-const CN = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10, 十一: 11, 十二: 12 };
-const MONTHS = [/janvier|january|\bjan\b/i, /f[ée]vrier|february|\bfeb\b/i, /\bmars\b|\bmarch\b/i, /avril|april/i, /\bmai\b|\bmay\b/i, /\bjuin\b|\bjune\b/i,
-  /juillet|\bjuly\b/i, /\bao[uû]t\b|august/i, /septembre|september/i, /octobre|october/i, /novembre|november/i, /d[ée]cembre|december/i];
-const ORD = /(?:第\s*([1-5一二三四五])\s*(?:周|个星期|星期)|(最后一\s*(?:周|个?星期))|\b(premi[eè]re|1(?:re|ère)|deuxi[eè]me|2e|troisi[eè]me|3e|quatri[eè]me|4e|derni[eè]re)\s+semaine|\b(first|1st|second|2nd|third|3rd|fourth|4th|last)\s+week\s+of)/i;
-const ordN = (m) => { if (m[1]) return CN[m[1]] || Number(m[1]); if (m[2]) return 9; const w = (m[3] || m[4]).toLowerCase(); return /^(premi|1|first)/.test(w) ? 1 : /^(deux|2|second)/.test(w) ? 2 : /^(trois|3|third)/.test(w) ? 3 : /^(quatr|4|fourth)/.test(w) ? 4 : 9; };
-export function parseWhen(t, now = new Date()) {
-  const d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const Y = d0.getFullYear(); const M = d0.getMonth() + 1; const Q = Math.floor(d0.getMonth() / 3) + 1;
-  const mon = (d) => addD(d, -((d.getDay() + 6) % 7));
-  const cap = (a, b) => [ymd(a), ymd(b > d0 ? d0 : b)];   // 本期只算到今天
-  const yOf = (mm) => (mm > M ? Y - 1 : Y);                 // 比现在月份大 = 去年
-  let m;
-  // ① 某一天：11月20日 / 11-20 / 20/11（法语日/月）/ 2026-11-20
-  if ((m = t.match(/(\d{4})-(\d{1,2})-(\d{1,2})/))) { const d = new Date(+m[1], m[2] - 1, +m[3]); return [ymd(d), ymd(d), ymd(d), 'd:' + ymd(d)]; }
-  if ((m = t.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/)) || (m = t.match(/(?<![\d-])(\d{1,2})-(\d{1,2})(?![\d-])/))) { const mm = +m[1], dd = +m[2]; if (mm <= 12 && dd <= 31) { const d = new Date(yOf(mm), mm - 1, dd); return [ymd(d), ymd(d), ymd(d).slice(5), 'd:' + ymd(d)]; } }
-  if ((m = t.match(/(?<![\d/])(\d{1,2})\/(\d{1,2})(?![\d/])/))) { const dd = +m[1], mm = +m[2]; if (mm <= 12 && dd <= 31) { const d = new Date(yOf(mm), mm - 1, dd); return [ymd(d), ymd(d), ymd(d).slice(5), 'd:' + ymd(d)]; } }
-  if (/前天|avant-hier|day before yesterday/i.test(t)) { const d = addD(d0, -2); return [ymd(d), ymd(d), `前天 ${ymd(d).slice(5)}`, 'd:' + ymd(d)]; }
-  if (/昨天|昨日|yesterday|\bhier\b/i.test(t)) { const d = addD(d0, -1); return [ymd(d), ymd(d), `昨天 ${ymd(d).slice(5)}`, 'yesterday']; }
-  if (/今天|今日|当天|today|aujourd|ce jour/i.test(t)) return [ymd(d0), ymd(d0), '今天', 'day'];
-  // ② 近 N 天 / last 7 days / 7 derniers jours
-  if ((m = t.match(/(?:最近|近|过去|last|past)\s*(\d+)\s*(?:天|日|days?|jours?)/i)) || (m = t.match(/(\d+)\s*derniers?\s*jours/i))) { const n = Number(m[1]); return [ymd(addD(d0, -(n - 1))), ymd(d0), `近 ${n} 天`, 'custom']; }
-  // ③ 某月第几周（周一到周日，掐在这个月里）：这个月第一周 / 10月第二周 / première semaine de novembre / first week of October
-  if ((m = t.match(ORD))) {
-    const n = ordN(m); let mm = M;
-    const mc = t.match(/(\d{1,2})\s*月份?|(十[一二]?|[一二三四五六七八九])\s*月/); if (mc) mm = mc[1] ? +mc[1] : CN[mc[2]];
-    else { const i = MONTHS.findIndex((r) => r.test(t)); if (i >= 0) mm = i + 1; else if (/上个?月|mois dernier|last month/i.test(t)) mm = M === 1 ? 12 : M - 1; }
-    // 第几周 = 按日期切：1–7 号第 1 周、8–14 号第 2 周、15–21、22–28、29 号到月底第 5 周（不跟星期几走，免得出现只有一两天的「第一周」）
-    // 一个月里的周 = 周历里那一行（周一到周日，月初 / 月末不满 4 天的零头并进第一 / 最后一周，lib/format.js monthWeeks）
-    const yy = mm > M ? Y - 1 : Y; const W = monthWeeks(yy, mm);
-    let k = n === 9 ? W.length : Math.min(n, W.length);
-    if (W[k - 1][0] > d0 && yy === Y && mm === M) k = weekOf(d0).n;   // 这个月还没走到的周 → 本周
-    const [a, b] = W[k - 1];
-    if (a <= d0) { const tw = weekOf(d0); const [x, y] = cap(a, b); return [x, y, `${mm} 月第 ${k} 周`, tw.y === yy && tw.m === mm && tw.n === k ? 'week' : `w:${yy}-${mm}-${k}`]; }
-  }
-  if (/上周|上个星期|上星期|last week|semaine (?:derni[eè]re|pass[ée]e)/i.test(t)) { const w = weekOf(d0); const v = weekOf(addD(w.from, -1)); return [ymd(v.from), ymd(v.to), '上周', `w:${v.y}-${v.m}-${v.n}`]; }
-  if (/本周|这周|这个星期|这星期|this week|cette semaine/i.test(t)) { const w = weekOf(d0); return [ymd(w.from), ymd(d0), '本周', 'week']; }
-  // ④ 季度：本季度 / 上季度 / Q3 / 第三季度 / 三季度 / ce trimestre / 3e trimestre
-  if (/上个?季度?(?!度)|上一季|last quarter|trimestre (?:dernier|pr[ée]c[ée]dent)|dernier trimestre/i.test(t) && /季|quarter|trimestre/i.test(t)) { const qq = Q === 1 ? 4 : Q - 1; const yy = Q === 1 ? Y - 1 : Y; return [...cap(new Date(yy, (qq - 1) * 3, 1), new Date(yy, qq * 3, 0)), `${yy === Y ? '' : yy + ' '}Q${qq}`, `q:${yy}-${qq}`]; }
-  if ((m = t.match(/\bQ\s*([1-4])\b|第?\s*([1-4一二三四])\s*季度?(?=度|$|[^月])|(?:\b([1-4])(?:er|e|ème)\s+trimestre)|(first|second|third|fourth)\s+quarter/i)) && /Q\s*[1-4]|季|trimestre|quarter/i.test(t)) {
-    const qq = m[1] ? +m[1] : m[2] ? (CN[m[2]] || +m[2]) : m[3] ? +m[3] : ['first', 'second', 'third', 'fourth'].indexOf(m[4].toLowerCase()) + 1;
-    const yy = qq > Q ? Y - 1 : Y; return [...cap(new Date(yy, (qq - 1) * 3, 1), new Date(yy, qq * 3, 0)), `${yy === Y ? '' : yy + ' '}Q${qq}`, yy === Y && qq === Q ? 'quarter' : `q:${yy}-${qq}`];
-  }
-  if (/本季度?|这个?季度|this quarter|ce trimestre/i.test(t)) return [ymd(new Date(Y, (Q - 1) * 3, 1)), ymd(d0), '本季度', 'quarter'];
-  // ⑤ 月：上月 / 11 月 / 十一月 / novembre / October
-  if (/上个?月|last month|mois (?:dernier|pass[ée])/i.test(t)) { const a = new Date(Y, M - 2, 1); return [ymd(a), ymd(new Date(Y, M - 1, 0)), '上月', `m:${a.getFullYear()}-${a.getMonth() + 1}`]; }
-  let mm = 0;
-  if ((m = t.match(/(\d{1,2})\s*月份?/)) && !/个月/.test(t.slice(m.index, m.index + 4))) mm = +m[1];
-  else if ((m = t.match(/(十[一二]?|[一二三四五六七八九])\s*月份?/)) && !/个月/.test(t.slice(m.index, m.index + 4))) mm = CN[m[1]];
-  else { const i = MONTHS.findIndex((r) => r.test(t)); if (i >= 0) mm = i + 1; }
-  if (mm >= 1 && mm <= 12) { const yy = yOf(mm); return [...cap(new Date(yy, mm - 1, 1), new Date(yy, mm, 0)), `${yy === Y ? '' : yy + ' 年 '}${mm} 月`, yy === Y && mm === M ? 'month' : `m:${yy}-${mm}`]; }
-  if (/本月|这个月|this month|ce mois/i.test(t)) return [ymd(new Date(Y, M - 1, 1)), ymd(d0), '本月', 'month'];
-  // ⑥ 年
-  if (/去年|上一年|last year|ann[ée]e (?:derni[eè]re|pass[ée]e)|l'an dernier|l’an dernier/i.test(t)) return [`${Y - 1}-01-01`, `${Y - 1}-12-31`, '去年', `y:${Y - 1}`];
-  if (/今年|本年度?|this year|cette ann[ée]e|year to date|\bytd\b/i.test(t)) return [`${Y}-01-01`, ymd(d0), '今年', 'year'];
-  if ((m = t.match(/\b(20\d{2})\s*(?:年|year|ann[ée]e)?/i)) && +m[1] <= Y) { const yy = +m[1]; return [...cap(new Date(yy, 0, 1), new Date(yy, 11, 31)), `${yy} 年`, yy === Y ? 'year' : `y:${yy}`]; }
-  if (/所有|全部|一直|历史|从来|至今|all time|ever|depuis (?:le d[ée]but|toujours)|historique|\btout\b|\btoutes?\b/i.test(t)) return ['2000-01-01', ymd(d0), '全部时间', 'custom'];
-  return [ymd(new Date(Y, M - 1, 1)), ymd(d0), '本月', 'month'];
-}
-
-// ── 看什么 / 按什么分：中 + 英 + 法（常用的业务说法，不追求全；按顺序判断，先命中先算）── 改词改这里，同步更新项目资料「智能搜索关键词表」
-const W_AR = /欠款|欠多少|欠了|欠钱|应收|没付|未付|没给钱|赊账|balance|余额|对账|outstanding|receivable|unpaid|\bowe[sd]?\b|owing|\bdebts?\b|impay|dette|solde|cr[ée]ances?|reste [àa] payer|\bqui doit\b/i;
-const W_STOCK = /库存|还有多少|有货|有没有货|剩多少|现货|stock|inventory|on hand|inventaire|disponib|\bdispo\b/i;
-const W_RECV = /收款|回款|收了|收到|进账|到账|收钱|encaiss|paiement|versement|recouvrement|\bpay[ée]s?\b|\bpaid\b|payments?|collect(?:ed|ion)?|received/i;
-const W_RET = /退货|退了|退回|retour|retourn|\brendu|returns?\b|returned|refund/i;
-const W_AMT = /金额|销售额|营业额|多少钱|卖了多少钱|业绩|chiffre|montant|revenue|turnover|amount|\bvaleur\b/i;
-const G_WHOM = /卖给了?谁|给谁|哪些客户|谁欠|谁买|谁没付|to whom|which (?:customers?|clients?)|who (?:owes|bought)|[àa] qui|quels clients|qui doit|qui a achet/i;
-const G_DAY = /每天|按天|每日|天天|逐日|par jour|chaque jour|quotidien|daily|per day|by day/i;
-const G_MODEL = /型号|机型|mod[èe]les?|\bmodels?\b|r[ée]f[ée]rences?/i;
-const G_CAT = /种类|类别|分类|cat[ée]gor|\bfamilles?\b|\bpar type\b|by type/i;
-const G_CUST = /客户|client|customer/i;
-const G_EMP = /销售员|员工|谁|每个人|业务员|vendeur|vendeuse|commerci|employ|seller|salesm[ae]n|sales ?rep|\bstaff\b|\bwho\b|\bqui\b/i;
-const G_DEAL = /订单|单子|commande|\border|facture|invoice/i;
-// 按单词找人名 / 客户名时，这些问话常用词不当名字（否则打「stock」会去找叫 STOCK… 的客户）
-const STOPW = /^(xof|cny|usd|fcfa|cfa|pcs|the|and|for|all|par|pour|les|des|une|qui|who|how|much|many|what|combien|balance|solde|stock|sales?|ventes?|vendu|sold|clients?|customers?|orders?|commandes?|today|yesterday|week|month|year|quarter|semaine|mois|ann[ée]e|trimestre|jours?|days?|last|past|this|cette|dernier|derni[eè]re|aujourd|hier|tout|toutes?|montant|amount|revenue|payments?|paid|paiement|retours?|returns?|stocks?|inventory|dispo|model|models|mod[eè]les?|daily|chaque|each|per|par|jour|vendeur|seller|staff|outstanding|unpaid|impay[ée]s?|dettes?|cr[ée]ances?|first|second|third|fourth|premi[eè]re|deuxi[eè]me|troisi[eè]me|quatri[eè]me)$/i;
-
-const METRIC = [['qty', '销量（片）'], ['amount', '销售额'], ['recv', '收款'], ['ret', '退货'], ['ar', '欠款（现在）'], ['stock', '库存（现在）']];
-const NOW = new Set(['ar', 'stock']);   // 这两个看的是「现在」，不看时间段
-const GROUP = [['customer', '按客户'], ['model', '按型号'], ['category', '按种类'], ['employee', '按销售员'], ['day', '按天'], ['deal', '按订单']];
-
-export function parse(text, dict) {
-  const t = String(text || ''); const T = norm(t); const low = t.toLowerCase();
-  const [from, to, when, pk] = parseWhen(t);
-  // 问话里常用的词不当人名 / 客户名（演示数据里有叫「销售」「客户」的）
-  const STOP = new Set(['销售', '客户', '员工', '仓库', '热线', '财务', '主管', '中方', '收款', '型号', '种类', '本月', '今天', '昨天']);
-  const hit = (arr, keys, stop = true) => arr.filter((x) => keys(x).some((k) => k && String(k).length >= 2 && !(stop && STOP.has(String(k).trim())) && low.includes(String(k).toLowerCase())));
-  // 整个名字出现在话里优先；没有就按单词找（打「thomas」也能找到「THOMAS AJM」），多个候选让人点着换
-  const words = (low.match(/[a-zà-ÿ0-9]{3,}/g) || []).filter((w) => !STOPW.test(w));
-  const fuzzy = (arr, keys) => arr.filter((x) => keys(x).some((k) => k && words.some((w) => String(k).toLowerCase().split(/[\s\-_.·]+/).some((part) => part.startsWith(w)))));
-  const emps = hit(dict.emps, (e) => [e.short_name, e.full_name, e.emp_no]);
-  const emp = emps[0] || (/(销售员|员工|业务员|名下|负责)/.test(t) ? fuzzy(dict.emps, (e) => [e.short_name, e.full_name])[0] : null) || null;
-  let custs = hit(dict.custs, (c) => [c.name, c.code]).sort((a, b) => b.name.length - a.name.length).filter((c) => !emp || !String(emp.short_name).toLowerCase().includes(c.name.toLowerCase()));
-  if (!custs.length) custs = fuzzy(dict.custs, (c) => [c.name, c.code]).filter((c) => !emp || !fuzzy([emp], (e) => [e.short_name]).length || !String(c.name).toLowerCase().includes(String(emp.short_name).toLowerCase()));
-  const cust = custs[0] || null; const custAlt = custs.slice(1, 6);
-  const cat = hit(dict.cats, (c) => [c.name], false).sort((a, b) => b.name.length - a.name.length)[0] || null;
-  let model = null;
-  for (const p of dict.models) { const k = norm(p); if (k.length >= 3 && T.includes(k) && (!model || k.length > norm(model).length)) model = p; }
-  const metric = W_AR.test(t) ? 'ar' : W_STOCK.test(t) ? 'stock' : W_RECV.test(t) ? 'recv' : W_RET.test(t) ? 'ret' : W_AMT.test(t) ? 'amount' : 'qty';
-  let group = G_WHOM.test(t) ? 'customer' : G_DAY.test(t) ? 'day' : G_MODEL.test(t) && !model ? 'model' : G_CAT.test(t) && !cat ? 'category'
-    : G_CUST.test(t) && !cust ? 'customer' : G_EMP.test(t) && !emp ? 'employee' : G_DEAL.test(t) ? 'deal' : null;
-  if (!group) group = emp && !cust ? 'customer' : cust ? 'model' : model ? 'customer' : 'employee';
-  if (['recv', 'ar'].includes(metric) && ['model', 'category', 'day', 'deal'].includes(group)) group = metric === 'ar' && group === 'deal' ? 'deal' : 'customer';
-  if (metric === 'stock' && !['model', 'category'].includes(group)) group = model ? 'model' : cat ? 'model' : 'category';
-  return { from, to, when, pk, emp, cust, custAlt, cat, model, metric, group };
-}
 
 const KEY = { customer: ['c.id', 'c.name'], model: ['p.model', 'p.model'], category: ['cat.name', 'cat.name'], employee: ['e.id', "coalesce(e.short_name, '（无归属）')"], day: ['s.shipped_at::date', "to_char(s.shipped_at::date, 'MM-DD')"], deal: ['d.id', 'd.biz_no'] };
 async function run(org, P) {
@@ -238,10 +129,19 @@ export function NewMenu() {
 const PROD_SQL = `select p.id, p.code, p.model, p.variant, p.shared_models, c.name as category,
   coalesce((select sum(s.qty_on_hand - s.qty_reserved) from app.stock_items s join app.warehouses w on w.id = s.warehouse_id where s.product_id = p.id and w.kind = 'local'), 0)::int as avail
   from app.products p join app.categories c on c.id = p.category_id where p.org_id = $1 and coalesce(p.active, true)`;
-// 问话的样子（有时间 / 看什么 / 怎么分的词）→ 回车直接按问题理解
-const QUESTION = new RegExp([/今天|昨天|前天|本周|上周|本月|上个?月|今年|去年|近\s*\d|最近|所有|全部|\d{1,2}\s*月|[一二三四五六七八九十]+月|季度?|第\s*\S\s*周|\bQ[1-4]\b|销量|卖|销售|金额|多少|收款|回款|退货|欠|balance|余额|库存|还有|按|每|谁|清单/,
-  /today|yesterday|this (?:week|month|year|quarter)|last (?:week|month|year|quarter|\d)|how (?:much|many)|\bsold\b|\bsales\b|aujourd|\bhier\b|cette (?:semaine|ann[ée]e)|ce (?:mois|trimestre)|derniers? jours|combien|vendu|ventes|trimestre|semaine|week of|\b(?:janvier|f[ée]vrier|mars|avril|juin|juillet|ao[uû]t|septembre|octobre|novembre|d[ée]cembre|january|february|march|april|june|july|august|september|october|november|december)\b|年度|\d{4}\s*年|\d{1,2}[-/]\d{1,2}|depuis|historique|all time|最后一周/,
-  W_AR, W_STOCK, W_RECV, W_RET, W_AMT, G_DAY].map((r) => r.source).join('|'), 'i');
+// 没听懂的问法（一样关键词都没认出来的）记在这台电脑上，最多 60 条；中方在搜索框空着时能看到、一键复制，发给 Claude 加关键词。
+const MISS_KEY = 'la9s.ask.miss';
+const readMiss = () => { try { return JSON.parse(localStorage.getItem(MISS_KEY)) || []; } catch { return []; } };
+const logMiss = (t) => { const txt = String(t).trim().slice(0, 80); const l = [{ t: txt, d: new Date().toISOString().slice(0, 10) }, ...readMiss().filter((x) => x.t !== txt)].slice(0, 60); try { localStorage.setItem(MISS_KEY, JSON.stringify(l)); } catch { /* ignore */ } return l; };
+// 时间小块能点开换（和页面日期按钮同一套口径）
+const WHEN_OPTS = [['day', '今天'], ['yesterday', '昨天'], ['week', '本周'], ['lastweek', '上周'], ['month', '本月'], ['lastmonth', '上月'], ['quarter', '本季度'], ['year', '今年'], ['all', '全部时间']];
+const whenPatch = (k) => {
+  const d = new Date(); const lm = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+  const pk = k === 'lastmonth' ? `m:${lm.getFullYear()}-${lm.getMonth() + 1}` : k === 'all' ? 'custom' : k;
+  const [from, to] = periodRange(k === 'lastmonth' ? pk : k);
+  return { from, to, pk, when: WHEN_OPTS.find((x) => x[0] === k)[1], said: null };
+};
+const whenKey = (P) => (P.from === '2000-01-01' ? 'all' : WHEN_OPTS.find(([k]) => { const w = whenPatch(k); return w.from === P.from && w.to === P.to; })?.[0] || '');
 
 function AskPanel({ onClose }) {
   const { org, go, openArchive, role } = useApp();
@@ -255,14 +155,17 @@ function AskPanel({ onClose }) {
   const [text, setText] = useState(() => { try { return sessionStorage.getItem('la9s.ask.last') || ''; } catch { return ''; } });
   const [P, setP] = useState(null); const [asked, setAsked] = useState(''); const [rows, setRows] = useState(null); const [busy, setBusy] = useState(false); const [hi, setHi] = useState(-1);
   const inp = useRef(null); const list = useRef(null);
+  const [miss, setMiss] = useState(readMiss); const [missOpen, setMissOpen] = useState(false); const [copied, setCopied] = useState(false);
   useEffect(() => { setTimeout(() => inp.current?.select(), 30); }, []);
+  useEffect(() => { const k = (e) => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onClose]);   // 焦点不在输入框里 Esc 也能关
   const ask = async (t = text, over) => {
     if (!dict || !String(t).trim()) return;
     try { sessionStorage.setItem('la9s.ask.last', t); } catch { /* ignore */ }
     const p = over || parse(t, dict); setP(p); setAsked(t); setBusy(true); setHi(-1);
+    if (!over && p.blank) setMiss(logMiss(t));
     try { setRows(await run(org, p)); } catch (e) { setRows([]); console.warn(e); } finally { setBusy(false); }
   };
-  const tweak = (patch) => ask(asked, { ...P, ...patch });
+  const tweak = (patch) => ask(asked, { ...P, ...patch, blank: false, said: patch.said === null ? { ...(P.said || {}), when: true } : P.said });
   const doJump = (J) => {
     try { sessionStorage.setItem('la9s.ask.last', text); } catch { /* ignore */ }
     onClose();
@@ -301,7 +204,7 @@ function AskPanel({ onClose }) {
     return f;
   }, [hits, P, rows, asked, text]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { list.current?.querySelector('.ask-hi')?.scrollIntoView({ block: 'nearest' }); }, [hi]);
-  const looksQ = QUESTION.test(text);
+  const looksQ = looksLikeQuestion(text) && !hits?.deals.length;   // 打的是单号（搜到了单）就不当问题：单号里的「18-01」长得像日期
   const enter = () => {
     if (hi >= 0 && flat[hi]) return flat[hi]();
     if (P && rows && asked === text && jumps[0]) return doJump(jumps[0]);
@@ -313,7 +216,6 @@ function AskPanel({ onClose }) {
   const key = (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(h + 1, flat.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(h - 1, -1)); }
-    else if (e.key === 'Escape') onClose();
   };
   let idx = (P && rows && asked === text) ? jumps.length : 0;
   const cls = (i) => (i === hi ? 'ask-hi' : '');
@@ -328,7 +230,7 @@ function AskPanel({ onClose }) {
     return `${who} ${P.when}：${P.metric === 'ret' ? '退货' : '出库'} ${fmt(tot.qty)} 片 · ${fmt(tot.amount)} XOF · ${tot.n} 单${rows.length > 1 ? `，最多 ${rows[0].label}（${fmt(P.metric === 'amount' ? rows[0].amount : rows[0].qty)}${P.metric === 'amount' ? ' XOF' : ' 片'}）` : ''}。`;
   })() : '';
   const rowJump = (r) => {
-    const base = { cust: P.cust?.id, model: P.model, cat: P.cat?.name, emp: P.emp?.id, from: P.from, to: P.to, ask: true };
+    const base = { cust: P.cust?.id, model: P.model, cat: P.cat?.name, emp: P.emp?.id, from: P.from, to: P.to, pk: P.pk, ask: true };
     if (P.metric === 'stock') return doJump({ kind: 'stock', q: r.label });
     if (P.group === 'deal') return doJump({ kind: 'go', to: `deal/${r.did || r.k}` });
     if (['ar', 'recv'].includes(P.metric)) return r.cid && P.group === 'customer' ? doJump({ kind: 'go', to: `customer/${r.cid}` }) : doJump({ kind: 'go', to: 'balances' });
@@ -336,7 +238,7 @@ function AskPanel({ onClose }) {
     if (P.group === 'model') return doJump({ kind: 'orders', j: { ...base, model: r.label } });
     if (P.group === 'category') return doJump({ kind: 'orders', j: { ...base, cat: r.label } });
     if (P.group === 'employee') return r.eid ? doJump({ kind: 'orders', j: { ...base, emp: r.eid } }) : null;
-    if (P.group === 'day') return doJump({ kind: 'orders', j: { ...base, from: `${P.from.slice(0, 4)}-${r.label}`, to: `${P.from.slice(0, 4)}-${r.label}` } });
+    if (P.group === 'day') { const d = `${(r.label > P.to.slice(5) ? P.from : P.to).slice(0, 4)}-${r.label}`; return doJump({ kind: 'orders', j: { ...base, from: d, to: d, pk: `d:${d}` } }); }
     return null;
   };
   const chip = (txt, onX) => <span className="ask-chip">{txt}{onX && <button type="button" aria-label="去掉" onClick={onX}>×</button>}</span>;
@@ -354,11 +256,21 @@ function AskPanel({ onClose }) {
         </form>
         <div className="ask-body" ref={list}>
           {!text.trim() && <div className="ask-ex">{EX.map((x) => <button type="button" key={x} className="ask-exb" onClick={() => { setText(x); ask(x); }}>{x}</button>)}
-            <div className="small muted" style={{ marginTop: 8 }}>打字就出：型号（型号 / 编码 / 通用型号都行）、客户、单号、员工、页面，↑↓ 选、回车打开。像问题的话（带时间、销量、欠款、库存…）回车就按问题理解，给一句结论 + 跳到筛好的清单。</div></div>}
+            <div className="small muted" style={{ marginTop: 8 }}>打字就出：型号（型号 / 编码 / 通用型号都行）、客户、单号、员工、页面，↑↓ 选、回车打开。像问题的话（带时间、销量、欠款、库存…）回车就按问题理解，给一句结论 + 跳到筛好的清单。中文、英语、法语都行。</div>
+            {role === 'admin' && miss.length > 0 && <div className="ask-misslist">
+              <button type="button" className="linkbtn small" onClick={() => setMissOpen(!missOpen)}>没听懂的问法 {miss.length} 条 {missOpen ? '▴' : '▾'}</button>
+              {missOpen && <><div className="ask-missrows">{miss.map((x) => <div key={x.t} className="small"><span className="muted">{x.d.slice(5)}</span> {x.t}</div>)}</div>
+                <div className="row" style={{ gap: 8 }}>
+                  <button type="button" className="btn sm" onClick={() => { navigator.clipboard?.writeText(miss.map((x) => x.t).join('\n')).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}>{copied ? '已复制' : '复制全部'}</button>
+                  <button type="button" className="btn sm ghost" onClick={() => { try { localStorage.removeItem(MISS_KEY); } catch { /* ignore */ } setMiss([]); setMissOpen(false); }}>清空</button>
+                  <span className="small muted">复制后发给 Claude，加进关键词</span></div></>}
+            </div>}</div>}
           {showQ && <div className="ask-ans">
             <div className="ask-chips">
               <span className="small muted">听懂的：</span>
-              {NOW.has(P.metric) ? chip('现在') : chip(`${P.when}${P.from === '2000-01-01' ? '' : `（${P.from.slice(5)}${P.to !== P.from ? ' – ' + P.to.slice(5) : ''}）`}`)}
+              {NOW.has(P.metric) ? chip('现在') : <>
+                {whenKey(P) ? <Choice size="sm" value={whenKey(P)} onChange={(v) => tweak(whenPatch(v))} flat={false} options={WHEN_OPTS} /> : <span className="ask-chip" title="点右边的 × 回到本月">{P.when}<button type="button" aria-label="回到本月" onClick={() => tweak(whenPatch('month'))}>×</button></span>}
+                <span className="small muted ask-range">{P.from === '2000-01-01' ? '' : `${P.from.slice(5)}${P.to !== P.from ? ' – ' + P.to.slice(5) : ''}`}{P.said && !P.said.when ? ' · 没说时间，按本月' : ''}</span></>}
               {P.emp && chip(`销售员 ${P.emp.short_name}`, () => tweak({ emp: null }))}
               {P.cust && chip(`客户 ${P.cust.name}`, () => tweak({ cust: null, custAlt: [] }))}
               {P.cat && chip(`种类 ${P.cat.name}`, () => tweak({ cat: null }))}
@@ -367,6 +279,7 @@ function AskPanel({ onClose }) {
               <Choice size="sm" value={P.group} onChange={(v) => tweak({ group: v })} flat={false} options={GROUP.filter(([k]) => (P.metric === 'stock' ? ['model', 'category'].includes(k) : P.metric === 'ar' ? ['customer', 'employee', 'deal'].includes(k) : P.metric !== 'recv' || !['model', 'category', 'deal'].includes(k)))} />
             </div>
             {P.custAlt?.length > 0 && <div className="small muted">不是这个客户？{P.custAlt.map((c) => <button type="button" key={c.id} className="linkbtn small" style={{ marginLeft: 6 }} onClick={() => tweak({ cust: c, custAlt: [P.cust, ...P.custAlt.filter((x) => x.id !== c.id)] })}>{c.name}</button>)}</div>}
+            {P.blank && <div className="ask-miss">没听懂「{asked}」。下面是默认的：本月 · 销量 · 按销售员；点上面的小块可以改，或者换个说法。这句话已经记下来，方便以后加关键词。</div>}
             {say && <div className="ask-say">{say}</div>}
             {jumps.length > 0 && <div className="ask-jumps">{jumps.map((J, i) => (
               <button type="button" key={i} className={`ask-jump ${i === 0 ? 'main' : ''} ${cls(i)}`} onClick={() => doJump(J)}><b>{J.label} →</b><small>{J.sub}</small></button>))}</div>}

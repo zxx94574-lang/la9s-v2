@@ -149,7 +149,7 @@ export default function Orders() {
           price && { k: '出了库还没收清', v: money(unpaid.reduce((a, d) => a + Number(d.due || 0), 0)), unit: 'XOF', sub: `${unpaid.length} 张单`, tone: unpaid.length ? 'red' : null, on: grp === 'unpaid', onClick: () => setGrp(grp === 'unpaid' ? '' : 'unpaid') },
         ]} />;
       })()}
-      {tab === 'ship' ? <ShipmentsList from={from} to={to} /> : tab === 'void' ? <VoidedList rows={voided} /> : tab === 'inq' ? <Inquiry embedded /> : <div className="card">
+      {tab === 'ship' ? <ShipmentsList from={from} to={to} /> : tab === 'void' ? <VoidedList rows={voided} /> : tab === 'inq' ? <Inquiry embedded from={from} to={to} /> : <div className="card">
         <div className="fbar">
           <CatFilterByName names={catNames} value={fcat} onChange={setFcat} allLabel="全部种类" />
           <span className="grow" />
