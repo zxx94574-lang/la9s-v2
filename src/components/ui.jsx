@@ -344,16 +344,44 @@ export function proofMeta(v) {
   if (!v || !v.startsWith('data:')) return null;
   const head = v.slice(5, v.indexOf(',')).split(';');
   const m = {}; for (const kv of head.slice(1)) { const [k, x] = kv.split('='); if (x) m[k] = decodeURIComponent(x); }
-  return { src: m.src, srcLabel: SRC_LABEL[m.src] || '未知来源', at: m.at, ft: m.ft, by: m.by };
+  return { src: m.src, srcLabel: SRC_LABEL[m.src] || '未知来源', at: m.at, ft: m.ft, et: m.et, by: m.by };
+}
+// EXIF DateTimeOriginal (0x9003) / DateTime (0x0132) from a JPEG, local time "YYYY:MM:DD HH:MM:SS" → ISO-ish; null if none
+export async function exifTime(file) {
+  try {
+    if (!/jpe?g/i.test(file.type)) return null;
+    const v = new DataView(await file.slice(0, 256 * 1024).arrayBuffer());
+    if (v.getUint16(0) !== 0xffd8) return null;
+    let o = 2;
+    while (o + 4 < v.byteLength) {
+      const mk = v.getUint16(o); const len = v.getUint16(o + 2);
+      if (mk === 0xffe1 && v.getUint32(o + 4) === 0x45786966) {
+        const t = o + 10; const le = v.getUint16(t) === 0x4949;
+        const u16 = (x) => v.getUint16(x, le); const u32 = (x) => v.getUint32(x, le);
+        const str = (x, n) => { let r = ''; for (let k = 0; k < n - 1; k++) r += String.fromCharCode(v.getUint8(x + k)); return r; };
+        let found = null;
+        const ifd = (off) => { const n = u16(t + off); for (let k = 0; k < n; k++) { const e = t + off + 2 + k * 12; const tag = u16(e);
+          if (tag === 0x9003 || (tag === 0x0132 && !found)) found = str(t + u32(e + 8), 20);
+          if (tag === 0x8769) ifd(u32(e + 8)); } };
+        ifd(u32(t + 4));
+        const m = found && found.match(/^(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)/);
+        return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).toISOString() : null;
+      }
+      if ((mk & 0xff00) !== 0xff00) return null;
+      o += 2 + len;
+    }
+  } catch { /* not readable */ }
+  return null;
 }
 async function encodeImage(file, src, by) {
+  const et = await exifTime(file);
   const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
   const s = Math.min(1, 900 / Math.max(img.width, img.height));
   const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   const b64 = c.toDataURL('image/jpeg', 0.72).split(',')[1];
   const enc = encodeURIComponent;
-  return `data:image/jpeg;src=${src};at=${enc(new Date().toISOString())};ft=${enc(new Date(file.lastModified || Date.now()).toISOString())};by=${enc(by || '')};base64,${b64}`;
+  return `data:image/jpeg;src=${src};at=${enc(new Date().toISOString())};ft=${enc(new Date(file.lastModified || Date.now()).toISOString())};by=${enc(by || '')}${et ? `;et=${enc(et)}` : ''};base64,${b64}`;
 }
 export function PhotoInput({ value, onChange, label = '拍照 / 上传', camera = true, invalid, onDup }) {
   const { org, role, toast } = useApp() || {};
@@ -453,7 +481,8 @@ function Lightbox({ list, start, onClose }) {
           <b>{cur.label || '凭证'}</b>
           <span>来源：<b className={m.src === 'camera' ? 'green-t' : ''}>{m.srcLabel || '—'}</b></span>
           <span>上传：{m.by || '—'} · {f(m.at)}</span>
-          <span>{m.src === 'camera' ? '拍摄时间' : '文件时间'}：{f(m.ft)}</span>
+          {m.et ? <span>照片拍摄（EXIF）：<b>{f(m.et)}</b>{m.at && Math.abs(new Date(m.at) - new Date(m.et)) > 864e5 && <span className="pill amber" style={{ marginLeft: 6 }}>比上传早 {Math.round((new Date(m.at) - new Date(m.et)) / 864e5)} 天</span>}</span>
+            : <span>{m.src === 'camera' ? '拍摄时间' : '文件时间'}：{f(m.ft)}{m.src !== 'camera' && <span className="muted"> （照片里没有拍摄时间，可能是截图）</span>}</span>}
           <span className="grow" />
           {list.length > 1 && <><button type="button" className="btn sm" disabled={i === 0} onClick={() => setI(i - 1)}>←</button><span>{i + 1}/{list.length}</span>
             <button type="button" className="btn sm" disabled={i === list.length - 1} onClick={() => setI(i + 1)}>→</button></>}

@@ -4,7 +4,7 @@
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, MonthPicker, MoneyIn, Assumed, Info } from '../components/ui.jsx';
-import { RuleGear, useRuleValues, ruleNum } from '../components/Rules.jsx';
+import { useBudget, BudgetEdit } from '../components/Rules.jsx';
 import { Spark, weekly } from '../components/MonthReport.jsx';
 import { useDashAll } from '../components/DashBlocks.jsx';
 import { useMarginRules } from '../components/Margin.jsx';
@@ -43,7 +43,7 @@ export default function Report() {
   const td = today();
   const [month, setMonth] = useState(() => { const d = new Date(td + 'T00:00:00Z'); d.setUTCDate(0); return Number(td.slice(8)) <= 20 ? d.toISOString().slice(0, 7) : td.slice(0, 7); });
   const all = useDashAll();
-  const rv = useRuleValues(['dash.budget']); const { lowPct } = useMarginRules();
+  const { budget: mBudget } = useBudget(month); const { lowPct } = useMarginRules();
   const a = `${month}-01`, b = lastDay(month);
   const { data } = useData(async () => {
     const [lay, tr, snap, ar, rates, rcpt, exps, pay, custs, rets, dirs, deals, pend, prods] = await Promise.all([
@@ -72,7 +72,7 @@ export default function Report() {
   const [rateIn, setRateIn] = useState(null);
   const rate = N(rateIn ?? data?.rates?.[month] ?? 0.011);
   const saveRate = async () => { try { await call(role, `select app.set_org_setting($1,'report_rates',$2)`, [org, JSON.stringify({ ...(data?.rates || {}), [month]: rate })]); toast(`${month} 的汇率记下了：1 XOF = ${rate} CNY`); setRateIn(null); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
-  const budget = ruleNum(rv, 'dash.budget'); const mLo = lowPct; const mHi = lowPct + 10;
+  const budget = mBudget; const mLo = lowPct; const mHi = lowPct + 10;
 
   const R = useMemo(() => {
     if (!data || !all) return null;
@@ -151,7 +151,7 @@ export default function Report() {
           <label className="row" style={{ gap: 6 }}><span className="small muted" data-tip="这个月的 XOF 折人民币汇率。记下以后这个月一直用它，改别的月不影响">1 XOF =</span>
             <MoneyIn className="in" style={{ width: 84 }} inputMode="decimal" value={String(rateIn ?? data?.rates?.[month] ?? 0.011)} onChange={(e) => setRateIn(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">CNY</span>
             {(rateIn != null || data?.rates?.[month] == null) && <button type="button" className="btn sm" onClick={saveRate}>记下</button>}</label>
-          <RuleGear ids={['dash.budget']} title="本月预算" />
+          <BudgetEdit month={month} />
           <button type="button" className="btn sm" onClick={copy}>复制文字版</button>
           <button type="button" className="btn sm primary" onClick={() => window.print()}>打印 / 存 PDF</button>
         </div></div>

@@ -41,7 +41,7 @@ export function LastPriceBar({ diffs, currency, onApply, applyLabel, onHistory, 
         <button type="button" className="btn sm ghost" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? '收起' : '看一下'}</button>
         <span className="grow" />
         {onApply && <button type="button" className="btn sm" onClick={onApply}>{applyLabel}</button>}
-        {onHistory && <button type="button" className="btn sm" onClick={onHistory}>历史价格</button>}
+        {onHistory && <button type="button" className="btn sm soft" onClick={onHistory}>历史价格<span className="badge-n">{diffs.length}</span></button>}
       </div>
       {open && <div className="lp-list">
         {diffs.map((r) => (
@@ -143,7 +143,7 @@ export function DealLastPrice({ deal, lines }) {
   };
   return (<>
     <LastPriceBar diffs={diffs} currency={deal.currency} onHistory={() => setHist(true)} note="核对一下是不是该沿用谈好的价" />
-    {!diffs.length && <div style={{ textAlign: 'right', margin: '-4px 0 8px' }}><button type="button" className="btn sm ghost" onClick={() => setHist(true)}>历史价格</button></div>}
+    {!diffs.length && <div style={{ textAlign: 'right', margin: '-4px 0 8px' }}><button type="button" className="btn sm soft" onClick={() => setHist(true)}>🕘 历史价格</button></div>}
     {hist && <PriceHistory customerId={deal.customer_id} customerName={deal.customer_name} productIds={ids} currency={deal.currency} onClose={() => setHist(false)}
       current={real.map((l) => ({ key: l.id, product_id: l.product_id, model: l.model, category: l.category, qty: N(l.qty_supply) || N(l.qty_req), now: nowOf(l) }))}
       onApply={canAdmin || canReq ? apply : null} applyLabel={admin ? '用选中的历史价' : '申请用选中的历史价'}

@@ -2,7 +2,7 @@
 // One header for all (待改 11): logo top-left (big) · title centred · top-right: customer name (biggest) + date, doc no in grey.
 // No address / phone / contact details anywhere. Client documents carry no 业务号 and no currency cell — the currency
 // lives only inside the amounts. Alignment: price & amount right, quantities centre, everything else left.
-import React, { useRef, useState } from 'react';
+import React, { createContext, useContext, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toBlob } from 'html-to-image';
 import { money, qty, dDate, dt, today } from '../lib/format.js';
@@ -18,10 +18,23 @@ const sharedShort = (list, n = 3) => (!list?.length ? '' : list.slice(0, n).join
 const R = { textAlign: 'right' }, C = { textAlign: 'center' };
 const TITLES = { quote: '报价单', pick: '找货单', so: '销售订单', balance: '对账单', return: '退货对账单' };
 
+// 122 抬头方案：默认 LA&9S；也可以选 G&S ENT（发货 / 本地税务用途）。G&S 也只放名字 / logo —— 给客户的单据不出现地址、电话
+const BrandCtx = createContext({ brand: 'la9s' });
+function GsMark() {
+  const { org } = useApp() || {};
+  const { data } = useData(async () => {
+    const [[hdr], [logo]] = await Promise.all([q(`select value from app.org_settings where org_id = $1 and key = 'doc_header_gs'`, [org]), q(Q.orgFile, [org, 'logo_gs'])]);
+    let src = null; if (logo) { const [f] = await q(Q.orgFileData, [org, 'logo_gs']); src = `data:${f.mime};base64,${f.data}`; }
+    return { name: hdr?.value?.name || 'G&S ENT.', tagline: hdr?.value?.tagline ?? 'Votre partenaire de confiance', src };
+  }, [org]);
+  if (!data) return <div className="dh-gs">G&S ENT.</div>;
+  return data.src ? <img src={data.src} alt={data.name} /> : <div className="dh-gs">{data.name}{data.tagline && <small>{data.tagline}</small>}</div>;
+}
 function Head({ kind, name, date, no, biz }) {
+  const { brand } = useContext(BrandCtx);
   return (
     <div className="doc-head2">
-      <img src={LOGO} alt="LA&9S" />
+      {brand === 'gs' ? <GsMark /> : <img src={LOGO} alt="LA&9S" />}
       <div className="dh-title">{t(TITLES[kind])}</div>
       <div className="dh-cust">
         <div className="dh-name">{name}</div>
@@ -219,7 +232,9 @@ export async function copyText(text) {
 export function DocActions({ kind, deal, lines, balance, ret, printLabel = '打印', copyLabel = '复制图片', hidePrint, hideCopy, hideText, primary }) {
   const ref = useRef();
   const [printing, setPrinting] = useState(false);
-  const { toast } = useApp();
+  const { toast, role } = useApp();
+  const [brand, setBrand] = useState('la9s');
+  const staff = !['boss', 'clerk'].includes(role);
   const copy = async () => {
     try {
       const blob = await toBlob(ref.current.firstChild, { pixelRatio: 2, backgroundColor: '#fff' });
@@ -236,10 +251,11 @@ export function DocActions({ kind, deal, lines, balance, ret, printLabel = '打�
   const print = () => { setPrinting(true); setTimeout(() => { try { window.print(); } catch { toast('这个页面不允许打印，请用电脑浏览器打开本地版', 'err'); } setPrinting(false); }, 50); };
   return (
     <>
+      {staff && <span className="seg sm" title="单据抬头：默认 LA&9S；发货 / 本地税务用途选 G&S（只放名字和 logo，不放地址电话）">{[['la9s', 'LA&9S'], ['gs', 'G&S']].map(([k, l]) => <button type="button" key={k} className={brand === k ? 'on' : ''} onClick={() => setBrand(k)}>{l}</button>)}</span>}
       {!hideCopy && <button type="button" className="btn primary" onClick={copy}>⧉ {copyLabel}</button>}
       {!hideText && <button type="button" className="btn" title="复制成一段文字，在 WhatsApp 直接粘贴发送" onClick={async () => toast((await copyText(docText({ kind, deal, lines, balance, ret }))) ? '文字已复制，到 WhatsApp 直接粘贴' : '浏览器不允许复制', 'ok')}>✎ 复制文字</button>}
       {!hidePrint && <button type="button" className={`btn ${primary === 'print' ? 'dark' : ''}`} onClick={print}>🖨 {printLabel}</button>}
-      {createPortal(<div className={`docwrap ${printing ? 'print-root' : ''}`} ref={ref}><DocSheet kind={kind} deal={deal} lines={lines} balance={balance} ret={ret} /></div>, document.body)}
+      {createPortal(<div className={`docwrap ${printing ? 'print-root' : ''}`} ref={ref}><BrandCtx.Provider value={{ brand }}><DocSheet kind={kind} deal={deal} lines={lines} balance={balance} ret={ret} /></BrandCtx.Provider></div>, document.body)}
     </>
   );
 }

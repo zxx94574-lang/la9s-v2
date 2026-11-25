@@ -12,6 +12,26 @@ import { money, dDate, dt, today, friendlyError, qty } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink , DealLink} from '../components/Archives.jsx';
 
 const ST = { await_receipt: ['待客户签收', 'gray'], ready: ['待录金蝶', 'amber'], saved: ['已保存', 'blue'], submitted: ['已提交 · 待审核', 'blue'], synced: ['已审核', 'green'], error: ['出错', 'red'], void: ['已撤销出库', 'gray'] };
+// 没有金蝶接口时的退路（待改 118）：把「待录金蝶」的出库单按金蝶「销售出库单」引入的列导成 Excel，在金蝶里一次引入
+async function exportKdSales(org, ids, toast) {
+  const rows = await q(`select x.out_no, d.biz_no, x.shipped_at, x.customer_received_at, c.code as customer_code, c.name as customer, d.currency,
+      p.code, cat.name as category, p.model, w.code as wh, sl.qty, sl.unit_price, sl.amount
+    from app.shipments x join app.deals d on d.id = x.deal_id join app.customers c on c.id = d.customer_id
+    join app.shipment_lines sl on sl.shipment_id = x.id join app.deal_lines l on l.id = sl.deal_line_id
+    join app.products p on p.id = l.product_id join app.categories cat on cat.id = p.category_id
+    left join app.stock_items si on si.id = l.stock_item_id left join app.warehouses w on w.id = si.warehouse_id
+    where x.org_id = $1 and x.id = any($2::uuid[]) order by x.shipped_at, x.out_no, p.code`, [org, ids]);
+  if (!rows.length) return toast('选中的单没有明细', 'err');
+  const ExcelJS = (await import('exceljs')).default;
+  const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('销售出库单');
+  ws.columns = [['单据日期', 12], ['客户编码', 12], ['客户名称', 22], ['发货仓库', 22], ['物料编码', 14], ['物料名称（种类 型号）', 26], ['实发数量', 10], ['含税单价', 12], ['价税合计', 14], ['结算币别', 8], ['系统出库单号', 18], ['系统业务号', 18]].map(([header, width]) => ({ header, width }));
+  for (const r of rows) ws.addRow([dDate(r.customer_received_at || r.shipped_at), r.customer_code, r.customer, KD_WH[r.wh] || r.wh || '', r.code, `${r.category} ${r.model}`, Number(r.qty), Number(r.unit_price), Number(r.amount), r.currency, r.out_no, r.biz_no]);
+  ws.getRow(1).font = { bold: true }; ws.views = [{ state: 'frozen', ySplit: 1 }];
+  const buf = await wb.xlsx.writeBuffer();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  a.download = `金蝶引入-销售出库-${today()}.xlsx`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast(`已导出 ${new Set(rows.map((r) => r.out_no)).size} 张单 ${rows.length} 行，在金蝶「销售出库单 → 引入」里用`);
+}
 const WH = { 'CI LA MATERIAL WH': 'LA', 'CI 9S MATERIAL WH': '9S', 'CI LA FOB MATERIAL WH': 'FOB', 'CI PENDING LIABILITY WH': 'PENDING', 'CI DEFECTIVE WH-LA': 'SCRAP', 'CI DEFECTIVE WH-9S': 'SCRAP', 'CI PCBA RECYCLE WH': 'RECYCLE', 'CI CHIP RECYCLE WH': 'RECYCLE' };
 
 import { KdAll, KdRecon } from '../components/KdRecon.jsx';
@@ -66,15 +86,20 @@ export default function Kingdee() {
           <button type="button" className={tab === 'grn' ? 'on' : ''} onClick={() => setTab('grn')}>采购入库 <span className="queue-n">{data.grn.filter((g) => g.kd_status === 'ready').length || ''}</span></button>
           <button type="button" className={tab === 'misc' ? 'on' : ''} onClick={() => setTab('misc')}>其他出入库 / 调拨 / 退货</button>
           <button type="button" className={tab === 'stock' ? 'on' : ''} onClick={() => setTab('stock')}>库存快照</button>
-          {['admin', 'finance'].includes(role) && <button type="button" className={tab === 'recon' ? 'on' : ''} onClick={() => setTab('recon')}>和金蝶对账</button>}</div>
+          <button type="button" className={tab === 'pool' ? 'on' : ''} onClick={() => setTab('pool')}>盘点编码顶替</button>
+          {['admin', 'finance'].includes(role) && <button type="button" className={tab === 'recon' ? 'on' : ''} onClick={() => setTab('recon')}>和金蝶对账</button>}
+          {['admin', 'finance'].includes(role) && <button type="button" className={tab === 'open' ? 'on' : ''} onClick={() => setTab('open')}>应收期初差异</button>}</div>
         {tab === 'all' && <div className="card-b"><KdAll /></div>}
         {tab === 'recon' && <div className="card-b"><KdRecon /></div>}
         {tab === 'grn' && <GrnList rows={data.grn} />}
         {tab === 'misc' && <MiscList />}
-        {['grn', 'misc', 'all', 'recon'].includes(tab) ? null : tab === 'queue' ? (
+        {tab === 'pool' && <PoolList />}
+        {tab === 'open' && <KdOpening />}
+        {['grn', 'misc', 'all', 'recon', 'pool', 'open'].includes(tab) ? null : tab === 'queue' ? (
           <Grid id="kd-queue" table="kingdee_outbox" columns={cols} rows={rows} onRowClick={(r) => go('deal/' + r.deal_id)} empty="没有"
             tools={<div className="chips">{[['ready', '待录'], ['saved', '已保存'], ['submitted', '待审核'], ['synced', '已审核'], ['await_receipt', '待签收'], ['', '全部']].map(([k, l]) =>
-              <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} {k ? counts[k] : data.rows.length}</button>)}</div>} />
+              <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} {k ? counts[k] : data.rows.length}</button>)}
+              {can(role, 'kd_save') && counts.ready > 0 && <button type="button" className="btn sm soft" title="金蝶接口没开之前的退路：导成金蝶「销售出库单」引入格式，在金蝶里一次引入；引入完回来点「录入并保存」填金蝶单号" onClick={() => exportKdSales(org, data.rows.filter((r) => r.status === 'ready').map((r) => r.shipment_id), toast).catch((e) => toast(friendlyError(e), 'err'))}>导出待录 {counts.ready} 张（金蝶引入 Excel）</button>}</div>} />
         ) : (<>
           <div className="card-b row" style={{ gap: 10, paddingTop: 0, flexWrap: 'wrap' }}>
             {data.snaps.length > 0 ? <select className="in" style={{ maxWidth: 220 }} value={data.d || ''} onChange={(e) => setAsOf(e.target.value)}>
@@ -214,5 +239,91 @@ function MiscList() {
         { key: 'status', label: '状态', w: 90, value: (r) => r.status, render: (r) => <Pill tone={r.status === 'ready' ? 'amber' : r.status === 'done' ? 'green' : 'gray'}>{r.status === 'ready' ? '待录' : r.status === 'done' ? '已录' : '不用录'}</Pill> },
         { key: 'remote_no', label: '金蝶单号', w: 130 },
       ]} />
+  );
+}
+
+// 盘点后「消耗池」：实物出的是 A 编码、金蝶该扣的是同一种货的 B 编码（盘盈的那个）—— 财务录金蝶出库时照「金蝶出库编码」录
+function PoolList() {
+  const { org } = useApp();
+  const { data } = useData(() => Promise.all([
+    q(`select u.id, u.at, u.qty, x.out_no, x.deal_id, d.biz_no, cu.name as customer,
+         a.code as ship_code, a.model as ship_model, a.id as ship_id, b.code as kd_code, b.model as kd_model, b.id as kd_id
+       from app.pool_uses u left join app.stock_moves m on m.id = u.move_id left join app.shipments x on x.id = m.ref_id
+       left join app.deals d on d.id = x.deal_id left join app.customers cu on cu.id = d.customer_id
+       join app.products a on a.id = u.ship_product join app.products b on b.id = u.kd_product
+       where u.org_id = $1 order by u.at desc limit 500`, [org]),
+    q(`select p.side, sum(p.qty_left)::int as left_, count(*)::int as n from app.stock_pool p where p.org_id = $1 and p.qty_left > 0 group by p.side`, [org]),
+  ]), [org]);
+  if (!data) return <div className="card-b muted">加载中…</div>;
+  const [rows, pool] = data;
+  const left = (k) => pool.find((x) => x.side === k)?.left_ || 0;
+  return (
+    <div className="card-b stack" style={{ gap: 8 }}>
+      <div className="hint">盘点后同一种货（编码甄别里定成同一组的）有的编码盘盈、有的盘亏：系统先不改金蝶，出货时<b>实物出 A、金蝶扣 B</b>，慢慢把差异消化掉。财务录金蝶销售出库时，这些行照「金蝶出库编码」录。
+        现在池子里还剩：盘盈待消化 <b>{qty(left('+'))}</b> 片 · 盘亏待消化 <b>{qty(left('-'))}</b> 片。</div>
+      <Grid id="kd-pool" rows={rows} empty="还没有顶替（盘点确认后、出到盘亏的编码时才会有）" columns={[
+        { key: 'at', label: '什么时候', w: 130, value: (r) => r.at, render: (r) => dt(r.at) },
+        { key: 'out_no', label: '出库单', w: 130, render: (r) => <DealLink id={r.deal_id} no={r.out_no || r.biz_no || '—'} /> },
+        { key: 'customer', label: '客户', w: 130 },
+        { key: 'ship_code', label: '实物出的编码', w: 120, render: (r) => <><span className="mono">{r.ship_code}</span> <ModelLink id={r.ship_id} model={r.ship_model} /></> },
+        { key: 'kd_code', label: '金蝶出库编码', w: 140, render: (r) => <><b className="mono">{r.kd_code}</b> <ModelLink id={r.kd_id} model={r.kd_model} /></> },
+        { key: 'qty', label: '片数', w: 80, type: 'number', sum: true },
+      ]} />
+    </div>
+  );
+}
+
+// 应收期初差异表（§3b 第 3 组）：期间客户 Balance 以系统（= 飞书）为准；金蝶差多少记在这里，不进日常账；跑通后中方逐个调平
+function KdOpening() {
+  const { org, role, toast, refresh } = useApp();
+  const [asOf, setAsOf] = useState(null); const [paste, setPaste] = useState(false); const [txt, setTxt] = useState(''); const [day, setDay] = useState(today());
+  const [clr, setClr] = useState(null); const [note, setNote] = useState(''); const [f, setF] = useState('open');
+  const { data } = useData(async () => {
+    const days = await q(`select distinct as_of from app.kd_opening_diff where org_id = $1 order by as_of desc`, [org]);
+    const d = asOf || (days[0] && dDate(days[0].as_of));
+    const rows = d ? await q(`select o.*, c.name as customer, c.id as cid from app.kd_opening_diff o left join app.customers c on c.id = o.customer_id where o.org_id = $1 and o.as_of = $2 order by abs(o.sys_amount - o.kd_amount) desc`, [org, d]) : [];
+    return { days, d, rows };
+  }, [org, asOf]);
+  if (!data) return <div className="card-b muted">加载中…</div>;
+  // 从 Excel 复制 = 制表符分隔；金额里的千分位逗号不能当分隔符
+  const parsed = txt.split(/\r?\n/).map((l) => (l.includes('\t') ? l.split('\t') : l.split(/;|\s{2,}/)).map((x) => x.trim())).filter((c) => c[0] && /\d/.test(c[1] || ''))
+    .map((c) => ({ code: c[0], amount: Number(String(c[1]).replace(/[^\d.-]/g, '')) || 0, currency: /^[A-Za-z]{3}$/.test(c[2] || '') ? c[2].toUpperCase() : 'XOF' }));
+  const save = async () => { try { const n = (await call(role, `select app.kd_opening_paste($1,$2,$3) as n`, [org, day, JSON.stringify(parsed)]))[0].n; toast(`已按 ${day} 比对 ${n} 个客户`); setPaste(false); setTxt(''); setAsOf(day); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  const clear = async () => { try { await call(role, `select app.kd_opening_clear($1,$2)`, [clr.id, note]); toast('已记成调平'); setClr(null); setNote(''); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  const diff = (r) => Number(r.sys_amount) - Number(r.kd_amount);
+  const all = data.rows.filter((r) => diff(r) !== 0);
+  const rows = all.filter((r) => (f === 'open' ? !r.cleared_at : f === 'done' ? r.cleared_at : true));
+  const sumOpen = all.filter((r) => !r.cleared_at).reduce((a, r) => a + diff(r), 0);
+  return (
+    <div className="card-b stack" style={{ gap: 8 }}>
+      <div className="hint">金蝶「应收款余额表」导出后，把<b>客户编码、余额（、币别）</b>两三列复制粘进来，系统按那天比对每个客户。<b>这里的差额不进客户 Balance</b>（期间以系统 = 飞书为准）；跑通后中方逐个调平、写怎么调的，最后以金蝶为准。</div>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        {data.days.length ? <select className="in" style={{ maxWidth: 200 }} value={data.d || ''} onChange={(e) => setAsOf(e.target.value)}>{data.days.map((x) => <option key={dDate(x.as_of)} value={dDate(x.as_of)}>比对日 {dDate(x.as_of)}</option>)}</select> : <span className="muted small">还没粘过金蝶应收</span>}
+        {data.d && <><Pill tone={all.some((r) => !r.cleared_at) ? 'amber' : 'green'}>{all.filter((r) => !r.cleared_at).length} 个客户没调平 · 合计差 {money(sumOpen)}</Pill>
+          <div className="chips">{[['open', '没调平'], ['done', '已调平'], ['', '全部']].map(([k, l]) => <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l}</button>)}</div></>}
+        <span className="grow" />
+        <button type="button" className="btn sm primary" onClick={() => setPaste(true)}>粘贴金蝶应收余额</button>
+      </div>
+      {data.d && <Grid id="kd-opening" rows={rows} empty={f === 'open' ? '全部调平了 ✓' : '没有'} columns={[
+        { key: 'customer_code', label: '客户编码', w: 100, render: (r) => <span className="mono">{r.customer_code}</span> },
+        { key: 'customer', label: '客户', w: 160, render: (r) => (r.cid ? <CustLink id={r.cid} name={r.customer} /> : <span className="pill red">系统里没有这个编码</span>) },
+        { key: 'currency', label: '币别', w: 60 },
+        { key: 'sys_amount', label: '系统（= 飞书）', w: 130, type: 'number', value: (r) => Number(r.sys_amount), render: (r) => money(r.sys_amount, r.currency) },
+        { key: 'kd_amount', label: '金蝶', w: 130, type: 'number', value: (r) => Number(r.kd_amount), render: (r) => money(r.kd_amount, r.currency) },
+        { key: 'diff', label: '差（系统 − 金蝶）', w: 140, type: 'number', sum: true, value: diff, render: (r) => <b className={diff(r) > 0 ? 'amber-t2' : 'red-t2'}>{diff(r) > 0 ? '+' : ''}{money(diff(r), r.currency)}</b> },
+        { key: 'st', label: '状态', w: 260, value: (r) => (r.cleared_at ? '已调平' : '没调平'), render: (r) => (r.cleared_at ? <span className="small"><Pill tone="green">已调平</Pill> {r.clear_note}</span>
+          : role === 'admin' ? <button type="button" className="btn sm" onClick={() => setClr(r)}>记成已调平…</button> : <Pill tone="amber">没调平</Pill>) },
+      ]} />}
+      {paste && <Modal title="粘贴金蝶应收余额" wide onClose={() => setPaste(false)} footer={<><button type="button" className="btn" onClick={() => setPaste(false)}>取消</button><span className="grow" />
+        <button type="button" className="btn primary" disabled={!parsed.length} onClick={save}>比对 {parsed.length} 个客户</button></>}>
+        <div className="stack">
+          <div className="row" style={{ gap: 8 }}><span className="small">金蝶余额是哪天的：</span><DatePicker value={day} onChange={setDay} /></div>
+          <textarea className="in" rows={10} style={{ width: '100%', fontFamily: 'monospace' }} placeholder={'CI0001\t2,350,000\nCI0002\t-150,000\tXOF'} value={txt} onChange={(e) => setTxt(e.target.value)} />
+          <div className="small muted">认到 {parsed.length} 行。系统里有余额、金蝶表里没有的客户也会列出来（金蝶记 0）。同一天再粘一次会覆盖没调平的行。</div>
+        </div></Modal>}
+      {clr && <Modal title={`记成已调平 · ${clr.customer_code}`} onClose={() => setClr(null)} footer={<><button type="button" className="btn" onClick={() => setClr(null)}>取消</button><button type="button" className="btn primary" disabled={!note.trim()} onClick={clear}>确认</button></>}>
+        <div className="stack"><div>差 <b>{money(diff(clr), clr.currency)}</b>。写一下怎么调平的（例如 金蝶补录了 SO-xxx / 飞书那笔是重复的已删）：</div>
+          <input className="in" style={{ width: '100%' }} value={note} onChange={(e) => setNote(e.target.value)} /></div></Modal>}
+    </div>
   );
 }

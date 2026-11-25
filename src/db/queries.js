@@ -136,7 +136,7 @@ where e.deal_id = $1 order by e.at, e.id`;
 export const dealShipments = `
 select s.*, (select coalesce(sum(qty),0) from app.shipment_lines sl where sl.shipment_id = s.id) as qty,
   (select coalesce(jsonb_agg(jsonb_build_object('deal_line_id', sl.deal_line_id, 'qty', sl.qty)), '[]') from app.shipment_lines sl where sl.shipment_id = s.id) as lines,
-  k.status as kingdee_status
+  k.status as kingdee_status, k.remote_no as kingdee_no
 from app.shipments s left join app.kingdee_outbox k on k.shipment_id = s.id
 where s.deal_id = $1 order by s.shipped_at`;
 
@@ -479,7 +479,7 @@ select d.*, exists (select 1 from app.sop_acks a where a.doc_id = d.id and a.ver
 from app.sop_docs d where d.org_id = $1 and d.active order by d.dept, d.title`;
 
 export const kdOutbox = `
-select k.id, k.status, k.remote_no, k.updated_at, k.saved_at, k.submitted_at, k.audited_at, sh.out_no, sh.shipped_at, sh.customer_received_at,
+select k.id, k.shipment_id, k.status, k.remote_no, k.updated_at, k.saved_at, k.submitted_at, k.audited_at, sh.out_no, sh.shipped_at, sh.customer_received_at,
   d.id as deal_id, d.biz_no, d.so_no, c.code as customer_code, c.name as customer_name,
   (select sum(sl.qty) from app.shipment_lines sl where sl.shipment_id = sh.id) as qty,
   (select sum(sl.amount) from app.shipment_lines sl where sl.shipment_id = sh.id) as amount

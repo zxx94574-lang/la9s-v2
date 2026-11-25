@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { TierPill, useApp, useData, Pill, usePeriod, PeriodBar } from '../components/ui.jsx';
+import { useRuleValues, ruleNum } from '../components/Rules.jsx';
 import Grid from '../components/Grid.jsx';
 import { money, qty, dDate } from '../lib/format.js';
 import { TIERS } from '../lib/domain.js';
@@ -32,8 +33,15 @@ export default function Dashboard() {
   const onAlert = useCallback((k, list) => setAlerts((a) => (JSON.stringify(a[k] || []) === JSON.stringify(list) ? a : { ...a, [k]: list })), []);
   // 11-25: 仓库 / 盘点这条链上要注意的也进「要你注意的」(盘点进行中、盘点金蝶待录、找货选了库位但库位空了 → 先不做)
   const { data: ops } = useData(async () => q(`select (select count(*) from app.counts where org_id = $1 and status = 'open')::int as open_cnt,
-      (select count(*) from app.counts c where c.org_id = $1 and c.status = 'closed' and c.kd_done_at is null and exists (select 1 from app.count_diffs d where d.count_id = c.id and d.diff <> 0))::int as kd_cnt`, [org]).then((r) => r[0]).catch(() => null), [org, tick]);
-  useEffect(() => { if (!ops) return; onAlert('ops', [...(ops.open_cnt ? [{ tone: 'red', text: '正在盘点 · 出货暂停', go: 'count' }] : []), ...(ops.kd_cnt ? [{ tone: 'amber', text: `${ops.kd_cnt} 次盘点金蝶没录完`, go: 'count' }] : [])]); }, [ops, onAlert]);
+      (select count(*) from app.counts c where c.org_id = $1 and c.status = 'closed' and c.kd_done_at is null and exists (select 1 from app.count_diffs d where d.count_id = c.id and d.diff <> 0))::int as kd_cnt,
+      (select r.rate from app.remittances r where r.org_id = $1 and r.currency = 'CNY' and r.on_date >= current_date - 60 order by r.on_date desc, r.created_at desc limit 1) as remit_rate,
+      (select r.on_date from app.remittances r where r.org_id = $1 and r.currency = 'CNY' and r.on_date >= current_date - 60 order by r.on_date desc, r.created_at desc limit 1) as remit_on,
+      (select rmb_per_xof from app.price_settings where org_id = $1) as rmb_per_xof`, [org]).then((r) => r[0]).catch(() => null), [org, tick]);
+  const rvD = useRuleValues(['price.rate_drift']); const driftLim = ruleNum(rvD, 'price.rate_drift');
+  // 329: 定价汇率 (1 CNY = 1/rmb_per_xof XOF) 和最近一笔汇回的实际汇率差太多 → 提醒调定价 (实际更贵 = 定价按旧汇率会少赚)
+  const priceRate = Number(ops?.rmb_per_xof) > 0 ? 1 / Number(ops.rmb_per_xof) : 0; const realRate = Number(ops?.remit_rate) || 0;
+  const drift = priceRate && realRate ? ((realRate - priceRate) / priceRate) * 100 : 0;
+  useEffect(() => { if (!ops) return; onAlert('ops', [...(Math.abs(drift) >= driftLim && driftLim > 0 ? [{ tone: drift > 0 ? 'red' : 'amber', text: `汇率变了 ${drift > 0 ? '+' : ''}${drift.toFixed(1)}%：最近汇回 1 CNY = ${realRate.toFixed(1)} XOF，定价用 ${priceRate.toFixed(1)}`, go: 'pricing' }] : []), ...(ops.open_cnt ? [{ tone: 'red', text: '正在盘点 · 出货暂停', go: 'count' }] : []), ...(ops.kd_cnt ? [{ tone: 'amber', text: `${ops.kd_cnt} 次盘点金蝶没录完`, go: 'count' }] : [])]); }, [ops, onAlert, drift, driftLim, realRate, priceRate]);
   const { data } = useData(async () => {
     const [[k], rc, bal, [cards], cmp, fobs] = await Promise.all([q(Q.dashboard, [org, from, to]), q(Q.receipts, [org, from, to]), q(Q.balances, [org]),
       q(Q.dashCards, [org, from, to, pf, pt]), q(Q.customerCompare, [org]), q(Q.fobList, [org]).catch(() => [])]);

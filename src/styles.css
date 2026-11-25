@@ -2044,3 +2044,14 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .hl{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:0}
 .hl-row{display:flex;flex-direction:column;gap:2px;padding:12px 16px;border-bottom:1px solid var(--line,#eef0f3)}
 .hl-row span{font-size:12px;color:var(--muted)}.hl-row b{font-size:20px}.hl-row small{font-size:12px;color:var(--muted)}
+/* 310: 次要操作按钮 = 浅蓝底 + 蓝字 + 蓝边；实心蓝只给保存 / 下推 */
+.btn.soft { background: #eef4fd; border-color: #b9cff2; color: var(--brand, #0447b0); }
+.btn.soft:hover { background: #e1ecfb; }
+.btn .badge-n { display: inline-block; min-width: 16px; padding: 0 4px; margin-left: 4px; border-radius: 8px; background: var(--brand, #0447b0); color: #fff; font-size: 11px; line-height: 16px; text-align: center; }
+.seg.sm button { padding: 4px 10px; font-size: 12px; }
+.doc-head2 .dh-gs { justify-self: start; font-weight: 800; font-size: 26px; color: #0b2a5b; line-height: 1.1; }
+.doc-head2 .dh-gs small { display: block; font-size: 11px; font-weight: 500; color: #6b7280; font-style: italic; }
+.rp-acts { min-width: 0; max-width: 100%; }
+.rp-acts > * { max-width: 100%; }
+.rp-acts label { flex-wrap: wrap; }
+@media (max-width: 760px) { .pagehead > .rp-acts { flex: 1 1 100%; justify-content: flex-start; } }

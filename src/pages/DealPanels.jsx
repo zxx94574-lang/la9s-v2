@@ -1005,7 +1005,8 @@ function ShipmentsCard({ deal, lines, shipments, act, role }) {
     { key: 'docs', label: '发货文件', w: 420, sortable: false, filterable: false, render: (s) => (s.voided_at ? null : <BlActions shipment={s} deal={deal} lines={lines} />) },
     { key: 'recv', label: '签收 / 金蝶', w: 260, sortable: false, render: (s) => {
       if (s.voided_at) return <span className="pill gray" title={dt(s.voided_at)}>已撤销 · {s.void_reason}</span>;
-      if (s.customer_received_at) return <Pill tone="green">已签收 · 金蝶可补录</Pill>;
+      if (s.customer_received_at) { const K = { ready: ['待录金蝶', 'amber'], saved: ['金蝶已保存', 'blue'], submitted: ['金蝶已提交 · 待审核', 'blue'], synced: ['金蝶已审核', 'green'], error: ['录金蝶出错', 'red'] }[s.kingdee_status] || ['待录金蝶', 'amber'];
+        return <span className="row" style={{ gap: 6 }}><Pill tone="green">已签收</Pill><Pill tone={K[1]}>{K[0]}</Pill>{s.kingdee_no && <span className="mono small" title="金蝶单号">{s.kingdee_no}</span>}</span>; }
       return (
         <span className="row" style={{ gap: 6 }}>
           <Pill tone="amber">待签收 · 到「签收 · 对账」步</Pill>

@@ -49,6 +49,7 @@ export const RULES = [
   ['att.late_free', 'late_rules', 'free', '迟到报备：每个月前几次报备过的迟到不扣', 2, '次', 'num', { page: 'attendance', where: '打卡' }],
   ['att.late_deduct', 'late_rules', 'deduct', '没报备 / 超过次数的迟到：扣当天出勤', true, '', 'bool', { page: 'attendance', where: '打卡' }],
   // 经营总览 (待改 487–506, Frank 11-23): 都在看板对应的板块上就地改
+  ['price.rate_drift', 'dash_rules', 'rate_drift_pct', '汇率提醒：最近一笔汇回的实际汇率和定价汇率差多少 % 就提醒调定价', 2, '%', 'num', { page: 'dashboard', where: '经营总览 · 要你注意的' }],
   ['dash.budget', 'dash_rules', 'budget_cny', '销售：本月预算（国内给的月预算，0 = 不显示进度条）', 0, 'CNY', 'num', { page: 'dashboard', where: '经营总览 · 销售' }],
   ['dash.age1', 'dash_rules', 'age1', '库龄：超过多少天标黄', 30, '天', 'num', { page: 'dashboard', where: '经营总览 · 库存' }],
   ['dash.age2', 'dash_rules', 'age2', '库龄：超过多少天标红（严重超期）', 120, '天', 'num', { page: 'dashboard', where: '经营总览 · 库存' }],
@@ -88,6 +89,7 @@ export const META = {
   'vol.pct': { area: 'cust', short: '月提货量涨跌 · 算变化大', src: 'Claude 先定', apply: '客户每月提货量对比', effect: '进中方待办「拿货量变化」', me: 1 },
   'att.late_free': { area: 'staff', short: '报备的迟到 · 每月免扣几次', src: 'Frank 11-23 定', apply: '员工点了「迟到报备」的迟到', effect: '前几次标黄不扣，超过照扣当天' },
   'att.late_deduct': { area: 'staff', short: '迟到扣当天', src: 'Frank 11-23 定', apply: '没报备 / 超过次数的迟到', effect: '那天不算出勤，工资少一天' },
+  'price.rate_drift': { area: 'sys', short: '汇率变动提醒 · 差几 %', src: 'Frank 11-16（待改 329）', apply: '经营总览「要你注意的」', effect: '实际汇回汇率偏离定价汇率超过这个数就提醒去「汇率与取整」调' },
   'dash.budget': { area: 'sys', short: '看板 · 本月销售预算', src: '国内每月给的预算', apply: '经营总览销售卡片', effect: '显示预算达成进度条' },
   'dash.age1': { area: 'po', short: '库龄 · 标黄天数', src: 'Frank 11-23 定', apply: '经营总览库存', effect: '这段库存标黄' },
   'dash.age2': { area: 'po', short: '库龄 · 标红天数', src: 'Frank 11-23 定（国内严重超期线）', apply: '经营总览库存', effect: '这段库存标红' },
@@ -248,4 +250,27 @@ function RuleLines({ ids, data }) {
           <span className="rl-ico"><Info><div className="rl-tip"><i>从哪来</i><span>{m.src || '—'}</span><i>作用在哪</i><span>{m.apply || '—'}</span><i>触发后</i><span>{m.effect || r[3]}</span></div></Info>{m.me ? <Assumed>这个值是 Claude 先按建议定的，Frank 还没逐条拍板；改了就算你定的。</Assumed> : null}</span>
         </div>);
     })}</div>);
+}
+
+// 预算按月（国内每月给一个数）：org_settings 'budget_months' = { 'YYYY-MM': CNY }；没填的月用「本月预算」规则的默认值
+export function useBudget(month) {
+  const { org, tick } = useApp();
+  const rv = useRuleValues(['dash.budget']);
+  const { data } = useData(() => q(`select value from app.org_settings where org_id = $1 and key = 'budget_months'`, [org]), [org, tick]);
+  const map = data?.[0]?.value || {};
+  const v = map[month] != null ? Number(map[month]) : ruleNum(rv, 'dash.budget');
+  return { budget: v || 0, map, own: map[month] != null };
+}
+export function BudgetEdit({ month }) {
+  const { org, role, toast, refresh } = useApp();
+  const { budget, map, own } = useBudget(month);
+  const [open, setOpen] = useState(false); const [v, setV] = useState('');
+  if (role !== 'admin') return null;
+  const save = async (val) => { const next = { ...map }; if (val === null) delete next[month]; else next[month] = val; try { await call(role, `select app.set_org_setting($1,'budget_months',$2)`, [org, JSON.stringify(next)]); toast(val === null ? `${month} 预算用默认值` : `${month} 预算 ${Number(val).toLocaleString('en-US')} CNY`); setOpen(false); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  return (<>
+    <button type="button" className="btn sm soft" title="国内每月给的销售预算（人民币）；每个月单独填，没填用规则参数里的默认值" onClick={() => { setV(budget ? String(budget) : ''); setOpen(true); }}>{month.slice(5)} 月预算 {budget ? `${(budget / 1e4).toLocaleString('en-US', { maximumFractionDigits: 1 })} 万` : '未填'}{own ? '' : budget ? '（默认）' : ''}</button>
+    {open && <Modal title={`${month} 销售预算（CNY）`} onClose={() => setOpen(false)} footer={<>{own && <button type="button" className="btn" onClick={() => save(null)}>清掉，用默认</button>}<span className="grow" /><button type="button" className="btn" onClick={() => setOpen(false)}>取消</button><button type="button" className="btn primary" disabled={!(Number(v) > 0)} onClick={() => save(Number(v))}>保存</button></>}>
+      <div className="stack"><input className="in" inputMode="numeric" value={v} onChange={(e) => setV(e.target.value.replace(/[^\d]/g, ''))} placeholder="例如 3000000" style={{ width: 220 }} autoFocus />
+        <div className="small muted">已填的月份：{Object.keys(map).sort().map((k) => `${k} ${(Number(map[k]) / 1e4).toLocaleString('en-US')} 万`).join('；') || '还没有'}</div></div></Modal>}
+  </>);
 }

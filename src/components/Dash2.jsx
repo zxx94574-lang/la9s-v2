@@ -10,7 +10,7 @@ import { CustLink, EmpLink, DealLink, ModelLink } from './Archives.jsx';
 import { useMarginRules } from './Margin.jsx';
 import { usePublicHeld } from './PublicHeld.jsx';
 import { useRemits, useRemitRules, remitFlag, remitCols } from './Remit.jsx';
-import { RuleGear, useRuleValues, ruleNum } from './Rules.jsx';
+import { RuleGear, useRuleValues, ruleNum, useBudget } from './Rules.jsx';
 import Grid from './Grid.jsx';
 import { Fold, total, pctTone, Pct } from './DashBlocks.jsx';
 import { money, qty, dDate, today } from '../lib/format.js';
@@ -159,7 +159,7 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
   // 有工资表就用工资表, 资金账户里记的「工资」支出不重复算
   const expShown = hasPay ? [{ id: '__pay', name: `工资（工资表 ${N(pay[0].months)} 个月，公司成本）`, v: payV, n: N(pay[0].n) }, ...expRows.filter((e) => !/工资|薪|salaire|CNPS|社保/i.test(e.name))] : expRows;
   const expT = expShown.reduce((a, e) => a + e.v, 0);
-  const budget = ruleNum(rv, 'dash.budget'); const inMonth = from.slice(8) === '01' && from.slice(0, 7) === to.slice(0, 7);
+  const { budget } = useBudget(from.slice(0, 7)); const inMonth = from.slice(8) === '01' && from.slice(0, 7) === to.slice(0, 7);
   const revCny = useMemo(() => (budget > 0 && inMonth ? total(rows, { target: 'CNY' }).rev : 0), [rows, budget, inMonth]);
   const miss = [...T.all.missModels.values()].sort((a, b) => b.qty - a.qty);
   useEffect(() => { onAlert?.('sale', T.all.profit < 0 ? [{ tone: 'red', text: `这段时间整体亏钱 ${s.f(-T.all.profit)} ${s.cur}`, go: 'margin' }] : []); }, [T.all.profit, s.cur, s.short]);   // eslint-disable-line react-hooks/exhaustive-deps

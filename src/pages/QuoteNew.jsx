@@ -197,7 +197,7 @@ export default function QuoteNew() {
         </div>}
         <LineEntry id="quote-new" catalog={data.catalog} categories={data.categories} tier={tier} lines={lines} setLines={(v) => { setCellErrs(null); setPriceOk(false); setLines(v); }}
           showErrors={errs} showPrice={showPrice && !!tier && priced} currency={currency} canPrice={canPrice && !!tier && priced} priceMode={tier && priced ? priceMode : null} fx={fx}
-          extraTools={showPrice && customer ? <button type="button" className="btn" onClick={() => setHistOpen(true)} title="这个客户以前每张单成交的价，不用跳页">🕘 历史价格</button> : null}
+          extraTools={showPrice && customer ? <button type="button" className="btn soft" onClick={() => setHistOpen(true)} title="这个客户以前每张单成交的价，不用跳页">🕘 历史价格</button> : null}
           onProductOpen={(p) => setProdOpen(p)} errors={cellErrs} />
         {canPrice && tier && <div className="card-b hint" style={{ borderTop: '1px solid var(--line-2)' }}>单价格子里可以直接给价（谈好的价）：标 ✎ 手改、报价单上留痕；没给的按「{cust?.tier}」档位价。</div>}
         {currency !== 'XOF' && <div className="card-b hint">{fx ? `价格 = XOF 档位价 ÷ ${fx}（按你填的汇率，保留两位小数），保存时汇率锁在这张单上。` : `先在上面填汇率（1 ${currency} = ? XOF），价格才会显示。`}</div>}
