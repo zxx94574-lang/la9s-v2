@@ -2170,3 +2170,9 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .pgsum .sb-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .d2-to { border: 0; background: none; color: var(--brand); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
 .d2-to:hover { background: var(--brand-soft); }
+/* 11-25 日期按钮：本日 → 日历、本周 → 周历 */
+.per-cal { padding: 0 2px 2px; }
+.per-cal button:disabled { color: #c3cad4; cursor: default; background: none; }
+.per-wk { display: flex; gap: 10px; align-items: center; font-variant-numeric: tabular-nums; }
+.per-wk .per-wn { color: var(--muted); font-size: 12px; min-width: 44px; }
+.per-wk.on .per-wn { color: rgba(255,255,255,.85); }

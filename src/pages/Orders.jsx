@@ -25,7 +25,7 @@ export default function Orders() {
   const { org, go, role } = useApp();
   // 看板上点某个颜色跳过来: 带时间段 + 灯色 (一次性)
   const [jump] = useState(() => { try { const j = JSON.parse(sessionStorage.getItem('la9s.orders.jump')); sessionStorage.removeItem('la9s.orders.jump'); return j; } catch { return null; } });
-  const P = usePeriod('orders', 'year', jump?.from ? { period: 'custom', custom: [jump.from, jump.to] } : null);
+  const P = usePeriod('orders', 'month', jump?.from ? (jump.pk && jump.pk !== 'custom' ? { period: jump.pk } : { period: 'custom', custom: [jump.from, jump.to] }) : null);   // 11-25: 默认本月；智能搜索带 pk 就点亮对应按钮
   const [stepF, setStepF] = useState(jump?.step || '');   // 11-20: 规则参数「看卡在这一步的单」跳过来
   const { period, custom, setPeriod, setCustom } = P;
   const { from, to } = P;
@@ -45,14 +45,15 @@ export default function Orders() {
   useEffect(() => { const f = () => { let j = null; try { j = JSON.parse(sessionStorage.getItem('la9s.orders.jump')); sessionStorage.removeItem('la9s.orders.jump'); } catch { /* ignore */ } if (!j) return;
     if (j.ask) { setFcust(j.cust ? [j.cust] : []); setFmodel(j.model ? [j.model] : []); setFcat(j.cat || ''); setFemp(j.emp || ''); setFromAsk(true); setLight(''); setStepF(''); setText(''); setFtier([]); setFpay([]); }
     else { if (j.cust) setFcust([j.cust]); if (j.model) setFmodel([j.model]); }
-    if (j.from) { setPeriod('custom'); setCustom([j.from, j.to]); } };
+    if (j.from) { if (j.pk && j.pk !== 'custom') setPeriod(j.pk); else { setPeriod('custom'); setCustom([j.from, j.to]); } } };
     window.addEventListener('la9s-orders-jump', f); return () => window.removeEventListener('la9s-orders-jump', f); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [mode, setMode] = useState('orders');
   const [gridShown, setGridShown] = useState(null);   // 表格里筛出来的行 + 机型条件 → 「按机型看」跟着同一套筛选
   const curFilter = { period, custom: period === 'custom' ? custom : null, light, fcust, ftier, fmodel, fpay, mode, text };
   const applyScheme = (f) => { if (f.period) setPeriod(f.period); if (f.period === 'custom' && f.custom) setCustom(f.custom); setLight(f.light || ''); setFcust(f.fcust || []); setFtier(f.ftier || []); setFmodel(f.fmodel || []); setFpay(f.fpay || []); setMode(f.mode || 'orders'); setText(f.text || ''); setTier(''); setGrp(''); };
   const payOf = (d) => (!(Number(d.shipped_amount) > 0) ? 'none' : Number(d.due) <= 0 ? 'paid' : Number(d.allocated_amount) > 0 ? 'partial' : 'unpaid');
-  const voided = useData(() => q(Q.voidedDeals, [org]), [org]).data || [];
+  const voidedAll = useData(() => q(Q.voidedDeals, [org]), [org]).data || [];
+  const voided = voidedAll.filter((d) => { const t = String(d.updated_at || '').slice(0, 10); return t >= from && t <= to; });   // 11-25: 已作废也跟右上角的时间段（按作废日期）
   const catDeals = useMemo(() => new Set(olines.filter((l) => l.category === fcat).map((l) => l.deal_id)), [olines, fcat]);
   const catNames = useMemo(() => [...new Set(olines.map((l) => l.category).filter(Boolean))], [olines]);
   const modelDeals = useMemo(() => new Set(olines.filter((l) => fmodel.includes(l.model)).map((l) => l.deal_id)), [olines, fmodel]);
@@ -141,7 +142,7 @@ export default function Orders() {
         const unpaid = rows.filter((d) => ['partial', 'shipped'].includes(d.status) && Number(d.due) > 0 && d.currency === 'XOF');
         const live = rows.filter((d) => dealLight(d) === 'active');
         return <SumBar items={[
-          { k: '订单', v: qty(rows.length), unit: '张', sub: period === 'custom' && custom ? `${custom[0]} – ${custom[1]}（按下单日期）` : '这个时间段（按下单日期）' },
+          { k: '订单', v: qty(rows.length), unit: '张', tip: '按下单日期算，时间段就是右上角选的那段' },
           { k: '片数', v: qty(rows.reduce((a, d) => a + qn(d), 0)), unit: '片' },
           price && { k: '订单金额', v: money(xof.reduce((a, d) => a + Number(d.amount || 0), 0)), unit: 'XOF', sub: other ? `另有 ${other} 张 CNY / USD 单没算进来` : null },
           { k: '进行中', v: qty(live.length), unit: '张', on: light === 'active', onClick: () => setLight(light === 'active' ? '' : 'active'), tone: live.length ? 'amber' : null },

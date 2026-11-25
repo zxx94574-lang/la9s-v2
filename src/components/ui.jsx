@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ymd, today, pad, periodRange, PERIODS, periodGroup, periodLabel } from '../lib/format.js';
+import { ymd, today, pad, periodRange, PERIODS, periodGroup, periodLabel, monthWeeks, weekOf } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
 import { normPhone } from '../lib/phone.js';
 
@@ -222,8 +222,8 @@ export function RangePicker({ value, onChange, label, on, placeholder = '选日�
   const step = (d) => { const nd = new Date(y, m + d, 1); setYm([nd.getFullYear(), nd.getMonth()]); };
   return (
     <span className="dp">
-      <button type="button" ref={btn} className={`rp-btn ${on ? 'on' : ''} ${open ? 'open' : ''}`} onClick={toggle} title="自定义：点开日历，点两下选一段">
-        {label && <span className="muted small">{label}</span>}<span className="rp-ico">▦</span><b>{value?.[0] ? rangeText(value[0], value[1]) : placeholder}</b>
+      <button type="button" ref={btn} className={`rp-btn ${on ? 'on' : ''} ${open ? 'open' : ''}`} onClick={toggle} title={`自定义：点开日历，点两下选一段${value?.[0] ? `（现在 ${rangeText(value[0], value[1])}）` : ''}`}>
+        {label && <span className="muted small">{label}</span>}<span className="rp-ico">▦</span><b>{value?.[0] ? rangeText(value[0], value[1]).replace(/ · \d+ 天$/, '') : placeholder}</b>
       </button>
       {open && pos && createPortal(
         <div className="dp-pop rp-pop" ref={pop} style={{ position: 'fixed', ...pos }}>
@@ -972,12 +972,23 @@ export function usePopBus(open, close) {
 
 // 426 / 427 (Frank 11-19, 全站): 页面的日期大筛选 —— 本日 / 本周 / 本月 / 本季度 / 本年度 / 自定义, 旁边永远写出真实的起止日期和天数.
 // usePeriod(页面名): 选了什么记在本机 (每页各记各的); <PeriodBar p={…} /> 放进 .pagehead 右边, 表头冻结以后也一直看得到.
-const pstore = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* */ } } };
+// 11-25 Frank：从侧栏 / 页签点进来一律是本月（不再长期记住上次选的）；同一次打开里，从详情返回清单保持刚才选的（存 sessionStorage）。
+// 智能搜索跳过来：presetPeriod(页面名, 值, [from, to]) 先写好，再跳；页面已经开着就收 'la9s-period' 事件当场换。
+const pstore = { get: (k, d) => { try { return JSON.parse(sessionStorage.getItem(k)) ?? d; } catch { return d; } }, set: (k, v) => { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch { /* */ } } };
+export function resetPeriods() { try { Object.keys(sessionStorage).filter((k) => k.startsWith('la9s.period.')).forEach((k) => sessionStorage.removeItem(k)); } catch { /* */ } }
+export function presetPeriod(key, period, custom) {
+  pstore.set(`la9s.period.${key}`, period); if (custom) pstore.set(`la9s.period.${key}.custom`, custom);
+  setTimeout(() => window.dispatchEvent(new CustomEvent('la9s-period', { detail: { key, period, custom } })), 60);
+}
 export function usePeriod(key, def = 'month', init = null) {
   const [period, setP] = useState(() => init?.period || pstore.get(`la9s.period.${key}`, def));
   const [custom, setC] = useState(() => init?.custom || pstore.get(`la9s.period.${key}.custom`, [today(), today()]));
   const setPeriod = (v) => { setP(v); pstore.set(`la9s.period.${key}`, v); };
   const setCustom = (v) => { setC(v); pstore.set(`la9s.period.${key}.custom`, v); };
+  useEffect(() => {
+    const f = (e) => { if (e.detail?.key !== key) return; if (e.detail.custom) setC(e.detail.custom); setP(e.detail.period); };
+    window.addEventListener('la9s-period', f); return () => window.removeEventListener('la9s-period', f);
+  }, [key]);
   const [from, to] = period === 'custom' ? custom : periodRange(period);
   const label = periodLabel(period);
   return { period, setPeriod, custom, setCustom, from, to, label };
@@ -988,8 +999,9 @@ export const rangeText = (from, to) => {
   const f = (d) => (sameY ? String(d).slice(5) : d);
   return from === to ? `${f(from)} · 1 天` : `${f(from)} → ${f(to)} · ${n} 天`;
 };
-export function PeriodBar({ p, children }) {
+export function PeriodBar({ p, children, all }) {
   // 477 (Frank 11-20): 五个按钮 —— 点一下 = 本期; 已经亮着的再点一下 (或点蓝色小 ▾) = 出这一组的选项; 日期框 = 自定义 (点两下选一段)
+  // 11-25: 本日 → 日历选任意一天；本周 → 周历选任意一周（一个月里的周，月初月末零头并进第一 / 最后一周）。all = 前面多一个「全部」（客户流水用）
   const g = periodGroup(p.period);
   const [menu, setMenu] = useState(null);
   const btns = useRef({});
@@ -997,22 +1009,25 @@ export function PeriodBar({ p, children }) {
   return (
     <div className="row period-bar">
       {children}
-      <div className="seg per-seg">{[['day', '本日'], ['week', '本周'], ['month', '本月'], ['quarter', '本季度'], ['year', '本年度']].map(([k, l]) => (
+      <div className="seg per-seg">{all && <button type="button" className={g === 'all' ? 'on' : ''} onClick={() => { p.setPeriod('all'); setMenu(null); }}>全部</button>}
+        {[['day', '本日'], ['week', '本周'], ['month', '本月'], ['quarter', '本季度'], ['year', '本年度']].map(([k, l]) => (
         <button type="button" key={k} ref={(el) => { btns.current[k] = el; }} className={g === k ? 'on' : ''} onClick={() => click(k)} aria-haspopup="menu" aria-expanded={menu === k}>
           {g === k ? periodLabel(p.period) : l}<i className="per-caret" onClick={(e) => { e.stopPropagation(); if (g !== k) p.setPeriod(k); setMenu(menu === k ? null : k); }}>▾</i>
         </button>))}</div>
-      <RangePicker value={[p.from, p.to]} on={p.period === 'custom'} onChange={(v) => { p.setCustom(v); p.setPeriod('custom'); }} />
-      {menu && <PeriodMenu k={menu} anchor={btns.current[menu]} cur={p.period} onPick={(v) => { p.setPeriod(v); setMenu(null); }} onClose={() => setMenu(null)} />}
+      {g !== 'all' && <RangePicker value={[p.from, p.to]} on={p.period === 'custom'} onChange={(v) => { p.setCustom(v); p.setPeriod('custom'); }} />}
+      {menu && <PeriodMenu k={menu} anchor={btns.current[menu]} cur={p.period} from={p.from} onPick={(v) => { p.setPeriod(v); setMenu(null); }} onClose={() => setMenu(null)} />}
     </div>);
 }
-function PeriodMenu({ k, anchor, cur, onPick, onClose }) {
-  const now = new Date(); const Y = now.getFullYear(); const M = now.getMonth() + 1; const Q = Math.floor(now.getMonth() / 3) + 1;
+const WK = ['一', '二', '三', '四', '五', '六', '日'];
+function PeriodMenu({ k, anchor, cur, from, onPick, onClose }) {
+  const now = new Date(); const Y = now.getFullYear(); const M = now.getMonth() + 1; const Q = Math.floor(now.getMonth() / 3) + 1; const T = today();
   const curY = Number(String(cur).match(/^[mqy]:(\d{4})/)?.[1]) || Y;
   const [yy, setYy] = useState(curY);
+  const [ym, setYm] = useState(() => { const d = new Date(from || T); return [d.getFullYear(), d.getMonth() + 1]; });   // 日历 / 周历看的是哪个月
   const pop = useRef(null); const [pos, setPos] = useState(null);
   usePopBus(true, onClose);
   useLayoutEffect(() => {
-    const place = () => { const r = anchor?.getBoundingClientRect(); if (!r) return; const w = Math.min(k === 'month' ? 260 : 200, window.innerWidth - 16); setPos({ width: w, top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - 8 - w)) }); };
+    const place = () => { const r = anchor?.getBoundingClientRect(); if (!r) return; const w = Math.min(k === 'month' || k === 'day' || k === 'week' ? 270 : 200, window.innerWidth - 16); setPos({ width: w, top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - 8 - w)) }); };
     place();
     const out = (e) => { if (!pop.current?.contains(e.target) && !anchor?.contains(e.target)) onClose(); };
     const key = (e) => { if (e.key === 'Escape') onClose(); };
@@ -1021,10 +1036,22 @@ function PeriodMenu({ k, anchor, cur, onPick, onClose }) {
   }, [anchor, k, onClose]);
   const item = (v, l, dis) => <button type="button" key={v} disabled={dis} className={`per-it ${cur === v || (v === 'month' && cur === `m:${Y}-${M}`) ? 'on' : ''}`} onClick={() => onPick(v)}>{l}</button>;
   const yearNav = <div className="per-yr"><button type="button" onClick={() => setYy(yy - 1)} aria-label="上一年">‹</button><b>{yy}</b><button type="button" disabled={yy >= Y} onClick={() => setYy(yy + 1)} aria-label="下一年">›</button></div>;
+  const [cy, cm] = ym;
+  const step = (d) => { const nd = new Date(cy, cm - 1 + d, 1); setYm([nd.getFullYear(), nd.getMonth() + 1]); };
+  const monthNav = <div className="per-yr"><button type="button" onClick={() => step(-1)} aria-label="上个月">‹</button><b>{cy} 年 {cm} 月</b><button type="button" disabled={cy > Y || (cy === Y && cm >= M)} onClick={() => step(1)} aria-label="下个月">›</button></div>;
   let body;
-  if (k === 'day') body = <div className="per-list">{item('day', '今天')}{item('yesterday', '昨天')}</div>;
-  else if (k === 'week') body = <div className="per-list">{item('week', '本周')}{item('lastweek', '上周')}</div>;
-  else if (k === 'month') body = <>{yearNav}<div className="per-grid m">{Array.from({ length: 12 }, (_, i) => { const mm = i + 1; const v = yy === Y && mm === M ? 'month' : `m:${yy}-${mm}`; return item(v, `${mm} 月`, yy > Y || (yy === Y && mm > M)); })}</div></>;
+  if (k === 'day') {
+    const sel = cur === 'day' ? T : cur === 'yesterday' ? from : String(cur).startsWith('d:') ? String(cur).slice(2) : null;
+    const lead = (new Date(cy, cm - 1, 1).getDay() + 6) % 7; const days = new Date(cy, cm, 0).getDate();
+    body = <>{monthNav}<div className="dp-grid per-cal">{WK.map((w) => <div key={w} className="w">{w}</div>)}{Array.from({ length: lead }, (_, i) => <span key={'b' + i} />)}
+      {Array.from({ length: days }, (_, i) => { const s = ymd(new Date(cy, cm - 1, i + 1)); return <button type="button" key={s} disabled={s > T} className={`${s === T ? 'today' : ''} ${s === sel ? 'on' : ''}`} onClick={() => onPick(s === T ? 'day' : `d:${s}`)}>{i + 1}</button>; })}</div></>;
+  } else if (k === 'week') {
+    const W = monthWeeks(cy, cm); const tw = weekOf(now);
+    const selKey = cur === 'week' ? `w:${tw.y}-${tw.m}-${tw.n}` : cur;
+    const f = (d) => `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    body = <>{monthNav}<div className="per-list">{W.map(([a, b], i) => { const v = `w:${cy}-${cm}-${i + 1}`; const isNow = cy === tw.y && cm === tw.m && i + 1 === tw.n;
+      return <button type="button" key={v} disabled={ymd(a) > T} className={`per-it per-wk ${selKey === v ? 'on' : ''}`} onClick={() => onPick(isNow ? 'week' : v)}><span className="per-wn">第 {i + 1} 周</span>{f(a)} → {f(b)}{isNow ? ' · 本周' : ''}</button>; })}</div></>;
+  } else if (k === 'month') body = <>{yearNav}<div className="per-grid m">{Array.from({ length: 12 }, (_, i) => { const mm = i + 1; const v = yy === Y && mm === M ? 'month' : `m:${yy}-${mm}`; return item(v, `${mm} 月`, yy > Y || (yy === Y && mm > M)); })}</div></>;
   else if (k === 'quarter') body = <>{yearNav}<div className="per-grid q">{[1, 2, 3, 4].map((qq) => item(yy === Y && qq === Q ? 'quarter' : `q:${yy}-${qq}`, `Q${qq}`, yy > Y || (yy === Y && qq > Q)))}</div></>;
   else body = <div className="per-list">{Array.from({ length: 5 }, (_, i) => Y - i).map((v) => item(v === Y ? 'year' : `y:${v}`, `${v} 年`))}</div>;
   return createPortal(<div className="menu per-menu" ref={pop} role="menu" style={{ position: 'fixed', ...(pos || { visibility: 'hidden' }) }}>{body}</div>, document.body);

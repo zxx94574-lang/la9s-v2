@@ -14,7 +14,7 @@ import Decisions from './pages/Decisions.jsx';
 import PoProfit from './pages/PoProfit.jsx';
 import Bins from './pages/Bins.jsx';
 import { DirectiveGate, DirBar } from './components/Directives.jsx';
-import { Ctx, Modal, useToasts, Info, useStickyPagehead, useInstantTips } from './components/ui.jsx';
+import { resetPeriods, Ctx, Modal, useToasts, Info, useStickyPagehead, useInstantTips } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
 import { ExportPanel } from './components/SettingsPanels.jsx';
 import { loadAllOpts } from './components/Opts.jsx';
@@ -284,7 +284,7 @@ export default function App() {
               <div key={g.id} className={`nav-group ${isOpen ? 'open' : ''}`}>
                 <button type="button" className="gh" onClick={() => setOpenGroups((o) => ({ ...o, [g.id]: !isOpen }))}>{t(g.label)}<span className="chev">⌄</span></button>
                 {isOpen && g.items.map((it) => (
-                  <button type="button" key={it.route} className={`nav-item ${active(it.route) ? 'active' : ''}`} onClick={() => go(it.route)}>
+                  <button type="button" key={it.route} className={`nav-item ${active(it.route) ? 'active' : ''}`} onClick={() => { resetPeriods(); go(it.route); }}>
                     <span className="ico"><RouteIcon route={it.route} /></span><span>{t(it.label)}</span>
                     {it.route === 'todo' && (overdueN > 0 || todoCount > 0) && <span className={`pill red ${overdueN ? 'hotpill' : ''}`} style={{ marginLeft: 'auto' }} title={overdueN ? `${overdueN} 张超过 24 小时没发货` : ''}>{overdueN ? `⏰${overdueN} · ` : ''}{todoCount}</span>}
                   </button>

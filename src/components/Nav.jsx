@@ -3,7 +3,7 @@
 // 侧栏宽度每个人自己拖 (存本浏览器). 新功能上线时, 配置里没有的项自动出现在它默认的分组里, 不会丢.
 import React, { useState } from 'react';
 import { call } from '../db/client.js';
-import { useApp, Modal, SortList } from './ui.jsx';
+import { resetPeriods, useApp, Modal, SortList } from './ui.jsx';
 import { ROLES, hasAny } from '../lib/domain.js';
 import { t } from '../lib/i18n.js';
 import { friendlyError } from '../lib/format.js';
@@ -177,5 +177,5 @@ export function HubTabs({ page, role, cfg, go }) {
   const tabs = HUBS[h].filter(([r]) => ITEMS[r] && visibleTo(r, role, cfg));
   if (tabs.length < 2) return null;
   const cur = page === 'count' ? 'bins' : page;
-  return <div className="hub-tabs">{tabs.map(([r, l]) => <button type="button" key={r} className={cur === r ? 'on' : ''} onClick={() => go(r)}>{l}</button>)}</div>;
+  return <div className="hub-tabs">{tabs.map(([r, l]) => <button type="button" key={r} className={cur === r ? 'on' : ''} onClick={() => { resetPeriods(); go(r); }}>{l}</button>)}</div>;
 }

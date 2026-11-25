@@ -16,18 +16,36 @@ export const dShort = (v) => { if (!v) return ''; const d = new Date(v); return 
 export const dDate = (v) => (v ? ymd(new Date(v)) : '');
 
 // 本日/本周/本月/本季度/本年度
+// 一个月里的周（Frank 11-25）：周一到周日，掐在这个月里；月初 / 月末不满 4 天的零头并进第一周 / 最后一周
+// （例：2026-11 → 第 1 周 11-01–11-08、第 2 周 11-09–11-15 … 第 4 周 11-23–11-30）。周历、本周按钮、智能搜索「第几周」都用这一个。
+export function monthWeeks(y, m) {   // m = 1–12；返回 [[开始 Date, 结束 Date], …]
+  const last = new Date(y, m, 0); const w = [];
+  for (let a = new Date(y, m - 1, 1); a <= last;) { const sun = new Date(a); sun.setDate(a.getDate() + ((7 - a.getDay()) % 7)); const b = sun > last ? last : sun; w.push([new Date(a), b]); a = new Date(b); a.setDate(b.getDate() + 1); }
+  const len = (x) => Math.round((x[1] - x[0]) / 864e5) + 1;
+  if (w.length > 1 && len(w[0]) < 4) { w[1][0] = w[0][0]; w.shift(); }
+  if (w.length > 1 && len(w[w.length - 1]) < 4) { w[w.length - 2][1] = w[w.length - 1][1]; w.pop(); }
+  return w;
+}
+export function weekOf(d) {   // 某天在它那个月的第几周 → { y, m, n, from, to }
+  const y = d.getFullYear(), m = d.getMonth() + 1; const W = monthWeeks(y, m);
+  const t = new Date(y, m - 1, d.getDate()); const i = Math.max(0, W.findIndex(([a, b]) => t >= a && t <= b));
+  return { y, m, n: i + 1, from: W[i][0], to: W[i][1] };
+}
 export function periodRange(key, now = new Date()) {
   const y = now.getFullYear(), m = now.getMonth();
   const day = new Date(y, m, now.getDate());
   const cap = (a, b) => [ymd(a), ymd(b > day ? day : b)];   // 本期只算到今天
   const k = String(key || '');
+  if (k === 'all') return ['2000-01-01', ymd(day)];
+  if (k.startsWith('d:')) return [k.slice(2), k.slice(2)];
+  if (k.startsWith('w:')) { const [yy, mm, nn] = k.slice(2).split('-').map(Number); const W = monthWeeks(yy, mm); const w = W[Math.min(nn, W.length) - 1]; return cap(w[0], w[1]); }
   if (k.startsWith('m:')) { const [yy, mm] = k.slice(2).split('-').map(Number); return cap(new Date(yy, mm - 1, 1), new Date(yy, mm, 0)); }
   if (k.startsWith('q:')) { const [yy, qq] = k.slice(2).split('-').map(Number); return cap(new Date(yy, (qq - 1) * 3, 1), new Date(yy, qq * 3, 0)); }
   if (k.startsWith('y:')) { const yy = Number(k.slice(2)); return cap(new Date(yy, 0, 1), new Date(yy, 11, 31)); }
   switch (key) {
     case 'yesterday': { const s = new Date(day); s.setDate(day.getDate() - 1); return [ymd(s), ymd(s)]; }
-    case 'lastweek': { const s = new Date(day); s.setDate(day.getDate() - ((day.getDay() + 6) % 7) - 7); const e = new Date(s); e.setDate(s.getDate() + 6); return [ymd(s), ymd(e)]; }
-    case 'week': { const s = new Date(day); s.setDate(day.getDate() - ((day.getDay() + 6) % 7)); return [ymd(s), ymd(day)]; }
+    case 'lastweek': { const w = weekOf(day); const p = new Date(w.from); p.setDate(p.getDate() - 1); const v = weekOf(p); return [ymd(v.from), ymd(v.to)]; }
+    case 'week': { const w = weekOf(day); return cap(w.from, w.to); }
     case 'month': return [ymd(new Date(y, m, 1)), ymd(day)];
     case 'quarter': return [ymd(new Date(y, Math.floor(m / 3) * 3, 1)), ymd(day)];
     case 'year': return [ymd(new Date(y, 0, 1)), ymd(day)];
@@ -35,12 +53,14 @@ export function periodRange(key, now = new Date()) {
   }
 }
 export const PERIODS = [['day', '本日'], ['week', '本周'], ['month', '本月'], ['quarter', '本季度'], ['year', '本年度'], ['custom', '自定义']];
-// 477 (Frank 11-20): 五个按钮各管一组; 组里的选项 = 今天/昨天、本周/上周、某个月、某个季度、某一年
-export const periodGroup = (k) => { const s = String(k || ''); if (s === 'day' || s === 'yesterday') return 'day'; if (s === 'week' || s === 'lastweek') return 'week'; if (s === 'month' || s.startsWith('m:')) return 'month'; if (s === 'quarter' || s.startsWith('q:')) return 'quarter'; if (s === 'year' || s.startsWith('y:')) return 'year'; return 'custom'; };
+// 477 (Frank 11-20): 五个按钮各管一组; 11-25: 本日组 = 今天 / 日历里任意一天 (d:)，本周组 = 本周 / 周历里任意一周 (w:)
+export const periodGroup = (k) => { const s = String(k || ''); if (s === 'all') return 'all'; if (s === 'day' || s === 'yesterday' || s.startsWith('d:')) return 'day'; if (s === 'week' || s === 'lastweek' || s.startsWith('w:')) return 'week'; if (s === 'month' || s.startsWith('m:')) return 'month'; if (s === 'quarter' || s.startsWith('q:')) return 'quarter'; if (s === 'year' || s.startsWith('y:')) return 'year'; return 'custom'; };
 export function periodLabel(k, now = new Date()) {
   const s = String(k || ''); const y = now.getFullYear();
-  const base = { day: '本日', yesterday: '昨天', week: '本周', lastweek: '上周', month: '本月', quarter: '本季度', year: '本年度', custom: '自定义' };
+  const base = { day: '本日', yesterday: '昨天', week: '本周', lastweek: '上周', month: '本月', quarter: '本季度', year: '本年度', custom: '自定义', all: '全部' };
   if (base[s]) return base[s];
+  if (s.startsWith('d:')) { const d = s.slice(2); if (d === ymd(now)) return '本日'; const yd = new Date(now); yd.setDate(now.getDate() - 1); if (d === ymd(yd)) return '昨天'; return Number(d.slice(0, 4)) === y ? d.slice(5) : d; }
+  if (s.startsWith('w:')) { const [yy, mm, nn] = s.slice(2).split('-').map(Number); const w = weekOf(now); if (yy === w.y && mm === w.m && nn === w.n) return '本周'; return `${yy === y ? '' : yy + ' 年 '}${mm} 月第 ${nn} 周`; }
   if (s.startsWith('m:')) { const [yy, mm] = s.slice(2).split('-').map(Number); return yy === y && mm === now.getMonth() + 1 ? '本月' : `${yy === y ? '' : yy + ' 年 '}${mm} 月`; }
   if (s.startsWith('q:')) { const [yy, qq] = s.slice(2).split('-').map(Number); return yy === y && qq === Math.floor(now.getMonth() / 3) + 1 ? '本季度' : `${yy === y ? '' : yy + ' '}Q${qq}`; }
   if (s.startsWith('y:')) { const yy = Number(s.slice(2)); return yy === y ? '本年度' : `${yy} 年`; }

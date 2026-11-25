@@ -4,13 +4,13 @@ import React, { useMemo, useState } from 'react';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { PhotoInput, TierPill, Light, useApp, useData, Pill, Modal, OptionNote, BigNum, DatePicker, Info, Choice, MoneyIn } from '../components/ui.jsx';
+import { PhotoInput, TierPill, Light, useApp, useData, Pill, Modal, OptionNote, BigNum, Info, Choice, MoneyIn, usePeriod, PeriodBar } from '../components/ui.jsx';
 import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import { BalanceCopy } from '../components/Doc.jsx';
 import { DealDrawer, DealChip, BalanceLine } from '../components/ReceiptForm.jsx';
 import { TIERS, seesPrice, balanceWords, can, NOTE_OPTIONS, RETURN_REASONS, RETURN_BASES } from '../lib/domain.js';
-import { money, qty, dt, dDate, friendlyError, pad, periodRange, ymd } from '../lib/format.js';
+import { money, qty, dt, dDate, friendlyError, pad, ymd } from '../lib/format.js';
 
 const N = (v) => Number(v || 0);
 
@@ -194,17 +194,11 @@ function CustomerReturnModal({ customerId, name, onClose }) {
 }
 
 /* Q8 (Frank 11-16): Balance 永远是全部没付清的 (不按今年截断); 这里可以只看某段时间的流水, 跟客户对某个月的账 */
-const LEDGER_PERIODS = [['all', '全部'], ['month', '本月'], ['last', '上月'], ['quarter', '本季度'], ['year', '本年度'], ['custom', '自定义']];
 const day = (e) => ymd(new Date(e.eff_at));
 function LedgerCard({ ledger, setDrawer }) {
-  const [period, setPeriod] = useState('all');
-  const [custom, setCustom] = useState(() => periodRange('month'));
-  const [from, to] = useMemo(() => {
-    if (period === 'all') return [null, null];
-    if (period === 'custom') return custom;
-    if (period === 'last') { const d = new Date(); return [ymd(new Date(d.getFullYear(), d.getMonth() - 1, 1)), ymd(new Date(d.getFullYear(), d.getMonth(), 0))]; }
-    return periodRange(period);
-  }, [period, custom]);
+  // 11-25: 换成全站同一套日期按钮（多一个「全部」，默认全部 —— Q8：流水默认看全部）
+  const P = usePeriod('ledger', 'all');
+  const from = P.period === 'all' ? null : P.from; const to = P.period === 'all' ? null : P.to;
   const rows = useMemo(() => (from ? ledger.filter((e) => day(e) >= from && day(e) <= to) : ledger), [ledger, from, to]);
   const opening = useMemo(() => (from ? ledger.filter((e) => day(e) < from).reduce((a, e) => a + N(e.amount), 0) : 0), [ledger, from]);
   const plus = rows.filter((e) => N(e.amount) > 0).reduce((a, e) => a + N(e.amount), 0);
@@ -213,8 +207,7 @@ function LedgerCard({ ledger, setDrawer }) {
   return (
     <div className="card">
       <div className="card-h"><h2>逐笔流水 <Info>出库、收款、退货、撤销出库、抹零每一笔都在；单号可点开。上面的欠款永远是全部没付清的，不按年份截断。选一个时间段 = 只看这段时间的流水，用来跟客户对某个月的账：期初 + 这段增加 − 这段减少 = 期末。</Info></h2>
-        <div className="seg">{LEDGER_PERIODS.map(([k, l]) => <button type="button" key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
-        {period === 'custom' && <DatePicker range value={custom} onChange={setCustom} />}</div>
+        <PeriodBar p={P} all /></div>
       {from && <div className="card-b row small" style={{ gap: 16, flexWrap: 'wrap', paddingBottom: 0 }}>
         <span>{from} ~ {to}</span>
         <span>期初 <b>{words(opening)}</b></span>

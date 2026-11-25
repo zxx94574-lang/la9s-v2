@@ -25,7 +25,7 @@ export default function Receipts({ preset }) {
   const [drawer, setDrawer] = useState(null);
   const [voidRc, setVoidRc] = useState(null);
   const [realloc, setRealloc] = useState(null);
-  const P = usePeriod('receipts', 'year'); const { from, to } = P;
+  const P = usePeriod('receipts'); const { from, to } = P;
 
   const { data } = useData(async () => {
     const [customers, list] = await Promise.all([q(Q.customers, [org]), q(Q.receipts, [org, from, to])]);
