@@ -2101,3 +2101,33 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .ask-chip button { border: 0; background: none; color: inherit; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 0 0 2px; }
 .ask-sel { width: auto; min-width: 0; padding: 3px 8px; height: auto; font-size: 12.5px; }
 .ask-say { font-size: 14px; line-height: 1.5; }
+/* 智能搜索（顶栏右上，Frank 11-25 14:00：图标 + 标注，做明显） */
+.ask-btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px 0 6px; border-radius: 999px; border: 0; background: var(--brand); color: #fff; font: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer; box-shadow: 0 2px 10px rgba(4,71,176,.28); transition: transform .15s var(--spring), box-shadow .15s; white-space: nowrap; }
+.ask-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(4,71,176,.35); }
+.ask-btn:active { transform: scale(.95); }
+.ask-ico { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: rgba(255,255,255,.2); font-size: 16px; line-height: 1; }
+.ask-ico.big { width: 30px; height: 30px; background: var(--brand-soft); color: var(--brand); font-size: 18px; flex: 0 0 auto; }
+@media (max-width: 900px) { .ask-btn { padding: 0 5px; } .ask-btn .ask-l { display: none; } }
+.ask-veil { position: fixed; inset: 0; z-index: 900; background: rgba(15,23,42,.32); display: flex; justify-content: center; align-items: flex-start; padding: 8vh 12px 12px; }
+.ask-pop { width: min(720px, 100%); max-height: 84vh; overflow: auto; background: #fff; border-radius: 16px; box-shadow: 0 24px 60px rgba(15,23,42,.25); padding: 14px; display: flex; flex-direction: column; gap: 10px; animation: askIn .18s var(--spring); }
+@keyframes askIn { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: none; } }
+.ask-row { display: flex; gap: 8px; align-items: center; }
+.ask-in { flex: 1; min-width: 0; border: 0; outline: 0; font: inherit; font-size: 17px; padding: 8px 4px; }
+.ask-ex { display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+.ask-ex > div { flex-basis: 100%; }
+.ask-exb { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; color: var(--text); }
+.ask-exb:hover { border-color: var(--brand); color: var(--brand); }
+.ask-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border-top: 1px solid var(--line); padding-top: 10px; }
+.ask-say { font-size: 15px; font-weight: 700; line-height: 1.5; }
+.ask-jumps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.ask-jump { text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 10px 12px; font: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 3px; transition: transform .12s var(--spring); }
+.ask-jump small { color: var(--muted); font-size: 12px; }
+.ask-jump.main { background: var(--brand); border-color: var(--brand); color: #fff; }
+.ask-jump.main small { color: rgba(255,255,255,.85); }
+.ask-jump:active { transform: scale(.97); }
+.ask-top { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.ask-tr { display: flex; gap: 10px; align-items: center; width: 100%; border: 0; border-bottom: 1px solid var(--line); background: #fff; padding: 8px 10px; font: inherit; cursor: pointer; text-align: left; }
+.ask-tr:last-child { border-bottom: 0; }
+.ask-tr:hover { background: var(--brand-soft); }
+.ask-tl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.of-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

@@ -1,12 +1,12 @@
-// 问一句（Frank 11-25）：经营总览顶上一个框，用平常说话的方式问数，例「Koffi 昨天对应客户的销量」
+// 智能搜索（Frank 11-25 14:00 改）：顶栏右上一个按钮 → 弹出搜索；一句话问 → 结论 + 一键跳转到对应清单（自动筛好）。
+// 原来是：经营总览顶上一个框，用平常说话的方式问数，例「Koffi 昨天对应客户的销量」
 // 不用外部 AI（数据不出这台电脑 / 服务器）：本地听懂「谁 / 哪个客户 / 哪个型号或种类 / 什么时候 / 看什么 / 按什么分」，
 // 听懂的部分显示成一排小块，点 × 去掉、点分组换一种分法；结果是一张表 + 一句话，客户 / 型号 / 员工都能点开。
 // 销量 = 出库（作废的不算，退货另列）；员工 = 订单上的归属销售员（激励也按这个算）；金额一律折成 XOF。
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { q } from '../db/client.js';
 import { useApp, useData, Choice } from './ui.jsx';
-import Grid from './Grid.jsx';
-import { CustLink, ModelLink, EmpLink } from './Archives.jsx';
+import { ordersJump } from '../lib/dirWork.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -29,6 +29,7 @@ export function parseWhen(t, now = new Date()) {
   if ((m = t.match(/(\d{1,2})\s*月份?/)) && !/个月/.test(t.slice(m.index, m.index + 4))) { const mm = Number(m[1]); if (mm >= 1 && mm <= 12) { const y = mm > d0.getMonth() + 1 ? d0.getFullYear() - 1 : d0.getFullYear(); return [ymd(new Date(y, mm - 1, 1)), ymd(new Date(y, mm, 0)), `${mm} 月`]; } }
   if (/今年|本年|this year/i.test(t)) return [`${d0.getFullYear()}-01-01`, ymd(d0), '今年'];
   if (/去年|last year/i.test(t)) return [`${d0.getFullYear() - 1}-01-01`, `${d0.getFullYear() - 1}-12-31`, '去年'];
+  if (/所有|全部|一直|历史|从来|至今|tout/i.test(t)) return ['2000-01-01', ymd(d0), '全部时间'];
   return [ymd(new Date(d0.getFullYear(), d0.getMonth(), 1)), ymd(d0), '本月'];
 }
 
@@ -42,19 +43,24 @@ export function parse(text, dict) {
   // 问话里常用的词不当人名 / 客户名（演示数据里有叫「销售」「客户」的）
   const STOP = new Set(['销售', '客户', '员工', '仓库', '热线', '财务', '主管', '中方', '收款', '型号', '种类', '本月', '今天', '昨天']);
   const hit = (arr, keys, stop = true) => arr.filter((x) => keys(x).some((k) => k && String(k).length >= 2 && !(stop && STOP.has(String(k).trim())) && low.includes(String(k).toLowerCase())));
-  const emp = hit(dict.emps, (e) => [e.short_name, e.full_name, e.emp_no])[0] || null;
-  const custs = hit(dict.custs, (c) => [c.name, c.code]).sort((a, b) => b.name.length - a.name.length);
-  const cust = custs.find((c) => !emp || !String(emp.short_name).toLowerCase().includes(c.name.toLowerCase())) || null;
+  // 整个名字出现在话里优先；没有就按单词找（打「thomas」也能找到「THOMAS AJM」），多个候选让人点着换
+  const words = (low.match(/[a-zà-ÿ0-9]{3,}/g) || []).filter((w) => !/^(xof|cny|usd|balance|pcs|the)$/.test(w));
+  const fuzzy = (arr, keys) => arr.filter((x) => keys(x).some((k) => k && words.some((w) => String(k).toLowerCase().split(/[\s\-_.·]+/).some((part) => part.startsWith(w)))));
+  const emps = hit(dict.emps, (e) => [e.short_name, e.full_name, e.emp_no]);
+  const emp = emps[0] || (/(销售员|员工|业务员|名下|负责)/.test(t) ? fuzzy(dict.emps, (e) => [e.short_name, e.full_name])[0] : null) || null;
+  let custs = hit(dict.custs, (c) => [c.name, c.code]).sort((a, b) => b.name.length - a.name.length).filter((c) => !emp || !String(emp.short_name).toLowerCase().includes(c.name.toLowerCase()));
+  if (!custs.length) custs = fuzzy(dict.custs, (c) => [c.name, c.code]).filter((c) => !emp || !fuzzy([emp], (e) => [e.short_name]).length || !String(c.name).toLowerCase().includes(String(emp.short_name).toLowerCase()));
+  const cust = custs[0] || null; const custAlt = custs.slice(1, 6);
   const cat = hit(dict.cats, (c) => [c.name], false).sort((a, b) => b.name.length - a.name.length)[0] || null;
   let model = null;
   for (const p of dict.models) { const k = norm(p); if (k.length >= 3 && T.includes(k) && (!model || k.length > norm(model).length)) model = p; }
-  const metric = /欠款|欠多少|应收|没付|impay|dette/i.test(t) ? 'ar' : /库存|还有多少|有货|剩多少|stock/i.test(t) ? 'stock' : /收款|回款|收了|进账|encaiss/i.test(t) ? 'recv' : /退货|退了|retour/i.test(t) ? 'ret' : /金额|销售额|营业额|多少钱|卖了多少钱|chiffre/i.test(t) ? 'amount' : 'qty';
+  const metric = /欠款|欠多少|应收|没付|balance|余额|对账|impay|dette|solde/i.test(t) ? 'ar' : /库存|还有多少|有货|剩多少|stock/i.test(t) ? 'stock' : /收款|回款|收了|进账|encaiss/i.test(t) ? 'recv' : /退货|退了|retour/i.test(t) ? 'ret' : /金额|销售额|营业额|多少钱|卖了多少钱|chiffre/i.test(t) ? 'amount' : 'qty';
   let group = /卖给了?谁|给谁|哪些客户|谁欠|谁买/.test(t) ? 'customer' : /每天|按天|每日|天天|par jour/i.test(t) ? 'day' : /型号|机型|modèle/i.test(t) && !model ? 'model' : /种类|类别/i.test(t) && !cat ? 'category'
     : /客户|client/i.test(t) && !cust ? 'customer' : /销售员|员工|谁|每个人|业务员|vendeur/i.test(t) && !emp ? 'employee' : /订单|单子|commande/i.test(t) ? 'deal' : null;
   if (!group) group = emp && !cust ? 'customer' : cust ? 'model' : model ? 'customer' : 'employee';
   if (['recv', 'ar'].includes(metric) && ['model', 'category', 'day', 'deal'].includes(group)) group = metric === 'ar' && group === 'deal' ? 'deal' : 'customer';
   if (metric === 'stock' && !['model', 'category'].includes(group)) group = model ? 'model' : cat ? 'model' : 'category';
-  return { from, to, when, emp, cust, cat, model, metric, group };
+  return { from, to, when, emp, cust, custAlt, cat, model, metric, group };
 }
 
 const KEY = { customer: ['c.id', 'c.name'], model: ['p.model', 'p.model'], category: ['cat.name', 'cat.name'], employee: ['e.id', "coalesce(e.short_name, '（无归属）')"], day: ['s.shipped_at::date', "to_char(s.shipped_at::date, 'MM-DD')"], deal: ['d.id', 'd.biz_no'] };
@@ -108,65 +114,130 @@ async function run(org, P) {
     where d.org_id = $1 and s.voided_at is null and s.shipped_at::date between $2::date and $3::date ${W} group by 1, 2 order by ${P.metric === 'amount' ? 'amount' : 'qty'} desc limit 3000`, args);
 }
 
-const EX = ['Koffi 昨天对应客户的销量', '本月每个销售员卖了多少钱', '上周屏幕按型号', '近 7 天收款按客户', 'BG6M 本月卖给了谁', '现在谁欠款最多', '电池盖库存'];
+const EX = ['Thomas 今年所有销售清单', 'Thomas 的 balance', 'Koffi 昨天对应客户的销量', '本月每个销售员卖了多少钱', '现在谁欠款最多', '近 7 天收款按客户', '电池盖库存'];
 
-export default function AskBox() {
-  const { org } = useApp();
+// 去哪看（一键跳转，到了自动筛好）：每种问法给一个主按钮，必要时再给一两个
+function jumpsOf(P, rows) {
+  const J = [];
+  const day = (x) => x.slice(5);
+  const range = P.from === '2000-01-01' ? '全部时间' : `${day(P.from)} – ${day(P.to)}`;
+  const ordersJ = { kind: 'orders', j: { cust: P.cust?.id, model: P.model, cat: P.cat?.name, emp: P.emp?.id, from: P.from, to: P.to, ask: true } };
+  if (P.metric === 'ar') {
+    if (P.cust) J.push({ ...{ kind: 'go', to: `customer/${P.cust.id}` }, label: `打开 ${P.cust.name} 的总账`, sub: '看 Balance、发对账单、把收款冲到订单' });
+    else if (rows?.length === 1 && rows[0].cid) J.push({ kind: 'go', to: `customer/${rows[0].cid}`, label: `打开 ${rows[0].label} 的总账`, sub: '看 Balance、冲订单' });
+    else J.push({ kind: 'go', to: 'balances', label: '打开客户欠款清单', sub: '全部客户的 Balance；点客户进总账冲单' });
+    if (P.cust) J.push({ ...ordersJ, j: { ...ordersJ.j, from: '2000-01-01', model: null, cat: null }, label: `${P.cust.name} 的全部订单`, sub: '订单总览，已筛好这个客户' });
+  } else if (P.metric === 'recv') {
+    J.push({ kind: 'go', to: P.cust ? `receipts/${P.cust.id}` : 'receipts', label: P.cust ? `打开 ${P.cust.name} 的收款` : '打开收款与总账', sub: P.cust ? '收款记录，已选好这个客户' : '登记 / 查收款' });
+    if (P.cust) J.push({ kind: 'go', to: `customer/${P.cust.id}`, label: `${P.cust.name} 的总账`, sub: '看 Balance、冲订单' });
+  } else if (P.metric === 'stock') {
+    J.push({ kind: 'stock', q: P.model || P.cat?.name || '', label: '打开库存', sub: P.model || P.cat ? `已按「${P.model || P.cat.name}」筛好` : '全部库存' });
+  } else {
+    const who = [P.cust?.name, P.emp ? `${P.emp.short_name} 名下客户` : null, P.cat?.name, P.model].filter(Boolean).join(' · ');
+    J.push({ ...ordersJ, label: `打开订单总览${who ? `：${who}` : ''}`, sub: `已筛好 · ${range}（按下单日期）；到了还能一键清除、改选别的客户` });
+    if (P.cust) J.push({ kind: 'go', to: `customer/${P.cust.id}`, label: `${P.cust.name} 的总账`, sub: 'Balance / 冲订单' });
+  }
+  return J;
+}
+
+export function AskButton() {
+  const { role } = useApp();
+  const [open, setOpen] = useState(false);
+  const ok = ['admin', 'manager', 'finance', 'sales_manager'].includes(role);
+  useEffect(() => {
+    if (!ok) return undefined;
+    const k = (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setOpen(true); } };
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
+  }, [ok]);
+  if (!ok) return null;
+  return (<>
+    <button type="button" className="ask-btn" onClick={() => setOpen(true)} title="智能搜索：用一句话问数，问完一键跳到对应清单（已自动筛好）。快捷键 ⌘K / Ctrl+K">
+      <span className="ask-ico">⌕</span><span className="ask-l">智能搜索</span></button>
+    {open && <AskPanel onClose={() => setOpen(false)} />}
+  </>);
+}
+
+function AskPanel({ onClose }) {
+  const { org, go } = useApp();
   const { data: dict } = useData(async () => {
     const [emps, custs, cats, models] = await Promise.all([q(`select id, short_name, full_name, emp_no from app.employees where org_id = $1`, [org]),
       q(`select id, name, code from app.customers where org_id = $1`, [org]), q(`select id, name from app.categories where org_id = $1`, [org]),
       q(`select distinct model from app.products where org_id = $1 and model is not null`, [org])]);
     return { emps, custs, cats, models: models.map((m) => m.model) };
   }, [org]);
-  const [text, setText] = useState(''); const [P, setP] = useState(null); const [rows, setRows] = useState(null); const [busy, setBusy] = useState(false); const [all, setAll] = useState(false);
-  const go = async (t = text, over) => {
+  const [text, setText] = useState(() => { try { return sessionStorage.getItem('la9s.ask.last') || ''; } catch { return ''; } });
+  const [P, setP] = useState(null); const [rows, setRows] = useState(null); const [busy, setBusy] = useState(false);
+  const inp = useRef(null);
+  useEffect(() => { setTimeout(() => inp.current?.select(), 30); }, []);
+  const ask = async (t = text, over) => {
     if (!dict || !String(t).trim()) return;
-    const p = over || parse(t, dict); setP(p); setBusy(true); setAll(false);
+    try { sessionStorage.setItem('la9s.ask.last', t); } catch { /* ignore */ }
+    const p = over || parse(t, dict); setP(p); setBusy(true);
     try { setRows(await run(org, p)); } catch (e) { setRows([]); console.warn(e); } finally { setBusy(false); }
   };
-  const tweak = (patch) => go(text, { ...P, ...patch });
+  const tweak = (patch) => ask(text, { ...P, ...patch });
+  const jumps = P && rows ? jumpsOf(P, rows) : [];
+  const doJump = (J) => {
+    onClose();
+    if (J.kind === 'orders') ordersJump(go, J.j);
+    else if (J.kind === 'stock') { try { sessionStorage.setItem('la9s.stock.q', J.q); } catch { /* ignore */ } go('stock'); setTimeout(() => window.dispatchEvent(new Event('la9s-stock-q')), 50); }
+    else go(J.to);
+  };
+  // 点预览里的一行：销量类 → 订单总览筛这个客户 / 型号 / 销售员；欠款 / 收款 → 客户总账；库存 → 库存
+  const rowJump = (r) => {
+    const base = { cust: P.cust?.id, model: P.model, cat: P.cat?.name, emp: P.emp?.id, from: P.from, to: P.to, ask: true };
+    if (P.metric === 'stock') return doJump({ kind: 'stock', q: r.label });
+    if (P.group === 'deal') return doJump({ kind: 'go', to: `deal/${r.did || r.k}` });
+    if (['ar', 'recv'].includes(P.metric)) return r.cid && P.group === 'customer' ? doJump({ kind: 'go', to: `customer/${r.cid}` }) : P.group === 'employee' && r.eid ? doJump({ kind: 'go', to: 'balances' }) : null;
+    if (P.group === 'customer') return doJump({ kind: 'orders', j: { ...base, cust: r.cid } });
+    if (P.group === 'model') return doJump({ kind: 'orders', j: { ...base, model: r.label } });
+    if (P.group === 'category') return doJump({ kind: 'orders', j: { ...base, cat: r.label } });
+    if (P.group === 'employee') return r.eid ? doJump({ kind: 'orders', j: { ...base, emp: r.eid } }) : null;
+    if (P.group === 'day') return doJump({ kind: 'orders', j: { ...base, from: `${P.from.slice(0, 4)}-${r.label}`, to: `${P.from.slice(0, 4)}-${r.label}` } });
+    return null;
+  };
   const tot = useMemo(() => (rows || []).reduce((a, r) => ({ qty: a.qty + Number(r.qty || 0), amount: a.amount + Number(r.amount || 0), n: a.n + Number(r.n || 0) }), { qty: 0, amount: 0, n: 0 }), [rows]);
   const say = P && rows ? (() => {
-    const who = [P.emp?.short_name, P.cust?.name, P.cat?.name, P.model].filter(Boolean).join(' · ') || '全公司';
+    const who = [P.emp ? `${P.emp.short_name}${P.metric === 'ar' || P.group === 'customer' ? ' 名下' : ''}` : null, P.cust?.name, P.cat?.name, P.model].filter(Boolean).join(' · ') || '全公司';
     const g = GROUP.find((x) => x[0] === P.group)?.[1].replace('按', '') || '';
     if (!rows.length) return `${who} ${NOW.has(P.metric) ? '现在' : P.when}：没有${({ recv: '收款', ret: '退货', ar: '欠款', stock: '库存' })[P.metric] || '出库'}。`;
-    if (P.metric === 'recv') return `${who} ${P.when}：收款 ${fmt(tot.amount)} XOF，${tot.n} 笔，${rows.length} 个${g}。`;
-    if (P.metric === 'ar') return `${who} 现在：欠款 ${fmt(tot.amount)} XOF，${tot.n} 张单没收清，${rows.length} 个${g}${rows[0] ? `；最多的是 ${rows[0].label}（${fmt(rows[0].amount)} XOF）` : ''}。`;
+    if (P.metric === 'recv') return `${who} ${P.when}：收款 ${fmt(tot.amount)} XOF，${tot.n} 笔。`;
+    if (P.metric === 'ar') return P.cust ? `${P.cust.name} 现在欠 ${fmt(tot.amount)} XOF，${tot.n} 张单没收清。` : `${who} 现在：欠款 ${fmt(tot.amount)} XOF，${tot.n} 张单没收清，${rows.length} 个${g}；最多 ${rows[0].label}（${fmt(rows[0].amount)}）。`;
     if (P.metric === 'stock') return `${who} 现在：本地库存 ${fmt(tot.qty)} 片（可售 ${fmt(tot.amount)}），${rows.length} 个${g}。`;
-    return `${who} ${P.when}：${P.metric === 'ret' ? '退货' : '出库'} ${fmt(tot.qty)} 片 · ${fmt(tot.amount)} XOF · ${tot.n} 单，分 ${rows.length} 个${g}${rows[0] ? `；最多的是 ${rows[0].label}（${fmt(P.metric === 'amount' ? rows[0].amount : rows[0].qty)}${P.metric === 'amount' ? ' XOF' : ' 片'}）` : ''}。`;
+    return `${who} ${P.when}：${P.metric === 'ret' ? '退货' : '出库'} ${fmt(tot.qty)} 片 · ${fmt(tot.amount)} XOF · ${tot.n} 单${rows.length > 1 ? `，最多 ${rows[0].label}（${fmt(P.metric === 'amount' ? rows[0].amount : rows[0].qty)}${P.metric === 'amount' ? ' XOF' : ' 片'}）` : ''}。`;
   })() : '';
-  const labelCell = (r) => (P.group === 'deal' && P.metric === 'ar' ? <b>{r.label}</b> : P.group === 'customer' || (P.metric === 'recv' && ['deal', 'model', 'category'].includes(P.group)) ? <CustLink id={r.cid} name={r.label} />
-    : P.group === 'model' ? <ModelLink id={r.pid} model={r.label} /> : P.group === 'employee' && r.eid ? <EmpLink id={r.eid} name={r.label} /> : <b>{r.label}</b>);
   const chip = (txt, onX) => <span className="ask-chip">{txt}{onX && <button type="button" aria-label="去掉" onClick={onX}>×</button>}</span>;
+  const top = (rows || []).slice(0, 6);
   return (
-    <div className="card ask-box" style={{ marginBottom: 12 }}>
-      <div className="card-b stack" style={{ gap: 8 }}>
-        <form className="row" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); go(); }}>
-          <input className="in grow" value={text} onChange={(e) => setText(e.target.value)} placeholder={`问一句，例「${EX[0]}」`} />
-          <button type="submit" className="btn primary" disabled={!dict || !text.trim() || busy}>{busy ? '…' : '问'}</button>
-          {P && <button type="button" className="btn ghost" onClick={() => { setP(null); setRows(null); setText(''); }}>清空</button>}
+    <div className="ask-veil" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="ask-pop" role="dialog" aria-label="智能搜索">
+        <form className="ask-row" onSubmit={(e) => { e.preventDefault(); if (P && rows && jumps[0] && text === (sessionStorage.getItem('la9s.ask.last') || '')) doJump(jumps[0]); else ask(); }}>
+          <span className="ask-ico big">⌕</span>
+          <input ref={inp} className="ask-in" value={text} onChange={(e) => { setText(e.target.value); }} onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }} placeholder="一句话问，例「Thomas 的 balance」「Koffi 本月客户销量」" />
+          <button type="submit" className="btn primary" disabled={!dict || !text.trim() || busy}>{busy ? '…' : '搜'}</button>
         </form>
-        {!P && <div className="row small muted" style={{ gap: 6, flexWrap: 'wrap' }}>试试：{EX.map((x) => <button type="button" key={x} className="linkbtn small" onClick={() => { setText(x); go(x); }}>{x}</button>)}</div>}
-        {P && <div className="row ask-chips" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="small muted">我听懂的：</span>
-          {NOW.has(P.metric) ? chip('现在') : chip(`${P.when}（${P.from.slice(5)}${P.to !== P.from ? ' – ' + P.to.slice(5) : ''}）`)}
-          {P.emp && chip(`销售员 ${P.emp.short_name}`, () => tweak({ emp: null }))}
-          {P.cust && chip(`客户 ${P.cust.name}`, () => tweak({ cust: null }))}
-          {P.cat && chip(`种类 ${P.cat.name}`, () => tweak({ cat: null }))}
-          {P.model && chip(`型号 ${P.model}`, () => tweak({ model: null }))}
-          <Choice size="sm" value={P.metric} onChange={(v) => tweak({ metric: v })} flat={false} options={METRIC} />
-          <Choice size="sm" value={P.group} onChange={(v) => tweak({ group: v })} flat={false} options={GROUP.filter(([k]) => (P.metric === 'stock' ? ['model', 'category'].includes(k) : P.metric === 'ar' ? ['customer', 'employee', 'deal'].includes(k) : P.metric !== 'recv' || !['model', 'category', 'deal'].includes(k)))} />
-        </div>}
-        {say && <div className="ask-say"><b>{say}</b></div>}
-        {P && rows && rows.length > 0 && <Grid id="ask" compactTools maxHeight={360} rows={all ? rows : rows.slice(0, 10)} rowKey={(r) => r.k} columns={[
-          { key: 'label', label: GROUP.find((x) => x[0] === P.group)?.[1].replace('按', '') || '', w: 180, value: (r) => r.label, render: labelCell },
-          ...(['recv', 'ar'].includes(P.metric) ? [] : [{ key: 'qty', label: P.metric === 'ret' ? '退货片数' : P.metric === 'stock' ? '实存' : '片数', w: 90, type: 'number', sum: true, render: (r) => fmt(r.qty) }]),
-          { key: 'amount', label: ({ recv: '收款 XOF', ar: '欠款 XOF', stock: '可售' })[P.metric] || '金额 XOF', w: 130, type: 'number', sum: true, value: (r) => Math.round(Number(r.amount || 0)), render: (r) => fmt(r.amount) },
-          { key: 'n', label: ({ recv: '笔数', ar: '没收清的单', stock: '编码数' })[P.metric] || '单数', w: 90, type: 'number', sum: true },
-          ...(!['recv', 'ar', 'stock'].includes(P.metric) ? [{ key: 'share', label: '占比', w: 80, value: (r) => { const base = P.metric === 'amount' ? tot.amount : tot.qty; const v = P.metric === 'amount' ? Number(r.amount) : Number(r.qty); return base ? `${Math.round(v / base * 100)}%` : ''; } }] : []),
-        ]} />}
-        {P && rows && rows.length > 10 && <div><button type="button" className="btn sm ghost" onClick={() => setAll(!all)}>{all ? '只看前 10' : `看全部 ${rows.length} 个（上面那句话是全部的合计）`}</button></div>}
-        {P && <div className="small muted">销量 = 出库（作废的不算）；销售员 = 订单上的归属销售员（欠款按客户的归属销售员）；库存 = LA + 9S；金额折成 XOF。没听懂的词就去掉了，可以换个说法，或者用上面两个下拉换看法。</div>}
+        {!P && <div className="ask-ex">{EX.map((x) => <button type="button" key={x} className="ask-exb" onClick={() => { setText(x); ask(x); }}>{x}</button>)}
+          <div className="small muted" style={{ marginTop: 8 }}>问完给你一句结论 + 一个跳转按钮，到了对应清单已经自动筛好（再按一次回车也是跳转）。⌘K / Ctrl+K 随时打开。</div></div>}
+        {P && <>
+          <div className="ask-chips">
+            <span className="small muted">听懂的：</span>
+            {NOW.has(P.metric) ? chip('现在') : chip(`${P.when}${P.from === '2000-01-01' ? '' : `（${P.from.slice(5)}${P.to !== P.from ? ' – ' + P.to.slice(5) : ''}）`}`)}
+            {P.emp && chip(`销售员 ${P.emp.short_name}`, () => tweak({ emp: null }))}
+            {P.cust && chip(`客户 ${P.cust.name}`, () => tweak({ cust: null, custAlt: [] }))}
+            {P.cat && chip(`种类 ${P.cat.name}`, () => tweak({ cat: null }))}
+            {P.model && chip(`型号 ${P.model}`, () => tweak({ model: null }))}
+            <Choice size="sm" value={P.metric} onChange={(v) => tweak({ metric: v })} flat={false} options={METRIC} />
+            <Choice size="sm" value={P.group} onChange={(v) => tweak({ group: v })} flat={false} options={GROUP.filter(([k]) => (P.metric === 'stock' ? ['model', 'category'].includes(k) : P.metric === 'ar' ? ['customer', 'employee', 'deal'].includes(k) : P.metric !== 'recv' || !['model', 'category', 'deal'].includes(k)))} />
+          </div>
+          {P.custAlt?.length > 0 && <div className="small muted">不是这个客户？{P.custAlt.map((c) => <button type="button" key={c.id} className="linkbtn small" style={{ marginLeft: 6 }} onClick={() => tweak({ cust: c, custAlt: [P.cust, ...P.custAlt.filter((x) => x.id !== c.id)] })}>{c.name}</button>)}</div>}
+          {say && <div className="ask-say">{say}</div>}
+          {jumps.length > 0 && <div className="ask-jumps">{jumps.map((J, i) => (
+            <button type="button" key={i} className={`ask-jump ${i === 0 ? 'main' : ''}`} onClick={() => doJump(J)}><b>{J.label} →</b><small>{J.sub}</small></button>))}</div>}
+          {top.length > 1 && <div className="ask-top">{top.map((r) => (
+            <button type="button" key={r.k} className="ask-tr" title="点了直接打开" onClick={() => rowJump(r)}>
+              <span className="ask-tl">{r.label}</span><span className="grow" />{!['recv', 'ar'].includes(P.metric) && <span className="muted small">{fmt(r.qty)} 片</span>}<b>{fmt(r.amount)}</b></button>))}
+            {rows.length > top.length && <div className="small muted" style={{ padding: '4px 8px' }}>还有 {rows.length - top.length} 个，跳过去看全部</div>}</div>}
+        </>}
       </div>
     </div>);
 }

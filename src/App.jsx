@@ -1,3 +1,4 @@
+import { AskButton } from './components/AskBox.jsx';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { openDb, resetDemo, q, isPersistent, REAL, TEST, SERVER, serverMe, setCustomerSession, customerSession } from './db/client.js';
 import { StaffLogin, doLogout } from './components/StaffLogin.jsx';
@@ -342,6 +343,7 @@ export default function App() {
                 🔔{(overdueN > 0 || todoCount > 0) && <span className={`badge ${overdueN ? 'hot' : ''}`} title={overdueN ? `${overdueN} 张超过 24 小时没发货` : ''}>{overdueN || todoCount}</span>}
               </button>}
               <span className="hide-m"><Info>{REAL ? '真实数据快照（金蝶 10-19 库存 / 在途，飞书物料与客户；应收还没导）。在这里操作只存在本浏览器，不会写回金蝶 / 飞书。' : '演示版 · 虚构数据。'}数据保存在本浏览器，刷新不丢。未连接金蝶 / WhatsApp。</Info></span>
+              {!portal && <AskButton />}
               <button type="button" className="btn icon-btn" onClick={() => setSettings(true)} aria-label="设置" title="设置">⚙</button>
             </div>
           </header>

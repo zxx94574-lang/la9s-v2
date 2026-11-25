@@ -39,10 +39,12 @@ export default function Orders() {
   // 229 (Frank 11-11): 筛选条 —— 客户 / 档位 / 机型 / 付款, 可叠加; 「按机型看」给出片数和金额; 可存成筛选方案
   const olinesRaw = useData(() => q(Q.orderLines, [org, from, to]), [org, from, to]).data;
   const olines = useMemo(() => olinesRaw || [], [olinesRaw]);
-  const [fcust, setFcust] = useState(jump?.cust ? [jump.cust] : []); const [ftier, setFtier] = useState([]); const [fmodel, setFmodel] = useState(jump?.model ? [jump.model] : []); const [fpay, setFpay] = useState([]); const [fcat, setFcat] = useState('');   // 507: 档案「共 N 张」/ 指令「去做」跳过来带客户 / 机型
+  const [fcust, setFcust] = useState(jump?.cust ? [jump.cust] : []); const [ftier, setFtier] = useState([]); const [fmodel, setFmodel] = useState(jump?.model ? [jump.model] : []); const [fpay, setFpay] = useState([]); const [fcat, setFcat] = useState(jump?.cat || ''); const [femp, setFemp] = useState(jump?.emp || ''); const [fromAsk, setFromAsk] = useState(!!jump?.ask);   // 507: 档案「共 N 张」/ 指令「去做」跳过来带客户 / 机型
   // 507: 已经在订单总览, 又从档案「共 N 张」/ 指令跳过来 → 照样换筛选
   useEffect(() => { const f = () => { let j = null; try { j = JSON.parse(sessionStorage.getItem('la9s.orders.jump')); sessionStorage.removeItem('la9s.orders.jump'); } catch { /* ignore */ } if (!j) return;
-    if (j.cust) setFcust([j.cust]); if (j.model) setFmodel([j.model]); if (j.from) { setPeriod('custom'); setCustom([j.from, j.to]); } };
+    if (j.ask) { setFcust(j.cust ? [j.cust] : []); setFmodel(j.model ? [j.model] : []); setFcat(j.cat || ''); setFemp(j.emp || ''); setFromAsk(true); setLight(''); setStepF(''); setText(''); setFtier([]); setFpay([]); }
+    else { if (j.cust) setFcust([j.cust]); if (j.model) setFmodel([j.model]); }
+    if (j.from) { setPeriod('custom'); setCustom([j.from, j.to]); } };
     window.addEventListener('la9s-orders-jump', f); return () => window.removeEventListener('la9s-orders-jump', f); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [mode, setMode] = useState('orders');
   const [gridShown, setGridShown] = useState(null);   // 表格里筛出来的行 + 机型条件 → 「按机型看」跟着同一套筛选
@@ -62,12 +64,13 @@ export default function Orders() {
     if (fpay.length && !fpay.includes(payOf(d))) return false;
     if (fmodel.length && !modelDeals.has(d.id)) return false;
     if (fcat && !catDeals.has(d.id)) return false;
+    if (femp && d.owner_employee_id !== femp) return false;
     if (grp === 'open' && ['shipped', 'cancelled'].includes(d.status)) return false;
     if (grp === 'unpaid' && !(['partial', 'shipped'].includes(d.status) && Number(d.due) > 0)) return false;
     if (grp && !['open', 'unpaid'].includes(grp) && !grp.split(',').includes(d.status)) return false;
     if (text) { const t = text.toUpperCase(); if (![d.biz_no, d.customer_name, d.customer_code, d.city, d.quote_no, d.so_no].some((x) => String(x || '').toUpperCase().includes(t))) return false; }
     return true;
-  }), [data, text, tier, grp, light, fcust, ftier, fpay, fmodel, modelDeals, stepF, fcat, catDeals]);
+  }), [data, text, tier, grp, light, fcust, ftier, fpay, fmodel, modelDeals, stepF, fcat, catDeals, femp]);
   const price = seesPrice(role);
   const mRows = useData(() => (role === 'admin' ? call(role, `select deal_id, qty, revenue, cost, profit, cost_missing, cost_goods, sale, returned, adjust, freight, fee from app.margin_rows($1)`, [org]) : Promise.resolve([])), [org, role]).data;
   const margins = useMemo(() => { const by = {}; for (const r of mRows || []) (by[r.deal_id] ||= []).push(r); return Object.fromEntries(Object.entries(by).map(([k, v]) => [k, sumMargin(v)])); }, [mRows]);
@@ -161,7 +164,14 @@ export default function Orders() {
             ]} foot={(rs) => ({ model: '合计', pcs: `${qty(rs.reduce((a, r) => a + r.pcs, 0))} 片`, ...(price ? { amount: money(rs.reduce((a, r) => a + r.amount, 0)) } : {}) })} />
           </>
         ) : null}
-        {(fcust.length > 0 || fmodel.length > 0) && <div className="banner" style={{ marginBottom: 8 }}>只看{fcust.length > 0 && <> 客户 <b>{fcust.map((c) => (custOpts.find((x) => x[0] === c)?.[1] || '').split(' · ')[0]).join('、')}</b></>}{fmodel.length > 0 && <> 机型 <b>{fmodel.join('、')}</b></>} 的单（{rows.length} 张） <button type="button" className="btn sm ghost" onClick={() => { setFcust([]); setFmodel([]); }}>看全部</button></div>}
+        {(fcust.length > 0 || fmodel.length > 0 || fcat || femp) && <div className={`banner of-bar ${fromAsk ? 'ask' : ''}`} style={{ marginBottom: 8 }}>
+          {fromAsk && <span className="pill blue">⌕ 智能搜索带过来的</span>}<span>只看</span>
+          {fcust.map((c) => <span key={c} className="ask-chip">客户 {(custOpts.find((x) => x[0] === c)?.[1] || '').split(' · ')[0] || '…'}<button type="button" aria-label="去掉" onClick={() => setFcust(fcust.filter((x) => x !== c))}>×</button></span>)}
+          {femp && <span className="ask-chip">销售员 {(data || []).find((d) => d.owner_employee_id === femp)?.owner_name || '…'} 名下<button type="button" aria-label="去掉" onClick={() => setFemp('')}>×</button></span>}
+          {fcat && <span className="ask-chip">种类 {fcat}<button type="button" aria-label="去掉" onClick={() => setFcat('')}>×</button></span>}
+          {fmodel.map((m) => <span key={m} className="ask-chip">机型 {m}<button type="button" aria-label="去掉" onClick={() => setFmodel(fmodel.filter((x) => x !== m))}>×</button></span>)}
+          <span className="small muted">{period === 'custom' && custom ? `${custom[0]} – ${custom[1]} · ` : ''}{rows.length} 张</span><span className="grow" />
+          <button type="button" className="btn sm" onClick={() => { setFcust([]); setFmodel([]); setFcat(''); setFemp(''); setFtier([]); setFpay([]); setText(''); setLight(''); setStepF(''); setFromAsk(false); }}>清除全部筛选</button></div>}
         {stepF && <div className="banner" style={{ marginBottom: 8 }}>只看现在卡在「{STEPS.find((x) => x.key === stepF)?.label}」这一步的单（{rows.length} 张） <button type="button" className="btn sm ghost" onClick={() => setStepF('')}>看全部 ×</button></div>}
         {light !== 'draft' && mode === 'orders' && <Grid id="orders" table="deals" columns={cols} rows={rows} onShown={(rs, conds, qq) => { const ms = conds.filter((c) => c.key === 'models').flatMap((c) => (c.op === 'in' ? c.vals || [] : c.op === 'contains' ? [c.a] : [])).map((v) => String(v || '').toUpperCase()).filter(Boolean); setPeekHighlight([...ms, qq]); setGridShown({ rows: rs, models: (conds.find((c) => c.key === 'models' && c.op === 'in')?.vals || []).map((v) => String(v).toUpperCase()) }); }} onRowClick={(d) => go('deal/' + d.id)} empty={!data ? '加载中…' : light ? `${custom && period === 'custom' ? `${custom[0]} 至 ${custom[1]} ` : '这个时间段'}没有「${LIGHT_LABEL[light]}」的订单` : (data.length ? '没有符合条件的订单' : '这个时间段还没有订单')}
           foot={(rows) => ({ biz_no: `合计 ${rows.length} 单`, qty: `${qty(rows.reduce((a, d) => a + Number(['quoted', 'hotline_ok'].includes(d.status) ? d.qty_req : d.qty_supply), 0))} 件`,

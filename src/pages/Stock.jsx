@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Shared, Pill } from '../components/ui.jsx';
@@ -11,7 +11,10 @@ export default function Stock() {
   const { org } = useApp();
   const { data } = useData(() => q(Q.stock, [org]), [org]);
   const [wh, setWh] = useState('local');
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => { try { const v = sessionStorage.getItem('la9s.stock.q'); sessionStorage.removeItem('la9s.stock.q'); return v || ''; } catch { return ''; } });
+  // 智能搜索跳过来（已经在库存页也生效）
+  useEffect(() => { const f = () => { try { const v = sessionStorage.getItem('la9s.stock.q'); sessionStorage.removeItem('la9s.stock.q'); if (v != null) setText(v); } catch { /* ignore */ } };
+    window.addEventListener('la9s-stock-q', f); return () => window.removeEventListener('la9s-stock-q', f); }, []);
   const [pick, setPick] = useState(new Set()); const [freeze, setFreeze] = useState(null);
   const { role } = useApp();
   const rows = useMemo(() => (data || []).filter((r) => (wh === 'all' || (wh === 'local' ? r.warehouse_kind === 'local' : r.warehouse_kind !== 'local'))
@@ -34,7 +37,7 @@ export default function Stock() {
         <div className="sub">可售 = 实存 − 预占。本地出货只用 LA / 9S；FOB、待检、报废仓永不自动参与匹配。库存变动只能由出库、退货检验、采购入库产生。</div></div>
         <div className="row">
           <div className="seg">{[['local', 'LA + 9S 本地仓'], ['other', 'FOB / 待检 / 报废'], ['all', '全部']].map(([k, l]) => <button type="button" key={k} className={wh === k ? 'on' : ''} onClick={() => setWh(k)}>{l}</button>)}</div>
-          <input className="in" style={{ width: 220 }} placeholder="⌕ 型号 / 编码 / 库位 / 通用型号" value={text} onChange={(e) => setText(e.target.value)} />
+          <input className="in" style={{ width: 220 }} placeholder="⌕ 型号 / 编码 / 库位 / 通用型号" value={text} onChange={(e) => setText(e.target.value)} />{text && <button type="button" className="btn sm" onClick={() => setText('')}>清除筛选</button>}
         </div>
       </div>
       <HoldsCard />

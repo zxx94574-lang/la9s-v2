@@ -42,7 +42,7 @@ const dealTotals = `
      from app.deal_lines l where l.deal_id = d.id) as amount`;
 
 export const orders = `
-select d.id, d.biz_no, d.quote_no, d.pick_no, d.so_no, d.kind, d.status, d.currency, d.created_at, d.updated_at, d.planned_ship_date, d.urgent, d.staged_at, d.staged_photo, d.staged_note, (select count(*) from app.deal_events ev where ev.deal_id = d.id and ev.action = 'hotline_busy')::int as busy_n, d.approval, d.source, d.want_on, d.hotline_opened_at, d.hotline_busy_at,
+select d.id, d.owner_employee_id, d.biz_no, d.quote_no, d.pick_no, d.so_no, d.kind, d.status, d.currency, d.created_at, d.updated_at, d.planned_ship_date, d.urgent, d.staged_at, d.staged_photo, d.staged_note, (select count(*) from app.deal_events ev where ev.deal_id = d.id and ev.action = 'hotline_busy')::int as busy_n, d.approval, d.source, d.want_on, d.hotline_opened_at, d.hotline_busy_at,
   c.id as customer_id, coalesce(c.code, c.temp_code) as customer_code, c.name as customer_name, c.city, c.tier,
   (select string_agg(distinct coalesce(p.model, l.req_model), ' / ') from app.deal_lines l left join app.products p on p.id = l.product_id where l.deal_id = d.id) as models,
   ${dealTotals},
