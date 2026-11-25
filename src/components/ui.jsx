@@ -1024,7 +1024,7 @@ function PeriodMenu({ k, anchor, cur, from, onPick, onClose }) {
   const curY = Number(String(cur).match(/^[mqy]:(\d{4})/)?.[1]) || Y;
   const [yy, setYy] = useState(curY);
   const [ym, setYm] = useState(() => { const d = new Date(from || T); return [d.getFullYear(), d.getMonth() + 1]; });   // 日历 / 周历看的是哪个月
-  const pop = useRef(null); const [pos, setPos] = useState(null);
+  const pop = useRef(null); const [pos, setPos] = useState(null); const [hw, setHw] = useState(null);
   usePopBus(true, onClose);
   useLayoutEffect(() => {
     const place = () => { const r = anchor?.getBoundingClientRect(); if (!r) return; const w = Math.min(k === 'month' || k === 'day' || k === 'week' ? 270 : 200, window.innerWidth - 16); setPos({ width: w, top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - 8 - w)) }); };
@@ -1046,11 +1046,20 @@ function PeriodMenu({ k, anchor, cur, from, onPick, onClose }) {
     body = <>{monthNav}<div className="dp-grid per-cal">{WK.map((w) => <div key={w} className="w">{w}</div>)}{Array.from({ length: lead }, (_, i) => <span key={'b' + i} />)}
       {Array.from({ length: days }, (_, i) => { const s = ymd(new Date(cy, cm - 1, i + 1)); return <button type="button" key={s} disabled={s > T} className={`${s === T ? 'today' : ''} ${s === sel ? 'on' : ''}`} onClick={() => onPick(s === T ? 'day' : `d:${s}`)}>{i + 1}</button>; })}</div></>;
   } else if (k === 'week') {
+    // 11-25 Frank：周历长得和日历一样，但一整周一整块地选——鼠标移到哪一天，它那一周整块亮起来；下面一行写「第几周 · 起 → 止 · 几天」
     const W = monthWeeks(cy, cm); const tw = weekOf(now);
-    const selKey = cur === 'week' ? `w:${tw.y}-${tw.m}-${tw.n}` : cur;
+    const selKey = cur === 'week' ? `w:${tw.y}-${tw.m}-${tw.n}` : cur === 'lastweek' ? (() => { const v = weekOf(new Date(tw.from.getFullYear(), tw.from.getMonth(), tw.from.getDate() - 1)); return `w:${v.y}-${v.m}-${v.n}`; })() : cur;
+    const selI = W.findIndex((_, i) => selKey === `w:${cy}-${cm}-${i + 1}`);
+    const lead = (new Date(cy, cm - 1, 1).getDay() + 6) % 7; const days = new Date(cy, cm, 0).getDate();
+    const wi = (d) => W.findIndex(([a, b]) => d >= a.getDate() && d <= b.getDate());
     const f = (d) => `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    body = <>{monthNav}<div className="per-list">{W.map(([a, b], i) => { const v = `w:${cy}-${cm}-${i + 1}`; const isNow = cy === tw.y && cm === tw.m && i + 1 === tw.n;
-      return <button type="button" key={v} disabled={ymd(a) > T} className={`per-it per-wk ${selKey === v ? 'on' : ''}`} onClick={() => onPick(isNow ? 'week' : v)}><span className="per-wn">第 {i + 1} 周</span>{f(a)} → {f(b)}{isNow ? ' · 本周' : ''}</button>; })}</div></>;
+    const show = hw != null ? hw : selI;
+    const pick = (i) => { const isNow = cy === tw.y && cm === tw.m && i + 1 === tw.n; onPick(isNow ? 'week' : `w:${cy}-${cm}-${i + 1}`); };
+    body = <>{monthNav}<div className="dp-grid per-cal per-wkcal" onMouseLeave={() => setHw(null)}>{WK.map((w) => <div key={w} className="w">{w}</div>)}{Array.from({ length: lead }, (_, i) => <span key={'b' + i} />)}
+      {Array.from({ length: days }, (_, i) => { const d = i + 1; const s = ymd(new Date(cy, cm - 1, d)); const x = wi(d); const [a, b] = W[x]; const dis = ymd(a) > T;
+        const cls = [s === T ? 'today' : '', x === selI ? 'sel' : '', x === hw && !dis ? 'hov' : '', d === a.getDate() ? 'rs' : '', d === b.getDate() ? 're' : ''].join(' ');
+        return <button type="button" key={s} disabled={dis} className={cls} onMouseEnter={() => !dis && setHw(x)} onFocus={() => !dis && setHw(x)} onClick={() => pick(x)}>{d}</button>; })}</div>
+      <div className="rp-foot per-wkfoot">{show >= 0 && show != null ? <b>第 {show + 1} 周 · {f(W[show][0])} → {f(W[show][1])} · {Math.round((W[show][1] - W[show][0]) / 864e5) + 1} 天{cy === tw.y && cm === tw.m && show + 1 === tw.n ? ' · 本周' : ''}</b> : <span className="muted">点哪一周选哪一周</span>}</div></>;
   } else if (k === 'month') body = <>{yearNav}<div className="per-grid m">{Array.from({ length: 12 }, (_, i) => { const mm = i + 1; const v = yy === Y && mm === M ? 'month' : `m:${yy}-${mm}`; return item(v, `${mm} 月`, yy > Y || (yy === Y && mm > M)); })}</div></>;
   else if (k === 'quarter') body = <>{yearNav}<div className="per-grid q">{[1, 2, 3, 4].map((qq) => item(yy === Y && qq === Q ? 'quarter' : `q:${yy}-${qq}`, `Q${qq}`, yy > Y || (yy === Y && qq > Q)))}</div></>;
   else body = <div className="per-list">{Array.from({ length: 5 }, (_, i) => Y - i).map((v) => item(v === Y ? 'year' : `y:${v}`, `${v} 年`))}</div>;

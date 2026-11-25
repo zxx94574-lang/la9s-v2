@@ -2183,3 +2183,29 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .ask-missrows { max-height: 160px; overflow: auto; width: 100%; display: flex; flex-direction: column; gap: 2px; }
 /* 11-25 手机：标题右边一排里既有按钮又有日期条（订单总览）时，日期条自己占一行，起止日期不被挤到屏幕外 */
 @media (max-width: 760px) { .content .pagehead > .row:has(> .period-bar) { flex-wrap: wrap !important; overflow: visible; width: 100%; } .content .pagehead > .row > .period-bar { flex: 0 0 100%; max-width: 100%; } }
+/* 11-25 周历：和日历同一个格子，一整周一整块（选中 = 蓝底白字，鼠标所在那周 = 浅蓝），块的两头圆角 */
+.per-wkcal { gap: 3px 0; }
+.per-wkcal button { border-radius: 0; transition: background .14s ease, color .14s ease, transform .12s var(--spring); }
+.per-wkcal button:hover { background: none; }
+.per-wkcal button.hov { background: var(--brand-soft); }
+.per-wkcal button.sel { background: var(--brand); color: #fff; font-weight: 700; }
+.per-wkcal button.sel.today { color: #fff; }
+.per-wkcal button.rs, .per-wkcal button:nth-child(7n + 1) { border-top-left-radius: 9px; border-bottom-left-radius: 9px; }
+.per-wkcal button.re, .per-wkcal button:nth-child(7n) { border-top-right-radius: 9px; border-bottom-right-radius: 9px; }
+.per-wkcal button:active { transform: scale(.94); }
+.per-wkfoot { min-height: 22px; }
+/* 11-25 Frank：交互手感照苹果那种——能点的东西，鼠标移上去、按下去都有一点反馈（不花哨：颜色过渡 + 轻微缩放）。只加动画，不动版面。
+   已有反馈的（.btn / .seg / .chip / .nav-item / 日历格）不重复；这里补齐其余能点的。 */
+.tabs button, .hub-tabs button, .per-it, .per-seg button, .rp-btn, .ask-hit, .ask-jump, .ask-exb, .ask-tr, .mi, .linkbtn, .new-btn, .ask-bar,
+.pgsum [role="button"], .d2-to, .todo-row, .todo-line, .t2-item, .info-i, .mt-card, .ask-chip button {
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .14s var(--spring);
+}
+.tabs button:active, .hub-tabs button:active, .per-it:active, .rp-btn:active, .ask-exb:active, .mi:active, .new-btn:active, .d2-to:active, .linkbtn:active { transform: scale(.96); }
+.ask-hit:active, .ask-jump:active, .ask-tr:active, .pgsum [role="button"]:active, .todo-row:active, .todo-line:active, .t2-item:active { transform: scale(.985); }
+.tabs button:hover:not(.on), .hub-tabs button:hover:not(.on) { color: var(--brand); }
+.pgsum [role="button"]:hover, .t2-item:hover, .todo-row:hover { background-color: var(--brand-soft); }
+.ask-bar:hover { box-shadow: 0 0 0 3px var(--brand-soft); }
+.info-i:hover { transform: scale(1.12); }
+.menu, .dp-pop, .ask-pop { transform-origin: top center; }
+.ask-pop { animation: menuIn .18s var(--spring); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
