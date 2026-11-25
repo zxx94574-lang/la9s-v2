@@ -10,6 +10,7 @@ import CodeReview from './pages/CodeReview.jsx';
 import Report from './pages/Report.jsx';
 import { Changes, Health } from './pages/Changes.jsx';
 import Decisions from './pages/Decisions.jsx';
+import PoProfit from './pages/PoProfit.jsx';
 import Bins from './pages/Bins.jsx';
 import { DirectiveGate, DirBar } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info, useStickyPagehead, useInstantTips } from './components/ui.jsx';
@@ -229,6 +230,7 @@ export default function App() {
     case 'attendance': view = <Attendance />; break;
     case 'kpi': view = <Kpi />; break;
     case 'margin': view = <MarginPage />; break;
+    case 'poprofit': view = <PoProfit />; break;
     case 'report': view = <Report />; break;
     case 'changes': view = <Changes />; break;
     case 'decisions': view = <Decisions />; break;

@@ -63,3 +63,36 @@ test('0095 审批三种模式: self 直接生效 / notify 生效 + 知会 / appr
   await assert.rejects(t.as(U.admin, `select app.decision_submit($1,'drop_table','x',null,'{}')`, [org]), /不能走审批/);
   await assert.rejects(t.as(U.manager, `select app.decision_submit($1,'promo','x',null,$2)`, [org, JSON.stringify(args)]), /PERMISSION/);
 });
+
+test('0096 按采购单看利润: 先进先出把出库分到批次, 收入按那几张单的单价, 成本按付款汇率', async () => {
+  const t = await setup();
+  const org = t.ids.org;
+  await t.as(U.admin, `select app.save_product_batch($1,null,$2)`, [t.ids.bg6mCover, JSON.stringify({ po_no: 'PO-A', ordered_on: '2026-09-01', qty: 6, currency: 'XOF', unit_price: 1000 })]);
+  await t.as(U.admin, `select app.save_product_batch($1,null,$2)`, [t.ids.bg6mCover, JSON.stringify({ po_no: 'PO-B', ordered_on: '2026-10-01', qty: 10, currency: 'CNY', unit_price: 10, pay_rate: 100 })]);
+  const d = await t.toConfirmed(t.ids.camaraAbobo, [{ product_id: t.ids.bg6mCover, qty_req: 10 }]);
+  await t.shipAll(d);
+  const price = Number((await t.lines(d))[0].unit_price);
+  const rows = await t.as(U.admin, `select * from app.po_profit($1)`, [org]);
+  const A = rows.find((r) => r.po_no === 'PO-A'); const B = rows.find((r) => r.po_no === 'PO-B');
+  assert.equal(A.sold, 6); assert.equal(A.left_qty, 0); assert.equal(Number(A.cost_sold), 6000);
+  assert.equal(B.sold, 4); assert.equal(B.left_qty, 6); assert.equal(Number(B.unit_cost), 1000 + Number((await t.one(`select freight_xof from app.products where id=$1`, [t.ids.bg6mCover])).freight_xof || 0));
+  assert.equal(B.rate_basis, '付款汇率');
+  assert.equal(Number(A.revenue), Math.round(6 * price)); assert.equal(Number(B.revenue), Math.round(4 * price));
+  assert.equal((await t.as(U.admin, `select * from app.po_profit($1,'PO-B')`, [org])).length, 1);
+  await assert.rejects(t.as(U.manager, `select * from app.po_profit($1)`, [org]), /PERMISSION/);
+});
+
+test('0097 退货坏货按原来出货的仓进对应报废仓: 9S 的进 SCRAP-9S, 没有对应的进默认报废仓', async () => {
+  const t = await setup();
+  const org = t.ids.org;
+  await t.one(`insert into app.warehouses (org_id, code, name, kind) values ($1,'SCRAP-9S','报废仓 9S','scrap') returning id`, [org]);
+  const d = await t.toConfirmed(t.ids.camaraAbobo, [{ product_id: t.ids.x6516, qty_req: 5 }]);
+  await t.shipAll(d);
+  const [l] = await t.lines(d);
+  const rt = await t.val(U.hotline, `select app.request_return($1,'quality','坏',$2)`, [d, JSON.stringify([{ line_id: l.id, qty: 2 }])]);
+  await t.as(U.admin, `select app.decide_return($1,true)`, [rt]);
+  const rl = await t.one(`select id from app.return_lines where return_id=$1`, [rt]);
+  await t.as(U.manager, `select app.inspect_return_line($1,0,2)`, [rl.id]);
+  const r = await t.one(`select w.code, s.qty_on_hand from app.stock_items s join app.warehouses w on w.id=s.warehouse_id where w.kind='scrap' and s.product_id=$1 and s.qty_on_hand > 0`, [t.ids.x6516]);
+  assert.equal(r.code, 'SCRAP-9S'); assert.equal(r.qty_on_hand, 2);
+});

@@ -320,7 +320,7 @@ function CostBlocks({ p, ps, batches, tier, priceOf, lockedOf, ed, setEd, onChan
           <span className="small muted">默认按日期，最新的在最上面</span></div>}
         <Grid id="pd-batches" compactTools rows={[...batches].sort((a, b) => String(dDate(b.ordered_on) || '').localeCompare(String(dDate(a.ordered_on) || '')))} empty="还没有批次。点「＋ 加一批」，或在「数据导入 → 采购批次」导金蝶采购订单。"
           selectable={role === 'admin' ? { selected: bsel, onChange: setBsel } : undefined} rowClass={(b) => (maxB && b.id === maxB.id && batches.length > 1 ? 'pd-max' : '')} columns={[
-            { key: 'po_no', label: '采购单号', w: 170, value: (b) => b.po_no || '', render: (b) => <span className="mono">{b.po_no || '—'}{b.source === 'kingdee' && <span className="muted small"> 金蝶</span>}</span> },
+            { key: 'po_no', label: '采购单号', w: 170, value: (b) => b.po_no || '', render: (b) => <span className="mono">{b.po_no ? <button type="button" className="linkbtn" title="看这张采购单的货卖了多少、赚了多少" onClick={() => { try { localStorage.setItem('la9s.poProfit', b.po_no); } catch { /* */ } window.location.hash = '#/poprofit'; }}>{b.po_no}</button> : '—'}{b.source === 'kingdee' && <span className="muted small"> 金蝶</span>}</span> },
             { key: 'ordered_on', label: '日期', w: 110, value: (b) => dDate(b.ordered_on) || '' },
             { key: 'qty', label: '数量', w: 90, type: 'number', render: (b) => qty(b.qty) },
             { key: 'unit_price', label: '采购单价', w: 110, value: (b) => N(b.unit_price), type: 'number', render: (b) => <>{b.currency === 'USD' ? '$' : b.currency === 'CNY' ? '¥' : ''}{+N(b.unit_price).toFixed(b.currency === 'USD' ? 4 : 2)}</> },

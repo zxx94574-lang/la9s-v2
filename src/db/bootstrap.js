@@ -114,9 +114,9 @@ export async function seedDemo(db) {
   }
 
   const wh = async (code, name, kind) => (await one(`insert into app.warehouses (org_id,code,name,kind,supplier) values ($1,$2,$3,$4,$5) returning id`,
-    [org, code, name, kind, code === '9S' ? '9S' : 'LA'])).id;
+    [org, code, name, kind, code.includes('9S') ? '9S' : 'LA'])).id;
   const W = { LA: await wh('LA', 'LA 仓', 'local'), S9: await wh('9S', '9S 仓', 'local'), FOB: await wh('FOB', 'FOB 仓', 'fob'),
-    PENDING: await wh('PENDING', '待检仓', 'pending'), SCRAP: await wh('SCRAP', '报废仓', 'scrap') };
+    PENDING: await wh('PENDING', '待检仓', 'pending'), SCRAP: await wh('SCRAP', '报废仓 LA', 'scrap'), SCRAP9: await wh('SCRAP-9S', '报废仓 9S', 'scrap') };
 
   await db.query(`insert into app.price_settings (org_id) values ($1)`, [org]);
   const P = {}; const ST = {};

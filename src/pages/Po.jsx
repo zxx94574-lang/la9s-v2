@@ -194,7 +194,7 @@ export function PoDrawer({ id, onClose }) {
     { key: 'kd_status', label: '金蝶', w: 110, value: (g) => g.kd_status, render: (g) => <Pill tone={g.kd_status === 'synced' ? 'green' : g.kd_status === 'saved' ? 'blue' : 'amber'}>{g.kd_status === 'synced' ? '已审核' : g.kd_status === 'saved' ? `已录 ${g.kd_no || ''}` : '待录金蝶'}</Pill> },
   ];
   return (
-    <Drawer title={<span className="row" style={{ gap: 8 }}>采购单 <span className="mono">{po.po_no}</span><Pill tone={PURPOSE[po.purpose || 'unknown'][1]}>{PURPOSE[po.purpose || 'unknown'][0]}</Pill>{po.fob_no && <Pill tone="amber">{po.fob_no}</Pill>}{!po.fob_no && po.purpose === 'fob' && (po.fob_customer_codes || []).length > 0 && <Pill tone="amber">{po.fob_customer_codes.join(',')}</Pill>}</span>} onClose={onClose}>
+    <Drawer title={<span className="row" style={{ gap: 8 }}>采购单 <span className="mono">{po.po_no}</span><Pill tone={PURPOSE[po.purpose || 'unknown'][1]}>{PURPOSE[po.purpose || 'unknown'][0]}</Pill>{po.fob_no && <Pill tone="amber">{po.fob_no}</Pill>}{!po.fob_no && po.purpose === 'fob' && (po.fob_customer_codes || []).length > 0 && <Pill tone="amber">{po.fob_customer_codes.join(',')}</Pill>}{role === 'admin' && <button type="button" className="btn sm soft" onClick={() => { try { localStorage.setItem('la9s.poProfit', po.po_no); } catch { /* */ } onClose(); window.location.hash = '#/poprofit'; }}>这单赚了多少 →</button>}</span>} onClose={onClose}>
       <DoneHost only={['grn']} />
       <div className="kv" style={{ marginBottom: 12 }}>
         <div><div className="k">需求批次</div><div className="v">{po.batch_name || '—'}</div></div>

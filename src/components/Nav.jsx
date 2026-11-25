@@ -17,7 +17,8 @@ export const ITEMS = {
   sop: ['▣', '培训与 SOP', 'work', []],
   attendance: ['⏱', '打卡', 'work', STAFF],
   kpi: ['⏲', '时效与准确率', 'work', ['admin']],
-  report: ['▤', '月报', 'cn', ['admin']],   // 11-25: 从经营总览挪出来, 单独一页
+  report: ['▤', '月报', 'cn', ['admin']],
+  poprofit: ['¥', '按采购单利润', 'cn', ['admin']],   // 11-25 Frank   // 11-25: 从经营总览挪出来, 单独一页
   margin: ['％', '毛利分析', 'cn', ['admin']],
   rules: ['⚙', '规则参数', 'cn', ['admin']],   // 350
   changes: ['≣', '变更记录', 'cn', ['admin']],   // 116
@@ -65,7 +66,7 @@ export const HUBS = {
   hotline: [['hotline', '热线回访'], ['visits', '客户拜访']],
   receipts: [['receipts', '收款与冲账'], ['balances', '客户总账'], ['cash', '资金账户']],
   pricing: [['pricing', '物料与定价'], ['materials', '物料名称'], ['codes', '编码甄别']],
-  report: [['report', '月报'], ['margin', '毛利分析'], ['kpi', '时效与准确率']],
+  report: [['report', '月报'], ['margin', '毛利分析'], ['poprofit', '按采购单利润'], ['kpi', '时效与准确率']],
   rules: [['rules', '规则参数'], ['decisions', '审批'], ['changes', '变更记录'], ['health', '系统健康']],
 };
 export const HUB_LABEL = { stock: '库存与库位', replenish: '备货与采购', customers: '客户档案', hotline: '热线与拜访', receipts: '收款与总账', pricing: '物料与定价', report: '报告', rules: '规则与系统' };

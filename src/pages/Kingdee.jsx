@@ -182,7 +182,7 @@ function SnapModal({ onClose, onDone }) {
 }
 
 // 系统收货 → 金蝶采购入库: FOB 那部分入 FOB 仓, 本地入 LA / 9S 仓 —— 这样金蝶也能分清 FOB 和本地备货
-export const KD_WH = { LA: 'CI LA Material WH', '9S': 'CI 9S Material WH', FOB: 'CI LA FOB Material WH' };
+export const KD_WH = { LA: 'CI LA Material WH', '9S': 'CI 9S Material WH', FOB: 'CI LA FOB Material WH', PENDING: 'CI Pending liability WH', SCRAP: 'CI Defective WH-LA', 'SCRAP-9S': 'CI Defective WH-9S' };
 function GrnList({ rows }) {
   const { role, toast, refresh } = useApp();
   const [no, setNo] = useState({});
