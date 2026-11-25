@@ -1,3 +1,4 @@
+import { submitDecision } from '../lib/decision.js';
 import { RuleGear } from '../components/Rules.jsx';
 import { DocSettings } from '../components/SettingsPanels.jsx';
 import { showDone } from '../components/Done.jsx';
@@ -1160,14 +1161,15 @@ function TierGate({ deal, info, act, role }) {
     </div>
   );
 }
-function BadDebtModal({ deal, act, onClose }) {
+function BadDebtModal({ deal, onClose }) {
+  const { org, role, toast, refresh } = useApp();
   const [amt, setAmt] = useState(String(N(deal.due)));
   const [reason, setReason] = useState('');
   const [proof, setProof] = useState('');
   const ok = N(amt) > 0 && N(amt) <= N(deal.due) && reason.trim() && proof;
   return (
     <Modal title={`坏账核销：${deal.biz_no}`} risk="red" onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{!reason.trim() ? '写原因' : !proof ? '传凭证' : `金额 1 – ${money(deal.due, deal.currency)}`}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={() => act(`已核销坏账 ${money(amt, deal.currency)}`, `select app.write_off_bad_debt($1,$2,$3,$4)`, [deal.id, N(amt), reason, proof || null]).then(onClose, () => {})}>确认核销</button></>}>
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" />{!ok && <span className="why">{!reason.trim() ? '写原因' : !proof ? '传凭证' : `金额 1 – ${money(deal.due, deal.currency)}`}</span>}<button type="button" className="btn primary" disabled={!ok} onClick={() => submitDecision(role, org, 'writeoff', `核销坏账：${deal.customer_name} ${deal.biz_no} ${money(amt, deal.currency)}`, { 客户: deal.customer_name, 订单: deal.biz_no, 金额: `${money(amt, deal.currency)} ${deal.currency}`, 还欠: `${money(deal.due, deal.currency)} ${deal.currency}`, 原因: reason }, { deal: deal.id, amount: N(amt), reason, proof: proof || null }, toast, `已核销坏账 ${money(amt, deal.currency)}`).then(() => { refresh(); onClose(); }, (e) => toast(friendlyError(e), 'err'))}>确认核销</button></>}>
       <div className="stack">
         <div className="hint">确认这笔钱收不回来才核销。核销后客户总账减少，但记录永久保留（谁、什么时候、多少、为什么），以后客户又付了照常登记收款。</div>
         <FRow label="核销金额" req><MoneyIn className="in" inputMode="decimal" style={{ width: 150 }} value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /><span className="small muted">{deal.currency}，本单还欠 {money(deal.due, deal.currency)}</span></FRow>

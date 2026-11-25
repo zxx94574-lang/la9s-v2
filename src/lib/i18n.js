@@ -40,6 +40,36 @@ const D = {
   // common buttons
   '复制图片': ['Copy image', 'Copier l’image'], '复制文字': ['Copy text', 'Copier le texte'], '打印': ['Print', 'Imprimer'],
   '保存': ['Save', 'Enregistrer'], '取消': ['Cancel', 'Annuler'], '确认': ['Confirm', 'Confirmer'], '搜索': ['Search', 'Rechercher'],
+  // 11-25: 页面标题 / 页签 / 列名 / 常用按钮（屏幕上整段文字完全一样时自动翻译，见 domTranslate）
+  '全部': ['All', 'Tout'], '关闭': ['Close', 'Fermer'], '确定': ['OK', 'OK'], '知道了': ['Got it', 'Compris'], '再看看': ['Not now', 'Plus tard'], '记下': ['Save', 'Noter'],
+  '✎ 修改': ['✎ Edit', '✎ Modifier'], '保存选项': ['Save options', 'Enregistrer'], '恢复默认': ['Reset', 'Par défaut'], '处理': ['Handle', 'Traiter'], '批准': ['Approve', 'Approuver'], '解锁': ['Unlock', 'Déverrouiller'],
+  '筛选': ['Filter', 'Filtrer'], '分组': ['Group', 'Grouper'], '导出': ['Export', 'Exporter'], '列': ['Columns', 'Colonnes'], '筛选方案': ['Saved filters', 'Filtres'], '卡片': ['Cards', 'Cartes'], '表格': ['Table', 'Tableau'],
+  '本日': ['Today', 'Aujourd’hui'], '本周': ['This week', 'Semaine'], '本月': ['This month', 'Mois'], '本季度': ['Quarter', 'Trimestre'], '本年度': ['Year', 'Année'], '自定义': ['Custom', 'Personnalisé'],
+  '订单': ['Orders', 'Commandes'], '订单号': ['Order no.', 'N° commande'], '单号': ['No.', 'N°'], '单': ['orders', 'cmd'], '笔': ['items', 'lignes'], '下单': ['Order', 'Commander'], '询单': ['Inquiries', 'Demandes'], '询单号': ['Inquiry no.', 'N° demande'],
+  '出库单': ['Delivery notes', 'Bons de sortie'], '出库单号': ['Delivery no.', 'N° bon de sortie'], '出库数量': ['Qty shipped', 'Qté sortie'], '出库片数': ['Pcs shipped', 'Pcs sorties'], '出库日': ['Ship date', 'Date sortie'], '出库日期': ['Ship date', 'Date sortie'], '最近出库': ['Last shipped', 'Dernière sortie'],
+  '入库': ['Receive', 'Entrée'], '入仓号': ['Warehouse entry no.', 'N° d’entrée'], '箱号': ['Box no.', 'N° carton'], '发货文件': ['Shipping docs', 'Documents d’envoi'], '发货日': ['Ship date', 'Date d’envoi'], '发货时间': ['Shipped at', 'Envoyé le'],
+  '付款': ['Payment', 'Paiement'], '已付': ['Paid', 'Payé'], '未付': ['Unpaid', 'Impayé'], '凭证': ['Proof', 'Justificatif'], '照片': ['Photo', 'Photo'], '找货照片': ['Picking photo', 'Photo préparation'],
+  '件数': ['Pieces', 'Pièces'], '片数': ['Pieces', 'Pièces'], '型号数': ['Models', 'Modèles'], '机型': ['Models', 'Modèles'], '通用型号': ['Compatible models', 'Modèles compatibles'], '品牌': ['Brand', 'Marque'], '物料编码': ['Item code', 'Code article'], '物料名称': ['Item name', 'Nom article'],
+  '单价 CNY': ['Unit price CNY', 'Prix unitaire CNY'], '金额 XOF': ['Amount XOF', 'Montant XOF'], '成本': ['Cost', 'Coût'], '利润': ['Profit', 'Marge'], '毛利率': ['Margin %', 'Taux de marge'], '销售额': ['Sales', 'Chiffre d’affaires'], '占比': ['Share', 'Part'], '档位': ['Tier', 'Catégorie'], '档位价': ['Tier price', 'Prix catégorie'],
+  '库存': ['Stock', 'Stock'], '实存': ['On hand', 'En stock'], '预占': ['Reserved', 'Réservé'], '可售': ['Available', 'Disponible'], '在途': ['In transit', 'En transit'], '库位': ['Bin', 'Emplacement'], '批次': ['Batch', 'Lot'], '还没到': ['Not arrived', 'Pas arrivé'], '预计到': ['ETA', 'Arrivée prévue'], '预计到货': ['ETA', 'Arrivée prévue'],
+  '客户编码': ['Customer code', 'Code client'], '客户总账': ['Customer ledger', 'Compte client'], '客户账号': ['Customer accounts', 'Comptes clients'], '客户门店': ['Customer shops', 'Boutiques clients'], '门店': ['Shops', 'Boutiques'], '店': ['Shop', 'Boutique'], '我的门店': ['My shops', 'Mes boutiques'], '我的订单': ['My orders', 'Mes commandes'], '我的对账': ['My statement', 'Mon relevé'], '店里库存': ['Shop stock', 'Stock boutique'],
+  '员工': ['Staff', 'Employé'], '员工与工资': ['Staff & payroll', 'Personnel et paie'], '工号': ['Staff ID', 'Matricule'], '全称': ['Full name', 'Nom complet'], '简称': ['Short name', 'Nom court'], '部门': ['Department', 'Service'], '职位': ['Position', 'Poste'], '负责城市': ['City', 'Ville'], '销售员': ['Sales rep', 'Commercial'],
+  '电话': ['Phone', 'Téléphone'], '地址': ['Address', 'Adresse'], '城市': ['City', 'Ville'], '地点': ['Place', 'Lieu'], '名字': ['Name', 'Nom'], '账号': ['Account', 'Compte'], '账户': ['Account', 'Compte'],
+  '状态': ['Status', 'Statut'], '类型': ['Type', 'Type'], '日期': ['Date', 'Date'], '时间': ['Time', 'Heure'], '哪天': ['Date', 'Date'], '什么时候': ['When', 'Quand'], '开始': ['Start', 'Début'], '到期日': ['Due date', 'Échéance'], '方式': ['Method', 'Mode'], '来源': ['Source', 'Source'], '用途': ['Purpose', 'Usage'],
+  '原因': ['Reason', 'Motif'], '备注': ['Note', 'Remarque'], '说明': ['Note', 'Remarque'], '结果': ['Result', 'Résultat'], '动作': ['Action', 'Action'], '谁': ['Who', 'Qui'], '谁提的': ['Requested by', 'Demandé par'], '改了什么': ['What changed', 'Modification'],
+  '超期': ['Overdue', 'En retard'], '核对': ['Check', 'Vérifier'], '区分': ['Kind', 'Type'], '业务': ['Business', 'Activité'], '项目': ['Project', 'Projet'], '货': ['Goods', 'Marchandise'], '系统': ['System', 'Système'], '金蝶': ['Kingdee', 'Kingdee'], '金蝶单号': ['Kingdee no.', 'N° Kingdee'], '金蝶状态': ['Kingdee status', 'Statut Kingdee'],
+  '需求数量': ['Qty asked', 'Qté demandée'], '订单数量': ['Order qty', 'Qté commandée'], '本次退货数量': ['Return qty', 'Qté retournée'], '采购数': ['Qty ordered', 'Qté achetée'], '被问次数': ['Times asked', 'Demandes'], '下次跟进': ['Next follow-up', 'Prochain suivi'], '客户怎么说': ['Customer said', 'Le client dit'], '客户说哪天付': ['Promised pay date', 'Date promise'],
+  '收款单': ['Receipts', 'Encaissements'], '收款单号': ['Receipt no.', 'N° encaissement'], '收到日期': ['Received on', 'Reçu le'], '采购单': ['Purchase orders', 'Bons d’achat'], '采购单号': ['PO no.', 'N° bon d’achat'], '采购单与到货': ['POs & arrivals', 'Achats et arrivages'], '采购与物资申请': ['Purchases & supplies', 'Achats et fournitures'], '物资申请': ['Supply requests', 'Demandes de fournitures'], '需求批次': ['Request batch', 'Lot de demande'],
+  'FOB 项目': ['FOB projects', 'Projets FOB'], 'FOB 客户': ['FOB customer', 'Client FOB'], '转本地': ['To local', 'Vers local'],
+  // page titles / tabs
+  '月报': ['Monthly report', 'Rapport mensuel'], '毛利分析': ['Margins', 'Marges'], '时效与准确率': ['Speed & accuracy', 'Délais et précision'], '规则参数': ['Rules', 'Règles'], '审批': ['Approvals', 'Validations'], '变更记录': ['Change log', 'Journal'], '系统健康': ['System health', 'Santé système'],
+  '库位与盘点': ['Bins & count', 'Emplacements et inventaire'], '金蝶同步': ['Kingdee sync', 'Synchro Kingdee'], '国内财务': ['China finance', 'Finance Chine'], '打卡': ['Clock in', 'Pointage'], '培训与 SOP': ['Training & SOP', 'Formation et SOP'], '编码甄别': ['Code review', 'Revue des codes'], '物料名称管理': ['Item names', 'Noms des articles'],
+  '经营总览 ': ['Dashboard', 'Tableau de bord'], '库存与库位': ['Stock & bins', 'Stock et emplacements'], '备货与采购': ['Replenish & buy', 'Réassort et achats'], '热线与拜访': ['Hotline & visits', 'Hotline et visites'], '收款与总账': ['Receipts & ledger', 'Encaissements et comptes'], '报告': ['Reports', 'Rapports'], '规则与系统': ['Rules & system', 'Règles et système'],
+  '新订单': ['New order', 'Nouvelle commande'], '进行中': ['In progress', 'En cours'], '草稿': ['Draft', 'Brouillon'], '已完成': ['Done', 'Terminé'], '创建时间': ['Created', 'Créé le'], '订单状态': ['Order status', 'Statut'],
+  '按订单看': ['By order', 'Par commande'], '按机型看': ['By model', 'Par modèle'], '出库单 / BL': ['Delivery / BL', 'Sorties / BL'], '测试版': ['Test', 'Test'], '返回': ['Back', 'Retour'], '前进': ['Forward', 'Suivant'],
+  '科特迪瓦 · 中方管理': ['Côte d’Ivoire · Management', 'Côte d’Ivoire · Direction'], '卡在哪一步': ['Stuck at', 'Bloqué à'], '单据阶段': ['Stage', 'Étape'], '要你注意的': ['Needs attention', 'À surveiller'],
+  '首页': ['Home', 'Accueil'], '待办': ['Tasks', 'Tâches'], '更多': ['More', 'Plus'], '销量': ['Sold', 'Vendu'], '本地备货': ['Local stock', 'Stock local'], '待录': ['To enter', 'À saisir'], '已录': ['Entered', 'Saisi'], '不用录': ['Skip', 'Ignorer'],
+  '库位图': ['Bin map', 'Plan'], '待上架': ['To shelve', 'À ranger'], '盘点': ['Stock count', 'Inventaire'], '门店账号': ['Shop accounts', 'Comptes boutiques'], '客人': ['Guest', 'Visiteur'],
 };
 export function t(zh) {
   if (LANG === 'zh' || zh == null) return zh;
@@ -48,3 +78,28 @@ export function t(zh) {
 }
 // share of a Chinese string list that has a translation (shown in settings so nobody mistakes partial for done)
 export const coverage = () => Object.keys(D).length;
+
+// 屏幕上的文字整段等于词表里的中文时，切到英 / 法自动换掉（列名、按钮、页签、标题…）；切回中文还原。
+// 句子 / 带数字的文字不动 —— 那些要页面自己用 t()。
+const ORIG = new WeakMap(); const OUT = new WeakMap();
+let obs = null;
+const HAN = /[一-鿿]/;
+function fix(node) {
+  if (node.nodeType !== 3) return;
+  const raw = ORIG.has(node) ? ORIG.get(node) : node.nodeValue;
+  if (!raw || !HAN.test(raw)) return;
+  let k = raw.trim(); let e = D[k];
+  if (!e) { const m = k.match(/^([^\u4e00-\u9fff]*?)([\u4e00-\u9fff][^]*?)([\s\d.,·:：%]*)$/); if (m && D[m[2].trim()]) { k = m[2].trim(); e = D[k]; } }
+  if (LANG === 'zh') { if (ORIG.has(node) && node.nodeValue !== raw) { OUT.set(node, raw); node.nodeValue = raw; } return; }
+  if (!e) return;
+  const v = raw.replace(k, e[LANG === 'en' ? 0 : 1]);
+  if (node.nodeValue !== v) { ORIG.set(node, raw); OUT.set(node, v); node.nodeValue = v; }
+}
+function walk(root) { const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (!n.parentElement?.closest('input,textarea,[contenteditable],.no-tr,.doc,.bl-sheet')) fix(n); } }
+export function domTranslate() {
+  if (typeof document === 'undefined') return;
+  walk(document.body);
+  if (obs) return;
+  obs = new MutationObserver((ms) => { for (const m of ms) { if (m.type === 'characterData') { const n = m.target; if (OUT.get(n) === n.nodeValue) continue; if (!n.parentElement?.closest('input,textarea,.no-tr,.doc')) { ORIG.delete(n); OUT.delete(n); fix(n); } } else m.addedNodes.forEach((x) => (x.nodeType === 3 ? fix(x) : x.nodeType === 1 && walk(x))); } });
+  obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+}

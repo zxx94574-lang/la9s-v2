@@ -1,6 +1,7 @@
 // 特价表 (Frank 11-17 清仓价表 → 11-18 改: 大部分叫「促销价」, 名字中方自己定义). 一条 = 名字 + 型号 + 价 + 起止日期 + 适用对象 + 原因. 只中方.
 // 生效期间: ① 自动成为适用客户的单价 (比档位价低才生效, 规则在 0059 tier_price)  ② 卖价不低于它的行不被「会亏」拦住 (0052).
 // 卖价不低于生效清仓价的行, 不再被「会亏」拦住 (规则在 0052).
+import { submitDecision } from '../lib/decision.js';
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Modal, FRow, Info, Choice, DatePicker, Pill, Assumed, MoneyIn, TierPill } from './ui.jsx';
@@ -45,8 +46,12 @@ export default function ClearanceCard({ products }) {
     if (!f.note.trim()) return toast('写原因（谁定的、为什么给这个价）', 'err');
     if (f.scope === 'tier' && !f.tiers.length) return toast('选适用的档位', 'err'); if (f.scope === 'cust' && !f.custs.length) return toast('选适用的客户', 'err');
     try {
-      await call(role, `select app.set_promo($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [org, f.product, Number(f.price), f.range[0], f.range[1], f.scope === 'tier' ? f.tiers : null, f.scope === 'cust' ? f.custs : null, f.note.trim(), f.label || '促销价']);
-      toast(`${f.label || '促销价'}已生效，适用客户的报价会自动带出这个价`); setForm(null); refresh();
+      const [pm] = await q(`select p.code, p.model, c.name as category from app.products p join app.categories c on c.id = p.category_id where p.id = $1`, [f.product]);
+      await submitDecision(role, org, 'promo', `${f.label || '促销价'}：${pm ? `${pm.category || ''} ${pm.model}` : '型号'} ${Number(f.price).toLocaleString('en-US')}（${f.range[0]} → ${f.range[1]}）`,
+        { 型号: pm ? `${pm.code || ''} ${pm.category || ''} ${pm.model}` : f.product, 价格: Number(f.price), 名字: f.label || '促销价', 起止: `${f.range[0]} → ${f.range[1]}`, 适用: f.scope === 'tier' ? f.tiers.join(' / ') : f.scope === 'cust' ? `${f.custs.length} 个客户` : '所有客户', 原因: f.note.trim() },
+        { product: f.product, price: Number(f.price), from: f.range[0], to: f.range[1], tiers: f.scope === 'tier' ? f.tiers : null, customers: f.scope === 'cust' ? f.custs : null, note: f.note.trim(), label: f.label || '促销价' },
+        toast, `${f.label || '促销价'}已生效，适用客户的报价会自动带出这个价`);
+      setForm(null); refresh();
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
   const live = data.filter((r) => state(r)[0] === '生效中').length;

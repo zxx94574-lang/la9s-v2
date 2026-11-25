@@ -29,13 +29,16 @@ export function costModel(p, ps, batches = []) {
   const rawXof = rmb != null ? rmb / rate : null;
   const raw = rmb != null ? rawXof + (defFreight ?? 0) : null;
   const landed = raw != null ? ceilTo(raw, step) : null;
-  const toXof = (b) => (b.currency === 'USD' ? N(b.unit_price) * usd : b.currency === 'XOF' ? N(b.unit_price) : N(b.unit_price) / rate);
+  const toXofNow = (b) => (b.currency === 'USD' ? N(b.unit_price) * usd : b.currency === 'XOF' ? N(b.unit_price) : N(b.unit_price) / rate);
+  const toXofPaid = (b) => (b.currency !== 'XOF' && N(b.pay_rate) > 0 ? N(b.unit_price) * N(b.pay_rate) : 0);
+  // 329: 按付款时实际汇率 和 按最新定价汇率 两种都算，取贵的（保守定价）
+  const toXof = (b) => Math.max(toXofNow(b), toXofPaid(b));
   const bFreight = (b) => (N(b.freight_total) > 0 && N(b.freight_pieces) > 0 ? { v: ceilTo(N(b.freight_total) / N(b.freight_pieces), 50), how: 'batch' }
     : b.freight_xof != null ? { v: N(b.freight_xof), how: 'piece' } : defFreight != null ? { v: defFreight, how: 'default' } : { v: 0, how: 'none' });
   const bRaw = (b) => toXof(b) + bFreight(b).v;
   const bLanded = (b) => ceilTo(bRaw(b), step);
   const maxB = batches.length ? batches.reduce((m, b) => (bLanded(b) > bLanded(m) ? b : m), batches[0]) : null;
-  return { rate, usd, step, defFreight, rmb, rawXof, raw, landed, toXof, bFreight, bRaw, bLanded, maxB, maxCost: maxB ? bLanded(maxB) : null };
+  return { rate, usd, step, defFreight, rmb, rawXof, raw, landed, toXof, toXofNow, toXofPaid, bFreight, bRaw, bLanded, maxB, maxCost: maxB ? bLanded(maxB) : null };
 }
 
 // 自检: 红 = 肯定有问题, 黄 = 可能有问题 (Frank 11-11 208 三色)
@@ -312,7 +315,7 @@ function CostBlocks({ p, ps, batches, tier, priceOf, lockedOf, ed, setEd, onChan
           {role === 'admin' && !adding && <button type="button" className="btn sm" onClick={() => setAdding({ po_no: '', ordered_on: today(), qty: '', currency: 'CNY', unit_price: '', freight_total: '', freight_pieces: '' })}>＋ 加一批</button>}</div>
         {adding && <div className="tscroll"><table className="t"><tbody><BatchForm p={p} f={adding} setF={setAdding} role={role} toast={toast} onDone={() => { setAdding(null); onChanged(); }} /></tbody></table></div>}
         {role === 'admin' && batches.length > 0 && <div className="row" style={{ gap: 6, margin: '6px 0' }}>
-          <button type="button" className="btn sm" disabled={bsel.size !== 1} title={bsel.size === 1 ? '' : '先勾选一批'} onClick={() => { const b = batches.find((x) => bsel.has(x.id)); setAdding({ ...b, id: b.id, freight_total: b.freight_total ?? '', freight_pieces: b.freight_pieces ?? '', unit_price: String(b.unit_price), qty: String(b.qty) }); }}>填这批的运费</button>
+          <button type="button" className="btn sm" disabled={bsel.size !== 1} title={bsel.size === 1 ? '' : '先勾选一批'} onClick={() => { const b = batches.find((x) => bsel.has(x.id)); setAdding({ ...b, id: b.id, freight_total: b.freight_total ?? '', freight_pieces: b.freight_pieces ?? '', pay_rate: b.pay_rate ?? '', unit_price: String(b.unit_price), qty: String(b.qty) }); }}>改这批（运费 / 汇率）</button>
           <ConfirmBtn className="btn sm soft-red" disabled={bsel.size !== 1} tip={bsel.size === 1 ? '' : '先勾选一批'} title="删掉这一批采购记录？" body={'删了找不回来。这个型号的到岸成本会按剩下的批次重新算，挂牌价可能跟着变。'} okText="确认删掉" risk="red" onOk={async () => { const b = batches.find((x) => bsel.has(x.id)); try { await call(role, `select app.delete_product_batch($1)`, [b.id]); toast('已删掉这批'); setBsel(new Set()); onChanged(); } catch (e) { toast(friendlyError(e), 'err'); } }}>删掉这批</ConfirmBtn>
           <span className="small muted">默认按日期，最新的在最上面</span></div>}
         <Grid id="pd-batches" compactTools rows={[...batches].sort((a, b) => String(dDate(b.ordered_on) || '').localeCompare(String(dDate(a.ordered_on) || '')))} empty="还没有批次。点「＋ 加一批」，或在「数据导入 → 采购批次」导金蝶采购订单。"
@@ -321,7 +324,8 @@ function CostBlocks({ p, ps, batches, tier, priceOf, lockedOf, ed, setEd, onChan
             { key: 'ordered_on', label: '日期', w: 110, value: (b) => dDate(b.ordered_on) || '' },
             { key: 'qty', label: '数量', w: 90, type: 'number', render: (b) => qty(b.qty) },
             { key: 'unit_price', label: '采购单价', w: 110, value: (b) => N(b.unit_price), type: 'number', render: (b) => <>{b.currency === 'USD' ? '$' : b.currency === 'CNY' ? '¥' : ''}{+N(b.unit_price).toFixed(b.currency === 'USD' ? 4 : 2)}</> },
-            { key: 'xof', label: '折合 XOF', w: 100, type: 'number', value: (b) => Math.round(cm.toXof(b)), render: (b) => money(Math.round(cm.toXof(b))) },
+            { key: 'pay_rate', label: '付款汇率', w: 110, type: 'number', value: (b) => N(b.pay_rate) || null, render: (b) => (b.currency === 'XOF' ? '—' : N(b.pay_rate) > 0 ? <span title={`1 ${b.currency} = ${b.pay_rate} XOF（付这批货款时的实际汇率）`}>{+N(b.pay_rate).toFixed(2)}</span> : <span className="pill amber" title="没填就只按最新定价汇率算">没填</span>) },
+            { key: 'xof', label: '折合 XOF', w: 130, type: 'number', value: (b) => Math.round(cm.toXof(b)), render: (b) => { const now = cm.toXofNow(b), paid = cm.toXofPaid(b); return <span title={`按最新汇率 ${money(Math.round(now))}${paid ? ` · 按付款汇率 ${money(Math.round(paid))}` : ''}，取贵的`}>{money(Math.round(cm.toXof(b)))}{paid > 0 && <span className="small muted"> {paid >= now ? '付款价' : '新汇率'}</span>}</span>; } },
             { key: 'freight', label: '每片运费', w: 110, type: 'number', value: (b) => cm.bFreight(b).v, render: (b) => { const fr = cm.bFreight(b); return fr.how === 'none' ? <span className="pill amber">没填</span> : <span title={fr.how === 'batch' ? `${money(b.freight_total)} ÷ ${qty(b.freight_pieces)} 片 → 进到 ${money(fr.v)}` : ''}>{money(fr.v)}{fr.how === 'default' && <span className="small muted"> 默认</span>}</span>; } },
             { key: 'landed', label: '到岸', w: 130, type: 'number', value: (b) => cm.bLanded(b), render: (b) => <><b>{money(cm.bLanded(b))}</b> <span className="small muted">实际 {money(Math.round(cm.bRaw(b)))}</span>{maxB && b.id === maxB.id && batches.length > 1 && <span className="small red-t2"> 最贵</span>}</> },
             { key: 'delta', label: '比当前成本', w: 110, type: 'number', value: (b) => (landed != null ? cm.bLanded(b) - landed : null), render: (b) => { const d = landed != null ? cm.bLanded(b) - landed : null; return <span className={d > 0 ? 'red-t2' : d < 0 ? 'green-t2' : ''}>{d == null ? '—' : d === 0 ? '持平' : `${d > 0 ? '+' : ''}${money(d)}`}</span>; } },
@@ -337,7 +341,7 @@ function BatchForm({ p, f, setF, role, toast, onDone }) {
   const per = N(f.freight_total) > 0 && N(f.freight_pieces) > 0 ? ceilTo(N(f.freight_total) / N(f.freight_pieces), 50) : null;
   const save = async () => {
     const payload = { po_no: f.po_no, ordered_on: f.ordered_on ? String(f.ordered_on).slice(0, 10) : '', qty: Number(f.qty), currency: f.currency, unit_price: Number(f.unit_price),
-      freight_xof: f.freight_xof === '' || f.freight_xof == null ? null : Number(f.freight_xof), freight_total: f.freight_total === '' ? null : Number(f.freight_total), freight_pieces: f.freight_pieces === '' ? null : Number(f.freight_pieces), note: f.note || '' };
+      freight_xof: f.freight_xof === '' || f.freight_xof == null ? null : Number(f.freight_xof), freight_total: f.freight_total === '' ? null : Number(f.freight_total), freight_pieces: f.freight_pieces === '' ? null : Number(f.freight_pieces), note: f.note || '', pay_rate: f.pay_rate === '' || f.pay_rate == null ? null : Number(f.pay_rate) };
     try { await call(role, `select app.save_product_batch($1,$2,$3)`, [p.id, f.id || null, JSON.stringify(payload)]); toast(f.id ? '这批已更新' : '这批已记下'); onDone(); }
     catch (e) { toast(friendlyError(e), 'err'); }
   };
@@ -348,6 +352,7 @@ function BatchForm({ p, f, setF, role, toast, onDone }) {
       <td><MoneyIn className="in sm" inputMode="numeric" value={f.qty} onChange={num('qty', /\D/g)} style={{ width: 70 }} /></td>
       <td><span className="row" style={{ gap: 4 }}><select className="in sm" value={f.currency} onChange={set('currency')}><option value="CNY">¥</option><option value="USD">$</option><option value="XOF">XOF</option></select>
         <MoneyIn className="in sm" inputMode="decimal" value={f.unit_price} onChange={num('unit_price')} style={{ width: 80 }} /></span></td>
+      <td>{f.currency !== 'XOF' && <MoneyIn className="in sm" inputMode="decimal" value={f.pay_rate ?? ''} onChange={num('pay_rate')} placeholder={`1 ${f.currency} = ? XOF`} title="付这批货款时的实际汇率；不知道就空着" style={{ width: 96 }} />}</td>
       <td colSpan={3}><span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
         <MoneyIn className="in sm" inputMode="decimal" value={f.freight_total} onChange={num('freight_total')} placeholder="这批总运费" style={{ width: 100 }} />÷
         <MoneyIn className="in sm" inputMode="numeric" value={f.freight_pieces} onChange={num('freight_pieces', /\D/g)} placeholder="总片数" style={{ width: 80 }} />

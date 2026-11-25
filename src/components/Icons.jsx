@@ -44,7 +44,7 @@ export const ROUTE_ICON = {
   dashboard: 'grid', todo: 'checklist', sop: 'book', attendance: 'clock', kpi: 'gauge', margin: 'percent', rules: 'sliders', codes: 'barcode',
   orders: 'clipboard', inquiry: 'ask', fob: 'ship', accounts: 'badge', customers: 'users', hotline: 'phone', visits: 'pin', stores: 'store',
   receipts: 'cash', balances: 'invoice', cash: 'wallet', kingdee: 'sync', stock: 'box', count: 'checklist', bins: 'layout', po: 'truck', cnfin: 'wallet', replenish: 'trend', unmet: 'alert', purchase: 'cart',
-  pricing: 'tag', report: 'invoice', changes: 'list', health: 'gauge', materials: 'pencil', staff: 'person', import: 'upload', nav: 'layout',
+  pricing: 'tag', report: 'invoice', changes: 'list', decisions: 'checklist', health: 'gauge', materials: 'pencil', staff: 'person', import: 'upload', nav: 'layout',
   'p/shop': 'plus', 'p/orders': 'list', 'p/pos': 'calc', 'p/stock': 'box', 'p/balance': 'invoice', 'p/stores': 'store',
 };
 let OVERRIDE = {};

@@ -10,6 +10,7 @@ import { PermPanel, ExportPanel, DocSettings } from './SettingsPanels.jsx';
 import { IconLibrary } from './Icons.jsx';
 import { ITEMS as NAV_ITEMS } from './Nav.jsx';
 import { friendlyError } from '../lib/format.js';
+import { submitDecision } from '../lib/decision.js';
 
 // [id, 存在 org_settings 的 key, 字段, 说明, 默认值, 单位, 类型 num|bool|text, home]
 export const RULES = [
@@ -50,6 +51,7 @@ export const RULES = [
   ['att.late_deduct', 'late_rules', 'deduct', '没报备 / 超过次数的迟到：扣当天出勤', true, '', 'bool', { page: 'attendance', where: '打卡' }],
   // 经营总览 (待改 487–506, Frank 11-23): 都在看板对应的板块上就地改
   ['price.rate_drift', 'dash_rules', 'rate_drift_pct', '汇率提醒：最近一笔汇回的实际汇率和定价汇率差多少 % 就提醒调定价', 2, '%', 'num', { page: 'dashboard', where: '经营总览 · 要你注意的' }],
+  ['price.rate_basis', 'dash_rules', 'rate_basis', '汇率提醒拿哪个比：最近一笔汇回 / 最近 30 天平均', 'avg30', '', 'sel', { page: 'dashboard', where: '经营总览 · 要你注意的', opts: [['last', '最近一笔'], ['avg30', '30 天平均']] }],
   ['dash.budget', 'dash_rules', 'budget_cny', '销售：本月预算（国内给的月预算，0 = 不显示进度条）', 0, 'CNY', 'num', { page: 'dashboard', where: '经营总览 · 销售' }],
   ['dash.age1', 'dash_rules', 'age1', '库龄：超过多少天标黄', 30, '天', 'num', { page: 'dashboard', where: '经营总览 · 库存' }],
   ['dash.age2', 'dash_rules', 'age2', '库龄：超过多少天标红（严重超期）', 120, '天', 'num', { page: 'dashboard', where: '经营总览 · 库存' }],
@@ -90,6 +92,7 @@ export const META = {
   'att.late_free': { area: 'staff', short: '报备的迟到 · 每月免扣几次', src: 'Frank 11-23 定', apply: '员工点了「迟到报备」的迟到', effect: '前几次标黄不扣，超过照扣当天' },
   'att.late_deduct': { area: 'staff', short: '迟到扣当天', src: 'Frank 11-23 定', apply: '没报备 / 超过次数的迟到', effect: '那天不算出勤，工资少一天' },
   'price.rate_drift': { area: 'sys', short: '汇率变动提醒 · 差几 %', src: 'Frank 11-16（待改 329）', apply: '经营总览「要你注意的」', effect: '实际汇回汇率偏离定价汇率超过这个数就提醒去「汇率与取整」调' },
+  'price.rate_basis': { area: 'sys', short: '汇率提醒 · 比哪个', src: 'Frank 11-25：拿不准就两个都做、默认平均', apply: '经营总览「要你注意的」', effect: '最近一笔反应快但会被单笔特殊价带偏；30 天平均稳', me: true },
   'dash.budget': { area: 'sys', short: '看板 · 本月销售预算', src: '国内每月给的预算', apply: '经营总览销售卡片', effect: '显示预算达成进度条' },
   'dash.age1': { area: 'po', short: '库龄 · 标黄天数', src: 'Frank 11-23 定', apply: '经营总览库存', effect: '这段库存标黄' },
   'dash.age2': { area: 'po', short: '库龄 · 标红天数', src: 'Frank 11-23 定（国内严重超期线）', apply: '经营总览库存', effect: '这段库存标红' },
@@ -131,7 +134,7 @@ export function useRuleValues(ids) {
 const valOf = (data, r) => { const v = data?.find((x) => x.key === r[1])?.value?.[r[2]]; return v ?? r[4]; };
 export const ruleNum = (data, id) => Number(valOf(data, BY_ID[id]));
 export const ruleVal = (data, id) => valOf(data, BY_ID[id]);
-export const fmtRule = (data, id) => { const r = BY_ID[id]; const v = valOf(data, r); return r[6] === 'bool' ? (v ? '开' : '关') : r[6] === 'num' ? `${Number(v).toLocaleString('en-US')} ${r[5]}` : String(v); };
+export const fmtRule = (data, id) => { const r = BY_ID[id]; const v = valOf(data, r); return r[6] === 'sel' ? ((r[7]?.opts || []).find((o) => o[0] === v)?.[1] || String(v)) : r[6] === 'bool' ? (v ? '开' : '关') : r[6] === 'num' ? `${Number(v).toLocaleString('en-US')} ${r[5]}` : String(v); };
 
 // 一组规则的编辑行 (改一格存一格, 立即生效)
 export function RuleRows({ ids, short }) {
@@ -142,6 +145,7 @@ export function RuleRows({ ids, short }) {
   const save = async (r, v) => {
     try {
       const old = data.find((x) => x.key === r[1])?.value || {};
+      if (r[1] === 'price_rules') { await submitDecision(role, org, 'price_rules', `改价规则：${r[3].split('：')[1] || r[3]} → ${v}`, { 改前: old[r[2]] ?? r[4], 改后: v }, { value: { ...old, [r[2]]: v } }, toast, `已保存：${r[3].split('：')[0]}，立即生效`); refresh(); return; }
       await call(role, `select app.set_org_setting($1,$2,$3)`, [org, r[1], JSON.stringify({ ...old, [r[2]]: v })]);
       toast(`已保存：${r[3].split('：')[0]}，立即生效`); refresh();
     } catch (e) { toast(friendlyError(e), 'err'); }
@@ -155,6 +159,9 @@ export function RuleRows({ ids, short }) {
         if (r[6] === 'bool') return (
           <label key={id} className="rule-row"><span className="grow">{label}</span>
             <input type="checkbox" checked={!!v} onChange={(e) => save(r, e.target.checked)} /></label>);
+        if (r[6] === 'sel') return (
+          <div key={id} className="rule-row"><span className="grow">{label}</span>
+            <span className="seg sm">{(r[7]?.opts || []).map(([k, l]) => <button type="button" key={k} className={v === k ? 'on' : ''} onClick={() => v !== k && save(r, k)}>{l}</button>)}</span></div>);
         if (r[6] === 'text') return (
           <div key={id} className="rule-row"><span className="grow">{label}</span>
             <input className="in" style={{ width: 130 }} value={draft[id] ?? v} onChange={(e) => setDraft({ ...draft, [id]: e.target.value })}
@@ -231,7 +238,9 @@ function RuleLines({ ids, data }) {
   const [draft, setDraft] = useState({});
   if (!data) return <div className="small muted">加载中…</div>;
   const save = async (r, v) => {
-    try { const old = data.find((x) => x.key === r[1])?.value || {}; await call(role, `select app.set_org_setting($1,$2,$3)`, [org, r[1], JSON.stringify({ ...old, [r[2]]: v })]); toast(`已保存：${META[r[0]]?.short || r[3]}，立即生效`); refresh(); }
+    try { const old = data.find((x) => x.key === r[1])?.value || {};
+      if (r[1] === 'price_rules') { await submitDecision(role, org, 'price_rules', `改价规则：${META[r[0]]?.short || r[3]} → ${v}`, { 改前: old[r[2]] ?? r[4], 改后: v }, { value: { ...old, [r[2]]: v } }, toast, `已保存：${META[r[0]]?.short || r[3]}，立即生效`); refresh(); return; }
+      await call(role, `select app.set_org_setting($1,$2,$3)`, [org, r[1], JSON.stringify({ ...old, [r[2]]: v })]); toast(`已保存：${META[r[0]]?.short || r[3]}，立即生效`); refresh(); }
     catch (e) { toast(friendlyError(e), 'err'); }
   };
   return (
@@ -239,6 +248,8 @@ function RuleLines({ ids, data }) {
       const r = BY_ID[id]; const m = META[id] || {}; const v = valOf(data, r);
       const ctl = r[6] === 'bool'
         ? <button type="button" className={`pill ${v ? 'green' : 'gray'} rl-tog`} onClick={() => save(r, !v)}>{v ? '开' : '关'}</button>
+        : r[6] === 'sel'
+          ? <span className="seg sm">{(r[7]?.opts || []).map(([k, l]) => <button type="button" key={k} className={v === k ? 'on' : ''} onClick={() => v !== k && save(r, k)}>{l}</button>)}</span>
         : r[6] === 'text'
           ? <input className="in rl-in" value={draft[id] ?? v} onChange={(e) => setDraft({ ...draft, [id]: e.target.value })} onBlur={(e) => { const x = e.target.value.trim(); if (draft[id] != null && x && x !== v) save(r, x); }} />
           : <span className="rl-num"><MoneyIn className="in rl-in" inputMode="numeric" value={draft[id] ?? String(v)} onChange={(e) => setDraft({ ...draft, [id]: String(e.target.value).replace(/[^\d.]/g, '') })}

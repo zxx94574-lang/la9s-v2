@@ -24,7 +24,7 @@ select p.id, p.code, p.model, p.variant, p.brand, p.shared_models, c.id as categ
   -- 中方用: 最贵的到岸成本 (当前成本 vs 各采购批次, 按最新汇率), 判断「会亏」; 员工界面不显示
   (select greatest(
      case when p.rmb_cost is not null and ps.rmb_per_xof > 0 then round((p.rmb_cost / ps.rmb_per_xof + coalesce(p.freight_xof, 0)) / ps.round_to) * ps.round_to end,
-     (select max(round(((case b.currency when 'USD' then b.unit_price * ps.xof_per_usd when 'XOF' then b.unit_price else b.unit_price / ps.rmb_per_xof end) + coalesce(b.freight_xof, p.freight_xof, 0)) / ps.round_to) * ps.round_to)
+     (select max(round((greatest(case b.currency when 'USD' then b.unit_price * ps.xof_per_usd when 'XOF' then b.unit_price else b.unit_price / ps.rmb_per_xof end, case when b.currency <> 'XOF' and b.pay_rate > 0 then b.unit_price * b.pay_rate else 0 end) + coalesce(b.freight_xof, p.freight_xof, 0)) / ps.round_to) * ps.round_to)
         from app.product_batches b where b.product_id = p.id))
    from app.price_settings ps where ps.org_id = p.org_id) as cost_xof
 from app.products p join app.categories c on c.id = p.category_id
@@ -109,7 +109,7 @@ select l.*, p.code, p.brand, coalesce(p.model, l.req_model) as model, p.variant,
   dd.fx_rate,
   (select greatest(
      case when p.rmb_cost is not null and ps.rmb_per_xof > 0 then round((p.rmb_cost / ps.rmb_per_xof + coalesce(p.freight_xof, 0)) / ps.round_to) * ps.round_to end,
-     (select max(round(((case b.currency when 'USD' then b.unit_price * ps.xof_per_usd when 'XOF' then b.unit_price else b.unit_price / ps.rmb_per_xof end) + coalesce(b.freight_xof, p.freight_xof, 0)) / ps.round_to) * ps.round_to)
+     (select max(round((greatest(case b.currency when 'USD' then b.unit_price * ps.xof_per_usd when 'XOF' then b.unit_price else b.unit_price / ps.rmb_per_xof end, case when b.currency <> 'XOF' and b.pay_rate > 0 then b.unit_price * b.pay_rate else 0 end) + coalesce(b.freight_xof, p.freight_xof, 0)) / ps.round_to) * ps.round_to)
         from app.product_batches b where b.product_id = p.id))
    from app.price_settings ps where ps.org_id = dd.org_id) as cost_xof,
   (select coalesce(jsonb_agg(jsonb_build_object('result', pc.result, 'note', pc.note, 'at', pc.at) order by pc.at), '[]') from app.pick_checks pc where pc.deal_line_id = l.id) as checks,

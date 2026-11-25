@@ -2055,3 +2055,15 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .rp-acts > * { max-width: 100%; }
 .rp-acts label { flex-wrap: wrap; }
 @media (max-width: 760px) { .pagehead > .rp-acts { flex: 1 1 100%; justify-content: flex-start; } }
+/* 手机卡片表（Grid < 640px） */
+.gc-switch { display: flex; justify-content: flex-end; padding: 4px 8px; }
+.gcards { display: flex; flex-direction: column; gap: 8px; padding: 6px 8px 10px; }
+.gcard { border: 1px solid var(--line, #e5e9f0); border-radius: 12px; background: #fff; padding: 10px 12px; }
+.gcard.click:active { transform: scale(.99); }
+.gc-h { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 6px; min-width: 0; }
+.gc-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.gc-b { display: grid; grid-template-columns: 1fr; gap: 3px; }
+.gc-kv { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; min-width: 0; }
+.gc-kv > span { color: var(--muted, #64748b); flex: 0 0 auto; max-width: 45%; }
+.gc-kv > b { font-weight: 500; min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.gc-foot { background: #f6f8fb; font-weight: 600; }

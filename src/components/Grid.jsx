@@ -177,6 +177,12 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   // a column without a label (buttons / actions) gets no sort or filter
   const byKey = useMemo(() => Object.fromEntries(columns.map((c) => [c.key, c.label ? c : { ...c, sortable: false, filterable: false }])), [columns]);
   const vis = layout.order.filter((k) => !layout.hidden.includes(k) && byKey[k]).map((k) => byKey[k]);
+  // 手机（< 640px）：只看不改的表默认变成一行一张卡片（标题 = 第一列，其余「列名 · 值」）；有可改的列照旧表格；右上角能切换
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  useEffect(() => { const f = () => setNarrow(window.innerWidth < 640); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, []);
+  const autoCards = !vis.some((c) => c.edit);
+  const [cardPref, setCardPref] = useState(() => { try { const v = localStorage.getItem('la9s.gcard.' + id); return v == null ? null : v === '1'; } catch { return null; } });
+  const pickCards = (v) => { setCardPref(v); try { localStorage.setItem('la9s.gcard.' + id, v ? '1' : '0'); } catch { /* */ } };
   ALIGN_GRID = id || 'grid';   // alignOf 是模块级小函数, 每次渲染前告诉它现在是哪张表
   const tableRef = useRef();
   const gid = 'g-' + id.replace(/[^a-z0-9]/gi, '');
@@ -868,7 +874,20 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
           {table && app.role === 'admin' && <button type="button" className="gear-btn" title="这张表的选项设置：加自己的列（单选 / 文本 / 日期 / 数字）、改选项和颜色" aria-label="选项设置" onClick={() => setOptOpen(true)}>⚙</button>}
         </div>
       )}
-      <div className="tw" ref={twRef} style={maxHeight ? { maxHeight } : null}>
+      {narrow && <div className="gc-switch"><span className="seg sm"><button type="button" className={(cardPref ?? autoCards) ? 'on' : ''} onClick={() => pickCards(true)}>卡片</button><button type="button" className={(cardPref ?? autoCards) ? '' : 'on'} onClick={() => pickCards(false)}>表格</button></span></div>}
+      {narrow && (cardPref ?? autoCards) && (
+        <div className="gcards">
+          {allShown.length === 0 && <div className="empty">{rows.length ? '筛选以后没有符合条件的行' : empty}</div>}
+          {(shown.length > lim ? shown.slice(0, lim) : shown).map((row, r) => { const k = rowKey(row); const [h, ...rest] = vis; const cell = (c) => { let x = c.render ? c.render(row, r) : c.value ? c.value(row) : row[c.key]; if (x instanceof Date) x = fmtDate(x); else if (x !== null && typeof x === 'object' && !React.isValidElement(x) && !Array.isArray(x)) x = String(x); return x; };
+            return (
+              <div key={k} className={`gcard ${rowClass?.(row) || ''} ${onRowClick ? 'click' : ''}`} onClick={(e) => { if (e.target.closest('a,button,input,label,.linkbtn')) return; onRowClick?.(row); }}>
+                <div className="gc-h">{selectable && <input type="checkbox" checked={selectable.selected.has(k)} onChange={() => { const s2 = new Set(selectable.selected); s2.has(k) ? s2.delete(k) : s2.add(k); selectable.onChange(s2); }} />}<span className="gc-title">{h ? cell(h) : k}</span>{onRowClick && <span className="muted">›</span>}</div>
+                <div className="gc-b">{rest.filter((c) => c.label).map((c) => { const v = cell(c); return v === '' || v == null || v === false ? null : <div key={c.key} className="gc-kv"><span>{c.label}</span><b style={{ textAlign: alignOf(c) === 'right' ? 'right' : 'left' }}>{v}</b></div>; })}</div>
+              </div>); })}
+          {shown.length > lim && <div ref={moreRef} className="muted small" style={{ padding: 8 }}>还有 {shown.length - lim} 行，往下滑自动显示…</div>}
+          {footObj && shown.length > 0 && <div className="gcard gc-foot">{vis.filter((c) => footObj[c.key] != null && footObj[c.key] !== '').map((c) => <div key={c.key} className="gc-kv"><span>{c.label}</span><b>{footObj[c.key]}</b></div>)}</div>}
+        </div>)}
+      <div className="tw" ref={twRef} style={{ ...(maxHeight ? { maxHeight } : null), ...(narrow && (cardPref ?? autoCards) ? { display: 'none' } : null) }}>
         {drag?.block && drag.x != null && <i className="col-drop" style={{ left: drag.x }} />}
         <table className="t" ref={tableRef} style={{ '--rh': `${selectable ? 64 : 40}px` }} onMouseOver={cellOver} onMouseLeave={cellOut}>
           <thead>

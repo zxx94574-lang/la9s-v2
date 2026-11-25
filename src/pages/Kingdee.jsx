@@ -12,6 +12,16 @@ import { money, dDate, dt, today, friendlyError, qty } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink , DealLink} from '../components/Archives.jsx';
 
 const ST = { await_receipt: ['待客户签收', 'gray'], ready: ['待录金蝶', 'amber'], saved: ['已保存', 'blue'], submitted: ['已提交 · 待审核', 'blue'], synced: ['已审核', 'green'], error: ['出错', 'red'], void: ['已撤销出库', 'gray'] };
+async function writeXlsx(name, sheet, head, rows) {
+  const ExcelJS = (await import('exceljs')).default;
+  const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet(sheet);
+  ws.columns = head.map(([header, width]) => ({ header, width }));
+  for (const r of rows) ws.addRow(r);
+  ws.getRow(1).font = { bold: true }; ws.views = [{ state: 'frozen', ySplit: 1 }];
+  const buf = await wb.xlsx.writeBuffer();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  a.download = `${name}-${today()}.xlsx`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
 // 没有金蝶接口时的退路（待改 118）：把「待录金蝶」的出库单按金蝶「销售出库单」引入的列导成 Excel，在金蝶里一次引入
 async function exportKdSales(org, ids, toast) {
   const rows = await q(`select x.out_no, d.biz_no, x.shipped_at, x.customer_received_at, c.code as customer_code, c.name as customer, d.currency,
@@ -178,8 +188,13 @@ function GrnList({ rows }) {
   const [no, setNo] = useState({});
   const step = async (g, s) => { try { await call(role, `select app.kd_grn_step($1,$2,$3)`, [g.id, s, no[g.id] || null]); toast(s === 'save' ? '已记金蝶入库单号' : '已完成'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
   if (!rows.length) return <div className="empty">还没有收货单。到货在「备货看板 → 在途采购 → 到货入库」收。</div>;
+  const ready = rows.filter((g) => g.kd_status === 'ready');
+  const exportGrn = () => writeXlsx('金蝶引入-采购入库', '采购入库单', [['入库日期', 12], ['系统收货单号', 18], ['源采购订单号', 18], ['收料仓库', 24], ['物料编码', 14], ['型号', 18], ['实收数量', 10], ['FOB 客户', 14]],
+    ready.flatMap((g) => g.lines.flatMap((l) => [l.local_qty ? [dDate(g.created_at), g.grn_no, g.po_no, KD_WH[l.warehouse] || l.warehouse, l.code, l.model, Number(l.local_qty), ''] : null, l.fob_qty ? [dDate(g.created_at), g.grn_no, g.po_no, KD_WH.FOB, l.code, l.model, Number(l.fob_qty), l.fob_customer || ''] : null].filter(Boolean))))
+    .then(() => toast(`已导出 ${ready.length} 张收货单，在金蝶「采购入库单 → 引入」里用`), (e) => toast(friendlyError(e), 'err'));
   return (
     <div className="card-b stack">
+      {ready.length > 0 && can(role, 'kd_save') && <div><button type="button" className="btn sm soft" onClick={exportGrn}>导出待录 {ready.length} 张（金蝶引入 Excel）</button></div>}
       <div className="hint">按仓库分好了，照着在金蝶「采购入库单」里录（关联原采购订单）：FOB 部分入 <b>CI LA FOB Material WH</b>，本地部分入 LA / 9S 仓。录完填金蝶单号。</div>
       {rows.map((g) => {
         const parts = [];
@@ -228,7 +243,10 @@ function MiscList() {
     <Grid id="kd-misc" rows={rows} selectable={['admin', 'manager', 'finance'].includes(role) ? { selected: sel, onChange: setSel } : undefined} empty="没有要录的"
       tools={<><div className="chips">{[['ready', '待录'], ['done', '已录'], ['skip', '不用录'], ['', '全部']].map(([k, l]) => <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} {k ? data.filter((r) => r.status === k).length : data.length}</button>)}</div>
         {sel.size > 0 && <span className="row" style={{ gap: 6 }}><input className="in" style={{ width: 150 }} placeholder="金蝶单号" value={no} onChange={(e) => setNo(e.target.value)} />
-          <button type="button" className="btn sm primary" disabled={!no.trim()} onClick={() => done(false)}>选中的 {sel.size} 条已录金蝶</button><button type="button" className="btn sm" onClick={() => done(true)}>不用录</button></span>}</>}
+          <button type="button" className="btn sm primary" disabled={!no.trim()} onClick={() => done(false)}>选中的 {sel.size} 条已录金蝶</button><button type="button" className="btn sm" onClick={() => done(true)}>不用录</button></span>}
+        {['admin', 'manager', 'finance'].includes(role) && data.some((r) => r.status === 'ready') && <button type="button" className="btn sm soft" title="按金蝶单据类型分页签导出（其他入库 / 其他出库 / 调拨 / 销售退货），在金蝶里引入"
+          onClick={() => { const rs = data.filter((r) => r.status === 'ready' && (!sel.size || sel.has(r.id))); writeXlsx('金蝶引入-其他出入库', '待录', [['日期', 12], ['金蝶单据', 16], ['怎么来的', 22], ['仓库', 24], ['物料编码', 14], ['种类', 10], ['型号', 16], ['数量（+进 / −出）', 14]],
+            rs.map((r) => [dDate(r.at), r.doc_type, MISC_REASON[r.reason] || r.reason, KD_WH[r.warehouse] || r.warehouse, r.code, r.category, r.model, Number(r.qty)])).then(() => toast(`已导出 ${rs.length} 条`), (e) => toast(friendlyError(e), 'err')); }}>导出{sel.size ? `选中 ${sel.size}` : '全部待录'} 条（Excel）</button>}</>}
       columns={[
         { key: 'at', label: '什么时候', w: 130, value: (r) => r.at, render: (r) => dt(r.at) },
         { key: 'doc_type', label: '金蝶单据', w: 120, render: (r) => <b>{r.doc_type}</b> },

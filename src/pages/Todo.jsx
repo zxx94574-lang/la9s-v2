@@ -145,7 +145,8 @@ export default function Todo() {
       (select count(*) from app.v_po_ledger g where g.org_id = $1 and g.goods_cny > g.paid_cny + 0.5) as cn_unpaid,
       (select count(*) from app.po_receipts g where g.org_id = $1 and g.kd_status = 'ready') as grn_ready,
       (select count(*) from app.account_events e join app.customer_accounts a on a.id = e.account_id where a.org_id = $1 and e.kind = 'pw_changed' and e.acked_at is null) as pw_changed,
-      (select count(*) from app.deals d where d.org_id = $1 and d.source = 'guest' and d.status = 'quoted') as guest_new`, [org])]);
+      (select count(*) from app.deals d where d.org_id = $1 and d.source = 'guest' and d.status = 'quoted') as guest_new,
+      (select count(*) from app.decisions x where x.org_id = $1 and x.status = 'pending' and x.mode = 'approve' and app.decision_can_decide(x)) as decide_n`, [org])]);
     return f;
   }, [org]);
   const kdTodo = useKdTodoCount();
@@ -194,6 +195,7 @@ export default function Todo() {
       ex('notices') > 0 && line('paynotice', 'cash', `${ex('notices')} 笔「客户说付了」还没对上到账`),
       ex('pr_new') > 0 && line('pr', 'purchase', `${ex('pr_new')} 张采购 / 物资申请还没下单`),
       ex('pr_eta') > 0 && line('pr', 'purchase', `${ex('pr_eta')} 张采购 / 物资申请 5 天内到或已过期`),
+      ex('decide_n') > 0 && line('decide', 'decisions', `${ex('decide_n')} 件事等你批（审批）`),
       ex('po_eta') > 0 && line('po_eta', 'po', `${ex('po_eta')} 张采购单快到港 / 已过预计到港，还没收完`),
       ex('cn_offer') > 0 && line('cn_offer', 'purchase', `${ex('cn_offer')} 张备货申请等你回复（能给多少 / 单价 / 哪天发）`),
       ex('cn_unpaid') > 0 && line('cn_pay', 'cnfin', `${ex('cn_unpaid')} 张采购单货款还没付清`),
@@ -257,6 +259,7 @@ export const SLOTS = {
   inquiry: { label: '询单', roles: ['admin', 'hotline', 'sales', 'sales_manager', 'manager'] },
   addons: { label: '追加的货', roles: ['admin', 'manager', 'picker', 'hotline', 'sales_manager'] },
   tasks: { label: '派出去的任务', roles: ['admin', 'manager', 'sales_manager', 'hotline', 'finance', 'sales', 'picker'] },
+  decide: { label: '等你批的事', roles: ['admin'] },
   purchase: { label: '采购与到货', roles: ['manager', 'cn_support'] },
   po_eta: { label: '采购单快到港', roles: ['manager', 'cn_support'] },
   cn_offer: { label: '备货申请等国内商务回复', roles: ['cn_business'] },
