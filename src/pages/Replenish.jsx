@@ -1,6 +1,7 @@
 // 备货看板 (Frank 2026-10-29): 一张表看清 —— 本地可售 + 在途、卖得多快、能撑几天、欠客户多少、建议补多少.
 // 建议补货 = 日均出库 × 备货天数 + 欠客户的缺口 − 可售 − 在途 (日均取近 30 天和近 90 天里大的那个).
 // 积压 = 库龄 180 天以上还有货. 没编码的需求单独列, 给中方决定要不要建编码进货.
+import { CatFilterByName } from '../components/CatFilter.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -86,7 +87,7 @@ export default function Replenish() {
         {tab === 'board' && <>
           <Grid id="replenish" table="products" columns={cols} rows={rows} rowKey={(r) => r.product_id} empty="这一类没有物料"
             tools={<><div className="chips">{FILTERS.map(([k, l]) => <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} {data.rows.filter(match[k]).length}</button>)}</div>
-              <select className="in" value={cat} onChange={(e) => setCat(e.target.value)} style={{ maxWidth: 150 }}><option value="">全部种类</option>{cats.map((c) => <option key={c}>{c}</option>)}</select></>}
+              <CatFilterByName names={cats} value={cat} onChange={setCat} /></>}
             foot={(rs) => ({ code: `${rs.length} 个`, suggest: qty(rs.reduce((a, r) => a + N(r.suggest), 0)), short_qty: qty(rs.reduce((a, r) => a + N(r.short_qty), 0)), in_transit: qty(rs.reduce((a, r) => a + N(r.in_transit), 0)) })} />
         </>}
         {tab === 'po' && <Grid id="pos" table="purchase_orders" columns={poCols} rows={data.pos} rowActions={[{ label: '打开采购单（到货入库在里面）', run: (po) => openArchive({ kind: 'po', id: po.id }) }]} empty="没有在途的采购单（国内建单 / 导入箱单 / 金蝶采购订单导入后显示在这里）" />}

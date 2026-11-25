@@ -1,5 +1,6 @@
 // Fast line entry: category chips switch instantly (屏幕 ↔ 电池盖 ↔ 屏幕…), then type model / code / 通用型号.
 // Arrow keys + Enter or mouse. Frank 11-01: 点一个不关, 可以接着点 (点过的打 ✓); 「完成」/ Esc / 点外面才关.
+import CatFilter, { useCatPrefs } from './CatFilter.jsx';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { money, qty } from '../lib/format.js';
@@ -11,7 +12,11 @@ export const avail = (p) => p.stock.reduce((a, s) => a + s.on_hand - s.reserved,
 // 464: 改成全站统一的 可售 (绿, 带片数) / 可预订 (黄)
 export const StockPill = ({ n, pid }) => <AvailPill n={n} pid={pid} />;
 
-export default function ModelPicker({ catalog, categories, tier, onPick, onUnpick, showPrice = true, extra, picked }) {
+export default function ModelPicker({ catalog: catalogAll, categories, tier, onPick, onUnpick, showPrice = true, extra, picked, forSale = true, placeholder }) {
+  // 种类筛选全站同一个 CatFilter；选货场景（forSale）里「不卖」的种类连型号一起不出现
+  const cp = useCatPrefs();
+  const catalog = useMemo(() => (forSale && cp.hidden.length ? catalogAll.filter((p) => !cp.hidden.includes(p.category_id)) : catalogAll), [catalogAll, cp.hidden, forSale]);
+  const present = useMemo(() => new Set(catalog.map((x) => x.category_id)), [catalog]);
   const [cat, setCat] = useState('');
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
@@ -55,13 +60,10 @@ export default function ModelPicker({ catalog, categories, tier, onPick, onUnpic
   useEffect(() => { if (!open) setTip(null); }, [open]);
   return (
     <div className="stack" style={{ gap: 10 }}>
-      <div className="chips cats">
-        <button type="button" className={`chip ${!cat ? 'on' : ''}`} onClick={() => { setCat(''); input.current?.focus(); }}>全部</button>
-        {categories.filter((c) => !catalog || catalog.some((x) => x.category_id === c.id)).map((c) => <button type="button" key={c.id} className={`chip ${cat === c.id ? 'on' : ''}`} onClick={() => { setCat(c.id); setOpen(true); input.current?.focus(); }}>{c.name}</button>)}
-      </div>
+      <CatFilter categories={categories} value={cat} forSale={forSale} only={present} onChange={(v) => { setCat(v); if (v) setOpen(true); input.current?.focus(); }} />
       <div className="row" style={{ alignItems: 'stretch' }}>
         <div className={`picker grow ${open ? 'open' : ''}`} ref={box}>
-          <input ref={input} className="in" value={text} placeholder="⌕ 加一行：输入型号 / 编码 / 通用型号，↑↓ 选择，Enter 添加"
+          <input ref={input} className="in" value={text} placeholder={placeholder || "⌕ 加一行：输入型号 / 编码 / 通用型号，↑↓ 选择，Enter 添加"}
             onFocus={() => setOpen(true)} onChange={(e) => { setText(e.target.value); setOpen(true); setFocus(0); }} onKeyDown={key} />
           {open && (
             <div className="sugg" ref={sugg} style={shift ? { left: -shift, right: 'auto' } : null}>

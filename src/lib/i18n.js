@@ -7,6 +7,11 @@ export function setLang(l) { LANG = l; try { localStorage.setItem('la9s.lang', J
 export const LANGS = [['zh', '中文'], ['en', 'English'], ['fr', 'Français']];
 
 const D = {
+  // 11-25 种类筛选 / 盘点领任务 / 问一句 / 时效联动工资
+  '问': ['Ask', 'Demander'], '我听懂的：': ['I understood:', 'J’ai compris :'], '销量（片）': ['Units sold', 'Pièces vendues'], '销售额': ['Sales', 'Ventes'], '按客户': ['By customer', 'Par client'], '按型号': ['By model', 'Par modèle'], '按天': ['By day', 'Par jour'], '按订单': ['By order', 'Par commande'],
+  '自己领一批': ['Take a batch', 'Prendre un lot'], '再领一批': ['Take another batch', 'Prendre un autre lot'], '＋ 领这批': ['+ Take', '+ Prendre'], '我盘完了': ['I’m done', 'J’ai fini'], '这层盘完，下一层 →': ['Level done, next →', 'Niveau fini, suivant →'], '← 上一层': ['← Previous', '← Précédent'], '我的任务': ['My task', 'Ma tâche'], '记下': ['Save', 'Noter'],
+  '联动工资': ['Pay link', 'Lien avec la paie'], '时效准确奖扣': ['KPI bonus/penalty', 'Prime/pénalité KPI'], '重算时效准确奖扣': ['Recalc KPI bonus', 'Recalculer prime KPI'], '时效达标': ['On-time', 'Dans les délais'], '找货被改': ['Pick corrections', 'Corrections préparation'], '奖扣 XOF': ['Bonus XOF', 'Prime XOF'], '怎么算的': ['How', 'Calcul'],
+  '放外面': ['Show as chip', 'En bouton'], '不卖': ['Not sold', 'Non vendu'], '种类：顺序 / 放外面 / 不卖': ['Types: order / chips / not sold', 'Types : ordre / boutons / non vendus'],
   // navigation
   '工作台': ['Workspace', 'Espace de travail'], '经营总览': ['Dashboard', 'Tableau de bord'], '我的待办': ['My tasks', 'Mes tâches'],
   '销售主链': ['Sales', 'Ventes'], '新建询单 / 报价': ['New quote', 'Nouveau devis'], '订单总览': ['Orders', 'Commandes'],
@@ -116,6 +121,8 @@ export const coverage = () => Object.keys(D).length;
 // 句子 / 带数字的文字不动 —— 那些要页面自己用 t()。
 // 带数字的整句（待办 / 收款 / 订单里最常见的几种）
 const RX = [
+  [/^更多 (\d+) 种$/, '$1 more', '$1 de plus'],
+  [/^看全部 (\d+) 个（上面那句话是全部的合计）$/, 'Show all $1', 'Tout voir ($1)'],
   [/^只发了一部分，还有 ([\d,]+) 片没发$/, 'Partly shipped, $1 pcs left', 'Envoyé en partie, reste $1 pcs'],
   [/^全部冲到 (\S+)$/, 'All applied to $1', 'Tout imputé à $1'],
   [/^(\S+) 收款凭证$/, '$1 payment proof', '$1 justificatif'],

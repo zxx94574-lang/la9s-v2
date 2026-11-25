@@ -2,6 +2,7 @@
 //  表 1「员工档案」: 全名 / 工作名 / 邮箱 / 电话 / 部门 / 职位 / 入职 / 状态 / 证件照, 能单选的都单选, 日期用日期选择.
 //  表 2「工资发放记录」: 每月一张, 列和 8 月 Excel 一样, 能导出同样式的 Excel; 中方批准、中方标记已付, 付了就锁死永久留底.
 //  真实员工以飞书 STAFF INF 为准 (真实数据版开局导入), Excel 只是参考模板.
+import { kpiPayRows } from '../lib/kpiPay.js';
 import { normPhone, fmtPhone } from '../lib/phone.js';
 import { ConfirmEdit, HistoryBlock } from '../components/ProductDrawer.jsx';
 import React, { useMemo, useRef, useState } from 'react';
@@ -279,8 +280,9 @@ function Payroll({ staff, opts }) {
   const h = data.head; const draft = h && h.status !== 'paid'; const admin = role === 'admin';
   const run = async (msg, sql, p) => { try { await call(role, sql, p); toast(msg); refresh(); return true; } catch (e) { toast(friendlyError(e), 'err'); return false; } };
   const fixe = (l) => Math.round(Math.min(N(l.contract_salary), N(l.contract_salary) / (h?.days_base || 25) * N(l.days_worked)));
-  const net = (l) => fixe(l) + N(l.allowance) + N(l.incentive) + N(l.prime_team) + N(l.wh_comm) + N(l.sales_comm) - N(l.deduction);
+  const net = (l) => fixe(l) + N(l.allowance) + N(l.incentive) + N(l.prime_team) + N(l.wh_comm) + N(l.sales_comm) + N(l.kpi_pay) - N(l.deduction);
   const cost = (l) => net(l) + N(l.cnps);
+  const kpiRecalc = async (force, quiet) => { try { const { rows } = await kpiPayRows(org, month); await call(role, `select app.payroll_kpi_pay($1,$2,$3,$4)`, [org, month + '-01', JSON.stringify(rows.map((r) => ({ employee_id: r.employee_id, amount: r.amount, note: r.note }))), !!force]); if (!quiet) { toast(`时效准确奖扣已重算：${rows.filter((r) => r.amount).length} 人有奖扣（手改过的没动）`); refresh(); } } catch (e) { toast(friendlyError(e), 'err'); } };
   const saveLine = async (emp, patch, meta) => { try { await call(role, `select app.payroll_set_line($1,$2,$3,$4)`, [org, month + '-01', emp, JSON.stringify(patch)]); if (!meta?.batch || meta.last) { toast(meta?.batch ? `已保存 ${meta.total} 格` : '已保存'); refresh(); } } catch (e) { toast(friendlyError(e), 'err'); } };
   const editNum = (k) => (l) => (draft ? { type: 'number', value: String(N(l[k])), onChange: (v, m) => saveLine(l.employee_id, { [k]: v.replace(/[^\d.]/g, '') || '0' }, m) } : null);
   const lines = data.lines.filter((l) => !dept || l.snap_dept === dept);
@@ -311,6 +313,12 @@ function Payroll({ staff, opts }) {
       render: (l) => { const a = dev(l.sales_comm, l.sales_comm_auto);
         return <span className="row" style={{ gap: 6, justifyContent: 'flex-end' }} title={`自动算：这个月整单付清的片数 × ${data.srate} XOF（按订单上的归属销售员；FOB 不算）。自动数只是依据，可以手改。`}>
           {N(l.sales_comm) || N(l.sales_comm_auto) ? money(l.sales_comm) : ''}{N(l.sales_comm_auto) > 0 && <span className="small muted">{Math.round(N(l.sales_comm_auto) / (data.srate || 1))} 片</span>}{a != null && <Pill tone="amber">自动 {money(a)}</Pill>}</span>; } },
+    // 11-25 Frank: 时效 / 准确率联动工资 —— 可正可负, 自动带出 (算法 = 时效与准确率页) + 可手改; 依据挂在格子上
+    { key: 'kpi_pay', label: '时效准确奖扣', w: 150, type: 'money', value: (l) => N(l.kpi_pay),
+      edit: (l) => (draft ? { type: 'number', value: String(N(l.kpi_pay)), onChange: (v) => run('已保存', `select app.payroll_set_kpi_pay($1,$2,$3,$4)`, [org, month + '-01', l.employee_id, Number(String(v).replace(/[^\d.-]/g, '') || 0)]) } : null),
+      render: (l) => { const a = dev(l.kpi_pay, l.kpi_pay_auto); const v = N(l.kpi_pay);
+        return <span className="row" style={{ gap: 6, justifyContent: 'flex-end' }} title={l.kpi_note ? `自动算：${l.kpi_note}。规则在「规则参数 → 员工」里调；自动数只是依据，可以手改。` : '这个月没有算到他的时效 / 找货段'}>
+          {v || l.kpi_pay_auto != null ? <b className={v < 0 ? 'red-t' : ''}>{v > 0 ? '+' : ''}{money(v)}</b> : ''}{a != null && <Pill tone="amber">自动 {money(a)}</Pill>}</span>; } },
     { key: 'prime_team', label: '团队奖金', w: 90, type: 'money', value: (l) => N(l.prime_team), edit: editNum('prime_team'), render: (l) => money(l.prime_team) },
     { key: 'cnps', label: '社保（公司交）', w: 110, type: 'money', value: (l) => N(l.cnps), edit: editNum('cnps'), render: (l) => money(l.cnps) },
     { key: 'deduction', label: '扣款', w: 90, type: 'money', value: (l) => N(l.deduction), edit: editNum('deduction'), render: (l) => money(l.deduction) },
@@ -359,7 +367,7 @@ function Payroll({ staff, opts }) {
       )}
       {!h ? (
         <div className="card card-b row" style={{ gap: 10 }}>{label}还没有工资单。<span className="grow" />
-          {(admin || role === 'sales_manager') && <button type="button" className="btn primary" onClick={async () => { if (await run(`${label}工资单已建好，在职员工都加进来了，提成已按记录带出`, `select app.payroll_open($1,$2)`, [org, month + '-01'])) { try { await call(role, `select app.payroll_wh_comm($1,$2)`, [org, month + '-01']); await call(role, `select app.payroll_sales_comm($1,$2)`, [org, month + '-01']); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } } }}>建 {label}工资单</button>}</div>
+          {(admin || role === 'sales_manager') && <button type="button" className="btn primary" onClick={async () => { if (await run(`${label}工资单已建好，在职员工都加进来了，提成已按记录带出`, `select app.payroll_open($1,$2)`, [org, month + '-01'])) { try { await call(role, `select app.payroll_wh_comm($1,$2)`, [org, month + '-01']); await call(role, `select app.payroll_sales_comm($1,$2)`, [org, month + '-01']); await kpiRecalc(false, true); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } } }}>建 {label}工资单</button>}</div>
       ) : (
         <>
           {h.reopen_count > 0 && h.status !== 'paid' && <div className="banner warn">⚠ 这个月之前已经「确认发放」过 {h.reopen_count} 次（最近一次 {dDate(h.last_confirmed_at)}，撤回原因：{h.last_reopen_reason}）。再次确认前先核实钱有没有付出去，别发两次。</div>}
@@ -378,6 +386,7 @@ function Payroll({ staff, opts }) {
               <select className="in" style={{ maxWidth: 160 }} value={dept} onChange={(e) => setDept(e.target.value)}><option value="">全部部门</option>{opts.departments.map((d) => <option key={d.v} value={d.v}>{d.l}</option>)}</select>
               {draft && selRows.length > 0 && <button type="button" className="btn sm" onClick={dropSel}>从本月去掉 {new Set(selRows.map((l) => l.employee_id)).size} 人</button>}
               {draft && <button type="button" className="btn sm" title={`按这个月的出库记录重算仓库提成（正确出货每片 ${data.rate} XOF，出错的单取消）；手改过的不覆盖`} onClick={() => run('仓库提成已按出库记录重算（手改过的没动）', `select app.payroll_wh_comm($1,$2)`, [org, month + '-01'])}>重算仓库提成</button>}
+              {draft && <button type="button" className="btn sm" title="按「时效与准确率」同一套算法重算这个月每人的时效 / 找货准确奖扣（规则参数里调线和金额）；手改过的不覆盖" onClick={() => kpiRecalc(false)}>重算时效准确奖扣</button>}
               {draft && <button type="button" className="btn sm" title={`按这个月付清的订单重算销售提成（每片 ${data.srate} XOF，整单付清才算）；手改过的不覆盖`} onClick={() => run('销售提成已按付清的订单重算（手改过的没动）', `select app.payroll_sales_comm($1,$2)`, [org, month + '-01'])}>重算销售提成</button>}
               {draft && <button type="button" className="btn sm" onClick={() => run('已把新入职的人加进来（已有的行不动）', `select app.payroll_open($1,$2)`, [org, month + '-01'])}>加入新员工</button>}
               {draft && (selRows.length > 0

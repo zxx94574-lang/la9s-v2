@@ -6,6 +6,7 @@
 //  · 整块粘贴: 从 Excel / 飞书 / 手写整理的清单粘进编码或机型那一列 (后面一列是数字就当数量), 一次几十上百行
 //  · 编码带出一切; 种类 + 机型带出编码; 对上多个编码标黄让人挑; 没建档自动变「补录需求」(未满足需求)
 //  · 勾选几行 → 「批量设种类」
+import CatFilter, { useCatPrefs } from './CatFilter.jsx';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Grid from './Grid.jsx';
@@ -464,7 +465,8 @@ export function PickList({ catalog, categories, picked, onClose, onAdd, stockLab
   const [text, setText] = useState('');
   const [chosen, setChosen] = useState({});   // id → qty string
   const t = text.trim().toUpperCase();
-  const all = catalog.filter((p) => (!cat || p.category_id === cat) && (!t || p.model.includes(t) || String(p.code).toUpperCase().includes(t) || (p.shared_models || []).some((s) => s.includes(t))));
+  const cp = useCatPrefs();
+  const all = catalog.filter((p) => !cp.hidden.includes(p.category_id) && (!cat || p.category_id === cat) && (!t || p.model.includes(t) || String(p.code).toUpperCase().includes(t) || (p.shared_models || []).some((s) => s.includes(t))));
   // 230: 库存多的排前面 (客户端按 有货 → 可预订)
   const rk = (p) => (p.band ? { ok: 1e9, low: 1e8, none: 0 }[p.band] : avail(p));
   const list = [...all].sort((a, b) => rk(b) - rk(a)).slice(0, 300);
@@ -477,8 +479,7 @@ export function PickList({ catalog, categories, picked, onClose, onAdd, stockLab
         <button type="button" className="btn" onClick={onClose}>关闭</button>
         <button type="button" className="btn primary" disabled={!n} onClick={() => onAdd(Object.entries(chosen).map(([id, q]) => ({ product: catalog.find((p) => p.id === id), qty: Number(q) || 0 })))}>加入（{n}）</button></>}>
       <div className="stack" style={{ gap: 8 }}>
-        <div className="chips"><button type="button" className={`chip ${!cat ? 'on' : ''}`} onClick={() => setCat('')}>全部</button>
-          {categories.map((c) => <button type="button" key={c.id} className={`chip ${cat === c.id ? 'on' : ''}`} onClick={() => setCat(c.id)}>{c.name}</button>)}</div>
+        <CatFilter categories={categories} value={cat} onChange={setCat} />
         <input className="in" autoFocus placeholder="⌕ 机型 / 编码 / 通用机型，包含就出来" value={text} onChange={(e) => setText(e.target.value)} />
         <div className="picklist">
           <Grid id="picklist" noTools maxHeight={420} rows={list} rowClass={(p) => (p.id in chosen ? 'on' : picked?.has(p.id) ? 'done' : '')}
@@ -518,7 +519,7 @@ function UnmetModal({ catalog, categories, onClose, onAdd, onUseProduct }) {
         <button type="button" className="btn primary" disabled={!cat || !M || !!exact} onClick={() => onAdd(cat, M, Number(n) || 0)}>记录为未建档需求</button></>}>
       <div className="stack">
         <div className="field req"><label>① 先选种类</label>
-          <div className="chips">{categories.map((c) => <button type="button" key={c.id} className={`chip ${cat === c.id ? 'on' : ''}`} onClick={() => setCat(c.id)}>{c.name}</button>)}</div></div>
+          <CatFilter categories={categories} value={cat} onChange={setCat} forSale={false} allLabel="未选" /></div>
         <div className="field req"><label>② 再填型号（自动转大写）</label>
           <input className="in" disabled={!cat} value={typed} onChange={(e) => setModel(e.target.value)} placeholder={cat ? '例如 SPARK 30 PRO' : '请先选种类'} list="unmet-models" />
           <datalist id="unmet-models">{inCat.map((p) => <option key={p.id} value={p.model} />)}</datalist></div>

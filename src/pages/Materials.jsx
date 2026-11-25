@@ -1,5 +1,6 @@
 // 物料名称管理 (待改 9 / 10, 只中方): search a keyword across models, shared models and 未建档需求,
 // rename / merge with a preview, set the brand. Codes never change, so history follows the new name automatically.
+import CatFilter from '../components/CatFilter.jsx';
 import React, { useMemo, useState } from 'react';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { q, call } from '../db/client.js';
@@ -70,8 +71,7 @@ export default function Materials() {
       <div className="card">
         <div className="card-b row" style={{ gap: 12, alignItems: 'flex-end' }}>
           <div className="field" style={{ minWidth: 260 }}><label>关键词（例如 A05）</label><input className="in" autoFocus value={kw} onChange={(e) => { setKw(e.target.value); setSel(new Set()); }} placeholder="型号 / 通用型号 / 未建档写法" /></div>
-          <div className="field"><label>种类</label><div className="chips"><button type="button" className={`chip ${!cat ? 'on' : ''}`} onClick={() => setCat('')}>全部</button>
-            {data.categories.map((c) => <button type="button" key={c.id} className={`chip ${cat === c.id ? 'on' : ''}`} onClick={() => setCat(c.id)}>{c.name}</button>)}</div></div>
+          <div className="field"><label>种类</label><CatFilter categories={data.categories} value={cat} onChange={setCat} forSale={false} /></div>
         </div>
         <Grid id="materials" table="products" columns={cols} rows={rows} rowKey={(r) => r.key} selectable={{ selected: sel, onChange: setSel }} empty={kw ? '没有含这个词的型号' : '输入关键词搜索'}
           tools={<>

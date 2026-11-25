@@ -4,6 +4,7 @@
 //     「提交询价」要填电话 / 店名 / 城市 / 称呼 → 自动建潜客 (挂选的销售员) + 已报价单 → 热线马上跟进
 //     「复制清单图片」什么都不用填 → 一张清单图 (带销售员编号和时间, 不带价格), 自己发 WhatsApp 给销售员
 // 现在这版没有服务器: 登录在本浏览器里验证; 验证码没法真的发到手机, 演示时直接显示在页面上 (部署后改成 WhatsApp / 短信发).
+import CatFilter from '../components/CatFilter.jsx';
 import React, { useMemo, useRef, useState } from 'react';
 import { toBlob } from 'html-to-image';
 import { callAnon, setCustomerSession, getOrg, REAL } from '../db/client.js';
@@ -164,8 +165,7 @@ export function GuestShop() {
             {data.sales.map((s) => <option key={s.id} value={s.id}>{s.emp_no ? `${s.emp_no} · ` : ''}{s.full_name}</option>)}
             <option value="none">没有 / 不知道 · Aucun</option></select></div>
         <input className="in" placeholder="⌕ 型号 / 编码 · Modèle" value={text} onChange={(e) => setText(e.target.value)} />
-        <div className="chips"><button type="button" className={`chip ${!cat ? 'on' : ''}`} onClick={() => setCat('')}>全部</button>
-          {cats.map(([id, name]) => <button type="button" key={id} className={`chip ${cat === id ? 'on' : ''}`} onClick={() => setCat(id)}>{name}</button>)}</div>
+        <CatFilter categories={cats.map(([id, name]) => ({ id, name }))} value={cat} onChange={setCat} />
       </div>
       <div className="plist">
         {list.map((p) => {

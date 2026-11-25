@@ -1,3 +1,4 @@
+import AskBox from '../components/AskBox.jsx';
 import React, { useCallback, useEffect, useState } from 'react';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -107,6 +108,7 @@ export default function Dashboard() {
           {admin && <button type="button" className={`btn sm ${edit ? 'primary' : ''}`} onClick={() => setLayoutEdit(!edit)} title="大板块和板块里小卡片的顺序、宽度、显示不显示（全员一样）">⚙ 配置看板</button>}
         </PeriodBar>
       </div>
+      {['admin', 'manager', 'finance', 'sales_manager'].includes(role) && <AskBox />}
       {data && <Attention alerts={alerts} />}
       {!data ? <div className="empty">加载中…</div> : <LayoutGrid page="dash" blocks={blocks} />}
     </>

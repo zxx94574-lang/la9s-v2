@@ -1,3 +1,4 @@
+import { CatFilterByName } from '../components/CatFilter.jsx';
 import { RuleGear } from '../components/Rules.jsx';
 import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -38,7 +39,7 @@ export default function Orders() {
   // 229 (Frank 11-11): 筛选条 —— 客户 / 档位 / 机型 / 付款, 可叠加; 「按机型看」给出片数和金额; 可存成筛选方案
   const olinesRaw = useData(() => q(Q.orderLines, [org, from, to]), [org, from, to]).data;
   const olines = useMemo(() => olinesRaw || [], [olinesRaw]);
-  const [fcust, setFcust] = useState(jump?.cust ? [jump.cust] : []); const [ftier, setFtier] = useState([]); const [fmodel, setFmodel] = useState(jump?.model ? [jump.model] : []); const [fpay, setFpay] = useState([]);   // 507: 档案「共 N 张」/ 指令「去做」跳过来带客户 / 机型
+  const [fcust, setFcust] = useState(jump?.cust ? [jump.cust] : []); const [ftier, setFtier] = useState([]); const [fmodel, setFmodel] = useState(jump?.model ? [jump.model] : []); const [fpay, setFpay] = useState([]); const [fcat, setFcat] = useState('');   // 507: 档案「共 N 张」/ 指令「去做」跳过来带客户 / 机型
   // 507: 已经在订单总览, 又从档案「共 N 张」/ 指令跳过来 → 照样换筛选
   useEffect(() => { const f = () => { let j = null; try { j = JSON.parse(sessionStorage.getItem('la9s.orders.jump')); sessionStorage.removeItem('la9s.orders.jump'); } catch { /* ignore */ } if (!j) return;
     if (j.cust) setFcust([j.cust]); if (j.model) setFmodel([j.model]); if (j.from) { setPeriod('custom'); setCustom([j.from, j.to]); } };
@@ -49,6 +50,8 @@ export default function Orders() {
   const applyScheme = (f) => { if (f.period) setPeriod(f.period); if (f.period === 'custom' && f.custom) setCustom(f.custom); setLight(f.light || ''); setFcust(f.fcust || []); setFtier(f.ftier || []); setFmodel(f.fmodel || []); setFpay(f.fpay || []); setMode(f.mode || 'orders'); setText(f.text || ''); setTier(''); setGrp(''); };
   const payOf = (d) => (!(Number(d.shipped_amount) > 0) ? 'none' : Number(d.due) <= 0 ? 'paid' : Number(d.allocated_amount) > 0 ? 'partial' : 'unpaid');
   const voided = useData(() => q(Q.voidedDeals, [org]), [org]).data || [];
+  const catDeals = useMemo(() => new Set(olines.filter((l) => l.category === fcat).map((l) => l.deal_id)), [olines, fcat]);
+  const catNames = useMemo(() => [...new Set(olines.map((l) => l.category).filter(Boolean))], [olines]);
   const modelDeals = useMemo(() => new Set(olines.filter((l) => fmodel.includes(l.model)).map((l) => l.deal_id)), [olines, fmodel]);
   const rows = useMemo(() => (data || []).filter((d) => {
     if (stepF) { if (d.status === 'cancelled' || STEPS[reachedStep(d) + 1]?.key !== stepF) return false; }
@@ -58,12 +61,13 @@ export default function Orders() {
     if (ftier.length && !ftier.includes(d.tier)) return false;
     if (fpay.length && !fpay.includes(payOf(d))) return false;
     if (fmodel.length && !modelDeals.has(d.id)) return false;
+    if (fcat && !catDeals.has(d.id)) return false;
     if (grp === 'open' && ['shipped', 'cancelled'].includes(d.status)) return false;
     if (grp === 'unpaid' && !(['partial', 'shipped'].includes(d.status) && Number(d.due) > 0)) return false;
     if (grp && !['open', 'unpaid'].includes(grp) && !grp.split(',').includes(d.status)) return false;
     if (text) { const t = text.toUpperCase(); if (![d.biz_no, d.customer_name, d.customer_code, d.city, d.quote_no, d.so_no].some((x) => String(x || '').toUpperCase().includes(t))) return false; }
     return true;
-  }), [data, text, tier, grp, light, fcust, ftier, fpay, fmodel, modelDeals, stepF]);
+  }), [data, text, tier, grp, light, fcust, ftier, fpay, fmodel, modelDeals, stepF, fcat, catDeals]);
   const price = seesPrice(role);
   const mRows = useData(() => (role === 'admin' ? call(role, `select deal_id, qty, revenue, cost, profit, cost_missing, cost_goods, sale, returned, adjust, freight, fee from app.margin_rows($1)`, [org]) : Promise.resolve([])), [org, role]).data;
   const margins = useMemo(() => { const by = {}; for (const r of mRows || []) (by[r.deal_id] ||= []).push(r); return Object.fromEntries(Object.entries(by).map(([k, v]) => [k, sumMargin(v)])); }, [mRows]);
@@ -104,12 +108,12 @@ export default function Orders() {
   const byModel = useMemo(() => {
     const base = gridShown?.rows || rows; const fm = gridShown?.models || [];
     const ok = new Map(base.map((d) => [d.id, d])); const m = new Map();
-    for (const l of olines) { const d = ok.get(l.deal_id); if (!d || !l.model) continue; if (fm.length && !fm.includes(String(l.model).toUpperCase())) continue;
+    for (const l of olines) { const d = ok.get(l.deal_id); if (!d || !l.model) continue; if (fm.length && !fm.includes(String(l.model).toUpperCase())) continue; if (fcat && l.category !== fcat) continue;
       const pcs = Number(l.qty_shipped) - Number(l.qty_returned); const k = l.model + '|' + (l.category || '');
       const r = m.get(k) || { key: k, model: l.model, category: l.category, product_id: l.product_id, pcs: 0, amount: 0, req: 0, deals: new Set(), custs: new Set() };
       r.pcs += pcs; r.amount += pcs * Number(l.unit_price || 0); r.req += Number(l.qty_req); r.deals.add(l.deal_id); r.custs.add(d.customer_id); m.set(k, r); }
     return [...m.values()].map((r) => ({ ...r, deal_n: r.deals.size, cust_n: r.custs.size })).sort((a, b) => b.pcs - a.pcs);
-  }, [rows, olines, gridShown]);
+  }, [rows, olines, gridShown, fcat]);
   const counts = useMemo(() => { const c = { done: 0, active: 0, cancelled: 0 }; for (const d of data || []) c[dealLight(d)] += 1; return c; }, [data]);
   const drafts = useData(() => q(`select qd.*, c.name as customer_name, c.code as customer_code, coalesce(e.short_name, e.full_name) as by_name from app.quote_drafts qd join app.customers c on c.id = qd.customer_id left join app.members m on m.user_id = qd.user_id and m.org_id = qd.org_id left join app.employees e on e.id = m.employee_id where qd.org_id = $1 ${role === 'admin' ? '' : 'and qd.user_id = $2'} order by qd.updated_at desc`, role === 'admin' ? [org] : [org, USERS[role]]), [org, role]).data || [];
   return (
@@ -129,6 +133,7 @@ export default function Orders() {
       </div>
       {tab === 'ship' ? <ShipmentsList from={from} to={to} /> : tab === 'void' ? <VoidedList rows={voided} /> : tab === 'inq' ? <Inquiry embedded /> : <div className="card">
         <div className="fbar">
+          <CatFilterByName names={catNames} value={fcat} onChange={setFcat} allLabel="全部种类" />
           <span className="grow" />
           <div className="seg"><button type="button" className={mode === 'orders' ? 'on' : ''} onClick={() => setMode('orders')}>按订单看</button><button type="button" className={mode === 'models' ? 'on' : ''} onClick={() => setMode('models')}>按机型看</button></div>
         </div>

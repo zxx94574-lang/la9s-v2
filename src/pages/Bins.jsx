@@ -47,7 +47,7 @@ export function ProdPick({ products, value, onChange, autoFocus }) {
       {t.trim() && !hits.length && <div className="small muted">没找到这个型号（新货先在物料里建档）</div>}
     </div>);
 }
-export const PRODUCTS_SQL = `select p.id, p.code, p.kingdee_code, p.model, p.variant, c.name as category from app.products p join app.categories c on c.id = p.category_id where p.org_id = $1 and coalesce(p.active, true) order by c.sort, p.model`;
+export const PRODUCTS_SQL = `select p.id, p.code, p.kingdee_code, p.model, p.variant, p.shared_models, c.id as category_id, c.name as category from app.products p join app.categories c on c.id = p.category_id where p.org_id = $1 and coalesce(p.active, true) order by c.sort, p.model`;
 
 // 型号名前缀 = 品牌 (SS A05 → SS, ITEL A05 → ITEL); 没前缀的归「其他」
 export const brandOf = (model) => (String(model || '').match(/^([A-Z]+)[\s_]/) || [])[1] || '其他';

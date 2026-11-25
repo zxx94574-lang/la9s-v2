@@ -15,7 +15,8 @@ test('盘点: 库位格式 / 错码进消耗池 / 盘亏 / 确认后系统 = 实
   await t.as(U.admin, `select app.bin_upsert($1,' lr ')`, [org]);
   const c = await t.val(U.admin, `select app.count_start($1,'年前大盘点',true)`, [org]);
   await assert.rejects(t.as(U.admin, `select app.count_start($1,'x',true)`, [org]), /已经有一次/);
-  await t.val(U.admin, `select app.count_task_set($1,$2,'SS-A, SS-B')`, [c, t.ids.sales]);
+  await t.db.query(`update app.members set employee_id = $1 where user_id = $2`, [t.ids.picker, U.picker]);   // 0100: 只能盘派给自己的
+  await t.val(U.admin, `select app.count_task_set2($1,$2,$3,null)`, [c, t.ids.picker, ['SS-A', 'TXI-A']]);
   await t.as(U.picker, `select app.count_add($1,'ss-a-1',$2,70,null)`, [c, t.ids.bg6mScreen]);
   await t.as(U.picker, `select app.count_add($1,'SS-A-2',$2,30,'贴错码')`, [c, b2]);
   await t.as(U.picker, `select app.count_add($1,'TXI-A-1',$2,490,null)`, [c, t.ids.bg6mCover]);
@@ -61,7 +62,7 @@ test('盘点任务: 货架 + 种类, 一个货架只派一个人; 确认后金�
   await t.val(U.admin, `select app.count_task_set2($1,$2,$3,null)`, [c, t.ids.sales, ['LR']]);
   const tk = await t.one(`select shelves, category_id from app.count_tasks where count_id = $1 order by created_at limit 1`, [c]);
   assert.deepEqual(tk.shelves.sort(), ['SS-A', 'SS-B']); assert.equal(tk.category_id, t.ids.catScreen);
-  await t.as(U.picker, `select app.count_add($1,'SS-A-1',$2,5,null)`, [c, t.ids.bg6mScreen]);
+  await t.as(U.manager, `select app.count_add($1,'SS-A-1',$2,5,null)`, [c, t.ids.bg6mScreen]);
   await assert.rejects(t.as(U.admin, `select app.count_kd_done($1)`, [c]), /还没确认/);
   await t.val(U.admin, `select app.count_apply($1)`, [c]);
   await t.as(U.admin, `select app.count_kd_done($1)`, [c]);

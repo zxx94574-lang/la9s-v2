@@ -1,9 +1,10 @@
-// 241 (Frank 11-11): 时效与准确率 —— 先只显示、不考核; 跑 2–4 周看到真实的中位数再定线
+// 241 (Frank 11-11): 时效与准确率 —— 原先只显示不考核; 11-25 Frank 要联动工资 → 「联动工资」卡 + 工资单「时效准确奖扣」(规则参数可调可关)
 // 每张单按步骤分段计时 (只算上班时间), 谁的时间算谁的; 等客户的时间单独算; 速度和准确率成对看
 import { WorkMap, FLOW, OTHER } from '../components/WorkMap.jsx';
 import { METRICS, useMetricCfg, useMetricData, MetricCard, metricTone, fmtMetric, HiddenMetrics } from '../components/Metric.jsx';
 import { RuleGear } from '../components/Rules.jsx';
 import SalesComm from '../components/SalesComm.jsx';
+import KpiPay from '../components/KpiPay.jsx';
 import HotlineKpi from '../components/HotlineKpi.jsx';
 import React, { useMemo, useState } from 'react';
 import { q } from '../db/client.js';
@@ -144,7 +145,7 @@ export default function Kpi() {
   const FLOWK = ['quote', 'pick', 'so', 'ship', 'sign'];
   return (
     <>
-      <div className="pagehead"><div><div className="eyebrow">Délais & qualité</div><h1 tabIndex={0}>时效与准确率 <Info>只算上班时间（周一到周五 9:00–17:30，中午集体午休自动扣 1 小时；周六 9:00–12:00）。现在只显示、不考核：等员工用自己的工号登录、跑 2–4 周后，再按真实的中位数定线。顶上的环节和「规则参数」是同一条：点一个只看它，再点一下看全部。</Info></h1></div>
+      <div className="pagehead"><div><div className="eyebrow">Délais & qualité</div><h1 tabIndex={0}>时效与准确率 <Info>只算上班时间（周一到周五 9:00–17:30，中午集体午休自动扣 1 小时；周六 9:00–12:00）。达标率联动工资（见下面「联动工资」，线和金额在 ⚙ 里调，也可以关）；等员工用自己的工号登录跑 2–4 周后，再按真实的中位数调线。顶上的环节和「规则参数」是同一条：点一个只看它，再点一下看全部。</Info></h1></div>
         <PeriodBar p={P} /></div>
       <div style={{ marginBottom: 12 }}><WorkMap value={sel} onChange={setSel} info={areaInfo} /></div>
       {mdata && mcfg.ready && <div className="mt-area">
@@ -211,6 +212,7 @@ export default function Kpi() {
         ]} />
       </div>}
       {show('hotline') && <HotlineKpi from={from} to={to} />}
+      {show('staff') && <KpiPay month={String(from).slice(0, 7)} />}
       {show('staff') && <SalesComm from={from} to={to} />}
       {show('staff') && <div className="card" style={{ marginBottom: 12 }}>
         <div className="card-h"><h2>仓库提成 <span className="small muted">每片 {data.rate} XOF</span> <RuleGear anchor="kpi-wh" title="仓库提成" ids={['wh.comm']} /></h2><Info>按出库的片数算给这张单的复核人（没有复核人就给找货人）。这张单被记了发错的责任（少发 / 多发 / 发错型号），整张单的提成取消，下面列出是哪几张。月底算工资照这张表。每片多少钱在「设置 → 规则参数」里可调。</Info></div>

@@ -129,3 +129,38 @@ test('0099 国内财务记货款带汇率 → 批次付款汇率 = 带汇率货�
   await t.as(CNF, `select app.record_po_payment($1,$2)`, [po, JSON.stringify({ kind: 'goods', amount: 500, currency: 'CNY', proof: 'p.jpg' })]);
   assert.equal(Number((await t.one(`select pay_rate from app.product_batches where po_no = 'PO-R'`)).pay_rate), 91, '没填汇率的货款不影响');
 });
+
+test('0100 盘点: 员工只能盘派给自己的货架 / 种类; 报盘完才能自己再领; 主管随时能派', async () => {
+  const t = await setup();
+  const org = t.ids.org;
+  await t.db.query(`update app.members set employee_id = $1 where user_id = $2`, [t.ids.picker, U.picker]);
+  const c = await t.val(U.admin, `select app.count_start($1,'x',true)`, [org]);
+  await assert.rejects(t.as(U.picker, `select app.count_add($1,'SS-A-1',$2,5,null)`, [c, t.ids.bg6mScreen]), /还没给你派/);
+  const tk = await t.val(U.manager, `select app.count_task_set2($1,$2,$3,$4)`, [c, t.ids.picker, ['SS-A'], t.ids.catScreen]);
+  await t.as(U.picker, `select app.count_add($1,'ss-a-1',$2,5,null)`, [c, t.ids.bg6mScreen]);
+  await assert.rejects(t.as(U.picker, `select app.count_add($1,'SS-B-1',$2,5,null)`, [c, t.ids.bg6mScreen]), /不在你的任务/);
+  await assert.rejects(t.as(U.picker, `select app.count_add($1,'SS-A-2',$2,5,null)`, [c, t.ids.bg6mCover]), /种类不在你的任务/);
+  await assert.rejects(t.as(U.picker, `select app.count_task_claim($1,$2,null)`, [c, ['SS-B']]), /先把手上这批/);
+  await t.as(U.picker, `select app.count_task_done($1,true)`, [tk]);
+  await assert.rejects(t.as(U.picker, `select app.count_task_claim($1,$2,null)`, [c, ['SS-A']]), /已经派给/);
+  await t.val(U.picker, `select app.count_task_claim($1,$2,null)`, [c, ['SS-B']]);
+  await t.as(U.picker, `select app.count_add($1,'SS-B-1',$2,3,null)`, [c, t.ids.bg6mCover]);
+  await t.as(U.manager, `select app.count_add($1,'AA-A-1',$2,1,null)`, [c, t.ids.bg6mCover]);   // 主管哪里都能录
+  assert.equal(Number((await t.one(`select count(*) n from app.count_lines where count_id = $1`, [c])).n), 3);
+});
+
+test('0101 时效准确奖扣: 带进工资单 + 进实发; 手改过的重算不覆盖, force 才覆盖', async () => {
+  const t = await setup();
+  const org = t.ids.org;
+  await t.as(U.admin, `select app.payroll_open($1,'2026-11-01')`, [org]);
+  const net0 = Number((await t.one(`select net from app.payroll where org_id = $1 and employee_id = $2`, [org, t.ids.picker])).net);
+  await t.as(U.admin, `select app.payroll_kpi_pay($1,'2026-11-01',$2,false)`, [org, JSON.stringify([{ employee_id: t.ids.picker, amount: -5000, note: '时效 60%' }])]);
+  let r = await t.one(`select net, kpi_pay, kpi_note from app.payroll where org_id = $1 and employee_id = $2`, [org, t.ids.picker]);
+  assert.equal(Number(r.kpi_pay), -5000); assert.equal(Number(r.net), net0 - 5000); assert.equal(r.kpi_note, '时效 60%');
+  await t.as(U.admin, `select app.payroll_set_kpi_pay($1,'2026-11-01',$2,0)`, [org, t.ids.picker]);
+  await t.as(U.admin, `select app.payroll_kpi_pay($1,'2026-11-01',$2,false)`, [org, JSON.stringify([{ employee_id: t.ids.picker, amount: 10000, note: 'x' }])]);
+  assert.equal(Number((await t.one(`select kpi_pay from app.payroll where org_id = $1 and employee_id = $2`, [org, t.ids.picker])).kpi_pay), 0);
+  await t.as(U.admin, `select app.payroll_kpi_pay($1,'2026-11-01',$2,true)`, [org, JSON.stringify([{ employee_id: t.ids.picker, amount: 10000, note: 'x' }])]);
+  assert.equal(Number((await t.one(`select kpi_pay from app.payroll where org_id = $1 and employee_id = $2`, [org, t.ids.picker])).kpi_pay), 10000);
+  await assert.rejects(t.as(U.picker, `select app.payroll_kpi_pay($1,'2026-11-01','[]',true)`, [org]), /PERMISSION/);
+});

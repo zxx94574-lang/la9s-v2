@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { q, call, callValue } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, DatePicker, Modal, SortList, RateInput, Info, PageGear, Choice, PhotoInput, ConfirmBtn } from '../components/ui.jsx';
+import { useApp, useData, DatePicker, Modal, RateInput, Info, PageGear, Choice, PhotoInput, ConfirmBtn } from '../components/ui.jsx';
 import ProductDrawer from '../components/ProductDrawer.jsx';
 import { CustomerDrawer } from './Customers.jsx';
 import { STEPS } from '../lib/domain.js';
@@ -49,7 +49,6 @@ export default function QuoteNew() {
   const [cellErrs, setCellErrs] = useState(null);     // {rowKey: {col: msg}} → 表格里红框 (Frank 11-09 第 4 条)
   const [prodOpen, setProdOpen] = useState(null);
   const [custOpen, setCustOpen] = useState(false);
-  const [catOrderOpen, setCatOrderOpen] = useState(false);
 
   const realLines = lines.filter((l) => l.product || l.model);
   // 从「草稿」点进来: 直接摆回去
@@ -243,7 +242,7 @@ export default function QuoteNew() {
         <div className="flow2-now">
           <span>新订单 · <b>第 1 步 报价</b> <Info>选客户、选货{canPrice ? '、给价' : ''} → 保存 → 下面接着联系客户确认。报价不预占库存，确认下推找货时才预占。选了客户、填够 5 行会自动存草稿（订单总览 →「草稿」里找得到，7 天没动自动删）。</Info>{draftId ? <span className="small muted"> · 草稿已自动保存</span> : customer && realLines.length > 0 && realLines.length < minLines ? <span className="small muted"> · 还没存草稿：再加 {minLines - realLines.length} 行才会自动存</span> : null}</span>
           <span className="grow" />
-          {role === 'admin' && <PageGear items={[['种类顺序（所有人同款）', () => setCatOrderOpen(true)], [edit ? '退出调整版面' : '调整版面', () => setLayoutEdit(!edit)]]} />}
+          {role === 'admin' && <PageGear items={[[edit ? '退出调整版面' : '调整版面', () => setLayoutEdit(!edit)]]} />}
         </div>
       </div>
       {histOpen && customer && <PriceHistory customerId={customer} customerName={cust?.name} productIds={lines.filter((l) => l.product).map((l) => l.product.id)} currency={currency} onClose={() => setHistOpen(false)}
@@ -252,7 +251,6 @@ export default function QuoteNew() {
         applyLabel={canPrice ? '用选中的历史价' : '申请用选中的历史价'} applyNote={canPrice ? '填进单价，保存报价后生效（标手改）' : '填成申请价，保存后中方批了才生效'} />}
       {prodOpen && <ProductDrawer product={prodOpen} tier={tier} onClose={() => setProdOpen(null)} />}
       {custOpen && cust && <CustomerDrawer id={cust.id} onClose={() => setCustOpen(false)} />}
-      {catOrderOpen && <CatOrderModal categories={data.categories} onClose={() => setCatOrderOpen(false)} />}
 
       {/* 511 (Frank 11-24): 点「新订单」时有没完结的草稿 → 先问要不要前往; 前往 = 接着做, 不前往 = 草稿作废、开新的 (什么时候算草稿不变: 填够 N 行) */}
       {!customer && !openId && !draftAsked && (myDrafts || []).length > 0 && (
@@ -274,15 +272,3 @@ export default function QuoteNew() {
   );
 }
 
-// 种类条顺序 (Frank 11-09 第 1 条): 中方排一次, 所有人同款; 手机端一行横滑, 电脑端固定两行
-function CatOrderModal({ categories, onClose }) {
-  const { org, role, toast, refresh } = useApp();
-  const [list, setList] = useState(categories);
-  const save = async (v) => { try { await callValue(role, `select app.set_org_setting($1,'cat_order',$2)`, [org, v ? JSON.stringify(v.map((c) => c.id)) : null]); toast(v ? '种类顺序已保存' : '已恢复默认'); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
-  return (
-    <Modal title="种类条顺序" onClose={onClose} footer={<><button type="button" className="btn" onClick={() => save(null)}>恢复默认</button><span className="grow" /><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" onClick={() => save(list)}>保存</button></>}>
-      <div className="hint" style={{ marginBottom: 8 }}>按住一行上下拖，常用的放前面。电脑端固定两行、手机端一行横滑；搜索框照旧"输型号出全部"，种类只是辅助筛选。</div>
-      <SortList items={list} keyOf={(c) => c.id} onChange={setList} render={(c, i) => <><span className="mono muted small" style={{ width: 24 }}>{i + 1}</span><span className="grow">{c.name}</span></>} />
-    </Modal>
-  );
-}

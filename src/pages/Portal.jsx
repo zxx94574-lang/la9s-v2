@@ -2,6 +2,7 @@
 // 客户老板手机上用: 下单 / 我的订单 / 我的对账 / 我的门店. 门店店员: 向老板下单 / 看自己的单.
 // 客户端只显示「有货 / 少量 / 无货 / 在途」, 不显示精确库存, 不显示底价; 价格以热线发的报价单为准.
 // 我们这边: 「客户门店」页看所有客户的门店和门店订单.
+import CatFilter from '../components/CatFilter.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -58,8 +59,7 @@ export function PortalShop() {
         <div className="sub">{role === 'boss' ? '选型号和数量发给 LA&9S（这是询单，不是订单）；我们定好价给你报价，价格以报价单为准。' : '向老板下单，老板有货自己发，没货转给 LA&9S。'}</div></div></div>
       <div className="card card-b stack" style={{ gap: 10 }}>
         <input className="in" placeholder="⌕ 型号 / 编码 · Modèle" value={text} onChange={(e) => setText(e.target.value)} />
-        <div className="chips"><button type="button" className={`chip ${!cat ? 'on' : ''}`} onClick={() => setCat('')}>全部</button>
-          {cats.map(([id, name]) => <button type="button" key={id} className={`chip ${cat === id ? 'on' : ''}`} onClick={() => setCat(id)}>{name}</button>)}</div>
+        <CatFilter categories={cats.map(([id, name]) => ({ id, name }))} value={cat} onChange={setCat} />
       </div>
       <div className="plist">
         {list.map((p) => {

@@ -1,6 +1,7 @@
 // 物料与定价 (中方): the 飞书 Material Information formula, kept in the system.
 // 到岸成本 = round(人民币成本 ÷ 汇率 + 运费, 百位); S / Wholesale / Retail / Repair = 到岸 + 各档 FEE.
 // Edit cost / freight / FEE in the grid (columns highlighted), save → prices recomputed; a locked tier price (一口价) is never overwritten.
+import { CatFilterByName } from '../components/CatFilter.jsx';
 import { RuleGear } from '../components/Rules.jsx';
 import React, { useMemo, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
@@ -92,8 +93,7 @@ export default function Pricing() {
       </div>
       <div className="card">
         <div className="card-b row" style={{ gap: 10 }}>
-          <div className="chips"><button type="button" className={`chip ${!cat ? 'on' : ''}`} onClick={() => setCat('')}>全部 {data.rows.length}</button>
-            {cats.map((c) => <button type="button" key={c} className={`chip ${cat === c ? 'on' : ''}`} onClick={() => setCat(c)}>{c}</button>)}</div>
+          <CatFilterByName names={cats} value={cat} onChange={setCat} allLabel={`全部 ${data.rows.length}`} />
           <span className="grow" />
           {missing > 0 && <Pill tone="amber">{missing} 个物料缺人民币成本，算不出价格</Pill>}
           <span className="small muted">汇率更新：{s.updated_at ? dt(s.updated_at) : '默认值'}</span>

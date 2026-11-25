@@ -1,15 +1,16 @@
 // 509 / 510 / 512 / 513 (Frank 11-24): 盘点 —— 放在「库位与盘点」页的「盘点」页签
 // 中方: ① 现状 → ② 派任务 (谁 · 货架 · 种类; 一个货架只派一个人) → ③ 库位图叠进度 → ④ 差异 → 确认写进系统 (出货恢复) → 金蝶要录的单 (财务录完点「金蝶已录完」)
-// 员工: 只有「我的任务 → 一层一层盘 → 型号按品牌分组点选 → 填片数」+「这一层录了 / 我录的」
+// 员工: 只有「我的任务 → 一层一层盘 → 搜型号 → 填片数」+「这一层录了 / 我录的」；报盘完后可以自己再领一批（0100，只能盘派给自己的）
 // 盘点只记「在哪个库位找到多少」, 不在盘点时挪货; 挪位放到盘完后 (库位图里「挪」)
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import { useApp, useData, FRow, Choice, MultiChoice, Info, ConfirmBtn, Assumed, Modal } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
+import CatFilter from '../components/CatFilter.jsx';
 import { ModelLink, EmpLink } from '../components/Archives.jsx';
 import { dt, qty, friendlyError } from '../lib/format.js';
-import { BinPick, PRODUCTS_SQL, binDone, ShelfMap, brandOf, roomBrands, shelvesOf, binsOfShelf, allBinCodes } from './Bins.jsx';
+import { BinPick, PRODUCTS_SQL, binDone, ShelfMap, shelvesOf, binsOfShelf, allBinCodes } from './Bins.jsx';
 
 export function CountPanel({ rooms, items }) {
   const { org, role, toast, refresh } = useApp();
@@ -85,7 +86,8 @@ function Open({ c, me, admin, boss, rooms, items }) {
       <span className="grow" /><span className="small muted">开始 {dt(c.started_at)}</span></div>);
   if (!boss) return (
     <div className="card">{header}<div className="card-b">
-      {mine.length ? <Entry c={c} tasks={mine} rooms={rooms} lines={lines} products={data?.products || []} cats={data?.cats || []} /> : <span className="muted">中方还没给你派货架，派了这里就会出现你的任务。</span>}
+      {mine.length > 0 && <Entry c={c} tasks={mine} rooms={rooms} lines={lines} products={data?.products || []} cats={data?.cats || []} items={items} />}
+      {!mine.some((t) => t.status !== 'done') && <div style={{ marginTop: mine.length ? 14 : 0 }}>{!mine.length && <div className="muted" style={{ marginBottom: 8 }}>还没给你派货架：等主管派，或者自己领。</div>}<Claim c={c} rooms={rooms} tasks={tasks} cats={data?.cats || []} again={mine.length > 0} /></div>}
     </div></div>);
   return (
     <>
@@ -114,7 +116,7 @@ function Open({ c, me, admin, boss, rooms, items }) {
       </div>
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="card-h"><h2>我也来录</h2><span className="grow" /><button type="button" className="btn sm" onClick={() => setSelfOpen(!selfOpen)}>{selfOpen ? '收起' : '展开'}</button></div>
-        {selfOpen && <div className="card-b"><Entry c={c} tasks={mine} rooms={rooms} lines={lines} products={data?.products || []} cats={data?.cats || []} free={!mine.length} /></div>}
+        {selfOpen && <div className="card-b"><Entry c={c} tasks={mine} rooms={rooms} lines={lines} products={data?.products || []} cats={data?.cats || []} free={!mine.length} items={items} /></div>}
       </div>
       {admin && <div className="card">
         <div className="card-h" style={{ flexWrap: 'wrap', gap: 8 }}><h2>差异 <Info>系统数 = LA + 9S 两个仓合计。同一种货（编码甄别里定过）一个编码多、一个编码少能抵消的是「错码」；抵消不了的是真盘亏 / 盘盈。没盘到的编码按实物 0 算。确认后系统 = 实物、出货恢复；金蝶要录的单在「以前的盘点」里，财务录完点「金蝶已录完」。</Info></h2><span className="grow" />
@@ -146,58 +148,87 @@ function NewTask({ c, rooms, tasks, emps, cats }) {
     <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
       <Choice value={emp} onChange={setEmp} placeholder="谁盘" options={emps.map((e) => [e.id, `${e.emp_no ? e.emp_no + ' ' : ''}${e.short_name}`])} />
       <div style={{ minWidth: 220, flex: 1 }}><MultiChoice value={shs} onChange={setShs} placeholder={opts.length ? '盘哪些货架（可多选）' : '货架都派完了'} options={opts} style={{ width: '100%' }} /></div>
-      <Choice value={cat} onChange={setCat} options={[['*', '全部种类'], ...cats.map((x) => [x.id, x.name])]} />
+      <CatFilter categories={cats} value={cat === '*' ? '' : cat} onChange={(v) => setCat(v || '*')} forSale={false} allLabel="全部种类" compact />
       <button type="button" className="btn primary" disabled={!emp || !shs.length} onClick={go}>＋ 派</button>
     </div>);
 }
 
-// 录入: 任务 → 库位一层一层走 → 型号按品牌分组点选 → 片数; free = 没任务也能录 (中方自己)
-function Entry({ c, tasks, rooms, lines, products, cats, free }) {
+// 领任务（Frank 11-25）: 手上的报盘完了，自己再领一批没派出去的货架；主管 / 中方在「派任务」里随时派
+function Claim({ c, rooms, tasks, cats, again }) {
   const { role, toast, refresh } = useApp();
-  const [tid, setTid] = useState(tasks.find((t) => t.status !== 'done')?.id || tasks[0]?.id || '');
-  const t = tasks.find((x) => x.id === tid);
+  const [shs, setShs] = useState([]); const [cat, setCat] = useState('');
+  const taken = new Set(tasks.flatMap((t) => t.shelves || []));
+  const opts = shelvesOf(rooms).filter((x) => !taken.has(x)).map((x) => ({ v: x, l: x, group: x.split('-')[0] }));
+  const go = async () => { try { await call(role, `select app.count_task_claim($1,$2,$3)`, [c.id, shs, cat || null]); toast(`领了 ${shs.join('、')}`); setShs([]); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  if (!opts.length) return <div className="small muted">货架都派完了。还有要盘的找主管。</div>;
+  return (
+    <div className="ce-claim stack" style={{ gap: 8 }}>
+      <b>{again ? '再领一批' : '自己领一批'} <span className="muted small">（没派出去的货架；一个货架只给一个人）</span></b>
+      <MultiChoice value={shs} onChange={setShs} placeholder="盘哪些货架（可多选）" options={opts} style={{ width: '100%' }} />
+      <CatFilter categories={cats} value={cat} onChange={setCat} forSale={false} allLabel="全部种类" compact />
+      <div><button type="button" className="btn primary" disabled={!shs.length} onClick={go}>＋ 领这批</button></div>
+    </div>);
+}
+
+// 录入（Frank 11-25 改）: 任务 → 库位一层一层走 → 搜型号（型号 / 编码 / 通用型号，跟下单一样）→ 片数
+// 不再把所有型号平铺；没搜的时候只给「这一层上次放的」几个快捷，点了直接填数。只能录在派给自己的货架和种类里（后台也拦）。
+// free = 中方 / 主管自己录：随便选库位、种类
+function Entry({ c, tasks, rooms, lines, products, cats, free, items = {} }) {
+  const { role, toast, refresh } = useApp();
+  const open = tasks.filter((x) => x.status !== 'done');
+  const [tid, setTid] = useState((open[0] || tasks[0])?.id || '');
+  const t = tasks.find((x) => x.id === tid) || open[0] || tasks[0];
   const bins = useMemo(() => (t ? (t.shelves || []).flatMap((sh) => binsOfShelf(rooms, sh)) : []), [t, rooms]);
-  const [ix, setIx] = useState(0); const [freeBin, setFreeBin] = useState(''); const [freeCat, setFreeCat] = useState('*');
+  const [ix, setIx] = useState(0); const [freeBin, setFreeBin] = useState(''); const [freeCat, setFreeCat] = useState('');
   const bin = t && !free ? bins[Math.min(ix, bins.length - 1)] : freeBin;
-  const catId = t && !free ? t.category_id : freeCat === '*' ? null : freeCat;
-  const catName = catId ? cats.find((x) => x.id === catId)?.name : null;
-  const [sel, setSel] = useState(''); const [n, setN] = useState(''); const [kw, setKw] = useState(''); const [more, setMore] = useState(false);
-  const room = rooms.find((r) => r.room === String(bin || '').split('-')[0]); const rb = roomBrands(room); const rbKey = rb.join(',');
+  const catId = t && !free ? t.category_id : freeCat || null;
+  const [sel, setSel] = useState(''); const [n, setN] = useState(''); const [kw, setKw] = useState(''); const [hi, setHi] = useState(0);
   const here = lines.filter((l) => l.bin === bin);
-  const groups = useMemo(() => {
-    const k = kw.trim().toUpperCase().replace(/\s+/g, ''); const rbs = rbKey ? rbKey.split(',') : [];
-    const ps = products.filter((p) => (!catName || catName === p.category) && (!k || [p.code, p.model].some((x) => String(x || '').toUpperCase().replace(/\s+/g, '').includes(k))));
-    const by = {}; for (const p of ps) (by[brandOf(p.model)] ||= []).push(p);
-    const keys = Object.keys(by).sort((a, b) => (rbs.includes(b) - rbs.includes(a)) || (a === '其他') - (b === '其他') || a.localeCompare(b));
-    return keys.map((b) => ({ brand: b, mine: rbs.includes(b), ps: by[b] }));
-  }, [products, catName, kw, rbKey]);
-  const shown = kw.trim() || more || !groups.some((g) => g.mine) ? groups : groups.filter((g) => g.mine);
+  const norm = (x) => String(x || '').toUpperCase().replace(/[\s_-]+/g, '');
+  const pool = useMemo(() => products.filter((p) => !catId || p.category_id === catId), [products, catId]);
+  const hits = useMemo(() => {
+    const k = norm(kw); if (!k) return [];
+    const score = (p) => (norm(p.model) === k ? 4 : norm(p.model).startsWith(k) ? 3 : norm(p.model).includes(k) ? 2 : [p.code, p.kingdee_code, p.variant].some((x) => norm(x).includes(k)) ? 1.5 : (p.shared_models || []).some((x) => norm(x).includes(k)) ? 1 : 0);
+    return pool.map((p) => [p, score(p)]).filter(([, sc]) => sc > 0).sort((a, b) => b[1] - a[1] || a[0].model.localeCompare(b[0].model)).slice(0, 40).map(([p]) => p);
+  }, [pool, kw]);
+  // 没搜的时候: 这一层系统里记着的型号（只给型号不给数，免得照抄）+ 这层已经录过的
+  const quick = useMemo(() => { const ids = new Set([...(items[bin] || []).map((x) => x.product_id), ...here.map((l) => l.product_id)]); return pool.filter((p) => ids.has(p.id)); }, [items, bin, here, pool]);
   const done = bins.filter((b) => lines.some((l) => l.bin === b)).length;
-  const rec = async () => { try { await call(role, `select app.count_add($1,$2,$3,$4,null)`, [c.id, bin, sel, Number(n)]); toast(`${bin} · ${products.find((p) => p.id === sel)?.model} · ${n} 片`); setSel(''); setN(''); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  const P = (id) => products.find((p) => p.id === id);
+  const choose = (p) => { const d = here.find((l) => l.product_id === p.id); setSel(p.id); setN(d ? String(d.qty) : ''); };
+  const rec = async () => { try { await call(role, `select app.count_add($1,$2,$3,$4,null)`, [c.id, bin, sel, Number(n)]); toast(`${bin} · ${P(sel)?.model} · ${n} 片`); setSel(''); setN(''); setKw(''); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
   const elsewhere = sel ? lines.filter((l) => l.product_id === sel && l.bin !== bin) : [];
   const my = lines.filter((l) => l.by_user === USERS[role]);
+  const row = (p, i) => { const d = here.find((l) => l.product_id === p.id); return (
+    <button type="button" key={p.id} className={`ce-hit ${sel === p.id ? 'on' : ''} ${i === hi ? 'hi' : ''} ${d ? 'done' : ''}`} onClick={() => choose(p)} onMouseEnter={() => setHi(i)}>
+      <b>{p.model}</b><span className="muted small">{p.category}{p.variant ? ` · ${p.variant}` : ''}</span><span className="mono small muted">{p.code}</span>
+      {(p.shared_models || []).length > 0 && <span className="small muted ce-sh">通用 {(p.shared_models || []).slice(0, 4).join(' / ')}{p.shared_models.length > 4 ? ' …' : ''}</span>}
+      <span className="grow" />{d ? <span className="pill green">{qty(d.qty)} 片 ✓</span> : null}</button>); };
+  const key = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(h + 1, hits.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
+    else if (e.key === 'Enter' && hits[hi]) { e.preventDefault(); choose(hits[hi]); }
+  };
   return (
     <div className="stack" style={{ gap: 10 }}>
       {t && !free ? <>
-        {tasks.length > 1 && <Choice value={tid} onChange={(v) => { setTid(v); setIx(0); }} options={tasks.map((x) => [x.id, `${x.category || '全部'} · ${x.scope}`])} />}
+        {tasks.length > 1 && <Choice value={t.id} onChange={(v) => { setTid(v); setIx(0); setSel(''); }} options={tasks.map((x) => [x.id, `${x.category || '全部'} · ${x.scope}${x.status === 'done' ? '（已报盘完）' : ''}`])} />}
         <div className="ce-task"><div><small>我的任务</small><br /><b>{t.category || '全部种类'} · {t.scope}</b></div>
           <div style={{ textAlign: 'right' }}><small>{done} / {bins.length} 层</small><div className="ce-prog"><i style={{ width: `${bins.length ? (done / bins.length) * 100 : 0}%` }} /></div>
-            {t.status !== 'done' ? <ConfirmBtn className="btn sm" title="这批货架都盘完了？" body={`${t.scope}：${done} / ${bins.length} 层录过。点了中方会看到你盘完了，再给你派下一批。`} onOk={async () => { try { await call(role, `select app.count_task_done($1,true)`, [t.id]); toast('已报盘完'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } }}>我盘完了</ConfirmBtn> : <span className="pill green">已报盘完</span>}</div></div>
+            {t.status !== 'done' ? <ConfirmBtn className="btn sm" title="这批货架都盘完了？" body={`${t.scope}：${done} / ${bins.length} 层录过。点了中方会看到你盘完了；你可以马上再领下一批。`} onOk={async () => { try { await call(role, `select app.count_task_done($1,true)`, [t.id]); toast('已报盘完，可以再领一批'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } }}>我盘完了</ConfirmBtn> : <span className="pill green">已报盘完</span>}</div></div>
         <div className="ce-bin"><b>{bin}</b><span className="grow" />
-          <button type="button" className="btn" disabled={ix <= 0} onClick={() => { setIx(ix - 1); setSel(''); }}>← 上一层</button>
-          <button type="button" className="btn primary" disabled={ix >= bins.length - 1} onClick={() => { setIx(ix + 1); setSel(''); }}>这层盘完，下一层 →</button></div>
+          <button type="button" className="btn" disabled={ix <= 0} onClick={() => { setIx(ix - 1); setSel(''); setKw(''); }}>← 上一层</button>
+          <button type="button" className="btn primary" disabled={ix >= bins.length - 1} onClick={() => { setIx(ix + 1); setSel(''); setKw(''); }}>这层盘完，下一层 →</button></div>
       </> : <>
         <FRow label="库位" req><BinPick value={freeBin} onChange={setFreeBin} /></FRow>
-        <FRow label="种类"><Choice value={freeCat} onChange={setFreeCat} options={[['*', '全部种类'], ...cats.map((x) => [x.id, x.name])]} /></FRow>
+        <FRow label="种类"><CatFilter categories={cats} value={freeCat} onChange={setFreeCat} forSale={false} allLabel="全部种类" compact /></FRow>
       </>}
       {binDone(bin) && <>
-        {sel && <div className="ce-qty sticky"><b>{products.find((p) => p.id === sel)?.model}</b><input className="in" autoFocus inputMode="numeric" value={n} onChange={(e) => setN(e.target.value.replace(/\D/g, ''))} placeholder="片" onKeyDown={(e) => { if (e.key === 'Enter' && n !== '') rec(); }} /><button type="button" className="btn primary lg" disabled={n === ''} onClick={rec}>记下</button></div>}
-        <input className="in" style={{ width: '100%' }} value={kw} onChange={(e) => setKw(e.target.value)} placeholder="型号多就搜一下，例 A10" />
-        {shown.map((g) => <div key={g.brand} className="ce-grp"><h4>{g.brand}</h4><div className="ce-grid">{g.ps.slice(0, kw ? 60 : 200).map((p) => { const d = here.find((l) => l.product_id === p.id); return (
-          <button type="button" key={p.id} className={`ce-m ${sel === p.id ? 'on' : ''} ${d ? 'done' : ''}`} onClick={() => { setSel(p.id); setN(d ? String(d.qty) : ''); }} title={`${p.category} ${p.model}${p.variant ? ' · ' + p.variant : ''} · ${p.code}`}>
-            {g.brand !== '其他' ? p.model.slice(g.brand.length).replace(/^[\s_]+/, '') : p.model}<small>{d ? `${qty(d.qty)} 片 ✓` : p.variant || ' '}</small></button>); })}</div></div>)}
-        {!kw.trim() && groups.some((g) => g.mine) && groups.some((g) => !g.mine) && <button type="button" className="btn sm ghost" onClick={() => setMore(!more)}>{more ? '只看本房间的品牌' : `其他品牌（${groups.filter((g) => !g.mine).reduce((a, g) => a + g.ps.length, 0)} 个）`}</button>}
-        {!shown.length && <div className="small muted">没有这个种类 / 型号</div>}
+        {sel && <div className="ce-qty sticky"><b>{P(sel)?.model}</b><span className="muted small">{P(sel)?.category}</span><input className="in" autoFocus inputMode="numeric" value={n} onChange={(e) => setN(e.target.value.replace(/\D/g, ''))} placeholder="片" onKeyDown={(e) => { if (e.key === 'Enter' && n !== '') rec(); if (e.key === 'Escape') setSel(''); }} /><button type="button" className="btn primary lg" disabled={n === ''} onClick={rec}>记下</button></div>}
+        <input className="in" style={{ width: '100%' }} value={kw} autoFocus={!sel} onChange={(e) => { setKw(e.target.value); setHi(0); }} onKeyDown={key}
+          placeholder={`⌕ 搜型号 / 编码 / 通用型号${catId ? `（只在「${cats.find((x) => x.id === catId)?.name || ''}」里）` : ''}，例 A10`} />
+        {kw.trim() ? <div className="ce-hits">{hits.map(row)}{!hits.length && <div className="small muted" style={{ padding: 8 }}>没有「{kw.trim()}」{catId ? '（这个任务只盘这个种类；别的种类找主管）' : ''}</div>}</div>
+          : quick.length > 0 && <div className="ce-hits"><div className="small muted" style={{ padding: '2px 4px' }}>这一层上次放的（点了填数；别的型号上面搜）</div>{quick.map(row)}</div>}
         {elsewhere.length > 0 && <div className="count-warn">这个型号在 {elsewhere.map((l) => `${l.bin}（${qty(l.qty)}）`).join('、')} 也盘到了，最后合在一起算。</div>}
         <div className="small"><span className="muted">这一层录了：</span>{here.length ? here.map((l) => `${l.model} ${qty(l.qty)}`).join(' · ') : <span className="muted">还没录</span>}</div>
       </>}
