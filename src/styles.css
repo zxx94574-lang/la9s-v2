@@ -2067,3 +2067,15 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .gc-kv > span { color: var(--muted, #64748b); flex: 0 0 auto; max-width: 45%; }
 .gc-kv > b { font-weight: 500; min-width: 0; overflow-wrap: anywhere; text-align: right; }
 .gc-foot { background: #f6f8fb; font-weight: 600; }
+
+/* 顶栏：左边（logo / 返回前进）放不下时自己收，不许压到右边语言 / 岗位按钮上（法语字长，11-25 Frank 截图） */
+.top-left { min-width: 0; flex: 1 1 auto; overflow: hidden; }
+.top-left .brand { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-actions { flex: 0 0 auto; }
+@media (max-width: 1500px) { .top .brand small { display: none; } }
+@media (max-width: 1180px) { .navhist .nh-l { display: none; } }
+/* 11-25 法语字长：卡片标题最多两行不再截成「Chiffre ...」；数字后的单位放不下就换行，不裁掉；小字里的状态块不越过格子 */
+.d2-m .k { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; }
+.d2-m .v { flex-wrap: wrap; row-gap: 0; }
+.d2-m .d { overflow-wrap: anywhere; }
+.d2-m .d .pill { white-space: normal; max-width: 100%; display: inline-block; }

@@ -301,13 +301,13 @@ export default function App() {
 
         <div className="main">
           <header className="top">
-            <div className="row" style={{ gap: 10 }}>
+            <div className="row top-left" style={{ gap: 10 }}>
               <button type="button" className="btn ghost show-m" style={{ padding: 6 }} onClick={() => setDrawer(true)} aria-label="菜单">☰</button>
               <img className="mlogo" src="./la9s-logo.png" alt="LA&9S" onClick={() => go('dashboard')} />
               <span className="brand">LA&9S<small>{portal ? 'Commande client · 客户下单' : '科特迪瓦 · 中方管理'}</small></span>{TEST && <span className="pill red" style={{ marginLeft: 8 }} title="这里的单据都是测试数据，和真实版完全分开">测试版</span>}
               {!portal && <span className="navhist">
-                <button type="button" className="btn sm" disabled={!navPos.back} onClick={navBack} title="回到上一页（档案、滚到哪都照原样）">←<span className="hide-m"> 返回</span></button>
-                <button type="button" className="btn sm hide-m" disabled={!navPos.fwd} onClick={navFwd} title="回到刚才那一页">前进 →</button>
+                <button type="button" className="btn sm" disabled={!navPos.back} onClick={navBack} title="回到上一页（档案、滚到哪都照原样）">←<span className="nh-l"> 返回</span></button>
+                <button type="button" className="btn sm hide-m" disabled={!navPos.fwd} onClick={navFwd} title="回到刚才那一页"><span className="nh-l">前进 </span>→</button>
               </span>}
             </div>
             <div className="top-actions">
