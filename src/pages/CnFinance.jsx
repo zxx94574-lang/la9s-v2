@@ -13,14 +13,16 @@ export default function CnFinance() {
   const { org, tick } = useApp();
   const [pay, setPay] = useState(null);
   const { data } = useData(async () => {
-    const [rows, remit] = await Promise.all([
+    const [rows, remit, rates, avg] = await Promise.all([
       q(`select * from app.v_po_ledger where org_id = $1 order by coalesce(shipped_on, eta) desc nulls last, po_no`, [org]),
       q(`select currency, count(*)::int as n, sum(expected) as amt from app.remittances where org_id = $1 and status <> 'void' group by currency order by currency`, [org]).catch(() => []),
+      q(`select po_id, sum(amount * xof_per_unit) / nullif(sum(amount), 0) as rate, bool_or(xof_per_unit is null) as some_blank from app.po_payments where org_id = $1 and kind = 'goods' group by po_id`, [org]).catch(() => []),
+      q(`select sum(amount_out) / nullif(sum(expected), 0) as r from app.remittances where org_id = $1 and currency = 'CNY' and status <> 'void' and on_date >= current_date - 30`, [org]).catch(() => []),
     ]);
-    return { rows, remit };
+    return { rows: rows.map((r) => ({ ...r, ...(rates.find((x) => x.po_id === r.id) ? { pay_rate: rates.find((x) => x.po_id === r.id).rate, rate_blank: rates.find((x) => x.po_id === r.id).some_blank } : {}) })), remit, avgRate: Number(avg?.[0]?.r) || null };
   }, [org, tick]);
   if (!data) return <div className="empty">加载中…</div>;
-  const { rows, remit } = data;
+  const { rows, remit, avgRate } = data;
   const goods = rows.reduce((a, r) => a + N(r.goods_cny), 0), paid = rows.reduce((a, r) => a + N(r.paid_cny), 0);
   const owe = rows.filter((r) => N(r.goods_cny) > N(r.paid_cny) + 0.5);
   return (
@@ -44,19 +46,20 @@ export default function CnFinance() {
           { key: 'goods_cny', label: '货款应付 CNY', w: 120, value: (r) => N(r.goods_cny), render: (r) => <>{money(r.goods_cny, 'CNY')}{N(r.unpriced) > 0 && <Pill tone="amber">{r.unpriced} 行没单价</Pill>}</> },
           { key: 'paid_cny', label: '已付 CNY', w: 110, value: (r) => N(r.paid_cny), render: (r) => money(r.paid_cny, 'CNY') },
           { key: 'due', label: '还差', w: 120, value: (r) => N(r.goods_cny) - N(r.paid_cny), render: (r) => { const d = N(r.goods_cny) - N(r.paid_cny); return d > 0.5 ? <Pill tone="red">差 {money(d, 'CNY')}</Pill> : d < -0.5 ? <Pill tone="amber">多付 {money(-d, 'CNY')}</Pill> : N(r.goods_cny) > 0 ? <Pill tone="green">付清</Pill> : ''; } },
+          { key: 'pay_rate', label: '付款汇率', w: 120, value: (r) => N(r.pay_rate) || null, render: (r) => (N(r.paid_cny) <= 0 ? '' : N(r.pay_rate) > 0 ? <span title="1 CNY = ? 西法；这张单批次的成本按它算">{N(r.pay_rate).toFixed(2)}{r.rate_blank && <Pill tone="amber">有几笔没填</Pill>}</span> : <Pill tone="amber" title="付了货款但没填汇率：这批货的成本只能按现在的定价汇率估">没填</Pill>) },
           { key: 'freight_xof', label: '运费（折西法）', w: 120, value: (r) => N(r.freight_xof), render: (r) => (N(r.freight_xof) ? money(r.freight_xof) : <span className="muted">没记</span>) },
           { key: 'last_paid', label: '最近付款', w: 100, fill: true, value: (r) => dDate(r.last_paid) },
         ]} />
       </div>
-      {pay && <PayPo po={pay} onClose={() => setPay(null)} />}
+      {pay && <PayPo po={pay} avgRate={avgRate} onClose={() => setPay(null)} />}
     </>
   );
 }
 
-function PayPo({ po, onClose }) {
+function PayPo({ po, avgRate, onClose }) {
   const { role, toast, refresh } = useApp();
   const due = Math.max(0, N(po.goods_cny) - N(po.paid_cny));
-  const [v, setV] = useState({ kind: due > 0 ? 'goods' : 'freight', amount: due > 0 ? String(due) : '', currency: 'CNY', xof_per_unit: '', on_date: today(), proof: '', note: '' });
+  const [v, setV] = useState({ kind: due > 0 ? 'goods' : 'freight', amount: due > 0 ? String(due) : '', currency: 'CNY', xof_per_unit: due > 0 && avgRate ? String(Math.round(avgRate * 100) / 100) : '', on_date: today(), proof: '', note: '' });
   const set = (k) => (x) => setV((y) => ({ ...y, [k]: x }));
   const needRate = v.kind === 'freight' && v.currency !== 'XOF';
   const ok = Number(v.amount) > 0 && v.proof && (!needRate || Number(v.xof_per_unit) > 0);
@@ -70,7 +73,7 @@ function PayPo({ po, onClose }) {
           <div className="field req"><label>币种</label><Choice value={v.currency} onChange={set('currency')} flat options={[['CNY', 'CNY'], ['USD', 'USD'], ['XOF', 'XOF']]} /></div>
         </div>
         <div className="grid2">
-          {v.currency !== 'XOF' && <div className={`field ${needRate ? 'req' : ''}`}><label>汇率：1 {v.currency} = ? 西法</label><input className="in" inputMode="decimal" value={v.xof_per_unit} onChange={(e) => set('xof_per_unit')(e.target.value.replace(/[^\d.]/g, ''))} placeholder={v.currency === 'CNY' ? '例 85' : '例 600'} /></div>}
+          {v.currency !== 'XOF' && <div className={`field ${needRate ? 'req' : ''}`}><label>汇率：1 {v.currency} = ? 西法{v.kind === 'goods' && <span className="small muted">（填了，这批货的成本就按它算；默认 = 最近 30 天科特汇回的平均汇率）</span>}</label><input className="in" inputMode="decimal" value={v.xof_per_unit} onChange={(e) => set('xof_per_unit')(e.target.value.replace(/[^\d.]/g, ''))} placeholder={v.currency === 'CNY' ? '例 85' : '例 600'} /></div>}
           <div className="field"><label>付款日期</label><DatePicker value={v.on_date} onChange={set('on_date')} /></div>
         </div>
         <div className="field req"><label>凭证（银行回单 / 转账截图）</label><PhotoInput value={v.proof} onChange={set('proof')} /></div>

@@ -116,3 +116,16 @@ test('0098 先进先出追溯: 退货扣回去 / 卖给了谁 / 订单行来自�
   assert.deepEqual(src.map((r) => [r.po_no, r.qty]), [['PO-A', 6], ['PO-B', 1]]);
   await assert.rejects(t.as(U.manager, `select * from app.deal_line_sources($1)`, [d]), /PERMISSION/);
 });
+
+test('0099 国内财务记货款带汇率 → 批次付款汇率 = 带汇率货款的加权平均', async () => {
+  const t = await setup();
+  const CNF = '00000000-0000-0000-0000-0000000000cb', CNP = '00000000-0000-0000-0000-0000000000c9';
+  for (const [u, r] of [[CNF, '{cn_finance}'], [CNP, '{cn_support}']]) await t.db.query(`insert into app.members (user_id, org_id, roles) values ($1,$2,$3)`, [u, t.ids.org, r]);
+  const po = await t.val(CNP, `select app.save_po($1,null,$2,$3)`, [t.ids.org, JSON.stringify({ po_no: 'PO-R', purpose: 'local', inbound_no: 'CR1' }), JSON.stringify([{ product_id: t.ids.x6516, qty: 400, unit_price: 10 }])]);
+  await t.as(CNF, `select app.record_po_payment($1,$2)`, [po, JSON.stringify({ kind: 'goods', amount: 3000, currency: 'CNY', xof_per_unit: 90, proof: 'p.jpg' })]);
+  assert.equal(Number((await t.one(`select pay_rate from app.product_batches where po_no = 'PO-R'`)).pay_rate), 90);
+  await t.as(CNF, `select app.record_po_payment($1,$2)`, [po, JSON.stringify({ kind: 'goods', amount: 1000, currency: 'CNY', xof_per_unit: 94, proof: 'p.jpg' })]);
+  assert.equal(Number((await t.one(`select pay_rate from app.product_batches where po_no = 'PO-R'`)).pay_rate), 91);
+  await t.as(CNF, `select app.record_po_payment($1,$2)`, [po, JSON.stringify({ kind: 'goods', amount: 500, currency: 'CNY', proof: 'p.jpg' })]);
+  assert.equal(Number((await t.one(`select pay_rate from app.product_batches where po_no = 'PO-R'`)).pay_rate), 91, '没填汇率的货款不影响');
+});
