@@ -20,6 +20,8 @@ export const ITEMS = {
   report: ['▤', '月报', 'cn', ['admin']],   // 11-25: 从经营总览挪出来, 单独一页
   margin: ['％', '毛利分析', 'cn', ['admin']],
   rules: ['⚙', '规则参数', 'cn', ['admin']],   // 350
+  changes: ['≣', '变更记录', 'cn', ['admin']],   // 116
+  health: ['♡', '系统健康', 'cn', ['admin']],   // 116
   codes: ['⧉', '编码甄别', 'cn', ['admin']],   // 11-18 Frank 第 9 点: 同型号多编码, 一组一组定是不是同一种货
   //   // 350 (Frank 11-17): 所有阈值 / 开关单独一页
   // 11-09 Frank 第 8 条: 「新建询单 / 报价」「销售询单」不再是独立页; 建单 = 订单总览「＋ 新订单」, 询单审批 = 订单总览页签
@@ -63,8 +65,9 @@ export const HUBS = {
   receipts: [['receipts', '收款与冲账'], ['balances', '客户总账'], ['cash', '资金账户']],
   pricing: [['pricing', '物料与定价'], ['materials', '物料名称'], ['codes', '编码甄别']],
   report: [['report', '月报'], ['margin', '毛利分析'], ['kpi', '时效与准确率']],
+  rules: [['rules', '规则参数'], ['changes', '变更记录'], ['health', '系统健康']],
 };
-export const HUB_LABEL = { stock: '库存与库位', replenish: '备货与采购', customers: '客户档案', hotline: '热线与拜访', receipts: '收款与总账', pricing: '物料与定价', report: '报告' };
+export const HUB_LABEL = { stock: '库存与库位', replenish: '备货与采购', customers: '客户档案', hotline: '热线与拜访', receipts: '收款与总账', pricing: '物料与定价', report: '报告', rules: '规则与系统' };
 const HUB_CHILD = Object.fromEntries(Object.entries(HUBS).flatMap(([h, xs]) => xs.filter(([r]) => r !== h).map(([r]) => [r, h])));
 export const hubOf = (route) => (HUBS[route] ? route : HUB_CHILD[route] || null);
 

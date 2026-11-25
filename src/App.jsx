@@ -8,6 +8,7 @@ import MarginPage from './pages/MarginPage.jsx';
 import RulesPage from './pages/RulesPage.jsx';
 import CodeReview from './pages/CodeReview.jsx';
 import Report from './pages/Report.jsx';
+import { Changes, Health } from './pages/Changes.jsx';
 import Bins from './pages/Bins.jsx';
 import { DirectiveGate, DirBar } from './components/Directives.jsx';
 import { Ctx, Modal, useToasts, useOutside, Info, useStickyPagehead, useInstantTips } from './components/ui.jsx';
@@ -227,6 +228,8 @@ export default function App() {
     case 'kpi': view = <Kpi />; break;
     case 'margin': view = <MarginPage />; break;
     case 'report': view = <Report />; break;
+    case 'changes': view = <Changes />; break;
+    case 'health': view = <Health />; break;
     case 'rules': view = <RulesPage />; break;
     case 'codes': view = <CodeReview />; break;
     case 'staff': view = <Staff />; break;

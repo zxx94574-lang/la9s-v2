@@ -8,6 +8,7 @@ import { useApp, useData, Modal, FRow, Info, PhotoInput, Thumb, DatePicker, File
 import { EmpLink, DealLink } from './Archives.jsx';
 import { dt, dDate, friendlyError } from '../lib/format.js';
 import { OptChoice, OptNote, useOptList } from './Opts.jsx';
+import { useRuleValues, ruleVal } from './Rules.jsx';
 import OrderFlow, { FlowBadge } from './OrderFlow.jsx';
 import CustomerSelect from './CustomerSelect.jsx';
 import * as Q from '../db/queries.js';
@@ -84,7 +85,27 @@ export function DirectiveGate() {
   const un = (mine?.rows || []).filter((d) => d.status === 'sent' && !d.parent_id);   // 368: 定期任务比指令轻, 不弹窗挡操作, 只在待办里常驻
   const [why, setWhy] = useState({});
   useEffect(() => { if (un.length) beep(); }, [un.length]);
-  if (!un.length) return null;
+  // 227 (第 6 组): 收到了但没做完的 —— 紧急的每小时提醒一次, 普通的每天 9:30 (规则参数可调) 提醒一次; 点「知道了」关, 到点再弹
+  const [remind, setRemind] = useState(null);
+  const rv = useRuleValues(['dir.remind_at']); const at = String(ruleVal(rv, 'dir.remind_at') || '09:30');
+  useEffect(() => {
+    const check = () => {
+      const open = (mine?.rows || []).filter((d) => d.status === 'acked' && d.reporter !== false);
+      if (!open.length) return;
+      const now = new Date(); const hhmm = now.toTimeString().slice(0, 5); const day = now.toISOString().slice(0, 10);
+      let last = {}; try { last = JSON.parse(localStorage.getItem('la9s.dirRemind') || '{}'); } catch { /* ignore */ }
+      const urg = open.filter((d) => d.urgent);
+      if (urg.length && Date.now() - (last.urgent || 0) > 3600e3) { setRemind({ kind: 'urgent', rows: urg }); last.urgent = Date.now(); }
+      else if (hhmm >= at && last.daily !== day) { setRemind({ kind: 'daily', rows: open }); last.daily = day; }
+      try { localStorage.setItem('la9s.dirRemind', JSON.stringify(last)); } catch { /* ignore */ }
+    };
+    check(); const t = setInterval(check, 60e3); return () => clearInterval(t);
+  }, [mine, at]);
+  if (!un.length) return remind ? (
+    <Modal title={remind.kind === 'urgent' ? `紧急指令还没做完（${remind.rows.length} 条）· 每小时提醒` : `今天要做完的指令（${remind.rows.length} 条）`} onClose={() => setRemind(null)}
+      footer={<><span className="small muted">做完到「我的待办」点「去做」或「做完了」</span><span className="grow" /><button type="button" className="btn primary" onClick={() => setRemind(null)}>知道了</button></>}>
+      <div className="stack" style={{ gap: 6 }}>{remind.rows.map((d) => <div key={d.id} className="row" style={{ gap: 8 }}>{d.no && <span className="t2-no">{d.no}</span>}{d.urgent && <span className="pill red">紧急</span>}<b>{d.title}</b><span className="grow" /><DueChip d={d} /></div>)}</div>
+    </Modal>) : null;
   const ack = async (d) => { try { await call(role, `select app.ack_directive2($1,$2)`, [d.id, why[d.id] || null]); toast('已收到，做完到「我的待办」点完成'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
     <Modal title={`中方给你的指令（${un.length} 条没点收到）`} onClose={() => {}} footer={<span className="small muted">每一条都要点「收到」；规定 {ACK_MIN} 分钟内收到，超了要写原因。做完后到「我的待办」点完成、填结果。</span>}>

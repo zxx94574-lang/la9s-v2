@@ -19,6 +19,7 @@ export const RULES = [
   ['kpi.s4', 'kpi_targets', 's4', '时效目标：客户确认 → 复检打包完', 60, '分钟', 'num', { page: 'kpi', anchor: 'kpi-targets', where: '时效与准确率 · 每一步用了多久' }],
   ['kpi.s5', 'kpi_targets', 's5', '时效目标：打包完 → 出库', 60, '分钟', 'num', { page: 'kpi', anchor: 'kpi-targets', where: '时效与准确率 · 每一步用了多久' }],
   ['dir.ack', 'directive_rules', 'ack_minutes', '指令：下达后几分钟内必须点「收到」', 5, '分钟', 'num', { page: 'kpi', anchor: 'kpi-dir', where: '时效与准确率 · 中方指令' }],
+  ['dir.remind_at', 'directive_rules', 'remind_at', '指令：普通的每天几点提醒一次（紧急的每小时）', '09:30', '', 'text', { page: 'todo', where: '我的待办 · 中方指令' }],
   ['wh.comm', 'wh_commission', 'per_piece', '仓库提成：正确出货每片多少', 5, 'XOF', 'num', { page: 'kpi', anchor: 'kpi-wh', where: '时效与准确率 · 仓库提成' }],
   ['sales.comm', 'sales_comm', 'per_piece', '销售提成：每片多少钱（整单付清才算，自动带进工资单）', 17, 'XOF / 片', 'num', { page: 'kpi', anchor: 'sales-comm', where: '时效与准确率 · 销售提成' }],
   ['check.qty', 'check_rules', 'qty', '复检必抽检：一行数量超过多少片', 100, '片', 'num', { step: '每张单的「复检 + 打包」' }],
@@ -108,6 +109,7 @@ export const META = {
   'kpi.s2': { area: 'so', short: '时效 · 初检完 → 出销售单', src: 'Claude 先定', apply: '时效页达标率', effect: '只显示不考核', me: 1 },
   'kpi.s4': { area: 'ship', short: '时效 · 客户确认 → 复检完', src: 'Claude 先定', apply: '时效页达标率', effect: '只显示不考核', me: 1 },
   'kpi.s5': { area: 'ship', short: '时效 · 打包完 → 出库', src: 'Claude 先定', apply: '时效页达标率', effect: '只显示不考核', me: 1 },
+  'dir.remind_at': { area: 'dir', short: '指令 · 每天几点提醒', src: '第 6 组定（紧急每小时、普通每天 9:30）', apply: '收到了还没做完的指令', effect: '到点弹一次提醒，点「知道了」关' },
   'dir.ack': { area: 'dir', short: '指令 · 几分钟内点「收到」', src: 'Frank 11-12 定', apply: '中方下的每条指令', effect: '超时点收到要写原因，时效页记一次' },
   'wh.comm': { area: 'staff', short: '仓库提成 · 每片', src: 'Frank 定', apply: '正确出货的片数（发错整单取消）', effect: '自动带进工资单' },
   'sales.comm': { area: 'staff', short: '销售提成 · 每片', src: 'Frank 11-18 定', apply: '整单付清的片数', effect: '自动带进工资单' },
@@ -126,6 +128,7 @@ export function useRuleValues(ids) {
 }
 const valOf = (data, r) => { const v = data?.find((x) => x.key === r[1])?.value?.[r[2]]; return v ?? r[4]; };
 export const ruleNum = (data, id) => Number(valOf(data, BY_ID[id]));
+export const ruleVal = (data, id) => valOf(data, BY_ID[id]);
 export const fmtRule = (data, id) => { const r = BY_ID[id]; const v = valOf(data, r); return r[6] === 'bool' ? (v ? '开' : '关') : r[6] === 'num' ? `${Number(v).toLocaleString('en-US')} ${r[5]}` : String(v); };
 
 // 一组规则的编辑行 (改一格存一格, 立即生效)
