@@ -37,7 +37,7 @@ export default function MarginPage() {
   return (
     <>
       <div className="pagehead"><div><div className="eyebrow">Marge brute</div><h1 tabIndex={0}>毛利分析 <RuleGear anchor="margin-rules" title="毛利 / 亏钱规则" ids={['margin.low', 'loss.on', 'loss.nocost']} /></h1>
-        <Info>只有中方看得到。成本在出库那一刻锁定（当时的到岸成本，含物流）；退货、收货差异冲减、抹零 / 核销、价格调整、我们出的运费、我们承担的收款手续费都扣掉。毛利率 = 利润 ÷ 销售额，所有汇总都是加权（先把钱加起来再除），没有成本的行不算进毛利率。</Info></div></div>
+        <Info>只有中方看得到。成本在出库那一刻锁定（当时的到岸成本，含物流）；退货、收货差异冲减、抹零 / 核销、价格调整、我们承担的收款手续费都扣掉；我们出的运费不在这里扣，算日常开支（经营总览「销售」☰ 明细里的净利），和经营总览同一个口径。毛利率 = 利润 ÷ 销售额，所有汇总都是加权（先把钱加起来再除），没有成本的行不算进毛利率。</Info></div></div>
       <div className="tabs" style={{ marginBottom: 12 }}>
         {[['sold', '已出货毛利'], ['stock', '库存毛利'], ['kd', '和金蝶对毛利']].map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}
       </div>
@@ -48,8 +48,10 @@ export default function MarginPage() {
   );
 }
 
+// 523 (Frank 11-26 22:15 继续): 毛利分析和经营总览同一个口径 —— 毛利 = 销售额 − 货的成本; 我们出的运费算日常开支 (经营总览 ☰ 明细里的净利), 这里不扣.
+// 只改这一页的显示; 每张订单自己的「这单赚多少」和亏钱拦截照旧含运费.
 function useMarginRows(org, role) {
-  return useData(() => call(role, `select * from app.margin_rows($1)`, [org]), [org, role]);
+  return useData(async () => (await call(role, `select * from app.margin_rows($1)`, [org])).map((r) => (r.cost == null ? r : { ...r, cost: Number(r.cost) - Number(r.freight || 0), profit: Number(r.profit) + Number(r.freight || 0) })), [org, role]);
 }
 
 function Sold({ org, role }) {
@@ -80,7 +82,7 @@ function Sold({ org, role }) {
         <PeriodBar p={P} />
         <span className="small muted">按出库日期算</span>
       </div>
-      <MarginKpis t={tot} lowPct={lowPct} />
+      <MarginKpis t={tot} lowPct={lowPct} freightOut />
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="card-h"><h2>交叉看</h2>
           <span className="row small" style={{ gap: 6 }}>行 {sel(rowDim, setRowDim)} 列 {sel(colDim, setColDim, true)}</span>
@@ -105,7 +107,7 @@ function Sold({ org, role }) {
           { key: 'category', label: '种类', w: 90 },
           { key: 'model', label: '型号', w: 110, render: (r) => (r.product_id ? <ModelLink id={r.product_id} model={r.model} /> : r.model) },
           ...marginCols(lowPct),
-          { key: 'freight', label: '分摊运费', w: 100, type: 'number', render: (r) => (N(r.freight) ? money(Math.round(r.freight)) : '') },
+          { key: 'freight', label: '运费（算开支）', w: 100, type: 'number', render: (r) => (N(r.freight) ? money(Math.round(r.freight)) : '') },
           { key: 'fee', label: '分摊手续费', w: 100, type: 'number', render: (r) => (N(r.fee) ? money(Math.round(r.fee)) : '') },
           { key: 'returned', label: '退货', w: 90, type: 'number', render: (r) => (N(r.returned) ? `−${money(Math.round(r.returned))}` : '') },
           { key: 'adjust', label: '调整 / 核销', w: 100, type: 'number', render: (r) => (N(r.adjust) ? money(Math.round(r.adjust)) : '') },

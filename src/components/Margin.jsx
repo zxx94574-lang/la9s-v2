@@ -49,13 +49,13 @@ export const marginCols = (lowPct) => [
 ];
 
 // 汇总那一排数字 (订单页 / 毛利页 / 看板共用)
-export function MarginKpis({ t, lowPct, compact }) {
+export function MarginKpis({ t, lowPct, compact, freightOut }) {   // freightOut: 毛利分析页 —— 运费不在成本里, 算日常开支 (523)
   const cell = (k, v, sub) => (
     <div className={`mkpi ${compact ? 'sm' : ''}`}><div className="k">{k}</div><div className="v">{v}</div>{sub && <div className="s">{sub}</div>}</div>);
   return (
     <div className="mkpis">
       {cell('销售额', money(Math.round(t.revenue)), t.returned || t.adjust ? `原 ${money(Math.round(t.sale))}${t.returned ? ` · 退货 −${money(Math.round(t.returned))}` : ''}${t.adjust ? ` · 调整 / 核销 ${t.adjust < 0 ? '−' : '+'}${money(Math.abs(Math.round(t.adjust)))}` : ''}` : null)}
-      {cell('成本', money(Math.round(t.cost)), t.freight || t.fee ? `货 ${money(Math.round(t.goods))}${t.freight ? ` · 运费 ${money(Math.round(t.freight))}` : ''}${t.fee ? ` · 手续费 ${money(Math.round(t.fee))}` : ''}` : null)}
+      {cell('成本', money(Math.round(t.cost)), t.freight || t.fee ? `货 ${money(Math.round(t.goods))}${t.freight ? (freightOut ? ` · 运费 ${money(Math.round(t.freight))} 算开支，没扣` : ` · 运费 ${money(Math.round(t.freight))}`) : ''}${t.fee ? ` · 手续费 ${money(Math.round(t.fee))}` : ''}` : null)}
       {cell('利润', <span className={t.profit < 0 ? 'red-t2' : ''}>{money(Math.round(t.profit))}</span>)}
       {cell('毛利率', <MarginPill pct={t.pct} lowPct={lowPct} big />, t.cover != null && t.cover < 99.5 ? `只算有成本的 ${t.cover.toFixed(0)}% 销售额` : null)}
       {cell('数量', qty(t.qty), t.missingQty ? `${qty(t.missingQty)} 片成本缺失` : null)}
