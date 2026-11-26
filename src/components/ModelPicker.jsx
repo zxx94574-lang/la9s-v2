@@ -61,7 +61,7 @@ export default function ModelPicker({ catalog: catalogAll, categories, tier, onP
   return (
     <div className="stack" style={{ gap: 10 }}>
       <CatFilter categories={categories} value={cat} forSale={forSale} only={present} onChange={(v) => { setCat(v); if (v) setOpen(true); input.current?.focus(); }} />
-      <div className="row" style={{ alignItems: 'stretch' }}>
+      <div className="row mp-row" style={{ alignItems: 'stretch' }}>
         <div className={`picker grow ${open ? 'open' : ''}`} ref={box}>
           <input ref={input} className="in" value={text} placeholder={placeholder || "⌕ 加一行：输入型号 / 编码 / 通用型号，↑↓ 选择，Enter 添加"}
             onFocus={() => setOpen(true)} onChange={(e) => { setText(e.target.value); setOpen(true); setFocus(0); }} onKeyDown={key} />

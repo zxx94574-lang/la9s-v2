@@ -383,7 +383,7 @@ export default function LineEntry({ id, catalog, categories, tier, lines, setLin
             <button type="button" className="btn" onClick={() => setPickList(true)} title="大表格勾选，一次加很多">☰ 选货清单</button>
             <button type="button" className="btn" onClick={() => setUnmet(true)} title="客户要的型号我们系统里没有 → 记下来，备货时用">＋ 没建档的型号</button>{extraTools}</>} />
       </div>
-      <div ref={scope} id={gid}><Grid id={id}
+      <div ref={scope} id={gid}><Grid id={id} pin="model"
         tools={<>
           {lines.length > 0 && <UndoBar h={h} scope={scope} />}
           <span className="addrow">
@@ -418,7 +418,7 @@ function CellEditor({ kind, row, init, categories, catalog, onCommit, onCancel }
   const [focus, setFocus] = useState(0);
   const ref = useRef(); const box = useRef();
   const [pos, setPos] = useState(null);
-  useEffect(() => { ref.current?.focus(); if (init == null) ref.current?.select(); const r = box.current?.getBoundingClientRect(); if (r) setPos({ left: r.left, top: r.bottom + 2, width: Math.max(r.width, 260) }); }, [init]);
+  useEffect(() => { ref.current?.focus(); if (window.matchMedia?.('(pointer: coarse)').matches) setTimeout(() => ref.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 300); if (init == null) ref.current?.select(); const r = box.current?.getBoundingClientRect(); if (r) setPos({ left: r.left, top: r.bottom + 2, width: Math.max(r.width, 260) }); }, [init]);
   const T = text.trim().toUpperCase();
   const options = kind === 'category' ? categories.filter((c) => !T || c.name.toUpperCase().includes(T)).map((c) => ({ v: c.id, l: c.name }))
     : multi ? row.cands.map((id) => catalog.find((p) => p.id === id)).filter(Boolean).filter((p) => !T || `${p.code} ${p.model} ${p.variant || ''}`.toUpperCase().includes(T))

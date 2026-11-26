@@ -2259,3 +2259,27 @@ body { touch-action: manipulation; }
   input, select, textarea, .in { font-size: 16px !important; }
   .content { overflow-x: clip; }
 }
+
+/* 11-26 手机卡片里能直接改 */
+.gc-kv.gc-ed { align-items: center; }
+.gc-in { width: min(60%, 220px); min-height: 40px; padding: 6px 10px; border-radius: 10px; }
+.gc-in.err { border-color: var(--red); background: var(--red-bg); }
+
+/* 11-26 手机上的表格：横着滑；第一列（编码 / 名字）钉在左边，滑到右边也知道是哪一行；格子按着能直接滑动 */
+@media (max-width: 760px) {
+  .tw { touch-action: pan-x pan-y; overscroll-behavior-x: contain; }
+  .grid .t td, .grid .t th { touch-action: pan-x pan-y; }
+  .grid .t th.pin, .grid .t td.pin { position: sticky; left: var(--rh, 40px); z-index: 2; background: #fff; transition: max-width .22s ease, font-size .22s ease, box-shadow .22s ease; }
+  .grid .t thead th.pin { background: #f7f8fa; z-index: 4; }
+  /* 往右滑以后：钉住的那格缩成小标签（字小一号、最多 104px、超出省略），点一下滑回最左 */
+  .tw.slid .t td.pin, .tw.slid .t th.pin { max-width: 104px !important; min-width: 0 !important; width: 104px !important; font-size: 12px; box-shadow: 4px 0 10px -4px #0f2a5240; }
+  .tw.slid .t td.pin > *, .tw.slid .t td.pin { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tw.slid .t td.pin { color: var(--brand); cursor: pointer; }
+  .grid .t .rowhead .rgrip { display: none; }
+  .sticky-pick { position: static; }
+  .mp-row { flex-wrap: wrap; gap: 8px; }
+  .mp-row > .picker { flex: 1 1 100%; }
+  .mp-row > .btn { flex: 1 1 auto; }
+}
+.kb-proxy { position: fixed; left: 0; top: 40%; width: 1px; height: 1px; opacity: 0; font-size: 16px; border: 0; padding: 0; pointer-events: none; }
+@media (max-width: 760px) { .cell-in, .cell-pop .cell-in { font-size: 16px !important; min-height: 36px; } }

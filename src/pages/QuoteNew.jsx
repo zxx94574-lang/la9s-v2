@@ -1,6 +1,6 @@
 import DebtBanner from '../components/DebtBanner.jsx';
 import { useLastPrices, diffRows, LastPriceBar, PriceHistory } from '../components/LastPrice.jsx';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { q, call, callValue } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
@@ -84,6 +84,31 @@ export default function QuoteNew() {
   usePromos(customer || null);     // 这个客户生效的特价 (促销价…) → 自动成为单价
   const [histOpen, setHistOpen] = useState(false);
   const [waProof, setWaProof] = useState('');
+  // 11-26 Frank：手机上手一滑点了返回 / 关了网页，建了一半的单不能没 —— 每改一下就存在这台手机上，回来自动接着填（7 天内）
+  const WIP = 'la9s.quote.wip';
+  const [wipAt, setWipAt] = useState(null); const wipDone = useRef(false);
+  const hasWip = !!customer || lines.some((l) => l.product || l.model || l.code_in) || !!note;
+  useEffect(() => {
+    if (!wipDone.current) return;
+    try { if (hasWip) localStorage.setItem(WIP, JSON.stringify({ at: Date.now(), date, customer, currency, fxIn, note, lines: lines.map(({ product, ...l }) => ({ ...l, pid: product?.id || null })) })); } catch { /* ignore */ }
+  }, [date, customer, currency, fxIn, note, lines, hasWip]);
+  useEffect(() => {
+    if (!data || wipDone.current) return;
+    wipDone.current = true;
+    if (openId) return;
+    let w = null; try { w = JSON.parse(localStorage.getItem(WIP)); } catch { /* ignore */ }
+    if (!w || Date.now() - w.at > 7 * 864e5 || (customer && w.customer && customer !== w.customer)) return;
+    setDate(w.date || today()); if (w.customer) setCustomer(w.customer); setCurrency(w.currency || 'XOF'); setFxIn(w.fxIn || ''); setNote(w.note || '');
+    setLines((w.lines || []).map(({ pid, ...l }) => ({ ...l, product: pid ? data.catalog.find((p) => p.id === pid) || null : null })));
+    setWipAt(w.at);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+  useEffect(() => {   // 关网页 / 刷新前浏览器会问一句
+    if (!hasWip) return undefined;
+    const f = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', f); return () => window.removeEventListener('beforeunload', f);
+  }, [hasWip]);
+  const clearWip = () => { try { localStorage.removeItem(WIP); } catch { /* ignore */ } };
   if (!data) return <div className="empty">加载中…</div>;
   const cust = data.customers.find((c) => c.id === customer);
   const tier = cust?.tier;
@@ -126,7 +151,7 @@ export default function QuoteNew() {
       const id = await callValue(role, `select app.create_quote_fx($1,$2,$3,$4,$5,$6)`, [org, customer, currency, JSON.stringify(payload), note || null, fx]);
       if (draftId) await call(role, `select app.delete_quote_draft($1)`, [draftId]).catch(() => {});
       // 307 (Frank 11-14 定): 撤掉「员工没沿用上次价就自动报中方」—— 只留一行轻提示, 要不要沿用由人定
-      refresh(); setPriceOk(false);
+      refresh(); setPriceOk(false); clearWip();
       toast(fin.lines.some((l) => Number(l.req_price) > 0) ? '报价单已保存；有申请改价的行，已送中方审批，批了才能往下推' : '报价单已保存，下面接着联系客户确认');
       go('deal/' + id);
     } catch (e) {
@@ -159,7 +184,7 @@ export default function QuoteNew() {
       if (draftId) await call(role, `select app.delete_quote_draft($1)`, [draftId]).catch(() => {});
       refresh(); setWaProof('');
       toast({ picking: '已直接下推找货（价格、欠款都没问题）', price: '有要议价的行：已送中方，议完价自动下推找货', credit: '客户超欠款上限 / 账期：已转财务对账，收到款自动下推找货', approval: '这张单要中方特批：批了自动下推找货' }[r.state] || '已保存');
-      go('deal/' + r.deal);
+      clearWip(); go('deal/' + r.deal);
     } catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
   };
 
@@ -229,6 +254,8 @@ export default function QuoteNew() {
   ];
   return (
     <>
+      {wipAt && <div className="banner info row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 10 }}><span>已接着你上次没建完的单（{new Date(wipAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 存的）</span>
+        <span className="grow" /><button type="button" className="btn sm" onClick={() => { clearWip(); setLines([]); setCustomer(''); setNote(''); setWipAt(null); }}>清空，重新建</button></div>}
       {/* Frank 11-09 第 8 条: 不再是独立页, 就是新订单的第 1 步 (报价·确认) 编辑态; 保存即进流程, 下面接确认 */}
       <div className="flow2">
         <div className="flow2-steps">

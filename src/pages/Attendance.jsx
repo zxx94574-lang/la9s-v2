@@ -8,7 +8,7 @@ import AttCalendar from '../components/AttCalendar.jsx';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, DatePicker, MonthPicker, Drawer, MoneyIn, Choice, PhotoInput, FRow, ConfirmBtn } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, DatePicker, MonthPicker, Drawer, MoneyIn, Choice, PhotoInput, FRow, ConfirmBtn, RangePicker, Info } from '../components/ui.jsx';
 import { OptNote } from '../components/Opts.jsx';
 import { RuleGear } from '../components/Rules.jsx';
 import { staffOptions, optLabel } from '../lib/staffOptions.js';
@@ -31,7 +31,7 @@ function locate() {
   return new Promise((res, rej) => {
     if (!navigator.geolocation) { rej(new Error('这个浏览器不支持定位')); return; }
     navigator.geolocation.getCurrentPosition((p) => res({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }),
-      (e) => rej(new Error(e.code === 1 ? '没允许定位：手机设置里给浏览器打开定位权限' : '拿不到定位，到窗边或室外再试')), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+      (e) => rej(Object.assign(new Error(e.code === 1 ? '没允许定位' : '拿不到定位，到窗边或室外再试'), { denied: e.code === 1 })), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
   });
 }
 
@@ -76,7 +76,7 @@ export default function Attendance() {
       toast(r.new_site ? `已${nm} · 新地点（第一次来，等中方起名）${r.late ? ' · 迟到' : ''}` : r.ok ? `${nm}成功 · ${r.site}（${r.distance} 米）${r.late ? ' · 迟到' : ''}${r.early ? ' · 早退' : ''}` : `已${nm}，但不在规定地点（最近：${r.site || '没设地点'} ${r.distance ?? ''} 米）`, r.ok ? undefined : 'err');
       if (r.kind === 'out') await call(role, `select app.punch_left($1,$2)`, [org, data.left || 0]).catch(() => {});
       setEarly(null); refresh();
-    } catch (e) { setFail(e.message); toast(friendlyError(e), 'err'); } finally { setBusy(false); }
+    } catch (e) { setFail(e.denied ? 'denied' : e.message); if (!e.denied) toast(friendlyError(e), 'err'); } finally { setBusy(false); }
   };
   const todayMine = data.mine.filter((a) => dt(a.at).slice(0, 10) === today());
   const dCols = [
@@ -141,7 +141,7 @@ export default function Attendance() {
             </div>
             {ps.next === 'out' && ps.early && <div className="small muted">还没到下班时间（{String(ps.end_time || '').slice(0, 5)}）。现在打下班卡要写原因，会记一次早退。</div>}
             {busy && <div className="muted small">正在拿定位…</div>}
-            {fail && <div className="banner warn">{fail}</div>}
+            {fail === 'denied' ? <LocHelp onRetry={() => punch(null, early?.note)} /> : fail && <div className="banner warn">{fail}</div>}
             {fail && data.sites.length > 0 && <div className="small muted">演示链接里浏览器不给定位。演示用：
               {data.sites.slice(0, 3).map((s) => <button type="button" key={s.id} className="linkbtn" onClick={() => punch({ lat: Number(s.lat) + 0.0002, lng: Number(s.lng), acc: 25 }, early?.note)}>假装在 {s.name}</button>)}</div>}
             <div className="stack" style={{ gap: 6, textAlign: 'left' }}>
@@ -186,20 +186,40 @@ const LV_KIND = (l) => ({ full: '全天', am: '上午', pm: '下午' })[l.kind] 
 function LeaveModal({ onClose }) {
   const { org, role, toast, refresh } = useApp();
   const [f, setF] = useState({ kind: 'full', from: today(), to: today(), from_time: '10:00', to_time: '12:00', reason: '' });
+  // 11-26 Frank：日期跟经营总览那个日历一样 —— 点两下选一段，请一天就同一天点两下；半天 / 按小时只选一天
+  const span = f.kind === 'am' || f.kind === 'pm' ? 'half' : f.kind;
   const hrs = f.kind === 'hours' ? (new Date(`2000-01-01T${f.to_time}`) - new Date(`2000-01-01T${f.from_time}`)) / 36e5 : 0;
-  const ok = f.from && (f.kind !== 'hours' ? f.to >= f.from : hrs > 0) && f.reason.trim();
-  const go = async () => { try { const [{ n }] = await call(role, `select app.take_leave($1,$2) as n`, [org, JSON.stringify(f)]); toast(`已登记请假 ${n} 天`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  const days = f.kind === 'full' && f.from && f.to ? Math.round((new Date(f.to) - new Date(f.from)) / 864e5) + 1 : 0;
+  const ok = f.from && (f.kind === 'full' ? f.to >= f.from : f.kind === 'hours' ? hrs > 0 : true) && f.reason.trim();
+  const go = async () => { try { const body = f.kind === 'full' ? f : { ...f, to: f.from }; const [{ n }] = await call(role, `select app.take_leave($1,$2) as n`, [org, JSON.stringify(body)]); toast(`已登记请假 ${n} 天`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
-    <Modal title="请假" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!ok} onClick={go}>登记</button></>}>
+    <Modal title="请假" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!ok} onClick={go}>登记{days > 0 ? ` ${days} 天` : f.kind === 'hours' && hrs > 0 ? ` ${hrs} 小时` : span === 'half' ? ' 半天' : ''}</button></>}>
       <div className="stack">
-        <FRow label="请多久" req><Choice value={f.kind} onChange={(v) => setF({ ...f, kind: v })} options={[['full', '全天'], ['am', '上午'], ['pm', '下午'], ['hours', '按小时']]} /></FRow>
-        <FRow label={f.kind === 'hours' ? '哪天' : '从哪天'} req><DatePicker value={f.from} onChange={(v) => setF({ ...f, from: v, to: f.to < v ? v : f.to })} /></FRow>
-        {f.kind !== 'hours' && <FRow label="到哪天" req><DatePicker value={f.to} onChange={(v) => setF({ ...f, to: v })} /></FRow>}
-        {f.kind === 'hours' && <FRow label="几点到几点" req><span className="row" style={{ gap: 6 }}><input type="time" className="in" value={f.from_time} onChange={(e) => setF({ ...f, from_time: e.target.value })} /><span>到</span><input type="time" className="in" value={f.to_time} onChange={(e) => setF({ ...f, to_time: e.target.value })} />{hrs > 0 && <span className="muted small">{hrs.toFixed(1)} 小时</span>}</span></FRow>}
-        <FRow label="原因" req><OptNote optKey="att.leave_reason" title="请假原因" options={['生病', '家里有事', '办事', '其他']} value={f.reason} onChange={(v) => setF({ ...f, reason: v })} placeholder="写一句" /></FRow>
-        <div className="hint">不用审批，登记了就生效。请假的那部分不算出勤（全天不算、半天算半天、按小时折算），当天没打卡不算异常。</div>
+        <FRow label="请多久" req><Choice value={span} onChange={(v) => setF({ ...f, kind: v === 'half' ? (f.kind === 'pm' ? 'pm' : 'am') : v, to: v === 'full' ? f.to : f.from })} options={[['full', '一天或几天'], ['half', '半天'], ['hours', '几个小时']]} /></FRow>
+        {f.kind === 'full'
+          ? <FRow label="哪几天" req><span className="row" style={{ gap: 8, flexWrap: 'wrap' }}><RangePicker value={[f.from, f.to]} onChange={([a, b]) => setF({ ...f, from: a, to: b })} />{days > 0 && <b>{days} 天</b>}<Info>点开日历，点第一天再点最后一天；只请一天就同一天点两下。</Info></span></FRow>
+          : <FRow label="哪天" req><DatePicker value={f.from} onChange={(v) => setF({ ...f, from: v, to: v })} /></FRow>}
+        {span === 'half' && <FRow label="上午还是下午" req><Choice value={f.kind} onChange={(v) => setF({ ...f, kind: v })} options={[['am', '上午'], ['pm', '下午']]} /></FRow>}
+        {f.kind === 'hours' && <FRow label="几点到几点" req><span className="row" style={{ gap: 6 }}><input type="time" className="in" value={f.from_time} onChange={(e) => setF({ ...f, from_time: e.target.value })} /><span>到</span><input type="time" className="in" value={f.to_time} onChange={(e) => setF({ ...f, to_time: e.target.value })} />{hrs > 0 && <b>{hrs} 小时</b>}</span></FRow>}
+        <FRow label={<>原因 <Info>不用审批，登记了就生效。请假的那部分不算出勤（全天不算、半天算半天、按小时折算），当天没打卡不算异常。</Info></>} req><OptNote optKey="att.leave_reason" title="请假原因" options={['生病', '家里有事', '办事', '其他']} value={f.reason} onChange={(v) => setF({ ...f, reason: v })} placeholder="写一句" /></FRow>
       </div>
     </Modal>);
+}
+// 11-26 Frank：定位没开怎么办 —— 网页没法直接跳到手机设置（苹果 / 安卓都不让），只能按他的手机一步一步告诉他，改完点「再试一次」
+function LocHelp({ onRetry }) {
+  const ua = navigator.userAgent || ''; const ios = /iPhone|iPad|iPod/i.test(ua); const android = /Android/i.test(ua);
+  const chrome = /CriOS|Chrome/i.test(ua) && !/Edg/i.test(ua); let framed = false; try { framed = window.self !== window.top; } catch { framed = true; }
+  const steps = framed ? ['现在是在 Claude 里打开的系统，手机不让嵌在里面的网页拿定位，不是你设置错了。', '正式上线后用网址（la9s.com）在浏览器里打开，或者加到主屏幕，第一次点打卡时手机会弹「允许定位」，点「允许」就行，以后不用再管。']
+    : ios && chrome ? ['打开手机「设置」→ 往下找到「Chrome」→「位置」→ 选「使用 App 期间」。', '「设置」→「隐私与安全性」→「定位服务」要是开着的。', '回到这里点下面「再试一次」。']
+    : ios ? ['打开手机「设置」→「隐私与安全性」→「定位服务」→ 打开；往下找到「Safari 浏览器网站」→ 选「使用 App 期间」。', '回到 Safari，点地址栏左边「大小」→「网站设置」→「位置」→ 选「允许」。', '回到这里点下面「再试一次」。']
+    : android ? ['点浏览器地址栏左边的小锁 🔒 →「权限」→「位置」→ 选「允许」。', '手机顶部往下拉，把「位置 / 定位」打开。', '回到这里点下面「再试一次」。']
+    : ['点浏览器地址栏左边的小锁 →「位置」→ 选「允许」，电脑系统设置里也要允许浏览器用位置。', '点下面「再试一次」。'];
+  return (
+    <div className="banner warn" style={{ textAlign: 'left' }}>
+      <b>拿不到你的位置，打不了卡</b>
+      <ol style={{ margin: '6px 0 8px', paddingLeft: 20 }}>{steps.map((x, i) => <li key={i} style={{ marginBottom: 4 }}>{x}</li>)}</ol>
+      {!framed && <button type="button" className="btn primary" onClick={onRetry}>再试一次</button>}
+    </div>);
 }
 // 迟到报备: 只报今天; 报备过的迟到标黄, 每月前几次不扣
 function LateModal({ onClose }) {

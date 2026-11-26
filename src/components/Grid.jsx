@@ -138,8 +138,21 @@ function treeOrder(rows, parentOf, rowKey) {
   return out.concat(orphans);
 }
 
+// 11-26 Frank「手机上调配都无法调配成功」：卡片模式下可改的格子直接给输入框 / 下拉（原来卡片只能看）
+function CardEdit({ ed, align, onCommit }) {
+  const type = ed.type || 'text';
+  const [v, setV] = useState(ed.value ?? '');
+  useEffect(() => { setV(ed.value ?? ''); }, [ed.value]);
+  const done = () => { if (String(v ?? '') !== String(ed.value ?? '')) onCommit(v); };
+  if (type === 'select') return <select className={`in gc-in ${ed.invalid ? 'err' : ''}`} value={ed.value ?? ''} onChange={(e) => onCommit(e.target.value)}>{(ed.options || []).map(([ov, ol]) => <option key={String(ov)} value={ov}>{ol}</option>)}</select>;
+  return <input className={`in gc-in ${ed.invalid ? 'err' : ''}`} type={type === 'date' ? 'date' : 'text'} inputMode={type === 'number' ? 'decimal' : undefined} value={v ?? ''} title={ed.title}
+    style={{ textAlign: align === 'right' || type === 'number' ? 'right' : 'left' }}
+    onChange={(e) => { const x = type === 'number' ? e.target.value.replace(/[^\d.,-]/g, '') : e.target.value; setV(x); if (type === 'date') onCommit(x); }}
+    onBlur={type === 'date' ? undefined : done} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }} />;
+}
+
 export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyProp = (r) => r.id, rowClass, onRowClick, onDelete, selectable: selectableProp, foot, tools, empty = '暂无数据', maxHeight, noTools,
-  onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors, onShown, compactTools, slimTools, rowActions, parentOf }) {
+  onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors, onShown, compactTools, slimTools, rowActions, parentOf, pin }) {
   // 行没有 id 的表 (汇总表): 退到 key / employee_id / deal_id, 免得 React 报 key 重复、选区错位
   const rowKey = (r) => rowKeyProp(r) ?? r?.key ?? r?.employee_id ?? r?.deal_id ?? r?.code;
   // ── 每张表的自定义列 (Frank 11-08): 传 table="xxx" 就自动长出「选项设置」里加的列, 值存 row_attrs ──
@@ -176,11 +189,15 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
 
   // a column without a label (buttons / actions) gets no sort or filter
   const byKey = useMemo(() => Object.fromEntries(columns.map((c) => [c.key, c.label ? c : { ...c, sortable: false, filterable: false }])), [columns]);
-  const vis = layout.order.filter((k) => !layout.hidden.includes(k) && byKey[k]).map((k) => byKey[k]);
-  // 手机（< 640px）：只看不改的表默认变成一行一张卡片（标题 = 第一列，其余「列名 · 值」）；有可改的列照旧表格；右上角能切换
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  const vis0 = layout.order.filter((k) => !layout.hidden.includes(k) && byKey[k]).map((k) => byKey[k]);
+  // 11-26 Frank：手机上「要填的」挪到前面 —— 钉住的名字列 → 要填 / 能改的列（数量、单价、总价…）→ 其余信息往右放；电脑上照原来的顺序
+  const isFillCol = (c) => !!(c.fill || c.tint || c.edit);
+  const pinFirst = pin || vis0.find((c) => c.label)?.key;
+  const vis = useMemo(() => (narrow ? [...vis0.filter((c) => c.key === pinFirst), ...vis0.filter((c) => c.key !== pinFirst && isFillCol(c)), ...vis0.filter((c) => c.key !== pinFirst && !isFillCol(c))] : vis0), [narrow, pinFirst, vis0]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // 手机（< 640px）：只看不改的表默认变成一行一张卡片（标题 = 第一列，其余「列名 · 值」）；有可改的列照旧表格；右上角能切换
   useEffect(() => { const f = () => setNarrow(window.innerWidth < 640); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, []);
-  const autoCards = !vis.some((c) => c.edit);
+  const autoCards = false;   // 11-26 Frank：手机默认就是表格（卡片太占地方），表格在手机上能横滑、点一下就改
   const [cardPref, setCardPref] = useState(() => { try { const v = localStorage.getItem('la9s.gcard.' + id); return v == null ? null : v === '1'; } catch { return null; } });
   const pickCards = (v) => { setCardPref(v); try { localStorage.setItem('la9s.gcard.' + id, v ? '1' : '0'); } catch { /* */ } };
   ALIGN_GRID = id || 'grid';   // alignOf 是模块级小函数, 每次渲染前告诉它现在是哪张表
@@ -398,7 +415,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
     }
   };
   const cancelEdit = () => { editingRef.current = null; setEditing(null); };
-  useEffect(() => { if (editing && editRef.current) { const el = editRef.current; el.focus(); if (editing.type !== 'select' && editing.type !== 'date') { if (editing.typed) { const n = el.value.length; el.setSelectionRange?.(n, n); } else el.select?.(); } } // eslint-disable-next-line
+  useEffect(() => { if (editing && editRef.current) { const el = editRef.current; el.focus(); if (window.matchMedia?.('(pointer: coarse)').matches) setTimeout(() => el.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 300); if (editing.type !== 'select' && editing.type !== 'date') { if (editing.typed) { const n = el.value.length; el.setSelectionRange?.(n, n); } else el.select?.(); } } // eslint-disable-next-line
   }, [editing?.r, editing?.c]);
   // 老式键盘导航 (TEXTAREA / 页面自己渲染的 input 还会用到)
   const onKeyDown = (e) => {
@@ -452,7 +469,27 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel, editing]);
   const inSel = (r, c) => range && r >= range.r0 && r <= range.r1 && c >= range.c0 && c <= range.c1;
+  // 11-26 手机：手指按下不抢滑动（不拖选、不阻止默认），抬起时没怎么动才算「点」：可改的格子点一下直接进编辑
+  const tapRef = useRef(null); const proxyRef = useRef(null);
+  // 11-26 Frank：手机往右滑时，这一行是谁（名字 / 型号 / 单号）缩成一个小标签钉在左边；点它一下滑回最左
+  const pinKey = pinFirst;
+  const [slid, setSlid] = useState(false);
+  useEffect(() => { const w = twRef.current; if (!w) return undefined; const f = () => setSlid(w.scrollLeft > 12); w.addEventListener('scroll', f, { passive: true }); return () => w.removeEventListener('scroll', f); }, []);
+  useEffect(() => { const t = tableRef.current; const th = t?.querySelector('thead th.rowhead'); if (th) t.style.setProperty('--rh', `${th.offsetWidth}px`); });   // 手机钉住第一列时贴着行号那列
+  const cellUp = (e, r, c) => {
+    const t = tapRef.current; tapRef.current = null;
+    if (e.pointerType !== 'touch' || !t || t.r !== r || t.c !== c || Math.hypot(e.clientX - t.x, e.clientY - t.y) > 10) return;
+    if (slid && vis[c]?.key === pinKey) { twRef.current?.scrollTo({ left: 0, behavior: 'smooth' }); return; }
+    if (e.target.closest('input,select,textarea,button,a,.cell-pop,.dp-pop,.cell-sel,.linkbtn')) return;
+    if (editing && (editing.r !== r || editing.c !== c)) commitEdit();
+    setSel({ a: [r, c], b: [r, c] }); anchor.current = [r, c];
+    const ed = editFor(r, c);
+    if (editing && editing.r === r && editing.c === c) return;
+    if (onCellOpen || (ed && !ed.disabled)) proxyRef.current?.focus({ preventScroll: true });   // iPhone 只在手指点的那一刻允许弹键盘：先把键盘叫出来，编辑框出来后再把焦点交过去
+    if (onCellOpen) onCellOpen(shown[r], vis[c].key); else if (ed && !ed.disabled) openEdit(r, c);
+  };
   const cellDown = (e, r, c) => {
+    if (e.pointerType === 'touch' && !e.target.closest('input,select,textarea')) { tapRef.current = { x: e.clientX, y: e.clientY, r, c }; return; }
     if (e.target.closest('input,select,textarea')) {
       if (e.shiftKey && anchor.current) { e.preventDefault(); setSel({ a: anchor.current, b: [r, c] }); }
       else anchor.current = [r, c];
@@ -883,7 +920,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
           {table && app.role === 'admin' && <button type="button" className="gear-btn" title="这张表的选项设置：加自己的列（单选 / 文本 / 日期 / 数字）、改选项和颜色" aria-label="选项设置" onClick={() => setOptOpen(true)}>⚙</button>}
         </div>
       )}
-      {narrow && <div className="gc-switch"><span className="seg sm"><button type="button" className={(cardPref ?? autoCards) ? 'on' : ''} onClick={() => pickCards(true)}>卡片</button><button type="button" className={(cardPref ?? autoCards) ? '' : 'on'} onClick={() => pickCards(false)}>表格</button></span></div>}
+      {false && narrow && <div className="gc-switch"><span className="seg sm"><button type="button" className={(cardPref ?? autoCards) ? 'on' : ''} onClick={() => pickCards(true)}>卡片</button><button type="button" className={(cardPref ?? autoCards) ? '' : 'on'} onClick={() => pickCards(false)}>表格</button></span></div>}
       {narrow && (cardPref ?? autoCards) && (
         <div className="gcards">
           {allShown.length === 0 && <div className="empty">{rows.length ? '筛选以后没有符合条件的行' : empty}</div>}
@@ -891,12 +928,15 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
             return (
               <div key={k} className={`gcard ${rowClass?.(row) || ''} ${onRowClick ? 'click' : ''}`} onClick={(e) => { if (e.target.closest('a,button,input,label,.linkbtn')) return; onRowClick?.(row); }}>
                 <div className="gc-h">{selectable && <input type="checkbox" checked={selectable.selected.has(k)} onChange={() => { const s2 = new Set(selectable.selected); s2.has(k) ? s2.delete(k) : s2.add(k); selectable.onChange(s2); }} />}<span className="gc-title">{h ? cell(h) : k}</span>{onRowClick && <span className="muted">›</span>}</div>
-                <div className="gc-b">{rest.filter((c) => c.label).map((c) => { const v = cell(c); return v === '' || v == null || v === false ? null : <div key={c.key} className="gc-kv"><span>{c.label}</span><b style={{ textAlign: alignOf(c) === 'right' ? 'right' : 'left' }}>{v}</b></div>; })}</div>
+                <div className="gc-b">{rest.filter((c) => c.label).map((c) => { const ed = c.edit?.(row, r);
+                  if (ed && !ed.disabled) return <div key={c.key} className="gc-kv gc-ed"><span>{c.label}</span><CardEdit ed={ed} align={alignOf(c)} onCommit={(v) => { const b = []; setCell(r, vis.indexOf(c), v, b); flush(b); push(b); }} /></div>;   // 11-26 手机卡片里能直接改（数量、单价…）
+                  const v = cell(c); return v === '' || v == null || v === false ? null : <div key={c.key} className="gc-kv"><span>{c.label}</span><b style={{ textAlign: alignOf(c) === 'right' ? 'right' : 'left' }}>{v}</b></div>; })}</div>
               </div>); })}
           {shown.length > lim && <div ref={moreRef} className="muted small" style={{ padding: 8 }}>还有 {shown.length - lim} 行，往下滑自动显示…</div>}
           {footObj && shown.length > 0 && <div className="gcard gc-foot">{vis.filter((c) => footObj[c.key] != null && footObj[c.key] !== '').map((c) => <div key={c.key} className="gc-kv"><span>{c.label}</span><b>{footObj[c.key]}</b></div>)}</div>}
         </div>)}
-      <div className={`tw ${maxHeight ? (twOn ? 'tw-v tw-on' : 'tw-v') : ''}`} ref={twRef} onPointerDown={maxHeight && !twOn ? () => setTwOn(true) : undefined} style={{ ...(maxHeight ? { maxHeight } : null), ...(narrow && (cardPref ?? autoCards) ? { display: 'none' } : null) }}>
+      <input ref={proxyRef} className="kb-proxy" aria-hidden="true" tabIndex={-1} inputMode="decimal" readOnly={false} onChange={() => {}} value="" />
+      <div className={`tw ${maxHeight ? (twOn ? 'tw-v tw-on' : 'tw-v') : ''} ${slid ? 'slid' : ''}`} ref={twRef} onPointerDown={maxHeight && !twOn ? () => setTwOn(true) : undefined} style={{ ...(maxHeight ? { maxHeight } : null), ...(narrow && (cardPref ?? autoCards) ? { display: 'none' } : null) }}>
         {drag?.block && drag.x != null && <i className="col-drop" style={{ left: drag.x }} />}
         <table className="t" ref={tableRef} style={{ '--rh': `${selectable ? 64 : 40}px` }} onMouseOver={cellOver} onMouseLeave={cellOut}>
           <thead>
@@ -908,7 +948,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
                 return (
                   <th key={c.key} data-ck={c.key} style={{ ...widthStyle(c), textAlign: headAlign() }}
                     onPointerDown={(e) => headDown(e, c.key)}
-                    className={`${fill || c.tint ? 'fill-col' : ''} ${activeCol === c.key ? 'fill-active' : ''} ${colSel.has(c.key) ? 'col-sel' : ''}`}>
+                    className={`${fill || c.tint ? 'fill-col' : ''} ${activeCol === c.key ? 'fill-active' : ''} ${colSel.has(c.key) ? 'col-sel' : ''} ${c.key === pinKey ? 'pin' : ''}`}>
                     <span className="th-inner" style={{ justifyContent: headAlign() === 'right' ? 'flex-end' : headAlign() === 'center' ? 'center' : 'flex-start' }}>
                       <span className="grip" onPointerDown={(e) => startDrag(e, c.key)} title="拖动调整列顺序">⠿</span>
                       {fill && <span className="pen" title="这一列要填">✎</span>}
@@ -967,8 +1007,8 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
                     const fillCell = c.plain ? false : ((ed && !ed.disabled) || c.fill || c.tint);   // tint = 只上底色 (一组金额列同色), plain = 能改也不上色
                     const errMsg = errors?.[k]?.[c.key] || (ed?.invalid ? (ed.title || '有问题') : null);
                     return <td key={c.key} data-ck={c.key} data-cr={r} data-cc={ci} style={{ textAlign: alignOf(c), ...widthStyle(c) }} title={errMsg || undefined}
-                      className={`${errMsg ? 'cell-err' : ''} ${inSel(r, ci) ? 'sel' : ''} ${sel && sel.a[0] === r && sel.a[1] === ci && range.r0 === range.r1 && range.c0 === range.c1 ? 'sel-a' : ''} ${isEditing ? 'editing' : ''} ${fillCell ? 'fill-col' : ''} ${fillCell && activeCol === c.key ? 'fill-active' : ''}`}
-                      onPointerDown={(e) => cellDown(e, r, ci)} onPointerEnter={() => cellEnter(r, ci)}
+                      className={`${errMsg ? 'cell-err' : ''} ${inSel(r, ci) ? 'sel' : ''} ${sel && sel.a[0] === r && sel.a[1] === ci && range.r0 === range.r1 && range.c0 === range.c1 ? 'sel-a' : ''} ${isEditing ? 'editing' : ''} ${fillCell ? 'fill-col' : ''} ${fillCell && activeCol === c.key ? 'fill-active' : ''} ${c.key === pinKey ? 'pin' : ''}`}
+                      onPointerDown={(e) => cellDown(e, r, ci)} onPointerUp={(e) => cellUp(e, r, ci)} onPointerEnter={() => cellEnter(r, ci)}
                       onDoubleClick={isEditing ? undefined : onCellOpen ? () => onCellOpen(row, c.key) : (ed && !ed.disabled ? () => openEdit(r, ci) : undefined)}>{inner}</td>;
                   })}
                 </tr>
