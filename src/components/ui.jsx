@@ -419,6 +419,14 @@ export function PhotoInput({ value, onChange, label = '拍照 / 上传', camera 
         <span className="pb-text">{value ? <><b>已上传</b><span className="small muted">{proofMeta(value)?.srcLabel || '演示凭证'} · 可再粘贴替换</span></>
           : <><b>{label}</b><span className="small muted hide-touch">点这里后 ⌘/Ctrl+V 粘贴截图 · 拖进来</span></>}</span>
         {camera && <button type="button" className="btn sm" onClick={() => cam.current.click()}>📷 拍照</button>}
+        <button type="button" className="btn sm" title="把刚截的图粘进来（截图后先在相册里「拷贝」，或截图时选「拷贝并删除」）" onClick={async () => {   // 11-26 Frank：截图后直接粘贴
+          try {
+            const items = await navigator.clipboard.read();
+            for (const it of items) { const t = it.types.find((x) => x.startsWith('image/')); if (t) { const b = await it.getType(t); return take(new File([b], 'paste.png', { type: t }), 'paste'); } }
+            toast?.('剪贴板里没有图片：截图后在相册里点「拷贝」，再回来点粘贴', 'err');
+          } catch { box.current?.focus(); toast?.('这个浏览器不让按钮直接读剪贴板：长按框里「长按粘贴」那几个字，选「粘贴」', 'err'); }
+        }}>📋 粘贴</button>
+        <span className="pb-paste show-touch" contentEditable suppressContentEditableWarning onPaste={onPaste} onInput={(e) => { e.currentTarget.textContent = '长按粘贴'; }}>长按粘贴</span>
         <button type="button" className="btn sm" onClick={() => pick.current.click()}>选图</button>
         {value && <button type="button" className="btn sm ghost" onClick={() => { onChange(''); setDup([]); }} title="清除">×</button>}
         <input ref={cam} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { take(e.target.files[0], 'camera'); e.target.value = ''; }} />
@@ -773,7 +781,10 @@ const normOpts = (options) => (options || []).filter((o) => o != null).map((o) =
 export function Choice({ value, onChange, options, empty, placeholder = '请选择', err, disabled, flat, width, style, className = '', size, renderOpt }) {
   const show = (o) => (renderOpt && !o.empty ? renderOpt(o) : o.l);
   const opts = normOpts(options);
-  const asFlat = flat ?? (opts.length + (empty ? 1 : 0) <= 3 && opts.every((o) => o.l.length <= 12));
+  // 11-26 Frank：手机屏幕窄，一排放不下就变成下拉（只占一格）；放得下（最多 3 个、字加起来不长）才平铺
+  const phone = typeof window !== 'undefined' && window.innerWidth < 640;
+  const totalLen = opts.reduce((n, o) => n + String(o.l || '').length, 0) + (empty ? String(empty).length : 0);
+  const asFlat = flat ?? (opts.length + (empty ? 1 : 0) <= 3 && opts.every((o) => o.l.length <= 12) && (!phone || totalLen <= 12));
   const [open, setOpen] = useState(false); const [kw, setKw] = useState(''); const [hi, setHi] = useState(0); const [pos, setPos] = useState(null);
   const btn = useRef(null); const pop = useRef(null); const qin = useRef(null);
   usePopBus(open, () => setOpen(false));

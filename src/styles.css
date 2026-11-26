@@ -2320,3 +2320,41 @@ body { touch-action: manipulation; }
 .pinbtn.on { opacity: 1; filter: none; }
 @media (max-width: 760px) { .grid .t th .grip { display: none; } }
 @media (max-width: 760px) { .ticks-submit { white-space: nowrap; font-size: 14px !important; padding-left: 10px; padding-right: 10px; } }
+/* 11-26 找货行第二版：库位并进第二行（蓝色加粗），右边只剩数量；− 数量 + 三样一样高、都居中 */
+.tick-binl { display: none; }
+@media (max-width: 760px) {
+  .tick-binl { display: inline-flex; align-items: baseline; gap: 3px; font-weight: 800; color: var(--brand); margin-right: 6px; }
+  .tick-binl small { font-weight: 600; font-size: 10px; color: #6b84ad; }
+  .tick-side { padding: 0 10px 0 0 !important; align-self: center; }
+  .tick-qty { border: 0 !important; background: none !important; gap: 6px !important; align-items: center !important; }
+  .tick-qty .step { display: inline-flex !important; align-items: center; justify-content: center; width: 34px !important; height: 34px !important; min-width: 34px !important; border-radius: 50% !important; background: #eef2f8 !important; color: var(--brand); font-size: 20px !important; line-height: 1; padding: 0 !important; }
+  .tick-qty .step:disabled { background: #f4f6fa !important; color: #c3cad6; }
+  .tick-qty .num { display: inline-flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; min-width: 40px !important; height: 34px !important; padding: 0 !important; font-size: 17px !important; line-height: 1.05; }
+  .tick-qty .num small { font-size: 10px !important; }
+}
+.show-touch { display: none; }
+@media (pointer: coarse) { .show-touch { display: inline-flex; } }
+.pb-paste { align-items: center; min-height: 32px; padding: 0 10px; border: 1px dashed var(--line); border-radius: 8px; font-size: 12px; color: var(--muted); -webkit-user-select: text; user-select: text; caret-color: transparent; outline: none; }
+.pb-paste:focus { border-color: var(--brand); color: var(--brand); }
+@media (max-width: 760px) { .ticks-foot .proofbox .pb-paste { display: none; } }
+@media (max-width: 760px) {
+  .ticks-foot { flex-wrap: wrap !important; }
+  .ticks-foot .field { flex: 1 1 100% !important; }
+  .ticks-foot .proofbox { display: flex; gap: 6px; }
+  .ticks-foot .proofbox > .btn { flex: 1 1 0; min-height: 40px; }
+  .ticks-submit { flex: 1 1 100% !important; }
+}
+
+/* 11-26 Frank「图标有的太大有的太小」：一套尺寸 —— 常点的（搜索、返回、底栏、主要按钮）大一号；偶尔点的（⚙ 规则 / 选项、ⓘ 说明）小一号、不抢眼 */
+:root { --ic-main: 40px; --ic-minor: 28px; --ic-tiny: 18px; }
+.top .navhist .btn, .top .set-btn { height: var(--ic-main); min-width: var(--ic-main); border-radius: 12px; }
+.top .ask-bar { height: var(--ic-main); }
+@media (max-width: 760px) {
+  .top .ask-bar { width: var(--ic-main) !important; max-width: var(--ic-main) !important; border-width: 1.5px; box-shadow: none; }
+  .top .ask-bar .ask-ico { width: 30px; height: 30px; font-size: 15px; }
+  .top .set-btn { width: var(--ic-main); padding: 0; justify-content: center; font-size: 17px; }
+  .top .navhist .btn { width: var(--ic-main); padding: 0; justify-content: center; }
+}
+.gear-btn, .opt-gear { width: var(--ic-minor) !important; height: var(--ic-minor) !important; min-width: var(--ic-minor) !important; padding: 0 !important; border-radius: 8px !important; font-size: 14px !important; line-height: 1; display: inline-flex !important; align-items: center; justify-content: center; border: 1px solid transparent !important; background: transparent !important; color: #8a97ab !important; box-shadow: none !important; }
+.gear-btn:hover, .opt-gear:hover, .gear-btn.on { background: var(--brand-soft) !important; color: var(--brand) !important; }
+.info-i { width: var(--ic-tiny); height: var(--ic-tiny); font-size: 11px; }

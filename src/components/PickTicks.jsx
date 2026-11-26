@@ -87,10 +87,10 @@ export default function PickTicks({ deal, lines, employees, role, act }) {
         <div key={l.id} data-tick={l.id} className={`tick-row ${t ? 'done' : ''} ${short ? 'short' : ''} ${busy === l.id ? 'busy' : ''}`}>
           <button type="button" className="tick-main" onClick={() => tap(l)} disabled={!mine} aria-pressed={t}>
             <span className="tick-box">{t ? '✓' : ''}</span>
-            <span className="tick-info"><b className="tick-model">{l.model}</b><span className="tick-sub">{l.category} · {l.code}{l.variant ? ` · ${l.variant}` : ''}</span></span>
+            <span className="tick-info"><b className="tick-model">{l.model}</b><span className="tick-sub"><span className="tick-binl">{l.bin || '—'}<small>{l.warehouse}</small></span>{l.category} · {l.code}{l.variant ? ` · ${l.variant}` : ''}</span></span>
             <span className="tick-bin">{l.warehouse}<b>{l.bin || '—'}</b></span>
           </button>
-          <span className="tick-side"><span className="tick-binb"><small>{l.warehouse}</small>{l.bin || '—'}</span>
+          <span className="tick-side">
           <span className="tick-qty">
             <button type="button" className="step" disabled={!mine || c.qty <= 0} onClick={() => step(l, -1)} aria-label="少一片">−</button>
             <button type="button" className="num" disabled={!mine} onClick={() => setNumFor(l)} title="点这里直接输入数量">{qty(c.qty)}<small>/ {qty(l.qty_supply)}</small></button>
