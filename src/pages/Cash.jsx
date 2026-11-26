@@ -10,7 +10,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { readIntent, useIntent } from '../components/MobileSheet.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice, MoneyIn, Info, usePeriod, PeriodBar } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice, MoneyIn, Info, usePeriod, PeriodBar, useKeep, clearKeep } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { can, PAY_METHODS } from '../lib/domain.js';
@@ -243,7 +243,7 @@ function ExplainModal({ m, onClose }) {
 
 function MoveModal({ t, acc, onClose }) {
   const { role, toast, refresh } = useApp();
-  const [f, setF] = useState({ account: acc[0]?.account_id || '', date: today(), amount: '', payer: '', ref: '', cat: '', proof: '', note: '' });
+  const [f, setF] = useKeep(`cash.${t}`, 'f', { account: acc[0]?.account_id || '', date: today(), amount: '', payer: '', ref: '', cat: '', proof: '', note: '' });
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v?.target ? v.target.value : v }));
   const a = acc.find((x) => x.account_id === f.account);
   const title = { deposit: '登记到账', expense: '登记支出', handover: '交款给公司' }[t];
@@ -254,7 +254,7 @@ function MoveModal({ t, acc, onClose }) {
       if (t === 'deposit') { await call(role, `select app.record_deposit($1,$2,$3,$4,$5,$6,$7)`, [f.account, f.date, Number(f.amount), f.payer, f.ref, f.proof || null, f.note || null]); toast('已登记到账，等中方认领'); }
       if (t === 'expense') { const [{ s }] = await call(role, `select app.record_expense($1,$2,$3,$4,$5,$6) as s`, [f.account, Number(f.amount), f.date, f.cat, f.proof || null, f.note]); toast(s === 'approved' ? '支出已记账' : '支出已提交，等中方批'); }
       if (t === 'handover') { await call(role, `select app.request_handover($1,$2,$3,$4,$5)`, [f.account, Number(f.amount), f.date, f.proof, f.note || null]); toast('交款已提交，中方确认收到后才从账户里减掉'); }
-      refresh(); onClose();
+      clearKeep(`cash.${t}`); refresh(); onClose();
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
   return (
@@ -278,11 +278,11 @@ function MoveModal({ t, acc, onClose }) {
 
 function NoticeModal({ customers, onClose }) {
   const { role, toast, refresh } = useApp();
-  const [f, setF] = useState({ cust: '', amount: '', currency: 'XOF', method: 'bank', date: today(), proof: '', note: '' });
+  const [f, setF] = useKeep('cash.notice', 'f', { cust: '', amount: '', currency: 'XOF', method: 'bank', date: today(), proof: '', note: '' });
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v?.target ? v.target.value : v }));
   const go = async () => {
     try { await call(role, `select app.record_payment_notice($1,$2,$3,$4,$5,$6,$7)`, [f.cust, Number(f.amount), f.currency, f.method, f.date, f.proof, f.note || null]);
-      toast('已挂上，到账来了会自动配对'); refresh(); onClose(); }
+      clearKeep('cash.notice'); toast('已挂上，到账来了会自动配对'); refresh(); onClose(); }
     catch (e) { toast(friendlyError(e), 'err'); }
   };
   return (

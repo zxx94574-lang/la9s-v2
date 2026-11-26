@@ -8,7 +8,7 @@ import AttCalendar from '../components/AttCalendar.jsx';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal, DatePicker, MonthPicker, Drawer, MoneyIn, Choice, PhotoInput, FRow, ConfirmBtn, RangePicker, Info } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, DatePicker, MonthPicker, Drawer, MoneyIn, Choice, PhotoInput, FRow, ConfirmBtn, RangePicker, Info, useKeep, clearKeep } from '../components/ui.jsx';
 import { OptNote } from '../components/Opts.jsx';
 import { RuleGear } from '../components/Rules.jsx';
 import { staffOptions, optLabel } from '../lib/staffOptions.js';
@@ -185,13 +185,13 @@ export default function Attendance() {
 const LV_KIND = (l) => ({ full: '全天', am: '上午', pm: '下午' })[l.kind] || `${String(l.from_time || '').slice(0, 5)}–${String(l.to_time || '').slice(0, 5)}（${Number(l.hours)} 小时）`;
 function LeaveModal({ onClose }) {
   const { org, role, toast, refresh } = useApp();
-  const [f, setF] = useState({ kind: 'full', from: today(), to: today(), from_time: '10:00', to_time: '12:00', reason: '' });
+  const [f, setF] = useKeep('leave', 'f', { kind: 'full', from: today(), to: today(), from_time: '10:00', to_time: '12:00', reason: '' });
   // 11-26 Frank：日期跟经营总览那个日历一样 —— 点两下选一段，请一天就同一天点两下；半天 / 按小时只选一天
   const span = f.kind === 'am' || f.kind === 'pm' ? 'half' : f.kind;
   const hrs = f.kind === 'hours' ? (new Date(`2000-01-01T${f.to_time}`) - new Date(`2000-01-01T${f.from_time}`)) / 36e5 : 0;
   const days = f.kind === 'full' && f.from && f.to ? Math.round((new Date(f.to) - new Date(f.from)) / 864e5) + 1 : 0;
   const ok = f.from && (f.kind === 'full' ? f.to >= f.from : f.kind === 'hours' ? hrs > 0 : true) && f.reason.trim();
-  const go = async () => { try { const body = f.kind === 'full' ? f : { ...f, to: f.from }; const [{ n }] = await call(role, `select app.take_leave($1,$2) as n`, [org, JSON.stringify(body)]); toast(`已登记请假 ${n} 天`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
+  const go = async () => { try { const body = f.kind === 'full' ? f : { ...f, to: f.from }; const [{ n }] = await call(role, `select app.take_leave($1,$2) as n`, [org, JSON.stringify(body)]); clearKeep('leave'); toast(`已登记请假 ${n} 天`); refresh(); onClose(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
     <Modal title="请假" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!ok} onClick={go}>登记{days > 0 ? ` ${days} 天` : f.kind === 'hours' && hrs > 0 ? ` ${hrs} 小时` : span === 'half' ? ' 半天' : ''}</button></>}>
       <div className="stack">

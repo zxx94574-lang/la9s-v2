@@ -551,6 +551,21 @@ export function useOutside(open, close) {
 }
 
 // async data hook bound to the global refresh tick
+// 11-26 Frank：填到一半被弹出去 / 闪退 / 断网，回来还在 —— 每改一下就存在这台手机上（3 天），交上去以后清掉。
+// 用法：把 useState(初值) 换成 useKeep('出库.<单号>', '电话', 初值)；成功后 clearKeep('出库.<单号>')
+const KEEP = 'la9s.keep.';
+try { for (const k of Object.keys(localStorage)) if (k.startsWith(KEEP)) { const o = JSON.parse(localStorage.getItem(k) || 'null'); if (!o || Date.now() - o.t > 3 * 864e5) localStorage.removeItem(k); } } catch { /* ignore */ }
+export function useKeep(scope, field, init) {
+  const k = scope ? `${KEEP}${scope}|${field}` : null;
+  const [v, setV] = useState(() => {
+    if (k) { try { const o = JSON.parse(localStorage.getItem(k) || 'null'); if (o && Date.now() - o.t < 3 * 864e5) return o.v; } catch { /* ignore */ } }
+    return typeof init === 'function' ? init() : init;
+  });
+  const set = useCallback((x) => setV((old) => { const nv = typeof x === 'function' ? x(old) : x; if (k) { try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), v: nv })); } catch { /* 存不下（图片太大）就算了 */ } } return nv; }), [k]);
+  return [v, set];
+}
+export function clearKeep(scope) { try { for (const k of Object.keys(localStorage)) if (k.startsWith(`${KEEP}${scope}|`)) localStorage.removeItem(k); } catch { /* ignore */ } }
+
 export function useData(fn, deps) {
   const { tick } = useApp();
   const [state, set] = useState({ data: null, loading: true, error: null });

@@ -8,7 +8,7 @@ const VOID_WHY = ['金额输错', '小数点输错', '客户 / 订单选错', '�
 import React, { useEffect, useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, DatePicker, PhotoInput, Drawer, BigNum, Modal, FRow, Info, RateInput, Choice, Assumed, MoneyIn } from './ui.jsx';
+import { useApp, useData, DatePicker, PhotoInput, Drawer, BigNum, Modal, FRow, Info, RateInput, Choice, Assumed, MoneyIn, useKeep, clearKeep } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { can, whoCan, PAY_METHODS, balanceWords } from '../lib/domain.js';
 import { money, today, dDate, friendlyError } from '../lib/format.js';
@@ -32,27 +32,27 @@ export const DealChip = ({ id, no, onOpen }) => <DealLink id={id} no={no} onOpen
 export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDeal, defaultAmount, onDone, compact }) {
   const { org, role, toast, refresh } = useApp();
   const acc = accountCurrency;
-  const [date, setDate] = useState(today());
-  const [amount, setAmount] = useState('');   // Frank 11-09: 实收必须手填, 不带本单金额
-  const [currency, setCurrency] = useState('XOF');   // Frank 11-09 第 199 条: 币种下拉, 默认 XOF
-  const [rate, setRate] = useState('');
-  const [fee, setFee] = useState('');
-  const [method, setMethod] = useState('cash');
+  const [date, setDate] = useKeep(`rc.${lockDeal || 'free'}`, 'date', today());
+  const [amount, setAmount] = useKeep(`rc.${lockDeal || 'free'}`, 'amount', '');   // Frank 11-09: 实收必须手填, 不带本单金额
+  const [currency, setCurrency] = useKeep(`rc.${lockDeal || 'free'}`, 'currency', 'XOF');   // Frank 11-09 第 199 条: 币种下拉, 默认 XOF
+  const [rate, setRate] = useKeep(`rc.${lockDeal || 'free'}`, 'rate', '');
+  const [fee, setFee] = useKeep(`rc.${lockDeal || 'free'}`, 'fee', '');
+  const [method, setMethod] = useKeep(`rc.${lockDeal || 'free'}`, 'method', 'cash');
   const [mode, setMode] = useState(lockDeal ? 'specific' : 'oldest');
   const [picked, setPicked] = useState(lockDeal ? [lockDeal] : []);
-  const [proof, setProof] = useState('');
+  const [proof, setProof] = useKeep(`rc.${lockDeal || 'free'}`, 'proof', '');
   const [busy, setBusy] = useState(false);
   const [rateOk, setRateOk] = useState(false);
   const [drawer, setDrawer] = useState(null);
   const [errs, setErrs] = useState(false);
   const [overOk, setOverOk] = useState(false);
   // 214 / 219 / 220: 进哪个账户、手续费谁出、别人代付、员工代收
-  const [accountId, setAccountId] = useState('');
+  const [accountId, setAccountId] = useKeep(`rc.${lockDeal || 'free'}`, 'accountId', '');
   const [feeTouched, setFeeTouched] = useState(false);
   // 318 / 358 (Frank 11-15 / 11-17): 每笔一个开关「我们承担手续费」, 默认否; 开了默认 1% (到账 99%); 高于 1% 红色确认 + 写原因, 低于 1% 黄色确认
-  const [feeOn, setFeeOn] = useState(false); const [feeOk, setFeeOk] = useState(false); const [feeWhy, setFeeWhy] = useState('');
-  const [bearer, setBearer] = useState('');
-  const [payer, setPayer] = useState('');
+  const [feeOn, setFeeOn] = useKeep(`rc.${lockDeal || 'free'}`, 'feeOn', false); const [feeOk, setFeeOk] = useState(false); const [feeWhy, setFeeWhy] = useKeep(`rc.${lockDeal || 'free'}`, 'feeWhy', '');
+  const [bearer, setBearer] = useKeep(`rc.${lockDeal || 'free'}`, 'bearer', '');
+  const [payer, setPayer] = useKeep(`rc.${lockDeal || 'free'}`, 'payer', '');
   const [byStaff, setByStaff] = useState(false);
   const [collector, setCollector] = useState('');
 
@@ -136,7 +136,7 @@ export default function ReceiptForm({ customer, accountCurrency = 'XOF', lockDea
       const [{ id: newId }] = await call(role, `select app.record_receipt2($1,$2) as id`, [org, JSON.stringify({ customer_id: customer, received_on: date, amount_landed: landed, currency, method, account_currency: acc, rate: dbRate,
         mode, targets: mode === 'specific' ? picked : [], proof: proof || null, fee: feeV, fee_bearer: feeV > 0 ? 'company' : null, payer: payer || null, note: feeHigh && feeWhy.trim() ? `手续费 ${feeRate.toFixed(2)}%：${feeWhy.trim()}` : null,
         account_id: byStaff ? null : (accSel || null), collector_employee_id: byStaff ? collector : null })]);
-      toast(byStaff ? '收款已登记：客户账已冲，钱挂在员工名下（在途），交到公司再确认到账' : '收款已登记（待核对到账），客户总账已更新');
+      clearKeep(`rc.${lockDeal || 'free'}`); toast(byStaff ? '收款已登记：客户账已冲，钱挂在员工名下（在途），交到公司再确认到账' : '收款已登记（待核对到账），客户总账已更新');
       const sum = { id: newId, amount: N(amount), currency, conv, acc, hits: hits.map(([id, v]) => [nameOf(id), v, id]), left: preview.left, fee: feeV, landed, account: accRow?.name, accountId: byStaff ? null : accSel, heldBy: byStaff ? (data.staff || []).find((e) => e.id === collector)?.short_name : heldBy, after: N(data.bal?.balance) - conv };
       setAmount(''); setProof(''); setFee(''); setFeeTouched(false); setFeeOn(false); setFeeOk(false); setFeeWhy(''); setBearer(''); setPayer(''); setByStaff(false); setAccountId(''); setCollector(''); setRate(''); setRateOk(false); setOverOk(false); setErrs(false); if (!lockDeal) setPicked([]);
       refresh(); onDone?.(sum);

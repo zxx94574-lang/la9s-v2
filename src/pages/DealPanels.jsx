@@ -16,7 +16,7 @@ import { DocActions, DocSheet, BalanceCopy, BalancePreview } from '../components
 import { BlActions } from '../components/Bl.jsx';
 import { flagAnomaly } from '../components/IssueReport.jsx';
 import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus , ReceiptDone } from '../components/ReceiptForm.jsx';
-import { Modal, Shared, tierOpt, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip, Choice, Assumed, MoneyIn, AcctImpact } from '../components/ui.jsx';
+import { Modal, Shared, tierOpt, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip, Choice, Assumed, MoneyIn, AcctImpact, useKeep, clearKeep } from '../components/ui.jsx';
 import { ImpactFor } from '../components/Impact.jsx';
 import PickTicks, { AssignBar } from '../components/PickTicks.jsx';
 import { ContactPick, useContacts, rememberContact, contactRole } from '../components/Contacts.jsx';
@@ -170,12 +170,12 @@ export function CustomerInfo({ deal }) {
 
 export function ConfirmBlock({ deal, events, act, role, lines }) {
   const { go: nav } = useApp();
-  const [split, setSplit] = useState(false);
-  const [method, setMethod] = useState('');
-  const [when, setWhen] = useState('');          // today / tomorrow / date
-  const [date, setDate] = useState('');
-  const [note, setNote] = useState(NOTE_OPTIONS.hotline[0]);
-  const [proof, setProof] = useState('');
+  const [split, setSplit] = useKeep(`cb.${deal.id}.${deal.status}`, 'split', false);
+  const [method, setMethod] = useKeep(`cb.${deal.id}.${deal.status}`, 'method', '');
+  const [when, setWhen] = useKeep(`cb.${deal.id}.${deal.status}`, 'when', '');          // today / tomorrow / date
+  const [date, setDate] = useKeep(`cb.${deal.id}.${deal.status}`, 'date', '');
+  const [note, setNote] = useKeep(`cb.${deal.id}.${deal.status}`, 'note', NOTE_OPTIONS.hotline[0]);
+  const [proof, setProof] = useKeep(`cb.${deal.id}.${deal.status}`, 'proof', '');
   const [errs, setErrs] = useState(false);
   const e = evOf(events, 'hotline_confirmed');
   const phone = deal.customer_phone || '';
@@ -757,11 +757,11 @@ function PriceModal({ line, cur, onClose, onSave, request }) {
 // ───────────────────────── ⑦ 客户最终确认（先发图，再确认：方式 + 截图必传 + 发货日期）─────────────────────────
 export function ConfirmPanel({ deal, lines, events, act, role }) {
   const { go: nav2 } = useApp();
-  const [method, setMethod] = useState('');
-  const [proof, setProof] = useState('');
-  const [when, setWhen] = useState('today');
-  const [date, setDate] = useState(today());
-  const [note, setNote] = useState('');
+  const [method, setMethod] = useKeep(`cp.${deal.id}.${deal.status}`, 'method', '');
+  const [proof, setProof] = useKeep(`cp.${deal.id}.${deal.status}`, 'proof', '');
+  const [when, setWhen] = useKeep(`cp.${deal.id}.${deal.status}`, 'when', 'today');
+  const [date, setDate] = useKeep(`cp.${deal.id}.${deal.status}`, 'date', today());
+  const [note, setNote] = useKeep(`cp.${deal.id}.${deal.status}`, 'note', '');
   const [errs, setErrs] = useState(false);
   const price = seesPrice(role);
   const e = evOf(events, 'customer_confirmed');
@@ -832,25 +832,25 @@ function ShipForm({ deal, lines, shipments, act }) {
   const { toast, role, refresh } = useApp();
   const [date, setDate] = useState(today());
   const [time, setTime] = useState(nowTime());
-  const [method, setMethod] = useState('');
-  const [phone, setPhone] = useState('');
+  const [method, setMethod] = useKeep(`ship.${deal.id}.${shipments.length}`, 'method', '');
+  const [phone, setPhone] = useKeep(`ship.${deal.id}.${shipments.length}`, 'phone', '');
   // 406 (Frank 11-18): 收货地址和联系人分开 —— 地址从选项里选 (⚙ 中方维护, 默认带出客户所在城市), 联系人从客户档案的联系人里选 (能搜名字 / 电话), 新的人提交后自动进档案
   const OTHER_PLACE = '其他（手填）';
   const placeBase = useMemo(() => [...new Set([deal.city, 'Adjamé 市场', 'Abobo', 'Yopougon', 'Treichville', 'Cocody', '交通站（外区客户）', '客户到仓库自取'].filter(Boolean))].concat([OTHER_PLACE]), [deal.city]);
-  const [place, setPlace] = useState(deal.city || ''); const [placeNote, setPlaceNote] = useState('');
-  const [contact, setContact] = useState({ role: '', name: '', phone: '' });
+  const [place, setPlace] = useKeep(`ship.${deal.id}.${shipments.length}`, 'place', deal.city || ''); const [placeNote, setPlaceNote] = useKeep(`ship.${deal.id}.${shipments.length}`, 'placeNote', '');
+  const [contact, setContact] = useKeep(`ship.${deal.id}.${shipments.length}`, 'contact', { role: '', name: '', phone: '' });
   const placeText = place === OTHER_PLACE ? placeNote.trim() : place;
   const addrText = [placeText, contact?.name?.trim() && `${contact.name.trim()}${contact.role ? `（${contactRole(contact.role)}）` : ''}`, contact?.phone?.trim()].filter(Boolean).join(' · ');
   const addr = addrText;
-  const [proof, setProof] = useState('');
-  const [partial, setPartial] = useState(false);
-  const [preason, setPreason] = useState('');
+  const [proof, setProof] = useKeep(`ship.${deal.id}.${shipments.length}`, 'proof', '');
+  const [partial, setPartial] = useKeep(`ship.${deal.id}.${shipments.length}`, 'partial', false);
+  const [preason, setPreason] = useKeep(`ship.${deal.id}.${shipments.length}`, 'preason', '');
   const [askPartial, setAskPartial] = useState(false);
-  const [items, setItems] = useState({});
+  const [items, setItems] = useKeep(`ship.${deal.id}.${shipments.length}`, 'items', {});
   const [errs, setErrs] = useState(false);
   // 232 (Frank 11-11): 运费谁出 —— S 档默认我们出; 阿比让以外默认我们出一段 (仓库 → Adjamé 交通站); 其他默认客户出; 仓库可以改
-  const [bearerRaw, setBearer] = useState('customer'); const bearer = optSubmit('freight_bearer', bearerRaw).base;   // 270 (Frank 11-12): 默认客户出
-  const [freight, setFreight] = useState('');
+  const [bearerRaw, setBearer] = useKeep(`ship.${deal.id}.${shipments.length}`, 'bearerRaw', 'customer'); const bearer = optSubmit('freight_bearer', bearerRaw).base;   // 270 (Frank 11-12): 默认客户出
+  const [freight, setFreight] = useKeep(`ship.${deal.id}.${shipments.length}`, 'freight', '');
   const [summary, setSummary] = useState(null);
   const left = lines.filter((l) => N(l.qty_supply) > N(l.qty_shipped));
   const remain = (l) => N(l.qty_supply) - N(l.qty_shipped);
@@ -1570,13 +1570,13 @@ const SIGN_ROLES = [['boss', '老板'], ['staff', '店员'], ['sales', '销售�
 const normDigits = (v) => String(v || '').replace(/\D/g, '').slice(-10);
 function SignRow({ s, act, role, discs = [], lines = [], deal }) {
   const [disc, setDisc] = useState(false); const [decide, setDecide] = useState(null);
-  const [photo, setPhoto] = useState('');
-  const [at, setAt] = useState(() => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); });
+  const [photo, setPhoto] = useKeep(`sign.${s.id}`, 'photo', '');
+  const [at, setAt] = useKeep(`sign.${s.id}`, 'at', () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); });
   const [errs, setErrs] = useState(false);
   /* Q7 (Frank 11-16) + 409 (11-18): 谁收的货就跟谁确认 —— 先选身份 (老板 / 店员 / 销售员 / 其他人), 再从客户联系人里选人 (名字电话自动带出);
      选「销售员」= 自动带出这个客户的归属销售员. 电话不再强制 (填了要位数对), 确认人 + 签收凭证就够. 新的人签收后自动进客户联系人. */
   const { toast } = useApp();
-  const [who, setWho] = useState({ role: '', name: '', phone: '' });
+  const [who, setWho] = useKeep(`sign.${s.id}`, 'who', { role: '', name: '', phone: '' });
   const known = useContacts(!s.customer_received_at ? deal?.customer_id : null);
   const setRoleOf = (r) => { const hit = known.filter((c) => c.role === r); setWho(hit.length === 1 ? { ...hit[0], phone: hit[0].phone ? fmtPhone(hit[0].phone) : '' } : { role: r, name: '', phone: '' }); };
   const phoneBad = !!who.phone?.trim() && !phoneValid(who.phone);
