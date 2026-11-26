@@ -58,16 +58,16 @@ export const ShareBar = ({ p, sub, color, tip }) => {
   const w = Math.max(0, Math.min(100, Number(p) || 0)); const inside = w >= 24;
   return <span className={`sbar ${sub ? 'sub' : ''}`} data-tip={tip}><i style={{ width: `${w}%`, background: color }}>{inside && <em>{pctTxt(w)}%</em>}</i>{!inside && <em className="sbar-chip" style={{ left: `calc(${w}% + 4px)` }}>{pctTxt(w)}%</em>}</span>;
 };
-// 两段 (本地备货 / FOB) 拼一根: 名字 + 百分比写在段里, 段太窄放外面
-export const MixBar = ({ parts, label = '占比' }) => {
+// 两段 (本地备货 / FOB) 拼一根小条, 放在总卡片底部那行 (Frank 11-26 16:03: 别单独占一行, 做小; 字写外面, 悬停看金额)
+export const MixBar = ({ parts, label = '占比', fmt }) => {
   const T = parts.reduce((a, x) => a + Math.max(0, x.v), 0);
   if (!T) return null;
   const ps = parts.map((x) => ({ ...x, p: Math.max(0, x.v) / T * 100 }));
-  const out = ps.filter((x) => x.p < 22);
-  return <div className="mixbar"><span className="mixbar-l">{label}</span>
-    <div className="mixbar-bar">{ps.filter((x) => x.p > 0).map((x) => <i key={x.name} style={{ width: `${x.p}%`, background: x.color }} data-tip={`${x.name} ${x.p.toFixed(1)}%`}>{x.p >= 22 && <em>{x.name} {pctTxt(x.p)}%</em>}</i>)}</div>
-    {out.length > 0 && <div className="mixbar-out">{out.map((x) => <span key={x.name}><i style={{ background: x.color }} />{x.name} {pctTxt(x.p)}%</span>)}</div>}
-  </div>;
+  const tip = ps.map((x) => `${x.name} ${x.p.toFixed(1)}%${fmt ? `（${fmt(x.v)}）` : ''}`).join('　');
+  return <span className="mixbar" data-tip={`${label}：${tip}`}>
+    <span className="mixbar-bar">{ps.filter((x) => x.p > 0).map((x) => <i key={x.name} style={{ width: `${x.p}%`, background: x.color }} />)}</span>
+    {ps.map((x) => <span key={x.name} className="mixbar-k"><i style={{ background: x.color }} />{x.name} {pctTxt(x.p)}%</span>)}
+  </span>;
 };
 // 看板卡片上的百分比 = 同一种色块, 大一号 (Frank 11-20: 和表格里的小块一样, 只是更大)
 export const BigPct = ({ p, low }) => (p == null ? <span className="dk-v muted">—</span> : <span className={`pill dk-pct ${pctTone(p, low)}`}>{p.toFixed(1)}<small>%</small></span>);

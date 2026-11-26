@@ -225,6 +225,7 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
       <DCard title="销售" sub="销售额与毛利 · 只算已经出库的" tog={<Tog s={s} />} gear={<RuleGear ids={['dash.budget', 'margin.low']} title="销售看板的规则" />} open={o0 === 'ov'} onFold={() => tg0('ov')}
         foot={<>{budget > 0 && inMonth && <span className="d2-goal" data-tip={`本月预算 ${money(budget, 'CNY')} CNY，已完成 ${money(revCny, 'CNY')} CNY`}><i><em style={{ width: `${Math.min(100, revCny / budget * 100)}%` }} /></i>预算 {Math.round(revCny / budget * 100)}%</span>}
           <span>{T.all.n} 单 · {T.all.c} 位客户</span>
+          <MixBar label="销售额占比" fmt={(v) => `${s.f(v)} ${s.cur}`} parts={[{ name: '本地', v: T.loc.rev, color: 'var(--brand)' }, { name: 'FOB', v: T.fob.rev, color: '#8DB4EE' }]} />
           {T.all.miss > 0 && <button type="button" className="d2-warn" onClick={() => setMissOpen(true)} data-tip="这些货出库时没有到岸成本，销售额算了，成本和毛利没算">{qty(T.all.miss)} 片没成本</button>}</>}>
         {!rows.length ? <div className="muted small" style={{ padding: '8px 0' }}>这个时间段还没有出库</div> : <div className="d2-hero">{cells(T.all, 'all', true)}</div>}
       </DCard>
@@ -244,7 +245,6 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
             prev={Tp.rev || Tp.cost ? { rev: Tp.rev, cost: Tp.cost, gp: Tp.profit } : null} exps={plExps} expPrev={Tp.rev || expPrevT ? expPrevT : null}
             note={<span data-tip="开支 = 资金账户里已批的支出（按科目）+ 工资表（实发 + 社保）。订单运费已经在毛利里扣过、退给客户的钱不算开支，都不重复算。上期 = 上一个同样长的时间段。">{hasPay ? '' : '这段时间还没建工资表，净利里没扣工资。'}开支只记在合计里（不分本地 / FOB）；只算系统里记了的，没记进来的减不掉。</span>} />}
       </Detail>}
-      {T.all.rev > 0 && <MixBar label="销售额占比" parts={[{ name: '本地备货', v: T.loc.rev, color: 'var(--brand)' }, { name: 'FOB', v: T.fob.rev, color: '#8DB4EE' }]} />}
       <div className="d2-row">
         <DCard small title="本地备货" to={['orders', '订单总览']} open={o1 === 'local'} onFold={() => { setExp({}); tg1('local'); }} foot={<span>{T.loc.n} 单 · {T.loc.c} 位客户</span>}><div className="d2-sub">{cells(T.loc, 'local', false)}</div></DCard>
         <DCard small title="FOB" to={['fob', 'FOB 项目']} open={o1 === 'fob'} onFold={() => { setExp({}); tg1('fob'); }}

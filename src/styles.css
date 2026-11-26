@@ -2371,30 +2371,30 @@ body { touch-action: manipulation; }
 .sbar.sub > i { background: #8fb0e8; }
 .sbar em { font-style: normal; font-size: 11px; font-weight: 700; color: #fff; padding: 0 7px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .sbar em.sbar-chip { position: absolute; top: 50%; transform: translateY(-50%); padding: 0 6px; line-height: 16px; border-radius: 8px; background: #fff; color: var(--ink); border: 1px solid var(--line); font-weight: 600; }
-.mixbar { display: flex; align-items: center; gap: 10px; margin: 2px 4px; flex-wrap: wrap; } .mixbar-l { font-size: 12px; color: var(--muted); }
-.mixbar-bar { flex: 1 1 200px; display: flex; height: 20px; border-radius: 10px; overflow: hidden; background: #eef2f7; gap: 2px; }
-.mixbar-bar > i { display: flex; align-items: center; min-width: 4px; transition: width .35s ease; }
-.mixbar-bar em { font-style: normal; font-size: 12px; font-weight: 700; color: #fff; padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mixbar-out { display: flex; gap: 12px; font-size: 12px; color: var(--muted); white-space: nowrap; }
-.mixbar-out i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.mixbar { display: inline-flex; align-items: center; gap: 8px; cursor: default; white-space: nowrap; }
+.mixbar-bar { display: inline-flex; width: 120px; height: 6px; border-radius: 3px; overflow: hidden; background: var(--line-2); gap: 1px; }
+.mixbar-bar > i { display: block; height: 100%; min-width: 2px; }
+.mixbar-k { font-size: 12px; color: var(--muted); } .mixbar-k i { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 4px; vertical-align: 1px; }
+@media (max-width: 560px) { .mixbar-bar { width: 70px; } }
 
-/* 利润表 (522): 标准损益表, 项目一行一行往下算 */
+/* 利润表 (522, 11-26 16:03 横纵对调): 业务竖排, 销售额 → 净利 横着算 */
 .pl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.pl-t { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; font-variant-numeric: tabular-nums; }
-.pl-t th, .pl-t td { padding: 8px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line-2); }
+.pl-t { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+.pl-t th, .pl-t td { padding: 9px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line-2); }
 .pl-t thead th { font-size: 12px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); background: #fafbfd; }
-.pl-t th:first-child { text-align: left; position: sticky; left: 0; background: #fff; z-index: 1; min-width: 150px; }
+.pl-t thead th.pl-key { color: var(--ink); }
+.pl-t th:first-child { text-align: left; position: sticky; left: 0; background: #fff; z-index: 1; }
 .pl-t thead th:first-child { background: #fafbfd; } .pl-t thead small { font-weight: 400; }
-.pl-t tbody th { font-weight: 400; color: var(--ink); }
+.pl-t tbody th { font-weight: 600; color: var(--ink); }
+.pl-t td.pl-key { background: #f7f9fd; }
 .pl-t tr.pl-b th, .pl-t tr.pl-b td { font-weight: 700; }
-.pl-t tr.pl-ind th { padding-left: 28px; }
-.pl-t tr.pl-ind2 th, .pl-t tr.pl-ind2 td { padding-left: 46px; font-size: 12px; color: var(--muted); padding-top: 5px; padding-bottom: 5px; }
 .pl-t tr.pl-sep th, .pl-t tr.pl-sep td { border-top: 1.5px solid var(--ink); }
-.pl-t tr.pl-sep2 th, .pl-t tr.pl-sep2 td { border-top: 1.5px solid var(--ink); border-bottom: 3px double var(--ink); background: #f7f9fd; }
-.pl-t tr.pl-sep2 th:first-child { background: #f7f9fd; }
+.pl-t tr.pl-prev th, .pl-t tr.pl-prev td { color: var(--muted); font-weight: 400; font-size: 12px; }
+.pl-t tr.pl-chg th { color: var(--muted); font-weight: 400; font-size: 12px; } .pl-t tr.pl-chg td { font-size: 12px; } .pl-t tr.pl-chg th, .pl-t tr.pl-chg td { border-bottom: 0; }
+.pl-tipc { cursor: help; border-bottom: 1px dashed var(--line); }
 .pl-up { color: #15803d; font-size: 12px; } .pl-down { color: var(--red); font-size: 12px; }
 .pl-note { margin-top: 6px; }
-@media (max-width: 640px) { .pl-t { font-size: 12px; } .pl-t th, .pl-t td { padding: 7px 8px; } .pl-t th:first-child { min-width: 112px; box-shadow: 2px 0 4px -2px rgba(0,0,0,.12); } .pl-t tr.pl-ind th { padding-left: 18px; } .pl-t tr.pl-ind2 th { padding-left: 28px; } }
+@media (max-width: 640px) { .pl-t { font-size: 12px; } .pl-t th, .pl-t td { padding: 7px 8px; } .pl-t th:first-child { box-shadow: 2px 0 4px -2px rgba(0,0,0,.12); } }
 .rp-grid > .rp-wide { grid-column: 1 / -1; } @media print { .pl-t { min-width: 0; } }
 
 /* 518 手机对账简要 */
@@ -2415,4 +2415,6 @@ body { touch-action: manipulation; }
 .fitdoc .doc-preview-in { transform-origin: top left; width: max-content; }
 @media (max-width: 640px) { .doc-preview { flex-direction: column; align-items: stretch; } }
 @media (max-width: 560px) { .d2-m .d:empty { min-height: 0; margin-top: 0; } }
-@media (max-width: 640px) { .pl-t th:first-child { white-space: normal; max-width: 150px; } }
+/* 本地备货 / FOB 半宽小卡: 卡片窄到四格放不下 (侧栏开着、中等屏幕) → 两行两格, 毛利率色块不再被截 (Frank 11-26 截图) */
+.d2-card.sub { container-type: inline-size; }
+@container (max-width: 460px) { .d2-sub, .d2-sub.c3 { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 12px; } .d2-sub > .d2-m:nth-child(odd) { border-left: 0; padding-left: 0; } }
