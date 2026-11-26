@@ -96,8 +96,12 @@ test('员工档案: 飞书导入按来源记录更新, 照片不重复; 照片�
   await t.as(U.admin, `insert into app.members (user_id, org_id, employee_id, roles) values ($1,$2,$3,'{sales_manager}')`, [SM, t.ids.org, t.ids.sales]);
   await t.as(SM, `select app.create_inquiry($1,$2,$3,'')`, [t.ids.org, t.ids.camaraAbobo, JSON.stringify([{ product_id: t.ids.bg6mCover, qty_req: 1 }])]);
   // 0020: 销售主管 (罗兰) 可以起草工资单, 但「确认发放」只有中方
-  await t.as(SM, `select app.payroll_open($1,current_date)`, [t.ids.org]);
-  await rejects(t.as(SM, `select app.payroll_confirm($1,current_date)`, [t.ids.org]), /PERMISSION_DENIED/);
+  // 11-26：工资只给中方 + 国家经理（罗兰），销售主管不能再动
+  await rejects(t.as(SM, `select app.payroll_open($1,current_date)`, [t.ids.org]), /PERMISSION_DENIED/);
+  const CMU = '00000000-0000-0000-0000-0000000005a2';
+  await t.as(U.admin, `insert into app.members (user_id, org_id, roles) values ($1,$2,'{country_manager}')`, [CMU, t.ids.org]);
+  await t.as(CMU, `select app.payroll_open($1,current_date)`, [t.ids.org]);
+  await rejects(t.as(CMU, `select app.payroll_confirm($1,current_date)`, [t.ids.org]), /PERMISSION_DENIED/);
   await t.as(U.admin, `select app.payroll_confirm($1,current_date)`, [t.ids.org]);
   const hh = await t.one(`select status, paid_on from app.payroll_months where org_id=$1`, [t.ids.org]); assert.equal(hh.status, 'paid');
   await rejects(t.as(U.admin, `select app.payroll_set_line($1,current_date,$2,'{"deduction":1}')`, [t.ids.org, t.ids.sales]), /BAD_STATE/);

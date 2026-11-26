@@ -45,6 +45,7 @@ async function exportKdSales(org, ids, toast) {
 const WH = { 'CI LA MATERIAL WH': 'LA', 'CI 9S MATERIAL WH': '9S', 'CI LA FOB MATERIAL WH': 'FOB', 'CI PENDING LIABILITY WH': 'PENDING', 'CI DEFECTIVE WH-LA': 'SCRAP', 'CI DEFECTIVE WH-9S': 'SCRAP', 'CI PCBA RECYCLE WH': 'RECYCLE', 'CI CHIP RECYCLE WH': 'RECYCLE' };
 
 import { KdAll, KdRecon } from '../components/KdRecon.jsx';
+import HistRecon from '../components/HistRecon.jsx';
 export default function Kingdee() {
   const { org, role, toast, refresh, go } = useApp();
   const [tab, setTab] = useState('all');
@@ -97,15 +98,17 @@ export default function Kingdee() {
           <button type="button" className={tab === 'misc' ? 'on' : ''} onClick={() => setTab('misc')}>其他出入库 / 调拨 / 退货</button>
           <button type="button" className={tab === 'stock' ? 'on' : ''} onClick={() => setTab('stock')}>库存快照</button>
           <button type="button" className={tab === 'pool' ? 'on' : ''} onClick={() => setTab('pool')}>盘点编码顶替</button>
+          {hasAny(role, ['finance']) && <button type="button" className={tab === 'hist' ? 'on' : ''} onClick={() => setTab('hist')}>飞书 / 金蝶对账</button>}
           {hasAny(role, ['admin', 'finance']) && <button type="button" className={tab === 'recon' ? 'on' : ''} onClick={() => setTab('recon')}>和金蝶对账</button>}
           {hasAny(role, ['admin', 'finance']) && <button type="button" className={tab === 'open' ? 'on' : ''} onClick={() => setTab('open')}>应收期初差异</button>}</div>
         {tab === 'all' && <div className="card-b"><KdAll /></div>}
         {tab === 'recon' && <div className="card-b"><KdRecon /></div>}
+        {tab === 'hist' && <HistRecon />}
         {tab === 'grn' && <GrnList rows={data.grn} />}
         {tab === 'misc' && <MiscList />}
         {tab === 'pool' && <PoolList />}
         {tab === 'open' && <KdOpening />}
-        {['grn', 'misc', 'all', 'recon', 'pool', 'open'].includes(tab) ? null : tab === 'queue' ? (
+        {['grn', 'misc', 'all', 'recon', 'pool', 'open', 'hist'].includes(tab) ? null : tab === 'queue' ? (
           <Grid id="kd-queue" table="kingdee_outbox" columns={cols} rows={rows} onRowClick={(r) => go('deal/' + r.deal_id)} empty="没有"
             tools={<div className="chips">{[['ready', '待录'], ['saved', '已保存'], ['submitted', '待审核'], ['synced', '已审核'], ['await_receipt', '待签收'], ['', '全部']].map(([k, l]) =>
               <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} {k ? counts[k] : data.rows.length}</button>)}

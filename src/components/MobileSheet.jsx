@@ -29,7 +29,7 @@ const NEW = [
   ['客户', [{ r: 'visits', l: '记一次拜访', d: '新潜客也在这里', ico: 'visits', ok: (ro) => can(ro, 'prospect') },
     { r: 'hotline', l: '热线回访', d: '给客户打电话', ico: 'hotline' }]],
   ['仓库', [{ r: 'po', l: '到货收货', d: '采购单到了，按箱收', ico: 'po', ok: (ro) => can(ro, 'receive_po') },
-    { r: 'count', l: '盘点', d: '领任务，一层一层点', ico: 'count', gate: 'bins' },
+    { r: 'count', l: '盘点', d: '领任务，一层一层点', ico: 'count', gate: 'bins', ok: (ro) => hasAny(ro, ['manager', 'picker']) },
     { r: 'purchase', l: '物资申请', d: '要买东西', ico: 'purchase', ok: (ro) => can(ro, 'purchase_request') }]],
   ['我自己', [{ r: 'attendance', l: '打卡', d: '上班 / 下班', ico: 'attendance', ok: staff }, { r: 'attendance', l: '请假', d: '半天 / 全天', ico: 'attendance', i: 'leave', ok: staff }]],
 ];

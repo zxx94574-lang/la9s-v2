@@ -73,11 +73,17 @@ export const RULES = [
   ['dash.silent', 'dash_rules', 'silent_days', '沉默客户：多少天没下单', 30, '天', 'num', { page: 'dashboard', where: '经营总览 · 人员' }],
   ['dash.visit', 'dash_rules', 'visit_per_day', '拜访目标：每个销售员每天拜访几家', 5, '家', 'num', { page: 'dashboard', where: '经营总览 · 人员' }],
   ['dash.pick', 'dash_rules', 'pick_pct', '热线拨通率目标', 80, '%', 'num', { page: 'dashboard', where: '经营总览 · 人员' }],
+  ['recon.ok', 'recon_rules', 'ok', '金蝶对账：差额在多少以内算对上', 1000, 'XOF', 'num', { page: 'kingdee', where: '金蝶同步 · 飞书 / 金蝶对账' }],
+  ['recon.warn', 'recon_rules', 'warn', '金蝶对账：差额在多少以内标黄（超过标红）', 100000, 'XOF', 'num', { page: 'kingdee', where: '金蝶同步 · 飞书 / 金蝶对账' }],
+  ['recon.po_days', 'recon_rules', 'po_days', '采购单下单超过几天还没入库也没关闭 = 在途超期', 60, '天', 'num', { page: 'kingdee', where: '金蝶同步 · 飞书 / 金蝶对账' }],
 ];
 const BY_ID = Object.fromEntries(RULES.map((r) => [r[0], r]));
 // 每条规则在「工作地图」上的位置 + 三句说明 (Frank 11-20: 一眼知道从哪来、作用在哪、触发后怎样)
 // area = WorkMap 的环节; short = 一行里显示的短名字; src / apply / effect = 悬停小图标看到的三行; me = Claude 先定的、Frank 没拍板
 export const META = {
+  'recon.ok': { area: 'cash', short: '对账 · 对上的差额', src: 'Claude 先定', apply: '按客户对应收、按单对', effect: '差额在这以内算对上（绿）', me: 1 },
+  'recon.warn': { area: 'cash', short: '对账 · 标黄的差额', src: 'Claude 先定', apply: '按客户对应收、按单对', effect: '超过「对上」、在这以内标黄；再大标红', me: 1 },
+  'recon.po_days': { area: 'po', short: '在途超期天数', src: 'Claude 先定', apply: '金蝶导进来的采购单', effect: '超过天数没入库也没关闭，列进「在途超期」', me: 1 },
   'price.warn': { area: 'quote', short: '改价偏离 · 标黄', src: '物料档位价', apply: '建报价、改价时每一行', effect: '格子里标黄，只提醒', me: 1 },
   'price.odd': { area: 'quote', short: '改价偏离 · 异价单', src: '物料档位价', apply: '建报价、改价时每一行', effect: '标红 + 订单打「异价单」，员工改价要中方批' },
   'price.cny': { area: 'quote', short: '人民币报价只给 S 档', src: 'Frank 11-18 定', apply: '建报价选人民币时', effect: '非 S 档客户不让选，中方可单张破例' },
