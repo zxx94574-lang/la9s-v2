@@ -102,7 +102,7 @@ function StaffTable({ staff, opts }) {
           <div className="chips">{[['active', `在职 ${people.filter((e) => e.active).length}`], ['inactive', `离职 ${people.filter((e) => !e.active).length}`], ['all', '全部']].map(([k, l]) =>
             <button type="button" key={k} className={`chip ${show === k ? 'on' : ''}`} onClick={() => setShow(k)}>{l}</button>)}</div>
           <button type="button" className="btn sm" onClick={() => setEdit({})}>＋ 新员工</button>
-          <span className="hint">点一下选格子，再点一下改，改完自动保存；行号旁 ↗ 打开完整档案（证件照在里面）。</span></>} />
+          <Info>怎么改：点一下选中格子，再点一下就能改，改完自动保存。看完整档案（证件照在里面）：点行号旁边的 ↗。</Info></>} />
       {accounts.length > 0 && <div className="small muted" style={{ padding: '8px 14px' }}>另有 {accounts.length} 个系统岗位账号（{accounts.map((a) => a.short_name).join('、')}），只用来右上角切换岗位演示，不算员工。</div>}
       {edit && <EmpModal e={edit} opts={opts} onClose={() => setEdit(null)} />}
     </>

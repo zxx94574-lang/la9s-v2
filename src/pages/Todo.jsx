@@ -214,8 +214,6 @@ export default function Todo() {
       <div className="pagehead"><div><div className="eyebrow">Mes tâches</div><h1 tabIndex={0}>我的待办 <Info>当前岗位：{ROLES[role].label}。只有三段：紧急 / 进行中 / 待跟进。下推一步，单子自动出现在下一个人的待办里；做完的自动消失。</Info></h1></div>
         {admin && <div className="row"><button type="button" className="btn sm" onClick={() => setRouteOpen(true)}>⚙ 归谁</button></div>}</div>
       {!data ? <div className="card"><div className="empty">加载中…</div></div> : <div className="stack" style={{ gap: 12 }}>
-        {admin && <ReceiptDigest />}
-        {admin && <DirectiveBoard />}
         {SEC.map(([k, label, tip]) => (
           <div key={k} className={`card todo-sec todo-${k}`}>
             <div className="card-h"><h2><span className={`pill ${k}`}>{label}</span> {groups[k].length} 单 <Info>{tip}</Info></h2></div>
@@ -229,13 +227,16 @@ export default function Todo() {
                     <div className="small muted">{d.biz_no} · {dt(d.updated_at)} · {d.line_count} 个型号{d.want_on && !['shipped', 'cancelled'].includes(d.status) && <> · <Pill tone={wantDue(d) ? 'red' : 'blue'}>客户要货 {dDate(d.want_on)}</Pill></>}</div>
                     <div className="small">👉 {Number(d.busy_n) >= 3 && ['quoted', 'hotline_ok'].includes(d.status) ? '联系 3 次客户都忙：可以作废，或改天再联系' : n.what}{role === 'admin' && <span className="muted">（{n.roles.map((r) => ROLES[r].label).join('/')}）</span>}</div>
                   </div>
-                  <div className="row" style={{ flexShrink: 0 }}>{role === 'admin' && <button type="button" className="btn sm ghost" onClick={(e) => urgent(e, d)}>{d.urgent ? '取消紧急' : '提成紧急'}</button>}<Pill tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Pill><span className="muted">›</span></div>
+                  <div className="row" style={{ flexShrink: 0 }}>{role === 'admin' && <button type="button" className="btn sm ghost" onClick={(e) => urgent(e, d)}>{d.urgent ? '取消紧急' : '设为紧急'}</button>}<Pill tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Pill><span className="muted">›</span></div>
                 </div>
               );
             })}
             <div className="empty small sec-none">没有</div>
           </div>
         ))}
+        {/* 11-25：紧急 / 进行中 / 待跟进放最上面，今天收款和我下达的指令挪到下面（新人第一眼先看到最急的） */}
+        {admin && <DirectiveBoard />}
+        {admin && <ReceiptDigest />}
         {admin && <ChangeNotices />}
       </div>}
       {routeOpen && <RouteModal cur={routeSet || {}} onClose={() => setRouteOpen(false)} />}

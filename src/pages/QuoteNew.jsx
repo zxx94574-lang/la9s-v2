@@ -189,7 +189,8 @@ export default function QuoteNew() {
       </div>
       {customer && <div style={{ marginTop: 10 }}><DebtBanner customerId={customer} /></div>}</>) },
     { id: 'lines', title: '询单明细', span: 12, locked: true, render: () => (
-      <div className="card">
+      <div className={`card ${!customer && !lines.some((l) => l.product || l.model) ? 'need-first' : ''}`}>
+        {!customer && !lines.some((l) => l.product || l.model) && <div className="need-first-tip">① 先在上面选客户（价格按客户档位带出）　② 再在这里输型号加货</div>}
         {showPrice && tier && priced && lpDiffs.length > 0 && <div style={{ padding: '10px 10px 0' }}>
           <LastPriceBar diffs={lpDiffs} currency={currency}
             onApply={priceMode ? applyLast : null} applyLabel={canPrice ? '全部沿用上次价格' : '申请沿用上次价格（要中方批）'} />
@@ -222,7 +223,7 @@ export default function QuoteNew() {
           </div>
         </div>}
         <div className="actionbar">
-        <span className="hint">{can(role, 'quote') ? (directOk ? '新客户、大单或要先给客户看价，就先报价。' : '保存后生成报价单号，可复制图片发客户群。') : `当前岗位不能报价（${whoCan('quote')}）`}</span>
+        <span className="hint">{can(role, 'quote') ? (directOk ? '新客户、大单或要先给客户看价，就先报价。' : '') : `当前岗位不能报价（${whoCan('quote')}）`}</span>
         <button type="button" className={`btn ${directOk ? '' : 'primary'} lg`} disabled={busy || !can(role, 'quote')} onClick={submit}>{busy ? '保存中…' : priceOk ? '改价核对过，保存报价单 →' : directOk ? '先报价 →' : '保存报价单 →'}</button>
       </div></div>) },
   ];

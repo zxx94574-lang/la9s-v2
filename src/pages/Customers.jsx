@@ -110,7 +110,7 @@ export default function Customers() {
       <div className="card">
         <div className="tabs">{TABS.filter(([k]) => (price || !['warn', 'byowner'].includes(k)) && (k !== 'opts' || role === 'admin')).map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l} {!['byowner', 'opts'].includes(k) && <span className="muted small">{n(k)}</span>}</button>)}</div>
         {tab === 'byowner' ? <ByOwner /> : tab === 'opts' ? <CustomerOptionsEditor opts={O} /> : <Grid id="customers2" table="customers" columns={cols} rows={rows} onRowClick={(c) => setOpen(c.id)} empty="这一类没有客户" tools={seesPrice(role) ? <><span className="small muted">订单占比看</span><Choice size="sm" flat={false} width={120} value={shareK} onChange={setShareK} options={SHARE_RANGES} /><ShareNote /></> : null}
-          tools={canEdit ? <span className="hint">点一下选格子，再点一下改，改完自动保存；行号旁 ↗ 打开客户抽屉。城市 / 店铺类型 / 跟进状态等选项在「选项设置」里加，表头漏斗按它筛。</span> : null} />}
+          tools={canEdit ? <Info>点一下选格子，再点一下改，改完自动保存；行号旁 ↗ 打开客户抽屉。城市 / 店铺类型 / 跟进状态等选项在「选项设置」里加，表头漏斗按它筛。</Info> : null} />}
       </div>
       {open && <CustomerDrawer id={open} onClose={() => setOpen(null)} />}
       {newP && <ProspectModal onClose={() => setNewP(false)} onDone={(c) => setOpen(c.id)} />}

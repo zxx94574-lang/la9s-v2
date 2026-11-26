@@ -69,7 +69,7 @@ export default function ModelPicker({ catalog: catalogAll, categories, tier, onP
             <div className="sugg" ref={sugg} style={shift ? { left: -shift, right: 'auto' } : null}>
               <div className="sugg-h"><span className="small muted sugg-h-t">点一个加一行，可以接着点</span>
                 <button type="button" className="btn sm primary" onClick={() => setOpen(false)}>完成</button></div>
-              {list.length === 0 && <div className="empty">没有匹配的物料。客户要的型号我们没建档？用右边「＋ 补录需求」记下来。</div>}
+              {list.length === 0 && <div className="empty">没有匹配的物料。客户要的型号我们没有？点右边「＋ 没建档的型号」记下来。</div>}
               {/* 336 (Frank 11-17): 每行只显示 种类 · 机型（下面小字编码）· 库存 · 价格; 放不下一律省略, 不许串行; 完整信息电脑悬停 / 手机长按 */}
               {list.map((p, i) => (
                 <button type="button" key={p.id} className={`pk-row ${i === focus ? 'focus' : ''} ${picked?.has(p.id) ? 'picked' : ''}`}

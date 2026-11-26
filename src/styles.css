@@ -2209,3 +2209,8 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .menu, .dp-pop, .ask-pop { transform-origin: top center; }
 .ask-pop { animation: menuIn .18s var(--spring); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+/* 11-25 新订单：还没选客户、也没加货时，选货区淡一点，顶上一行告诉新人先做什么（不拦操作，先加货也行） */
+.need-first { position: relative; }
+.need-first > :not(.need-first-tip) { opacity: .55; transition: opacity .2s ease; }
+.need-first:hover > :not(.need-first-tip), .need-first:focus-within > :not(.need-first-tip) { opacity: 1; }
+.need-first-tip { padding: 10px 14px; background: var(--brand-soft); color: var(--brand); font-weight: 600; font-size: 14px; border-radius: var(--radius) var(--radius) 0 0; }

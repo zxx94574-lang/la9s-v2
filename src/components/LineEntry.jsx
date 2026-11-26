@@ -12,7 +12,7 @@ import { createPortal } from 'react-dom';
 import Grid from './Grid.jsx';
 import ModelPicker, { avail, StockPill } from './ModelPicker.jsx';
 import { AvailPill } from './DocPeek.jsx';
-import { Modal, Shared, useApp, useHistory, UndoBar, Bang, lowTip, MoneyIn } from './ui.jsx';
+import { Modal, Shared, useApp, useHistory, UndoBar, Bang, lowTip, MoneyIn, Info } from './ui.jsx';
 import { call } from '../db/client.js';
 import { money, qty } from '../lib/format.js';
 import { makeResolver, normModel, pasteRows, isQty } from '../lib/resolve.js';
@@ -381,11 +381,11 @@ export default function LineEntry({ id, catalog, categories, tier, lines, setLin
           onUnpick={(p) => { const next = latest.current.filter((x) => x.product?.id !== p.id); latest.current = next; h.commit(next, `去掉 ${p.model}`); toast(`已去掉 ${p.model}`); }}
           extra={<>
             <button type="button" className="btn" onClick={() => setPickList(true)} title="大表格勾选，一次加很多">☰ 选货清单</button>
-            <button type="button" className="btn" onClick={() => setUnmet(true)} title="客户要的型号我们没有建档 → 记录为未满足需求">＋ 补录需求</button>{extraTools}</>} />
+            <button type="button" className="btn" onClick={() => setUnmet(true)} title="客户要的型号我们系统里没有 → 记下来，备货时用">＋ 没建档的型号</button>{extraTools}</>} />
       </div>
       <div ref={scope} id={gid}><Grid id={id}
         tools={<>
-          <UndoBar h={h} scope={scope} />
+          {lines.length > 0 && <UndoBar h={h} scope={scope} />}
           <span className="addrow">
             <button type="button" className="btn sm primary" onClick={addBlank} title="加空白行：填编码，或选种类 + 填机型；也可以整列粘贴">＋ 加行</button>
             <MoneyIn className="in" inputMode="numeric" value={addN} onChange={(e) => setAddN(e.target.value.replace(/\D/g, ''))} onFocus={(e) => e.target.select()} title="一次加几行，默认 1 行" aria-label="加几行" />
@@ -398,9 +398,9 @@ export default function LineEntry({ id, catalog, categories, tier, lines, setLin
         onCellOpen={openCell} onPasteSel={onPasteSel} onClearSel={onClearSel} onSelChange={onSelChange} api={gridApi}
         rowClass={(l) => (showErrors && lineStatus(l) !== 'blank' && !(Number(l.qty_req) > 0) ? 'warn' : '')}
         onDelete={(l, i, rs) => { const ks = new Set((rs || [l]).map((x) => x.key)); const n = ks.size; h.commit(latest.current.filter((x) => !ks.has(x.key)), n === 1 ? `删除 ${nameOf(l)}` : `删除 ${n} 行`); toast(n === 1 ? `已删除 ${nameOf(l)}，可点「← 撤销」恢复` : `已删除 ${n} 行，可点「← 撤销」恢复`); }}
-        empty="用上面的搜索框或「选货清单」加型号；手写 / Excel 清单点「＋ 加行」后整列粘贴；客户要了但我们没建档的会自动变成补录需求"
+        empty="在上面输型号加货；有现成的 Excel 清单就点「＋ 加行」整列粘贴" slimTools
         foot={{ code: '合计', model: `${t.n} 个型号`, qty_req: `${qty(t.pcs)} 件`, total: showPrice ? `${money(t.amt, currency)} ${currency}` : '' }} /></div>
-      {drafts > 0 && <div className="hint small" style={{ padding: '6px 14px' }}>空白行像飞书一样用：点格子选中（按住往下拖选一段，再点一次取消），⌘C 复制、⌘V 粘贴（一个值粘到选中的一段 = 全部填这个值），双击 / 回车 / 直接打字开始填；种类、型号是带搜索的下拉；选中一段后直接打字或按回车选 = 这一段一起改；Delete 清空。</div>}
+      {drafts > 0 && <div className="small muted" style={{ padding: '6px 14px' }}>空白行怎么填 <Info>空白行像飞书一样用：点格子选中（按住往下拖选一段，再点一次取消），⌘C 复制、⌘V 粘贴（一个值粘到选中的一段 = 全部填这个值），双击 / 回车 / 直接打字开始填；种类、型号是带搜索的下拉；选中一段后直接打字或按回车选 = 这一段一起改；Delete 清空。</Info></div>}
       {unmet && <UnmetModal catalog={catalog} categories={categories} onClose={() => setUnmet(false)}
         onUseProduct={(p) => { setUnmet(false); add(p); }}
         onAdd={(cat, model, n) => { setUnmet(false); h.commit([...latest.current, { key: newKey(), product: null, category_id: cat, model, qty_req: String(n || 0), note: '' }], `补录 ${model}`); toast(`已记录未建档需求 ${model}`); }} />}

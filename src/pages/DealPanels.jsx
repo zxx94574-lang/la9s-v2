@@ -103,7 +103,7 @@ export function QuotePanel({ deal, lines, catalog, categories, act, role }) {
       <div className="card-h">
         {/* Frank 11-09 13:42: 改单的放左边标题后, 往外发的 (图片 / 文字 / 打印) 放右边 */}
         <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-          <h2>报价 · 确认 <span className="muted small mono">{deal.quote_no}</span></h2>
+          <h2>报价 · 确认 <span className="muted small mono">{deal.quote_no}</span>{(editable || lines.some((l) => !l.product_id)) && <Info>{lines.some((l) => !l.product_id) && <>黄色的行是我们没建档的型号：单价 0、不会出货，已经自动记进「未满足需求」（在「备货与采购」里看）。<br /></>}{editable && '现在还能在这张单上直接改；点了「下推找货」之后就只能看，要改先点右上角「更多 → 撤回到上一步」。'}</Info>}</h2>
           {editable && can(role, 'quote') && <button type="button" className="btn" onClick={startEdit}>✎ 修改报价（增删行）</button>}
         </div>
         <div className="row">
@@ -115,8 +115,6 @@ export function QuotePanel({ deal, lines, catalog, categories, act, role }) {
       <Grid id="deal-quote" slimTools table="deal_lines" columns={cols} rows={lines} rowClass={(l) => (!l.product_id ? 'manual' : '')}
         foot={(rows) => ({ code: '合计', model: `${rows.length} 个型号`, qty_req: `${qty(rows.reduce((a, l) => a + N(l.qty_req), 0))} 件`,
           amount: `${money(rows.reduce((a, l) => a + N(l.qty_req) * N(l.unit_price), 0), cur)} ${cur}` })} />
-      {lines.some((l) => !l.product_id) && <div className="card-b hint">黄色行 = 我们没建档的型号：单价 0、不会出货，已自动记入「未满足需求」。</div>}
-      {editable && <div className="card-b hint" style={{ borderTop: '1px solid var(--line-2)' }}>下推找货之前都可以在原单上改；下推之后这一页只读，要改请先「撤回到上一步」。</div>}
     </div>
   );
 }

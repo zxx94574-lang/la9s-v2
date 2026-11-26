@@ -6,7 +6,7 @@ import { RuleGear } from '../components/Rules.jsx';
 import React, { useMemo, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Pill, Modal , RateInput, MoneyIn, TierPill } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal , RateInput, MoneyIn, TierPill, Info } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import ProductDrawer from '../components/ProductDrawer.jsx';
 import ClearanceCard from '../components/Clearance.jsx';
@@ -98,7 +98,7 @@ export default function Pricing() {
           {missing > 0 && <Pill tone="amber">{missing} 个物料缺人民币成本，算不出价格</Pill>}
           <span className="small muted">汇率更新：{s.updated_at ? dt(s.updated_at) : '默认值'}</span>
         </div>
-        <Grid id="pricing" table="products" columns={cols} rows={rows} tools={admin ? <span className="hint">点一下选格子，再点一下改成本 / 运费 / FEE，改完自动保存并重算价格。</span> : null} />
+        <Grid id="pricing" table="products" columns={cols} rows={rows} tools={admin ? <Info>点一下选格子，再点一下改成本 / 运费 / FEE，改完自动保存并重算价格。</Info> : null} />
         {!admin && <div className="card-b hint">只有中方能改成本、运费、FEE 和汇率。</div>}
       </div>
       {admin && <ClearanceCard products={data.rows} />}
