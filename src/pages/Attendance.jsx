@@ -1,6 +1,7 @@
 // 上班打卡 (Frank 10-31): 带定位, 不拍照. 销售看是不是在市场; 办公室 / 仓库员工看是不是在仓库地址.
 // 手机打开 → 点「上班打卡 / 下班打卡」→ 浏览器给定位 → 系统找最近的工作地点, 记「在 / 不在」, 第一次上班卡超过上班时间算迟到.
 // 中方: 今天谁打了卡、在不在地方; 每月汇总 (出勤天数、迟到、不在地方); 维护工作地点 (仓库 / 办公室 / 各个市场, 可以站在那里点「用我现在的位置」).
+import { readIntent, useIntent } from '../components/MobileSheet.jsx';
 import React, { useState } from 'react';
 import AttCalendar from '../components/AttCalendar.jsx';
 import { q, call } from '../db/client.js';
@@ -43,7 +44,8 @@ export default function Attendance() {
   const [site, setSite] = useState(null);
   const [appeal, setAppeal] = useState(null);
   const [early, setEarly] = useState(null);   // 450: 提前下班 → 弹窗写原因
-  const [leave, setLeave] = useState(false); const [lateDlg, setLateDlg] = useState(false);   // 501: 请假 / 迟到报备
+  const [leave, setLeave] = useState(() => readIntent('leave')); const [lateDlg, setLateDlg] = useState(false);
+  useIntent(['leave'], () => setLeave(true));   // 501: 请假 / 迟到报备
   const admin = role === 'admin';
   const canName = ['admin', 'manager', 'sales_manager'].includes(role);
   const { data } = useData(async () => {

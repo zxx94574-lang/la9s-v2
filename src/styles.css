@@ -2214,3 +2214,41 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .need-first > :not(.need-first-tip) { opacity: .55; transition: opacity .2s ease; }
 .need-first:hover > :not(.need-first-tip), .need-first:focus-within > :not(.need-first-tip) { opacity: 1; }
 .need-first-tip { padding: 10px 14px; background: var(--brand-soft); color: var(--brand); font-weight: 600; font-size: 14px; border-radius: var(--radius) var(--radius) 0 0; }
+
+/* 11-26 手机底栏三张卡：新建 / 订单与单据 / 全部功能（从底部弹出） */
+.msheet-scrim { position: fixed; inset: 0; z-index: 90; background: #0f2a5240; animation: msFade .18s ease; }
+.msheet { position: fixed; z-index: 91; left: 0; right: 0; bottom: 0; max-height: 82vh; display: flex; flex-direction: column; background: #fff;
+  border-radius: 18px 18px 0 0; box-shadow: 0 -10px 40px #0f2a5230; padding-bottom: env(safe-area-inset-bottom, 0); animation: msUp .26s cubic-bezier(.2, .8, .2, 1); }
+.msheet-grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 8px auto 2px; cursor: pointer; }
+.msheet-h { display: flex; align-items: center; justify-content: space-between; padding: 6px 18px 8px; }
+.msheet-h b { font-size: 17px; }
+.msheet-x { border: 0; background: var(--line-2); width: 30px; height: 30px; border-radius: 50%; color: var(--muted); font-size: 13px; }
+.msheet-b { overflow-y: auto; padding: 0 14px calc(76px + env(safe-area-inset-bottom, 0px)); overscroll-behavior: contain; }
+.msheet-g { margin-top: 10px; }
+.msheet-gl { font-size: 12px; color: var(--muted); padding: 0 6px 6px; }
+.msheet-list { background: #f6f8fc; border-radius: 14px; overflow: hidden; }
+.msheet-row { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; background: none; padding: 11px 12px; text-align: left; min-height: 54px; }
+.msheet-row + .msheet-row { border-top: 1px solid #e6ebf3; }
+.msheet-ico { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 10px; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; }
+.msheet-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.msheet-txt b { font-size: 15px; color: var(--ink, #111); }
+.msheet-txt small { font-size: 12px; color: var(--muted); }
+.msheet-go { color: #b6c1d3; font-size: 20px; }
+.msheet-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.msheet-cell { border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 2px; border-radius: 12px; font-size: 12px; color: var(--ink, #111); text-align: center; line-height: 1.25; }
+.msheet-cell .msheet-ico { width: 46px; height: 46px; border-radius: 14px; }
+.msheet-row, .msheet-cell, .msheet-x { transition: background .15s ease, transform .12s ease; -webkit-tap-highlight-color: transparent; }
+.msheet-row:active { background: #e8eef8; } .msheet-cell:active { background: var(--brand-soft); transform: scale(.96); }
+@media (hover: hover) { .msheet-row:hover { background: #eef3fa; } .msheet-cell:hover { background: #f2f6fc; } }
+@media (min-width: 520px) { .msheet { left: 50%; right: auto; width: 480px; transform: translateX(-50%); animation: msUpC .26s cubic-bezier(.2, .8, .2, 1); } .msheet-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@keyframes msUp { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes msUpC { from { transform: translate(-50%, 100%); } to { transform: translateX(-50%); } }
+@keyframes msFade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .msheet, .msheet-scrim { animation: none; } }
+body:has(.msheet) .mnav { z-index: 92; }
+
+/* 11-26 界面分层：自带上下滚动的表，没点中时上下滑 = 滑页面；点中后（浅蓝框）才滑表格，滑到头也不带动页面 */
+.tw.tw-v { overflow-y: hidden; }
+.tw.tw-v.tw-on { overflow-y: auto; overscroll-behavior: contain; box-shadow: inset 0 0 0 2px var(--brand-line); border-radius: 8px; }
+.side, .modal, .menu, .msheet-b, .ask-pop, .dp-pop, .cell-pop .cell-sel, .per-menu { overscroll-behavior: contain; }
+html:has(.side.open), html:has(.overlay), html:has(.msheet), html:has(.ask-veil) { overflow: hidden; }

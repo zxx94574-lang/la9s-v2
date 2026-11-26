@@ -745,6 +745,15 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   if (api) api.current = { select: (rowK, colK, dr = 0) => { const r = shown.findIndex((x) => rowKey(x) === rowK) + dr; const c = vis.findIndex((x) => x.key === colK); if (r >= 0 && r < shown.length && c >= 0) { setSel({ a: [r, c], b: [r, c] }); anchor.current = [r, c]; } } };
   // Frank 11-09 16:15 定: 鼠标滚轮 = 上下滚页面 (不动表格左右); 按住 Shift 滚轮 = 表格左右滚; 触控板横滑照旧
   const twRef = useRef(null);
+  // 11-26 Frank：有自己上下滚动条的表（maxHeight），点中表格后上下滑才滑表格；点外面就恢复成滑页面
+  const [twOn, setTwOn] = useState(false);
+  useEffect(() => {
+    if (!maxHeight || !twOn) return undefined;
+    const off = (e) => { if (!twRef.current?.closest('.grid')?.contains(e.target)) setTwOn(false); };
+    const esc = (e) => { if (e.key === 'Escape') setTwOn(false); };
+    document.addEventListener('pointerdown', off, true); window.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', off, true); window.removeEventListener('keydown', esc); };
+  }, [maxHeight, twOn]);
   useEffect(() => {
     const w = twRef.current; if (!w) return undefined;
     const onWheel = (e) => {
@@ -887,7 +896,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
           {shown.length > lim && <div ref={moreRef} className="muted small" style={{ padding: 8 }}>还有 {shown.length - lim} 行，往下滑自动显示…</div>}
           {footObj && shown.length > 0 && <div className="gcard gc-foot">{vis.filter((c) => footObj[c.key] != null && footObj[c.key] !== '').map((c) => <div key={c.key} className="gc-kv"><span>{c.label}</span><b>{footObj[c.key]}</b></div>)}</div>}
         </div>)}
-      <div className="tw" ref={twRef} style={{ ...(maxHeight ? { maxHeight } : null), ...(narrow && (cardPref ?? autoCards) ? { display: 'none' } : null) }}>
+      <div className={`tw ${maxHeight ? (twOn ? 'tw-v tw-on' : 'tw-v') : ''}`} ref={twRef} onPointerDown={maxHeight && !twOn ? () => setTwOn(true) : undefined} style={{ ...(maxHeight ? { maxHeight } : null), ...(narrow && (cardPref ?? autoCards) ? { display: 'none' } : null) }}>
         {drag?.block && drag.x != null && <i className="col-drop" style={{ left: drag.x }} />}
         <table className="t" ref={tableRef} style={{ '--rh': `${selectable ? 64 : 40}px` }} onMouseOver={cellOver} onMouseLeave={cellOut}>
           <thead>

@@ -120,7 +120,7 @@ export function NewMenu() {
     .filter(([r]) => { const route = r.split('/')[0] === 'quote' ? 'orders' : r; return !ITEMS[route] || visibleTo(route, role); });
   if (!items.length) return null;
   return (
-    <span className="new-wrap" ref={box}>
+    <span className="new-wrap hide-m" ref={box}>
       <button type="button" className="new-btn" onClick={() => setOpen(!open)} title="新建：订单、询单、收款、FOB、拜访">＋<span className="new-l"> 新建</span></button>
       {open && <div className="menu new-menu">{items.map(([r, l, d]) => <button type="button" key={r} className="mi" onClick={() => { setOpen(false); go(r); }}><div><b>{l}</b><div className="small muted">{d}</div></div></button>)}</div>}
     </span>);

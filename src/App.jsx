@@ -1,4 +1,6 @@
 import { AskButton, NewMenu } from './components/AskBox.jsx';
+import { ActionSheet, MoreSheet } from './components/MobileSheet.jsx';
+import { installScrollLayers } from './lib/scrollLayers.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { openDb, resetDemo, q, isPersistent, REAL, TEST, SERVER, serverMe, setCustomerSession, customerSession } from './db/client.js';
 import { StaffLogin, doLogout } from './components/StaffLogin.jsx';
@@ -81,11 +83,13 @@ export default function App() {
   const [openGroups, setOpenGroups] = useState(() => store.get('la9s.navgroups3', {}));
   const [navCfg, setNavCfg] = useState(null);
   const [navEdit, setNavEdit] = useState(false);
+  const [msheet, setMsheet] = useState(null);   // 11-26 手机底栏：new 新建 / view 看单 / more 全部功能
   const [sideW, setSideW] = useState(() => store.get('la9s.sidew', 236));
   const [todoCount, setTodoCount] = useState(0);
   const [overdueN, setOverdueN] = useState(0);
   const [lang, setLangState] = useState(getLang);
   useEffect(() => { domTranslate(); }, [lang]);
+  useEffect(() => installScrollLayers(), []);   // 11-26 界面分层：上层里滑不带动后面
 
   useEffect(() => {
     openDb((msg) => setBoot((b) => ({ ...b, msg }))).then(({ org }) => {
@@ -340,9 +344,9 @@ export default function App() {
         <nav className="mnav">
           <button type="button" className={page === 'dashboard' ? 'on' : ''} onClick={() => go('dashboard')}><b><RouteIcon route="dashboard" size={20} /></b>首页</button>
           <button type="button" className={page === 'todo' ? 'on' : ''} onClick={() => go('todo')}><b><RouteIcon route="todo" size={20} /></b>待办{(overdueN > 0 || todoCount > 0) && <span className={`badge ${overdueN ? 'hot' : ''}`}>{overdueN || todoCount}</span>}</button>
-          <button type="button" className="plus" onClick={() => go('quote/new')}><b><Icon name="plus" size={20} /></b>报价</button>
-          <button type="button" className={active('orders') ? 'on' : ''} onClick={() => go('orders')}><b><RouteIcon route="orders" size={20} /></b>订单</button>
-          <button type="button" onClick={() => setDrawer(true)}><b><Icon name="list" size={20} /></b>更多</button>
+          <button type="button" className={`plus ${msheet === 'new' ? 'on' : ''}`} onClick={() => setMsheet(msheet === 'new' ? null : 'new')} aria-label="新建"><b><Icon name="plus" size={20} /></b>新建</button>
+          <button type="button" className={active('orders') || active('fob') || active('receipts') || msheet === 'view' ? 'on' : ''} onClick={() => setMsheet(msheet === 'view' ? null : 'view')}><b><RouteIcon route="orders" size={20} /></b>订单</button>
+          <button type="button" className={msheet === 'more' ? 'on' : ''} onClick={() => setMsheet(msheet === 'more' ? null : 'more')}><b><Icon name="list" size={20} /></b>更多</button>
         </nav>)}
       </div>
 
@@ -375,6 +379,8 @@ export default function App() {
           </div>
         </Modal>
       )}
+      {msheet && msheet !== 'more' && <ActionSheet kind={msheet} onClose={() => setMsheet(null)} />}
+      {msheet === 'more' && <MoreSheet cfg={navCfg} onClose={() => setMsheet(null)} onSettings={() => setSettings(true)} onMenu={() => setNavEdit(true)} />}
       {navEdit && <NavEditor cfg={navCfg} onClose={() => setNavEdit(false)} />}
       <ArchiveHost arch={arch} onClose={() => setArch(null)} />
       {toastView}

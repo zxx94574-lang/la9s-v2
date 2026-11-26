@@ -6,7 +6,8 @@ import { useControls, CONTROL_TABS, ControlPanels, ControlAlerts, RefundModal } 
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import PublicHeld from '../components/PublicHeld.jsx';
 import RemitCard from '../components/Remit.jsx';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { readIntent, useIntent } from '../components/MobileSheet.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, Modal, PhotoInput, DatePicker, Thumb, BigNum, Choice, MoneyIn, Info, usePeriod, PeriodBar } from '../components/ui.jsx';
@@ -47,6 +48,9 @@ export default function Cash() {
   }, [org, range[0], range[1]]);
   const ctl = useControls();   // 220: 待核对到账 / 员工代收 / 对账盘点 / 月结 / 在途
   const custName = useMemo(() => Object.fromEntries((data?.customers || []).map((c) => [c.id, `${c.code || c.temp_code} ${c.name}`])), [data]);
+  const canReg = can(role, 'cash_register');   // 11-26 手机「新建」卡片：登记支出 / 交款直接弹出
+  useEffect(() => { if (!canReg) return; const k = ['expense', 'handover'].find((x) => readIntent(x)); if (k) setModal({ t: k }); }, [canReg]);
+  useIntent(canReg ? ['expense', 'handover'] : [], (k) => setModal({ t: k }));
   if (!data) return <div className="empty">加载中…</div>;
   const reg = can(role, 'cash_register'), dec = can(role, 'cash_decide'), notice = can(role, 'payment_notice');
   const openNotices = data.notices.filter((n) => n.status === 'open');

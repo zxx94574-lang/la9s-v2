@@ -1,4 +1,5 @@
 import SumBar from '../components/SumBar.jsx';
+import { readIntent, useIntent } from '../components/MobileSheet.jsx';
 import { CatFilterByName } from '../components/CatFilter.jsx';
 import { RuleGear } from '../components/Rules.jsx';
 import { DocPeek, DocNo } from '../components/DocPeek.jsx';
@@ -35,7 +36,8 @@ export default function Orders() {
   const [grp, setGrp] = useState('');
   const [light, setLight] = useState(jump?.light || '');   // 三色灯筛选
   const ref = useOutside(open, () => setOpen(false));
-  const [tab, setTab] = useState('all');
+  const [tab, setTab] = useState(() => ['all', 'ship', 'inq', 'void'].find((k) => readIntent('o:' + k)) || 'all');
+  useIntent(['o:all', 'o:ship', 'o:inq', 'o:void'], (k) => setTab(k.slice(2)));   // 11-26 手机「订单」卡片点进来直接到对应页签
   const { data } = useData(async () => { await call(role, `select app.void_stale_drafts($1)`, [org]).catch(() => {}); return q(Q.orders, [org, from, to]); }, [org, from, to]);   // 259: 放太久的草稿顺手作废
   // 229 (Frank 11-11): 筛选条 —— 客户 / 档位 / 机型 / 付款, 可叠加; 「按机型看」给出片数和金额; 可存成筛选方案
   const olinesRaw = useData(() => q(Q.orderLines, [org, from, to]), [org, from, to]).data;
