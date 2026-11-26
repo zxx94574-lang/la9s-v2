@@ -140,6 +140,7 @@ export default function Cash() {
       <MetricStrip ids={['cash.pending', 'pay.days']} from={P.from} to={P.to} />
       {data.acc.length === 0 && <div className="card card-b muted">还没有账户。中方点「账户设置」先建。</div>}
       {/* 414 (Frank 11-18): 自有账户 / 公户分两块; 卡片可以拖动换位置 (只中方, 顺序全公司一样); 待核对的收款在卡片上看得见 */}
+      <div className="acc-blocks">
       {[['own', '公司自有账户', data.acc.filter((a) => !a.is_public)], ['pub', '公户（钱在个人手里，算他欠公司）', data.acc.filter((a) => a.is_public)]].map(([gk, gt, list]) => (list.length > 0 || gk === 'own') && (
         <div key={gk} className="acc-block">
           <div className="acc-block-t">{gt}<span className="small muted">{list.length} 个{dec ? ' · 按住卡片可以拖动换位置' : ''}</span></div>
@@ -164,7 +165,7 @@ export default function Cash() {
             })}
             {!list.length && <div className="small muted" style={{ padding: 8 }}>没有</div>}
           </div>
-        </div>))}
+        </div>))}</div>
       <ControlAlerts ctl={ctl} onGo={setTab} />
       <PublicHeld />
       <RemitCard accounts={data.acc} />

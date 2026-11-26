@@ -28,11 +28,11 @@ export default function Balances() {
     { key: 'code', label: '客户编码', w: 70, render: (r) => <b className="mono">{r.code}</b> },
     { key: 'name', label: '客户', w: 160, render: (r) => <><CustLink id={r.customer_id || r.id} name={r.name} /> <span className="muted small">{r.city}</span></> },
     { key: 'tier', label: '档位', w: 100, value: (r) => TIERS[r.tier], render: (r) => <TierPill tier={r.tier} /> },
+    { key: 'balance', label: '欠款 / 预付', w: 140, render: (r) => { const w = balanceWords(r.balance); return <b className={`${w.tone}-t2`}>{w.label === '已结清' ? '已结清' : `${w.label === '预付' ? '预付 ' : ''}${money(w.amount)}`}</b>; } },
     { key: 'owner', label: '归属销售', w: 80 },
     { key: 'total_sold', label: '累计购买', w: 120, render: (r) => money(r.total_sold) },
     { key: 'total_paid', label: '累计已付', w: 120, render: (r) => money(r.total_paid) },
     { key: 'total_returned', label: '累计退货', w: 90, render: (r) => money(r.total_returned) },
-    { key: 'balance', label: '欠款 / 预付', w: 140, render: (r) => { const w = balanceWords(r.balance); return <b className={`${w.tone}-t2`}>{w.label === '已结清' ? '已结清' : `${w.label === '预付' ? '预付 ' : ''}${money(w.amount)}`}</b>; } },
     { key: 'last_shipped', label: '最近出库', w: 110, render: (r) => dDate(r.last_shipped) },
     // 账龄: 还欠的钱按单据 (出库 / 期初单) 日期分段
     ...[['a30', '30 天内', (r) => N(r.d0_30)], ['a90', '31–90 天', (r) => N(r.d31_60) + N(r.d61_90)], ['a90p', '90 天以上', (r) => N(r.d91_180) + N(r.d180)]].map(([k, l, f], i) => (
@@ -53,7 +53,7 @@ export default function Balances() {
         { k: '预付合计', v: money(pre), unit: 'XOF', sub: `${all.filter(F.pre).length} 位 · 下次出库自动抵扣`, tone: pre ? 'green' : null, on: sf === 'pre', onClick: tg('pre') },
       ]} />
       <div className="card">
-        <Grid id="balances" table="customers" columns={cols} rows={rows} onRowClick={(r) => go('customer/' + r.id)}
+        <Grid id="balances" table="customers" pin="name" mFirst={['balance']} columns={cols} rows={rows} onRowClick={(r) => go('customer/' + r.id)}
           foot={(rs) => ({ code: `${rs.length} 位`, total_sold: money(rs.reduce((a, r) => a + N(r.total_sold), 0)), total_paid: money(rs.reduce((a, r) => a + N(r.total_paid), 0)),
             balance: `欠 ${money(rs.reduce((a, r) => a + Math.max(0, N(r.balance)), 0))} · 预付 ${money(rs.reduce((a, r) => a + Math.max(0, -N(r.balance)), 0))}` })} />
       </div>

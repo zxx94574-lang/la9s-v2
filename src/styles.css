@@ -1641,7 +1641,7 @@ tr.row-void td { color: #9aa3b2; text-decoration: line-through; }
 .wm-other .wm-node { width: 86px; }
 @media (max-width: 760px) { .wm-flow { overflow-x: auto; scrollbar-width: none; } .wm-node { width: 74px; } .wm-dot { width: 34px; height: 34px; font-size: 11px; } .wm-line { margin-top: 18px; min-width: 6px; } }
 /* 474 指标卡 */
-.mt-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.mt-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-bottom: 12px; }
 .mt-card { --mt-g: #dcfce7; --mt-a: #fef3c7; --mt-r: #fee2e2; background: #fff; border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 12px; min-width: 0; }
 .mt-h { display: flex; align-items: center; gap: 4px; }
 .mt-name { font-weight: 700; font-size: 13.5px; color: var(--brand); }
@@ -2428,3 +2428,4 @@ body { touch-action: manipulation; }
 .pl-t tr.pl-chg td span[data-tip] { cursor: help; }
 /* 自查: 页头那一排在手机上横着滑 (老规则), 但带搜索框的那排换行, 搜索框占一整行, 不再被挤到右边看不见 */
 @media (max-width: 640px) { .pagehead > .row:has(> .ph-search) { flex-wrap: wrap !important; overflow: visible; row-gap: 8px; } .pagehead > .row > .ph-search { flex: 1 1 100% !important; width: 100% !important; } }
+.acc-blocks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr)); gap: 0 16px; }

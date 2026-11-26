@@ -142,12 +142,10 @@ export default function Orders() {
         const qn = (d) => Number(['quoted', 'hotline_ok'].includes(d.status) ? d.qty_req : d.qty_supply) || 0;
         const xof = rows.filter((d) => d.currency === 'XOF'); const other = rows.length - xof.length;
         const unpaid = rows.filter((d) => ['partial', 'shipped'].includes(d.status) && Number(d.due) > 0 && d.currency === 'XOF');
-        const live = rows.filter((d) => dealLight(d) === 'active');
         return <SumBar items={[
           { k: '订单', v: qty(rows.length), unit: '张', tip: '按下单日期算，时间段就是右上角选的那段' },
           { k: '片数', v: qty(rows.reduce((a, d) => a + qn(d), 0)), unit: '片' },
           price && { k: '订单金额', v: money(xof.reduce((a, d) => a + Number(d.amount || 0), 0)), unit: 'XOF', sub: other ? `另有 ${other} 张 CNY / USD 单没算进来` : null },
-          { k: '进行中', v: qty(live.length), unit: '张', on: light === 'active', onClick: () => setLight(light === 'active' ? '' : 'active'), tone: live.length ? 'amber' : null },
           price && { k: '出了库还没收清', v: money(unpaid.reduce((a, d) => a + Number(d.due || 0), 0)), unit: 'XOF', sub: `${unpaid.length} 张单`, tone: unpaid.length ? 'red' : null, on: grp === 'unpaid', onClick: () => setGrp(grp === 'unpaid' ? '' : 'unpaid') },
         ]} />;
       })()}
@@ -190,7 +188,7 @@ export default function Orders() {
           <span className="small muted">{period === 'custom' && custom ? `${custom[0]} – ${custom[1]} · ` : ''}{rows.length} 张</span><span className="grow" />
           <button type="button" className="btn sm" onClick={() => { setFcust([]); setFmodel([]); setFcat(''); setFemp(''); setFtier([]); setFpay([]); setText(''); setLight(''); setStepF(''); setGrp(''); setFromAsk(false); }}>清除全部筛选</button></div>}
         {stepF && <div className="banner" style={{ marginBottom: 8 }}>只看现在卡在「{STEPS.find((x) => x.key === stepF)?.label}」这一步的单（{rows.length} 张） <button type="button" className="btn sm ghost" onClick={() => setStepF('')}>看全部 ×</button></div>}
-        {light !== 'draft' && mode === 'orders' && <Grid id="orders" table="deals" mFirst={['customer_name', 'light', 'amount', 'due']} columns={cols} rows={rows} onShown={(rs, conds, qq) => { const ms = conds.filter((c) => c.key === 'models').flatMap((c) => (c.op === 'in' ? c.vals || [] : c.op === 'contains' ? [c.a] : [])).map((v) => String(v || '').toUpperCase()).filter(Boolean); setPeekHighlight([...ms, qq]); setGridShown({ rows: rs, models: (conds.find((c) => c.key === 'models' && c.op === 'in')?.vals || []).map((v) => String(v).toUpperCase()) }); }} onRowClick={(d) => go('deal/' + d.id)} empty={!data ? '加载中…' : light ? `${custom && period === 'custom' ? `${custom[0]} 至 ${custom[1]} ` : '这个时间段'}没有「${LIGHT_LABEL[light]}」的订单` : (data.length ? '没有符合条件的订单' : '这个时间段还没有订单')}
+        {light !== 'draft' && mode === 'orders' && <Grid id="orders" table="deals" mFirst={['customer_name', 'light', 'amount', 'due']} columns={light ? cols.filter((c) => c.key !== 'light') : cols} rows={rows} onShown={(rs, conds, qq) => { const ms = conds.filter((c) => c.key === 'models').flatMap((c) => (c.op === 'in' ? c.vals || [] : c.op === 'contains' ? [c.a] : [])).map((v) => String(v || '').toUpperCase()).filter(Boolean); setPeekHighlight([...ms, qq]); setGridShown({ rows: rs, models: (conds.find((c) => c.key === 'models' && c.op === 'in')?.vals || []).map((v) => String(v).toUpperCase()) }); }} onRowClick={(d) => go('deal/' + d.id)} empty={!data ? '加载中…' : light ? `${custom && period === 'custom' ? `${custom[0]} 至 ${custom[1]} ` : '这个时间段'}没有「${LIGHT_LABEL[light]}」的订单` : (data.length ? '没有符合条件的订单' : '这个时间段还没有订单')}
           foot={(rows) => ({ biz_no: `合计 ${rows.length} 单`, qty: `${qty(rows.reduce((a, d) => a + Number(['quoted', 'hotline_ok'].includes(d.status) ? d.qty_req : d.qty_supply), 0))} 件`,
             amount: price ? money(rows.reduce((a, d) => a + Number(d.amount), 0)) : '', due: price ? money(rows.reduce((a, d) => a + Math.max(0, Number(d.due)), 0)) : '' })} />}
       </div>}

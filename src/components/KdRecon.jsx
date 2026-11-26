@@ -1,7 +1,7 @@
 // 378 / 380 (Frank 11-18): ① 「待录金蝶」总表 —— 所有动库存 / 动钱的单据一张清单, 批量回填金蝶单号, 按金蝶单号反查;
 // ② 「和金蝶对账」—— 金蝶导出的表拖进来, 自动认是哪种, 比出五类结果, 每次对账存一份.
 // 系统不往金蝶写, 只记单号、对状态.
-import { hasAny } from '../lib/domain.js';
+import { hasAny, seesPrice } from '../lib/domain.js';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Modal, FileDrop, Info, Assumed, Choice, Pill } from './ui.jsx';
@@ -9,7 +9,7 @@ import Grid from './Grid.jsx';
 import { DealLink, CustLink } from './Archives.jsx';
 import { OptNote } from './Opts.jsx';
 import { parseKdSheet, matchDocs, matchStock, KD_TYPES } from '../lib/kdRecon.js';
-import { dt, dDate, qty, friendlyError } from '../lib/format.js';
+import { dt, dDate, qty, money, friendlyError } from '../lib/format.js';
 
 const N = (v) => Number(v || 0);
 const STATE = { todo: 'red', wait: 'amber', done: 'green', skip: 'gray' };
@@ -24,7 +24,12 @@ export function KdAll() {
   const { org, role, toast, refresh } = useApp();
   const [show, setShow] = useState('todo'); const [kind, setKind] = useState(''); const [sel, setSel] = useState(new Set()); const [fill, setFill] = useState(null);
   const { data } = useData(() => q(`select * from app.v_kingdee_all where org_id = $1 order by (state = 'todo') desc, at desc`, [org]), [org]);
-  const all = data || [];
+  // 自查: 收款 / 销售出库录金蝶要金额, 以前这张表只有数量 (收款连数量都没有) —— 金额另取一次贴上去
+  const { data: amt } = useData(() => q(`select 'receipt' as k, r.id, r.amount as v, r.currency from app.receipts r where r.org_id = $1
+    union all select 'outbound', k.id, sum(sl.qty * dl.unit_price), max(d.currency) from app.kingdee_outbox k join app.shipment_lines sl on sl.shipment_id = k.shipment_id
+      join app.deal_lines dl on dl.id = sl.deal_line_id join app.deals d on d.id = dl.deal_id where k.org_id = $1 group by k.id`, [org]).catch(() => []), [org]);
+  const amtOf = useMemo(() => Object.fromEntries((amt || []).map((x) => [`${x.k}:${x.id}`, x])), [amt]);
+  const all = useMemo(() => (data || []).map((r) => { const a = amtOf[`${r.kind}:${r.row_id}`]; return a ? { ...r, amount: Number(a.v), currency: a.currency } : r; }), [data, amtOf]);
   const kinds = [...new Set(all.map((r) => r.kind_name))];
   const todoN = (k) => all.filter((r) => r.state === 'todo' && (!k || r.kind_name === k)).length;
   const rows = all.filter((r) => (show === 'all' || r.state === show || (show === 'todo' && r.state === 'wait')) && (!kind || r.kind_name === kind));
@@ -51,6 +56,7 @@ export function KdAll() {
           { key: 'customer_name', label: '客户 / 供应商', w: 160, render: (r) => (r.customer_id ? <CustLink id={r.customer_id} name={r.customer_name} /> : r.customer_name) },
           { key: 'at', label: '日期', w: 110, type: 'date', render: (r) => dDate(r.at) },
           { key: 'qty', label: '数量', w: 80, type: 'number', value: (r) => (r.qty == null ? null : N(r.qty)), render: (r) => (r.qty == null ? '' : qty(r.qty)) },
+          ...(seesPrice(role) ? [{ key: 'amount', label: '金额', w: 130, type: 'number', value: (r) => (r.amount == null ? null : r.amount), render: (r) => (r.amount == null ? '' : `${money(r.amount, r.currency)} ${r.currency || ''}`) }] : []),
           { key: 'state_name', label: '金蝶状态', w: 130, render: (r) => <Pill tone={STATE[r.state]}>{r.state_name}</Pill> },
           { key: 'kd_no', label: '金蝶单号', w: 150, mono: true }]} />
       {fill && <Modal wide title={`填金蝶单号 · ${fill.rows.length} 张`} onClose={() => setFill(null)} footer={<><button type="button" className="btn" onClick={() => setFill(null)}>取消</button><span className="grow" /><button type="button" className="btn primary" onClick={go}>保存</button></>}>
