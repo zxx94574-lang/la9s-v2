@@ -2358,3 +2358,9 @@ body { touch-action: manipulation; }
 .gear-btn, .opt-gear { width: var(--ic-minor) !important; height: var(--ic-minor) !important; min-width: var(--ic-minor) !important; padding: 0 !important; border-radius: 8px !important; font-size: 14px !important; line-height: 1; display: inline-flex !important; align-items: center; justify-content: center; border: 1px solid transparent !important; background: transparent !important; color: #8a97ab !important; box-shadow: none !important; }
 .gear-btn:hover, .opt-gear:hover, .gear-btn.on { background: var(--brand-soft) !important; color: var(--brand) !important; }
 .info-i { width: var(--ic-tiny); height: var(--ic-tiny); font-size: 11px; }
+
+/* 11-26 Frank：确认 / 保存这类主按钮一律在最右边（弹窗底部、单据操作条） */
+.modal-f > .btn.primary, .modal-f > .btn.danger, .modal-f > .btn.red, .actbar > .btn.primary, .actbar > .btn.danger, .actionbar > .btn.primary { order: 99; }
+.modal-f > .grow, .actbar > .grow { order: 50; }
+.modal-f > .grow ~ .btn:not(.primary):not(.danger) { order: 60; }
+.row:not(:has(> input, > select, > textarea, > .in)) > .btn.primary:not(.lg) { order: 99; }
