@@ -8,7 +8,7 @@ import { useApp, useData, Pill, Info, Modal, MultiChoice, Assumed } from '../com
 import { IssueList } from '../components/IssueReport.jsx';
 import TierCheck, { useTierCheck } from '../components/TierCheck.jsx';
 import DirectiveBoard from '../components/Directives.jsx';
-import { STATUS, ROLES, hasAny } from '../lib/domain.js';
+import { STATUS, ROLES, hasAny, roleSet } from '../lib/domain.js';
 import { money, dt, dDate, today, friendlyError } from '../lib/format.js';
 
 // who acts next on a deal in this status
@@ -150,6 +150,8 @@ export default function Todo() {
     return f;
   }, [org]);
   const kdTodo = useKdTodoCount();
+  // 11-26 飞书 / 金蝶对账里结论选了「金蝶要改」的 → 进录金蝶的人的待办，改完把结论换成「已调平」
+  const reconKd = useData(() => q(`select count(*)::int n from app.recon_marks where org_id = $1 and verdict like '金蝶要改%'`, [org]).catch(() => [{ n: 0 }]), [org]).data?.[0]?.n || 0;
   // 客户要货日期到了 (今天或已过) 的排最前 (Frank 11-07: 明天要的到明天自动前移)
   const td = today();
   const wantDue = (d) => d.want_on && dDate(d.want_on) <= td && !['shipped', 'cancelled'].includes(d.status);
@@ -167,7 +169,7 @@ export default function Todo() {
   const admin = role === 'admin';
   const { data: routeSet } = useData(async () => (await q(`select value from app.org_settings where org_id = $1 and key = 'todo_route'`, [org]))[0]?.value || {}, [org, tick]);
   const [routeOpen, setRouteOpen] = useState(false);
-  const mine = (id) => (routeSet?.[id] || SLOTS[id].roles).includes(role);
+  const mine = (id) => (routeSet?.[id] || SLOTS[id].roles).some((r) => roleSet(role).includes(r));   // 国家经理 / 销售主管按 roleSet 继承
   const ex = (k) => Number(extra?.[k] || 0);
   const line = (id, to, text) => mine(id) && <div key={id} className="row between todo-row" onClick={() => go(to)}><b>{text}</b><span className="muted">›</span></div>;
   const slot = (id, node, open0) => mine(id) && <Slot key={id} title={SLOTS[id].label} open0={open0}>{node}</Slot>;
@@ -201,6 +203,7 @@ export default function Todo() {
       ex('cn_unpaid') > 0 && line('cn_pay', 'cnfin', `${ex('cn_unpaid')} 张采购单货款还没付清`),
       ex('fob_price') > 0 && line('fob_price', 'fob', `${ex('fob_price')} 个 FOB 申请等定价`),
       kdTodo > 0 && line('kd', 'kingdee', `还没录金蝶 ${kdTodo} 张`),
+      reconKd > 0 && line('kd_recon', 'kingdee', `对账查出金蝶要改 ${reconKd} 条（金蝶同步 → 飞书 / 金蝶对账；改完把结论换成「已调平」）`),
       ex('grn_ready') > 0 && line('kd', 'kingdee', `${ex('grn_ready')} 张收货单要录金蝶采购入库`),
     ],
     green: [
@@ -272,6 +275,7 @@ export const SLOTS = {
   pr: { label: '采购 / 物资申请', roles: ['manager', 'finance'] },
   fob_price: { label: 'FOB 等定价', roles: ['admin'] },
   kd: { label: '录金蝶', roles: ['finance'] },
+  kd_recon: { label: '对账：金蝶要改', roles: ['finance'] },
   kd_audit: { label: '金蝶等审核', roles: ['manager', 'finance'] },
   tier: { label: '客户档位要核对', roles: ['admin'] },
   volume: { label: '客户拿货量变化', roles: ['admin'] },
