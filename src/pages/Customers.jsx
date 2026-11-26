@@ -16,7 +16,7 @@ import { TierPill, tierOpt, Light, useApp, useData, Pill, Modal, Drawer, Thumb, 
 import Grid from '../components/Grid.jsx';
 import { CallModal, ProspectModal, ResultPill, KIND, custLabel } from '../components/Crm.jsx';
 import { AccountPanel, ACC } from '../components/Account.jsx';
-import { can, seesPrice, TIERS, STATUS } from '../lib/domain.js';
+import { can, seesPrice, TIERS, STATUS, hasAny } from '../lib/domain.js';
 import { DealLink, EmpLink } from '../components/Archives.jsx';
 import { money, qty, dDate, dt, today, friendlyError } from '../lib/format.js';
 import { SUPPLY, customerOptions, optLabel, selOpts } from '../lib/customerOptions.js';
@@ -46,7 +46,7 @@ export default function Customers() {
     return { rows: rows.map((c) => ({ ...c, acc: by[c.id] || null })), emps, opts: customerOptions(optRow?.value) };
   }, [org, role]);
   // 格子里直接改 (Frank 11-07): 中方 / 主管改名称、负责人、电话、城市、地址、归属; 档位只中方
-  const canEdit = ['admin', 'manager', 'sales_manager'].includes(role);
+  const canEdit = hasAny(role, ['admin', 'manager', 'sales_manager']);
   const saveCell = async (c, k, v, meta) => { try { await call(role, `select app.edit_customer_info($1,$2)`, [c.id, JSON.stringify({ [k]: v })]); if (!meta?.batch || meta.last) { toast(meta?.batch ? `已保存 ${meta.total} 格` : '已保存'); refresh(); } } catch (e) { toast(friendlyError(e), 'err'); } };
   const txt = (k) => (c) => (canEdit ? { type: 'text', value: c[k] || '', onChange: (v, m) => saveCell(c, k, v, m) } : null);
   // 单选列: 选项来自「选项设置」; 现值不在列表里也保留显示
@@ -172,7 +172,7 @@ export function CustomerDrawer({ id, onClose }) {
   const fromDeal = fromDealId();   // 从哪张单点开的 (档案永远是总览, 只是把这张单标出来、排最前)
   return (
     <Drawer title={<span className="arch-title"><span className="mono">{c.code || `${c.temp_code}（临时）`}</span><i>·</i><span>{c.name}</span><i>·</i><TierPill tier={c.tier} empty="档位没定" /></span>} onClose={onClose}
-      actions={<>{['admin', 'manager', 'sales_manager', 'hotline'].includes(role) && <button type="button" className="btn sm" onClick={() => setEdit('info')} title="解锁修改：保存前列出改了什么并自检">✎ 修改</button>}{can(role, 'prospect') && <button type="button" className="btn sm" onClick={() => setCallOpen(true)}>☎ 记回访</button>}
+      actions={<>{hasAny(role, ['admin', 'manager', 'sales_manager', 'hotline']) && <button type="button" className="btn sm" onClick={() => setEdit('info')} title="解锁修改：保存前列出改了什么并自检">✎ 修改</button>}{can(role, 'prospect') && <button type="button" className="btn sm" onClick={() => setCallOpen(true)}>☎ 记回访</button>}
         {c.status === 'active' && can(role, 'quote') && <button type="button" className="btn sm" onClick={() => go('quote/new')}>＋ 报价</button>}
         {c.status === 'active' && price && <button type="button" className="btn sm" onClick={() => go('customer/' + c.id)}>总账</button>}
         {role === 'admin' && <button type="button" className="btn sm" onClick={() => setTaskOpen(true)}>派任务</button>}</>}>

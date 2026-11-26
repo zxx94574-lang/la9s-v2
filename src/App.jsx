@@ -22,7 +22,7 @@ import { ExportPanel } from './components/SettingsPanels.jsx';
 import { loadAllOpts } from './components/Opts.jsx';
 import { RouteIcon, Icon, setIconOverride } from './components/Icons.jsx';
 import { loadGridAlign } from './lib/gridPrefs.js';
-import { ROLES, setPermOverride, setPriceRules } from './lib/domain.js';
+import { ROLES, setPermOverride, setPriceRules, hasAny } from './lib/domain.js';
 import { t, getLang, setLang as setLangStore, LANGS, domTranslate } from './lib/i18n.js';
 import Dashboard from './pages/Dashboard.jsx';
 import QuoteNew from './pages/QuoteNew.jsx';
@@ -53,7 +53,7 @@ import Sop from './pages/Sop.jsx';
 import Kingdee from './pages/Kingdee.jsx';
 import { StoresHq, PortalShop, PortalOrders, PortalBalance, PortalStores } from './pages/Portal.jsx';
 import { ShopPos, ShopStock, CustomerAccounts } from './components/Shop.jsx';
-import { buildNav, NavEditor, HubTabs, hubOf } from './components/Nav.jsx';
+import { buildNav, NavEditor, HubTabs, hubOf, ITEMS, visibleTo } from './components/Nav.jsx';
 
 const store = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
@@ -146,14 +146,14 @@ export default function App() {
     if (!org) return;
     q(Q.orders, [org, '2000-01-01', '2999-12-31']).then((rows) => {
       setTodoCount(rows.filter((d) => todoFor(role, d)).length);
-      setOverdueN(['admin', 'manager', 'hotline', 'sales_manager'].includes(role) ? overdueList(rows).length : 0);
+      setOverdueN(hasAny(role, ['admin', 'manager', 'hotline', 'sales_manager']) ? overdueList(rows).length : 0);
     });
   }, [org, role, tick]);
 
   // 未处理报价提醒 (Frank 11-07): 没点开每 5 分钟、点开过每 10 分钟, 同一张单; 正在看的那张不提醒, 退出没完成继续
   const remindRef = useRef({});
   useEffect(() => {
-    if (!org || !['hotline', 'manager', 'admin'].includes(role)) return undefined;
+    if (!org || !hasAny(role, ['hotline', 'manager', 'admin'])) return undefined;
     const check = async () => {
       try {
         const rows = await q(`select d.id, d.created_at, d.hotline_opened_at, d.hotline_busy_at, (select count(*) from app.deal_events ev where ev.deal_id = d.id and ev.action = 'hotline_busy')::int as busy_n, c.name as customer_name from app.deals d join app.customers c on c.id = d.customer_id
@@ -220,6 +220,9 @@ export default function App() {
   // 中国支持: 打开不是给它的页 (订单 / 客户 / 钱) 一律回到待办
   if (role === 'cn_support' && !['todo', 'sop', 'stock', 'po', 'purchase', 'replenish'].includes(page)) page = 'todo';
   if (role === 'cn_business' && !['todo', 'sop', 'stock', 'purchase'].includes(page)) page = 'todo';
+  // 11-26 配权限：打开（或首页按钮落到）自己岗位看不到的页 → 回到我的待办（库管员、销售员的首页就是待办）
+  const home = !portal && ITEMS.dashboard && !visibleTo('dashboard', role, navCfg) ? 'todo' : 'dashboard';
+  if (!portal && ITEMS[page] && !page.startsWith('p/') && !visibleTo(page, role, navCfg)) page = 'todo';
   if (role === 'cn_finance' && !['todo', 'sop', 'po', 'cnfin'].includes(page)) page = 'todo';
   let view;
   switch (page) {
@@ -278,7 +281,7 @@ export default function App() {
       <div className="app" style={{ gridTemplateColumns: `${sideW}px minmax(0, 1fr)` }}>
         {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
         <aside className={`side ${drawer ? 'open' : ''}`}>
-          <div className="logo-box" onClick={() => go('dashboard')}>
+          <div className="logo-box" onClick={() => go(home)}>
             <img src="./la9s-logo.png" alt="LA&9S" />
             <small>科特迪瓦 · 中方管理</small>
           </div>
@@ -304,7 +307,7 @@ export default function App() {
           <header className="top">
             <div className="row top-left" style={{ gap: 10 }}>
               <button type="button" className="btn ghost show-m" style={{ padding: 6 }} onClick={() => setDrawer(true)} aria-label="菜单">☰</button>
-              <img className="mlogo" src="./la9s-logo.png" alt="LA&9S" onClick={() => go('dashboard')} />
+              <img className="mlogo" src="./la9s-logo.png" alt="LA&9S" onClick={() => go(home)} />
               <span className="brand">LA&9S<small>{portal ? 'Commande client · 客户下单' : '科特迪瓦 · 中方管理'}</small></span>{TEST && <span className="pill red" style={{ marginLeft: 8 }} title="这里的单据都是测试数据，和真实版完全分开">测试版</span>}
               {!portal && <span className="navhist">
                 <button type="button" className="btn sm" disabled={!navPos.back} onClick={navBack} title="回到上一页（档案、滚到哪都照原样）">←<span className="nh-l"> 返回</span></button>
@@ -342,10 +345,10 @@ export default function App() {
           {role === 'boss' && <button type="button" className={page === 'p/stores' ? 'on' : ''} onClick={() => go('p/stores')}><b><RouteIcon route="p/stores" size={20} /></b>门店</button>}
         </nav>) : (
         <nav className="mnav">
-          <button type="button" className={page === 'dashboard' ? 'on' : ''} onClick={() => go('dashboard')}><b><RouteIcon route="dashboard" size={20} /></b>首页</button>
-          <button type="button" className={page === 'todo' ? 'on' : ''} onClick={() => go('todo')}><b><RouteIcon route="todo" size={20} /></b>待办{(overdueN > 0 || todoCount > 0) && <span className={`badge ${overdueN ? 'hot' : ''}`}>{overdueN || todoCount}</span>}</button>
+          <button type="button" className={page === home && !msheet ? 'on' : ''} onClick={() => { setMsheet(null); go(home); }}><b><RouteIcon route="dashboard" size={20} /></b>首页</button>
+          <button type="button" className={page === 'todo' && !msheet ? 'on' : ''} onClick={() => { setMsheet(null); go('todo'); }}><b><RouteIcon route="todo" size={20} /></b>待办{(overdueN > 0 || todoCount > 0) && <span className={`badge ${overdueN ? 'hot' : ''}`}>{overdueN || todoCount}</span>}</button>
           <button type="button" className={`plus ${msheet === 'new' ? 'on' : ''}`} onClick={() => setMsheet(msheet === 'new' ? null : 'new')} aria-label="新建"><b><Icon name="plus" size={20} /></b>新建</button>
-          <button type="button" className={active('orders') || active('fob') || active('receipts') || msheet === 'view' ? 'on' : ''} onClick={() => setMsheet(msheet === 'view' ? null : 'view')}><b><RouteIcon route="orders" size={20} /></b>订单</button>
+          <button type="button" className={msheet === 'view' || (!msheet && (active('orders') || active('fob') || active('receipts'))) ? 'on' : ''} onClick={() => setMsheet(msheet === 'view' ? null : 'view')}><b><RouteIcon route="orders" size={20} /></b>订单</button>
           <button type="button" className={msheet === 'more' ? 'on' : ''} onClick={() => setMsheet(msheet === 'more' ? null : 'more')}><b><Icon name="list" size={20} /></b>更多</button>
         </nav>)}
       </div>
@@ -416,9 +419,9 @@ function LayoutSwitch({ onDone }) {
 function FlowPrompt({ role }) {
   const [msg, setMsg] = useState(null);
   useEffect(() => { const f = (e) => setMsg(e.detail); window.addEventListener('la9s:flow', f); return () => window.removeEventListener('la9s:flow', f); }, []);
-  useEffect(() => { if (msg && !['admin', 'finance'].includes(role)) { const t = setTimeout(() => setMsg(null), 4000); return () => clearTimeout(t); } return undefined; }, [msg, role]);
+  useEffect(() => { if (msg && !hasAny(role, ['admin', 'finance'])) { const t = setTimeout(() => setMsg(null), 4000); return () => clearTimeout(t); } return undefined; }, [msg, role]);
   if (!msg) return null;
-  if (!['admin', 'finance'].includes(role)) return <div className="toast ok" style={{ position: 'fixed', left: '50%', bottom: 86, transform: 'translateX(-50%)', zIndex: 80 }}>{msg.text}</div>;
+  if (!hasAny(role, ['admin', 'finance'])) return <div className="toast ok" style={{ position: 'fixed', left: '50%', bottom: 86, transform: 'translateX(-50%)', zIndex: 80 }}>{msg.text}</div>;
   return (
     <Modal title="已生成流水" onClose={() => setMsg(null)} footer={<><button type="button" className="btn" onClick={() => setMsg(null)}>不用，留在这里</button><span className="grow" /><button type="button" className="btn primary" onClick={() => { setMsg(null); window.location.hash = '#/' + msg.to; }}>立即查看 →</button></>}>
       <div>{msg.text}。是否立即查看？</div>

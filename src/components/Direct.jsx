@@ -1,4 +1,5 @@
 // 0076 熟客直接下单卡在欠款关 → 财务的紧急待办 (财务对完账、登记收款后自动下推找货, 这里自动消失)
+import { hasAny } from '../lib/domain.js';
 import React from 'react';
 import { q } from '../db/client.js';
 import { useApp, useData, Pill, Info } from './ui.jsx';
@@ -6,7 +7,7 @@ import { money } from '../lib/format.js';
 
 export function DirectHeld() {
   const { org, role, tick, go } = useApp();
-  const { data } = useData(() => (['admin', 'finance'].includes(role) ? q(`select * from app.v_direct_held where org_id = $1 order by created_at`, [org]) : Promise.resolve([])), [org, role, tick]);
+  const { data } = useData(() => (hasAny(role, ['admin', 'finance']) ? q(`select * from app.v_direct_held where org_id = $1 order by created_at`, [org]) : Promise.resolve([])), [org, role, tick]);
   const rows = (data || []).filter((r) => (r.approval_reasons || []).every((x) => /超欠款上限|超账期|有欠款不出货/.test(x)));
   if (!rows.length) return null;
   return (

@@ -7,7 +7,7 @@ import { useApp, useData, Pill, Info, Thumb, TierText } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { CustLink, DealLink, EmpLink } from './Archives.jsx';
 import { NoteModal } from '../pages/DealPanels.jsx';
-import { EVENT_LABELS, STATUS, ROLES, TIERS } from '../lib/domain.js';
+import { EVENT_LABELS, STATUS, ROLES, TIERS, hasAny } from '../lib/domain.js';
 import { money, qty, dt, friendlyError } from '../lib/format.js';
 
 export function MoneyUrgent() {
@@ -21,7 +21,7 @@ export function MoneyUrgent() {
         from app.payment_appeals a join app.deals d on d.id = a.deal_id join app.customers c on c.id = d.customer_id
         left join app.members m on m.user_id = a.created_by left join app.employees e on e.id = m.employee_id
         where a.org_id = $1 and a.status = 'open' order by a.created_at`, [org]) : [],
-      ['admin', 'finance', 'manager', 'sales_manager'].includes(role) ? q(`select * from app.v_staff_held where org_id = $1 order by received_on`, [org]) : [],
+      hasAny(role, ['admin', 'finance', 'manager', 'sales_manager']) ? q(`select * from app.v_staff_held where org_id = $1 order by received_on`, [org]) : [],
       admin ? call(role, `select * from app.ledger_check($1)`, [org]).catch(() => []) : []]);
     const days = Number(rule?.value?.held_days ?? 1);
     return { appeals, held: held.filter((h) => Number(h.days) >= days), days, diffs };

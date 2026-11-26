@@ -1,4 +1,5 @@
 import SumBar from '../components/SumBar.jsx';
+import { hasAny } from '../lib/domain.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -54,9 +55,9 @@ export default function Stock() {
       ]} />
       <HoldsCard />
       <div className="card">
-        {['admin', 'manager'].includes(role) && <div className="card-h"><h2>库存</h2><button type="button" className="btn sm soft-red" disabled={pick.size !== 1} title={pick.size === 1 ? '' : '先在下面勾选一行'} onClick={() => setFreeze(rows.find((r) => pick.has(r.stock_item_id)))}>⏸ 暂停出库（问题库存）</button></div>}
+        {hasAny(role, ['admin', 'manager']) && <div className="card-h"><h2>库存</h2><button type="button" className="btn sm soft-red" disabled={pick.size !== 1} title={pick.size === 1 ? '' : '先在下面勾选一行'} onClick={() => setFreeze(rows.find((r) => pick.has(r.stock_item_id)))}>⏸ 暂停出库（问题库存）</button></div>}
         {freeze && <FreezeModal row={freeze} onClose={() => { setFreeze(null); setPick(new Set()); }} />}
-        <Grid id="stock" table="stock_items" columns={cols} rows={rows} rowKey={(r) => r.stock_item_id} selectable={['admin', 'manager'].includes(role) ? { selected: pick, onChange: setPick } : undefined} rowClass={(r) => (Number(r.qty_available) <= 0 ? 'warn' : '')}
+        <Grid id="stock" table="stock_items" columns={cols} rows={rows} rowKey={(r) => r.stock_item_id} selectable={hasAny(role, ['admin', 'manager']) ? { selected: pick, onChange: setPick } : undefined} rowClass={(r) => (Number(r.qty_available) <= 0 ? 'warn' : '')}
           foot={{ warehouse: `${rows.length} 行`, qty_on_hand: qty(s('qty_on_hand')), qty_reserved: qty(s('qty_reserved')), qty_available: qty(s('qty_available')) }} />
       </div>
     </>

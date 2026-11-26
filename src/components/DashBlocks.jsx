@@ -10,7 +10,7 @@ import { useRemits, useRemitRules, remitFlag, remitCols } from './Remit.jsx';
 import { LayoutGrid } from './Layout.jsx';
 import Grid from './Grid.jsx';
 import { money, qty, dDate, today } from '../lib/format.js';
-import { TIERS } from '../lib/domain.js';
+import { TIERS, hasAny } from '../lib/domain.js';
 
 const N = (v) => Number(v || 0);
 const ymd = (v) => { if (!v) return ''; const x = v instanceof Date ? v : new Date(v); return isNaN(x) ? String(v).slice(0, 10) : x.toISOString().slice(0, 10); };
@@ -233,7 +233,7 @@ function MergeDlg({ groups, merge, def, org, onClose, onSet }) {
 // ───────── 账款: 客户欠款 / 收款 / Roland 手里的钱 / 回款 ─────────
 export function MoneyBlock({ bal, rc, from, to }) {
   const { go, role } = useApp();
-  const fin = ['admin', 'finance'].includes(role);
+  const fin = hasAny(role, ['admin', 'finance']);
   const held = usePublicHeld(); const remits = useRemits(); const rules = useRemitRules();
   const [open, setOpen] = useState(null);
   const [rcur, setRcur] = useLs('la9s.dash.rc.cur', 'XOF');
@@ -315,7 +315,7 @@ export function PeopleBlock({ from, to, label }) {
   const { org, role, go, tick } = useApp();
   const td = today();
   const { data } = useData(async () => {
-    const lead = ['admin', 'manager', 'sales_manager', 'finance'].includes(role);
+    const lead = hasAny(role, ['admin', 'manager', 'sales_manager', 'finance']);
     const [emps, ins, visits, calls, an] = await Promise.all([
       q(`select id, coalesce(short_name, full_name) as short_name, work_schedule from app.employees where org_id = $1 and active and coalesce(emp_no, '') <> '' and (joined_on is null or joined_on <= current_date)`, [org]),
       q(`select distinct employee_id from app.attendance where org_id = $1 and kind = 'in' and (at at time zone 'Africa/Abidjan')::date = (now() at time zone 'Africa/Abidjan')::date`, [org]),

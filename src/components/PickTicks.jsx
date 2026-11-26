@@ -6,7 +6,7 @@ import { call } from '../db/client.js';
 import { useApp, Modal, PhotoInput, Assumed, Info } from './ui.jsx';
 import { OptChoice, OptGear, useOptList } from './Opts.jsx';
 import { EmpLink } from './Archives.jsx';
-import { NOTE_OPTIONS, can } from '../lib/domain.js';
+import { NOTE_OPTIONS, can, hasAny } from '../lib/domain.js';
 import { qty, dt, friendlyError } from '../lib/format.js';
 import { flagAnomaly } from './IssueReport.jsx';
 
@@ -15,7 +15,7 @@ const N = (v) => Number(v || 0);
 export function AssignBar({ deal, employees, role }) {
   const { toast, refresh } = useApp();
   const [open, setOpen] = useState(false); const [emp, setEmp] = useState(deal.pick_assignee_employee_id || ''); const [note, setNote] = useState('');
-  const canAssign = ['admin', 'manager', 'sales_manager'].includes(role);
+  const canAssign = hasAny(role, ['admin', 'manager', 'sales_manager']);
   const who = (employees || []).find((e) => e.id === deal.pick_assignee_employee_id);
   const go = async () => {
     if (!emp) return toast('选一个人去找货', 'err');

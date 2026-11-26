@@ -2,6 +2,7 @@
 //  登记一笔 → 马上从交出钱的账户里扣; 到账由我们跟国内确认完再填 (只中方, 截图必传, 可分几次); 核对完算结束.
 //  应到 − 实到 = 这笔回款的全部成本, 系统拆成: 汇率上付的 (对比参考汇率) / 回款公司声明的手续费 / 说不清的差额.
 //  记录永远保留: 不能删, 录错只能作废 + 写原因 (钱加回原账户).
+import { hasAny } from '../lib/domain.js';
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Modal, DatePicker, MoneyIn, PhotoInput, Thumb, Assumed, Pill, Info } from './ui.jsx';
@@ -16,7 +17,7 @@ const f6 = (v) => (v == null ? '' : Number(v).toLocaleString('en-US', { maximumF
 
 export function useRemits(from, to) {
   const { org, role, tick } = useApp();
-  const ok = ['admin', 'finance'].includes(role);
+  const ok = hasAny(role, ['admin', 'finance']);
   const { data } = useData(async () => (ok ? q(`select * from app.v_remittances where org_id = $1 ${from ? 'and on_date between $2::date and $3::date' : ''} order by on_date desc, created_at desc`, from ? [org, from, to] : [org]) : null), [org, role, tick, from, to]);
   return data;
 }

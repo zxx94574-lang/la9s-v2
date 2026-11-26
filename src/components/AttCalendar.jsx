@@ -1,5 +1,6 @@
 // 226 / 243 (Frank 11-11): 员工月打卡日历 —— 一眼看一个月; 绿 正常 / 黄 迟到 / 红 没打卡·异常 / 灰 休息·还没到·入职前
 // 点某一天看当天明细 (几点上班下班、在哪), 有异议就在那一天直接申诉; 中方上面选员工, 还能给每个人设排班
+import { hasAny } from '../lib/domain.js';
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
@@ -52,7 +53,7 @@ export default function AttCalendar({ employeeId: fixed, pick = false, month: m0
     const myId = mine?.employee_id || null;
     const id = emp || fixed || myId;
     const [emps, [st]] = await Promise.all([
-      pick && ['admin', 'manager', 'sales_manager'].includes(role) ? q(`select id, short_name, full_name, emp_no, department from app.employees where org_id = $1 and active order by emp_no nulls last, short_name`, [org]) : [],
+      pick && hasAny(role, ['admin', 'manager', 'sales_manager']) ? q(`select id, short_name, full_name, emp_no, department from app.employees where org_id = $1 and active order by emp_no nulls last, short_name`, [org]) : [],
       q(`select start_time::text, end_time::text, grace_min, late_absent_min, half_day_end::text from app.attendance_settings where org_id = $1`, [org])]);
     if (!id) return { myId, id: null, emps, st: st || {} };
     const [[e], punches, appeals] = await Promise.all([

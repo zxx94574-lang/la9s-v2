@@ -1,4 +1,5 @@
 // 11-12 第 2 批: 问题库存冻结 (266) · 打电话名单 (250) · 价格调整单 (262) · 销量月对比 (252)
+import { hasAny } from '../lib/domain.js';
 import { RuleGear } from './Rules.jsx';
 import React, { useMemo, useState } from 'react';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from './Opts.jsx';
@@ -58,7 +59,7 @@ export function HoldsCard({ compact }) {
   const holds = useHolds(); const [open, setOpen] = useState(null);
   const active = (holds || []).filter((h) => h.status === 'active');
   if (!holds || (compact && !active.length)) return null;
-  const canDo = ['admin', 'manager'].includes(role);
+  const canDo = hasAny(role, ['admin', 'manager']);
   return (
     <div className="card" style={{ marginBottom: 12, borderColor: active.length ? '#f3c6c6' : undefined }}>
       <div className="card-h"><h2>暂停出库的货</h2>{active.length > 0 ? <span className="pill red">{active.length} 条冻结中</span> : <span className="pill green">没有</span>}

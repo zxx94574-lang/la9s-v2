@@ -11,7 +11,7 @@ import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop , PhoneInput, phoneValid, Choice, Info, Assumed, FRow, ConfirmBtn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
-import { ROLE_LABELS } from '../lib/domain.js';
+import { ROLE_LABELS, hasAny } from '../lib/domain.js';
 import { staffOptions, optLabel, SYS_ROLES } from '../lib/staffOptions.js';
 import { money, today, ymd, dDate, dt, friendlyError } from '../lib/format.js';
 import { saveFile } from '../lib/saveFile.js';
@@ -22,12 +22,12 @@ const STATUS = { draft: ['草稿', 'amber'], approved: ['已批准 · 待付', '
 
 export default function Staff() {
   const { org, role } = useApp();
-  const [tab, setTab] = useState(role === 'sales_manager' ? 'pay' : 'staff');
+  const [tab, setTab] = useState(role === 'country_manager' || role === 'sales_manager' ? 'pay' : 'staff');
   const { data } = useData(async () => {
     const [staff, opt] = await Promise.all([q(Q.staffList, [org]), q(`select value from app.org_settings where org_id = $1 and key = 'staff_options'`, [org])]);
     return { staff, opts: staffOptions(opt[0]?.value) };
   }, [org]);
-  const payrollOnly = role === 'sales_manager';   // 罗兰 (国家经理): 只看工资单, 起草 + 初审
+  const payrollOnly = role === 'country_manager' || role === 'sales_manager';   // 罗兰 (国家经理): 只看工资单, 起草 + 初审
   if (role !== 'admin' && !payrollOnly) return <div className="card card-b lock">员工与工资只有中方能看。</div>;
   if (!data) return <div className="empty">加载中…</div>;
   return (
@@ -176,7 +176,7 @@ export function EmpModal({ e, opts, onClose }) {
   const all = [...(files || []).map((x) => ({ ...x, src: `data:${x.mime};base64,${x.data}`, saved: true })), ...queued.map((x, i) => ({ ...x, i, src: `data:image/jpeg;base64,${x.data}` }))];
   return (
     <Modal wide title={e.id ? `员工 · ${e.short_name}` : '新员工'} onClose={onClose}
-      footer={locked ? <><button type="button" className="btn" onClick={onClose}>关闭</button>{['admin', 'sales_manager'].includes(role) && <button type="button" className="btn primary" onClick={() => setLocked(false)}>✎ 修改</button>}</>
+      footer={locked ? <><button type="button" className="btn" onClick={onClose}>关闭</button>{hasAny(role, ['admin', 'sales_manager']) && <button type="button" className="btn primary" onClick={() => setLocked(false)}>✎ 修改</button>}</>
         : <><button type="button" className="btn" onClick={() => (e.id ? (setF(f0), setQueued([]), setLocked(true)) : onClose())}>{e.id ? '取消修改' : '取消'}</button><button type="button" className="btn primary" disabled={!f.short_name.trim() || emailBad} onClick={review}>{e.id ? '保存修改…' : '保存'}</button></>}>
       {locked && <div className="banner info" style={{ marginBottom: 10 }}>档案已锁住，点右下角「✎ 修改」解锁；保存前会列出改了什么并自检，存完自动锁回。</div>}
       <fieldset className="lockset" disabled={locked}>
@@ -367,7 +367,7 @@ function Payroll({ staff, opts }) {
       )}
       {!h ? (
         <div className="card card-b row" style={{ gap: 10 }}>{label}还没有工资单。<span className="grow" />
-          {(admin || role === 'sales_manager') && <button type="button" className="btn primary" onClick={async () => { if (await run(`${label}工资单已建好，在职员工都加进来了，提成已按记录带出`, `select app.payroll_open($1,$2)`, [org, month + '-01'])) { try { await call(role, `select app.payroll_wh_comm($1,$2)`, [org, month + '-01']); await call(role, `select app.payroll_sales_comm($1,$2)`, [org, month + '-01']); await kpiRecalc(false, true); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } } }}>建 {label}工资单</button>}</div>
+          {(admin || role === 'country_manager' || role === 'sales_manager') && <button type="button" className="btn primary" onClick={async () => { if (await run(`${label}工资单已建好，在职员工都加进来了，提成已按记录带出`, `select app.payroll_open($1,$2)`, [org, month + '-01'])) { try { await call(role, `select app.payroll_wh_comm($1,$2)`, [org, month + '-01']); await call(role, `select app.payroll_sales_comm($1,$2)`, [org, month + '-01']); await kpiRecalc(false, true); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } } }}>建 {label}工资单</button>}</div>
       ) : (
         <>
           {h.reopen_count > 0 && h.status !== 'paid' && <div className="banner warn">⚠ 这个月之前已经「确认发放」过 {h.reopen_count} 次（最近一次 {dDate(h.last_confirmed_at)}，撤回原因：{h.last_reopen_reason}）。再次确认前先核实钱有没有付出去，别发两次。</div>}

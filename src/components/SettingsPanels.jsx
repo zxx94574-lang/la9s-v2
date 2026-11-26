@@ -5,7 +5,7 @@ import * as Q from '../db/queries.js';
 import { useApp, useData, FileDrop, Modal, Info } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { PERM_GROUPS, PERM_ROLES, defaultRoles } from '../lib/perm.js';
-import { ROLE_LABELS, rolesFor } from '../lib/domain.js';
+import { ROLE_LABELS, rolesFor, hasAny } from '../lib/domain.js';
 import { saveFile } from '../lib/saveFile.js';
 import { friendlyError, dt } from '../lib/format.js';
 import { BL_TYPES_DEFAULT, GS_DEFAULT } from './Bl.jsx';
@@ -15,7 +15,7 @@ export function ExportPanel() {
   const [busy, setBusy] = useState('');
   const [tick, setTick] = useState(0);
   const { data: log } = useData(() => (role === 'admin' ? q(Q.exportLog, [org]) : Promise.resolve([])), [org, role, tick]);
-  if (!['admin', 'manager'].includes(role)) return null;
+  if (!hasAny(role, ['admin', 'manager'])) return null;
   const run = async (kind) => {
     setBusy('正在读全部表…');
     try {

@@ -1,5 +1,6 @@
 // 317 (Frank 11-15 / 11-17): 公司收款账户 (Roland 公户 · Wave / 银行) —— 客户付到这里, 客户账照冲, 但钱在他手里, 交回公司之前算他欠公司.
 // 这里直接看: 每个公户现在欠公司多少 + 每一笔 (客户、日期、金额、已交、还欠、压了几天). 交回 (交款 / 转出) 按先进先出冲最老的一笔.
+import { hasAny } from '../lib/domain.js';
 import React, { useState } from 'react';
 import { q } from '../db/client.js';
 import { useApp, useData, Pill, Assumed, Info } from './ui.jsx';
@@ -12,7 +13,7 @@ const days = (d) => Math.max(0, Math.round((new Date(today()) - new Date(dDate(d
 export function usePublicHeld() {
   const { org, role, tick } = useApp();
   const { data } = useData(async () => {
-    if (!['admin', 'finance'].includes(role)) return null;
+    if (!hasAny(role, ['admin', 'finance'])) return null;
     const accs = await q(`select a.id, a.name, a.currency, a.hold_days, a.hold_limit, e.short_name as holder from app.cash_accounts a join app.employees e on e.id = a.holder_employee_id
       where a.org_id = $1 and a.active and a.is_public order by a.sort nulls last, a.name`, [org]);
     if (!accs.length) return [];

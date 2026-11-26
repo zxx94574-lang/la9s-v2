@@ -7,7 +7,7 @@ import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, Modal, DatePicker } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
-import { can } from '../lib/domain.js';
+import { can, hasAny } from '../lib/domain.js';
 import { money, dDate, dt, today, friendlyError, qty } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink , DealLink} from '../components/Archives.jsx';
 
@@ -97,8 +97,8 @@ export default function Kingdee() {
           <button type="button" className={tab === 'misc' ? 'on' : ''} onClick={() => setTab('misc')}>其他出入库 / 调拨 / 退货</button>
           <button type="button" className={tab === 'stock' ? 'on' : ''} onClick={() => setTab('stock')}>库存快照</button>
           <button type="button" className={tab === 'pool' ? 'on' : ''} onClick={() => setTab('pool')}>盘点编码顶替</button>
-          {['admin', 'finance'].includes(role) && <button type="button" className={tab === 'recon' ? 'on' : ''} onClick={() => setTab('recon')}>和金蝶对账</button>}
-          {['admin', 'finance'].includes(role) && <button type="button" className={tab === 'open' ? 'on' : ''} onClick={() => setTab('open')}>应收期初差异</button>}</div>
+          {hasAny(role, ['admin', 'finance']) && <button type="button" className={tab === 'recon' ? 'on' : ''} onClick={() => setTab('recon')}>和金蝶对账</button>}
+          {hasAny(role, ['admin', 'finance']) && <button type="button" className={tab === 'open' ? 'on' : ''} onClick={() => setTab('open')}>应收期初差异</button>}</div>
         {tab === 'all' && <div className="card-b"><KdAll /></div>}
         {tab === 'recon' && <div className="card-b"><KdRecon /></div>}
         {tab === 'grn' && <GrnList rows={data.grn} />}
@@ -240,11 +240,11 @@ function MiscList() {
   const rows = data.filter((r) => !f || r.status === f);
   const done = async (skip) => { try { const n = (await call(role, `select app.kingdee_misc_done($1,$2,$3) as n`, [[...sel], no, skip]))[0].n; toast(skip ? `${n} 条标成不用录` : `${n} 条已录金蝶 ${no}`); setSel(new Set()); setNo(''); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
-    <Grid id="kd-misc" rows={rows} selectable={['admin', 'manager', 'finance'].includes(role) ? { selected: sel, onChange: setSel } : undefined} empty="没有要录的"
+    <Grid id="kd-misc" rows={rows} selectable={hasAny(role, ['admin', 'manager', 'finance']) ? { selected: sel, onChange: setSel } : undefined} empty="没有要录的"
       tools={<><div className="chips">{[['ready', '待录'], ['done', '已录'], ['skip', '不用录'], ['', '全部']].map(([k, l]) => <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} {k ? data.filter((r) => r.status === k).length : data.length}</button>)}</div>
         {sel.size > 0 && <span className="row" style={{ gap: 6 }}><input className="in" style={{ width: 150 }} placeholder="金蝶单号" value={no} onChange={(e) => setNo(e.target.value)} />
           <button type="button" className="btn sm primary" disabled={!no.trim()} onClick={() => done(false)}>选中的 {sel.size} 条已录金蝶</button><button type="button" className="btn sm" onClick={() => done(true)}>不用录</button></span>}
-        {['admin', 'manager', 'finance'].includes(role) && data.some((r) => r.status === 'ready') && <button type="button" className="btn sm soft" title="按金蝶单据类型分页签导出（其他入库 / 其他出库 / 调拨 / 销售退货），在金蝶里引入"
+        {hasAny(role, ['admin', 'manager', 'finance']) && data.some((r) => r.status === 'ready') && <button type="button" className="btn sm soft" title="按金蝶单据类型分页签导出（其他入库 / 其他出库 / 调拨 / 销售退货），在金蝶里引入"
           onClick={() => { const rs = data.filter((r) => r.status === 'ready' && (!sel.size || sel.has(r.id))); writeXlsx('金蝶引入-其他出入库', '待录', [['日期', 12], ['金蝶单据', 16], ['怎么来的', 22], ['仓库', 24], ['物料编码', 14], ['种类', 10], ['型号', 16], ['数量（+进 / −出）', 14]],
             rs.map((r) => [dDate(r.at), r.doc_type, MISC_REASON[r.reason] || r.reason, KD_WH[r.warehouse] || r.warehouse, r.code, r.category, r.model, Number(r.qty)])).then(() => toast(`已导出 ${rs.length} 条`), (e) => toast(friendlyError(e), 'err')); }}>导出{sel.size ? `选中 ${sel.size}` : '全部待录'} 条（Excel）</button>}</>}
       columns={[

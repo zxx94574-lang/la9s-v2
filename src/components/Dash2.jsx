@@ -15,7 +15,7 @@ import Grid from './Grid.jsx';
 import { Fold, total, pctTone, Pct } from './DashBlocks.jsx';
 import { money, qty, dDate, today } from '../lib/format.js';
 import { Spark, weekly } from './MonthReport.jsx';
-import { TIERS } from '../lib/domain.js';
+import { TIERS, hasAny } from '../lib/domain.js';
 
 const N = (v) => Number(v || 0);
 const ymd = (v) => { if (!v) return ''; const x = v instanceof Date ? v : new Date(v); return isNaN(x) ? String(v).slice(0, 10) : x.toISOString().slice(0, 10); };
@@ -418,7 +418,7 @@ export function StockSec({ all, onAlert }) {
 // ───────────────────────── 账款 ─────────────────────────
 export function AcctSec({ bal, rc, fobs, ship, from, to, label, onAlert }) {
   const { org, role, go, tick } = useApp();
-  const fin = ['admin', 'finance'].includes(role);
+  const fin = hasAny(role, ['admin', 'finance']);
   const s = useSec('acct', 'XOF'); const cv = useRates(); const rv = useRuleValues(DASH_RULES);
   const held = usePublicHeld(); const remits = useRemits(); const rules = useRemitRules();
   const [o0, tg0] = useSlot('a0'); const [o1, tg1] = useSlot('a1'); const [o2, tg2] = useSlot('a2');
@@ -592,7 +592,7 @@ export function PeopleSec({ all, from, to, label, cards, cmp, onAlert }) {
   const silentDays = ruleNum(rv, 'dash.silent'), perDay = ruleNum(rv, 'dash.visit'), pickT = ruleNum(rv, 'dash.pick');
   const td = today();
   const { data } = useData(async () => {
-    const lead = ['admin', 'manager', 'sales_manager', 'finance'].includes(role);
+    const lead = hasAny(role, ['admin', 'manager', 'sales_manager', 'finance']);
     const [emps, ins, visits, calls, an, owners, custs] = await Promise.all([
       q(`select id, coalesce(short_name, full_name) as short_name, work_schedule from app.employees where org_id = $1 and active and coalesce(emp_no, '') <> '' and (joined_on is null or joined_on <= current_date)`, [org]),
       q(`select distinct on (employee_id) employee_id, late, at from app.attendance where org_id = $1 and kind = 'in' and (at at time zone 'Africa/Abidjan')::date = (now() at time zone 'Africa/Abidjan')::date order by employee_id, at`, [org]),

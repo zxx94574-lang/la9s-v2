@@ -8,15 +8,16 @@ import { ROLES, hasAny } from '../lib/domain.js';
 import { t } from '../lib/i18n.js';
 import { friendlyError } from '../lib/format.js';
 
-const STAFF = ['admin', 'manager', 'sales_manager', 'hotline', 'picker', 'finance', 'sales'];
+const STAFF = ['admin', 'manager', 'sales_manager', 'hotline', 'picker', 'finance', 'sales', 'country_manager'];
 
 // route → [图标, 默认名字, 默认分组, 默认能看的岗位 (空 = 全员)]
 export const ITEMS = {
-  dashboard: ['◫', '经营总览', 'work', ['admin', 'manager', 'sales_manager', 'hotline', 'picker', 'finance', 'sales']],
+  // 11-26 Frank 配权限：中方全部；国家经理 = 本地岗位能看的都能看（Nav 里靠 roleSet 展开，不用每行写）；成本 / 利润 / 定价 / 规则只中方
+  dashboard: ['◫', '经营总览', 'work', ['admin', 'manager', 'sales_manager', 'hotline', 'finance']],   // 库管员、销售员首页 = 我的待办
   todo: ['◉', '我的待办', 'work', []],
   sop: ['▣', '培训与 SOP', 'work', []],
   attendance: ['⏱', '打卡', 'work', STAFF],
-  kpi: ['⏲', '时效与准确率', 'work', ['admin']],
+  kpi: ['⏲', '时效与准确率', 'work', ['admin', 'country_manager']],
   report: ['▤', '月报', 'cn', ['admin']],
   poprofit: ['¥', '按采购单利润', 'cn', ['admin']],   // 11-25 Frank   // 11-25: 从经营总览挪出来, 单独一页
   margin: ['％', '毛利分析', 'cn', ['admin']],
@@ -33,8 +34,8 @@ export const ITEMS = {
   accounts: ['◎', '客户账号', 'cust', ['admin']],
   customers: ['♧', '客户档案', 'cust', ['admin', 'manager', 'hotline', 'sales', 'finance']],
   hotline: ['☎', '热线回访', 'cust', ['admin', 'manager', 'hotline', 'sales']],
-  visits: ['⌖', '客户拜访', 'cust', ['admin', 'manager', 'hotline', 'sales']],
-  stores: ['⌂', '客户门店', 'cust', ['admin', 'manager', 'hotline', 'sales']],
+  visits: ['⌖', '客户拜访', 'cust', ['admin', 'hotline', 'sales']],
+  stores: ['⌂', '客户门店', 'cust', ['admin', 'hotline', 'sales']],
   receipts: ['↙', '收款与冲账', 'fin', ['admin', 'finance', 'manager']],
   balances: ['₣', '客户总账 Balance', 'fin', ['admin', 'finance', 'manager', 'hotline', 'sales']],
   cash: ['⇄', '资金账户', 'fin', ['admin', 'finance', 'hotline', 'manager', 'sales']],
@@ -42,13 +43,13 @@ export const ITEMS = {
   stock: ['▦', '库存（实存/预占/可售）', 'wh', []],
   bins: ['▤', '库位与盘点', 'wh', STAFF],   // 510 / 513: 库位图 + 待上架 + 盘点 一页 (大家拿手机盘)
   po: ['⇵', '采购单与到货', 'wh', ['admin', 'manager', 'cn_support', 'cn_finance', 'finance', 'picker']],
-  replenish: ['⇡', '备货看板', 'wh', ['admin', 'manager', 'picker']],
+  replenish: ['⇡', '备货看板', 'wh', ['admin', 'manager', 'picker', 'sales_manager']],
   unmet: ['◇', '未满足需求', 'wh', ['admin', 'manager', 'sales_manager', 'hotline', 'picker', 'finance', 'sales']],
   purchase: ['⇣', '采购与物资申请', 'wh', [...STAFF, 'cn_support', 'cn_business']],
   cnfin: ['¥', '国内财务', 'wh', ['admin', 'cn_finance']],
   pricing: ['¥', '物料与定价', 'cn', ['admin']],
   materials: ['✎', '物料名称管理（中方）', 'cn', ['admin']],
-  staff: ['♙', '员工与工资', 'cn', ['admin', 'sales_manager']],
+  staff: ['♙', '员工与工资', 'cn', ['admin', 'country_manager']],   // 罗兰：工资单起草 + 初审
   import: ['⇩', '数据导入', 'cn', ['admin']],
   // 客户下单端 (客户老板 / 门店店员)
   'p/pos': ['¤', '收银', 'portal', ['boss', 'clerk']],

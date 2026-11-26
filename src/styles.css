@@ -2215,40 +2215,47 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .need-first:hover > :not(.need-first-tip), .need-first:focus-within > :not(.need-first-tip) { opacity: 1; }
 .need-first-tip { padding: 10px 14px; background: var(--brand-soft); color: var(--brand); font-weight: 600; font-size: 14px; border-radius: var(--radius) var(--radius) 0 0; }
 
-/* 11-26 手机底栏三张卡：新建 / 订单与单据 / 全部功能（从底部弹出） */
-.msheet-scrim { position: fixed; inset: 0; z-index: 90; background: #0f2a5240; animation: msFade .18s ease; }
-.msheet { position: fixed; z-index: 91; left: 0; right: 0; bottom: 0; max-height: 82vh; display: flex; flex-direction: column; background: #fff;
-  border-radius: 18px 18px 0 0; box-shadow: 0 -10px 40px #0f2a5230; padding-bottom: env(safe-area-inset-bottom, 0); animation: msUp .26s cubic-bezier(.2, .8, .2, 1); }
-.msheet-grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 8px auto 2px; cursor: pointer; }
-.msheet-h { display: flex; align-items: center; justify-content: space-between; padding: 6px 18px 8px; }
-.msheet-h b { font-size: 17px; }
-.msheet-x { border: 0; background: var(--line-2); width: 30px; height: 30px; border-radius: 50%; color: var(--muted); font-size: 13px; }
-.msheet-b { overflow-y: auto; padding: 0 14px calc(76px + env(safe-area-inset-bottom, 0px)); overscroll-behavior: contain; }
-.msheet-g { margin-top: 10px; }
-.msheet-gl { font-size: 12px; color: var(--muted); padding: 0 6px 6px; }
-.msheet-list { background: #f6f8fc; border-radius: 14px; overflow: hidden; }
-.msheet-row { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; background: none; padding: 11px 12px; text-align: left; min-height: 54px; }
-.msheet-row + .msheet-row { border-top: 1px solid #e6ebf3; }
-.msheet-ico { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 10px; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; }
-.msheet-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.msheet-txt b { font-size: 15px; color: var(--ink, #111); }
-.msheet-txt small { font-size: 12px; color: var(--muted); }
-.msheet-go { color: #b6c1d3; font-size: 20px; }
-.msheet-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.msheet-cell { border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 2px; border-radius: 12px; font-size: 12px; color: var(--ink, #111); text-align: center; line-height: 1.25; }
-.msheet-cell .msheet-ico { width: 46px; height: 46px; border-radius: 14px; }
-.msheet-row, .msheet-cell, .msheet-x { transition: background .15s ease, transform .12s ease; -webkit-tap-highlight-color: transparent; }
-.msheet-row:active { background: #e8eef8; } .msheet-cell:active { background: var(--brand-soft); transform: scale(.96); }
-@media (hover: hover) { .msheet-row:hover { background: #eef3fa; } .msheet-cell:hover { background: #f2f6fc; } }
-@media (min-width: 520px) { .msheet { left: 50%; right: auto; width: 480px; transform: translateX(-50%); animation: msUpC .26s cubic-bezier(.2, .8, .2, 1); } .msheet-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
-@keyframes msUp { from { transform: translateY(100%); } to { transform: none; } }
-@keyframes msUpC { from { transform: translate(-50%, 100%); } to { transform: translateX(-50%); } }
-@keyframes msFade { from { opacity: 0; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .msheet, .msheet-scrim { animation: none; } }
+/* 11-26 手机底栏三张卡：铺满（底栏留着能点），大图标格，最常用两个做大块 */
+.msheet { position: fixed; z-index: 91; left: 0; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column; background: #fff;
+  padding-top: env(safe-area-inset-top, 0px); animation: msIn .22s cubic-bezier(.2, .8, .2, 1); }
+.msheet-h { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 6px; }
+.msheet-h b { font-size: 22px; font-weight: 800; }
+.msheet-x { border: 0; background: var(--line-2); width: 36px; height: 36px; border-radius: 50%; color: var(--muted); font-size: 15px; }
+.msheet-b { flex: 1; overflow-y: auto; padding: 6px 16px calc(84px + env(safe-area-inset-bottom, 0px)); overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.msheet-top { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 6px 0 8px; }
+.msheet-big { border: 0; background: var(--brand); color: #fff; border-radius: 18px; padding: 16px 14px 14px; text-align: left; display: flex; flex-direction: column; gap: 6px; min-height: 120px; box-shadow: 0 8px 22px #0447b033; }
+.msheet-big .msheet-ico { width: 46px; height: 46px; border-radius: 14px; background: #ffffff26; color: #fff; display: grid; place-items: center; }
+.msheet-big .msheet-l { font-size: 18px; font-weight: 800; margin-top: auto; }
+.msheet-big small { font-size: 12.5px; color: #ffffffcc; line-height: 1.3; }
+.msheet-top .msheet-big:nth-child(2) { background: var(--brand-soft); color: var(--brand); box-shadow: none; }
+.msheet-top .msheet-big:nth-child(2) .msheet-ico { background: #fff; color: var(--brand); }
+.msheet-top .msheet-big:nth-child(2) small { color: #4a6aa0; }
+.msheet-g { margin-top: 16px; }
+.msheet-gl { font-size: 13px; font-weight: 700; color: var(--muted); padding: 0 4px 8px; }
+.msheet-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 6px; }
+.msheet-cell { border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 6px 2px 8px; border-radius: 14px; font-size: 13px; color: var(--ink, #111); text-align: center; line-height: 1.25; min-width: 0; }
+.msheet-cell .msheet-ico { width: 58px; height: 58px; border-radius: 18px; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; }
+.msheet-cell .msheet-l { overflow-wrap: anywhere; }
+.msheet-big, .msheet-cell, .msheet-x { transition: background .15s ease, transform .12s ease; -webkit-tap-highlight-color: transparent; }
+.msheet-big:active, .msheet-cell:active { transform: scale(.95); } .msheet-cell:active .msheet-ico { background: #d6e3f7; }
+@media (hover: hover) { .msheet-cell:hover .msheet-ico { background: #dce8f8; } .msheet-big:hover { filter: brightness(1.05); } }
+@media (max-width: 350px) { .msheet-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 560px) { .msheet-b { padding-left: max(16px, calc(50% - 300px)); padding-right: max(16px, calc(50% - 300px)); } .msheet-h { padding-left: max(18px, calc(50% - 298px)); padding-right: max(18px, calc(50% - 298px)); } .msheet-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@keyframes msIn { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .msheet { animation: none; } }
 body:has(.msheet) .mnav { z-index: 92; }
+body:has(.msheet) .top { visibility: hidden; }
 
 /* 11-26 界面分层：自带上下滚动的表，没点中时上下滑 = 滑页面；点中后（浅蓝框）才滑表格，滑到头也不带动页面 */
 .tw.tw-v { overflow-y: hidden; }
 .tw.tw-v.tw-on { overflow-y: auto; overscroll-behavior: contain; box-shadow: inset 0 0 0 2px var(--brand-line); border-radius: 8px; }
 .side, .modal, .menu, .msheet-b, .ask-pop, .dp-pop, .cell-pop .cell-sel, .per-menu { overscroll-behavior: contain; }
 html:has(.side.open), html:has(.overlay), html:has(.msheet), html:has(.ask-veil) { overflow: hidden; }
+
+/* 11-26 手机适配：整页永远不左右晃（只有表格、页签条这种自己能横滑的才横滑）；点输入框不自动放大；双击不缩放 */
+html, body { overflow-x: clip; max-width: 100%; }
+body { touch-action: manipulation; }
+@media (max-width: 760px) {
+  input, select, textarea, .in { font-size: 16px !important; }
+  .content { overflow-x: clip; }
+}

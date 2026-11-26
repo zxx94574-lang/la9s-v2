@@ -1,6 +1,7 @@
 // 366 (Frank 11-18): 「异常的单」总入口 —— 亏钱 / 价格 / 数量 / 欠款拦截 / 账对不上 / 任务卡流程 统一收在这里, 按类型打小标, 每行能跳到那张单;
 // 处理完自动从「待处理」消失, 转进「已处理记录」(当时的数字、谁、什么时候、怎么处理的), 记录不可改不可删.
 // 371: 板块常驻 (没有也显示 0), Always = 给「没内容就不渲染」的老板块补一个一行的空态.
+import { hasAny } from '../lib/domain.js';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Info, Assumed, DatePicker } from './ui.jsx';
@@ -34,7 +35,7 @@ export function AnomalyHub() {
   const { org, role, go, refresh } = useApp();
   const [tab, setTab] = useState('open'); const [g, setG] = useState('');
   const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10); }); const [to, setTo] = useState(today());
-  const staff = ['admin', 'manager', 'sales_manager', 'hotline', 'finance', 'sales', 'picker'].includes(role);
+  const staff = hasAny(role, ['admin', 'manager', 'sales_manager', 'hotline', 'finance', 'sales', 'picker']);
   useEffect(() => { if (org && staff) call(role, `select app.sync_anomalies($1)`, [org]).then((r) => { if (N(Object.values(r?.[0] || {})[0]) > 0) refresh(); }, () => {}); }, [org, role]);   // eslint-disable-line react-hooks/exhaustive-deps
   const { data: open } = useData(() => (staff ? call(role, `select * from app.anomaly_list($1, true)`, [org]).catch(() => []) : Promise.resolve([])), [org, role]);
   const { data: hist } = useData(() => (staff && tab === 'hist' ? call(role, `select * from app.anomaly_list($1, false, $2, $3)`, [org, from, to]).catch(() => []) : Promise.resolve(null)), [org, role, tab, from, to]);

@@ -3,6 +3,7 @@
 // 不用外部 AI（数据不出这台电脑 / 服务器）：本地听懂「谁 / 哪个客户 / 哪个型号或种类 / 什么时候 / 看什么 / 按什么分」，
 // 听懂的部分显示成一排小块，点 × 去掉、点分组换一种分法；结果是一张表 + 一句话，客户 / 型号 / 员工都能点开。
 // 销量 = 出库（作废的不算，退货另列）；员工 = 订单上的归属销售员（激励也按这个算）；金额一律折成 XOF。
+import { hasAny } from '../lib/domain.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { q } from '../db/client.js';
 import { useApp, useData, Choice } from './ui.jsx';
@@ -95,7 +96,7 @@ function jumpsOf(P, rows) {
 export function AskButton() {
   const { role } = useApp();
   const [open, setOpen] = useState(false);
-  const ok = ['admin', 'manager', 'finance', 'sales_manager'].includes(role);
+  const ok = hasAny(role, ['admin', 'manager', 'finance', 'sales_manager']);
   useEffect(() => {
     if (!ok) return undefined;
     const k = (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setOpen(true); } };
@@ -185,7 +186,7 @@ function AskPanel({ onClose }) {
     const sc = (p) => { const m = norm(p.model); const ws = words(p.model);
       return ws.includes(T) || m === T ? 5 : m.startsWith(T) ? 4 : ws.some((w) => w.startsWith(T)) ? 3 : m.includes(T) ? 2 : norm(p.code).includes(T) || norm(p.variant).includes(T) ? 1.5 : (p.shared_models || []).some((x) => norm(x).includes(T)) ? 1 : 0; };
     const prods = T.length >= 2 ? dict.prods.map((p) => [p, sc(p)]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1] || (b[0].avail - a[0].avail)).slice(0, 8).map(([p]) => p) : [];
-    const emps = ['admin', 'sales_manager'].includes(role) ? dict.emps.filter((e) => [e.short_name, e.full_name, e.emp_no].some((x) => x && String(x).toLowerCase().includes(low))).slice(0, 3) : [];
+    const emps = hasAny(role, ['admin', 'sales_manager']) ? dict.emps.filter((e) => [e.short_name, e.full_name, e.emp_no].some((x) => x && String(x).toLowerCase().includes(low))).slice(0, 3) : [];
     const pages = Object.entries(ITEMS).filter(([r, v]) => String(v[1]).includes(t) && visibleTo(r, role)).slice(0, 4);
     return { deals, custs, prods, emps, pages };
   }, [text, dict, role]);

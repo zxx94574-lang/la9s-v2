@@ -2,6 +2,7 @@
 // 中方: ① 现状 → ② 派任务 (谁 · 货架 · 种类; 一个货架只派一个人) → ③ 库位图叠进度 → ④ 差异 → 确认写进系统 (出货恢复) → 金蝶要录的单 (财务录完点「金蝶已录完」)
 // 员工: 只有「我的任务 → 一层一层盘 → 搜型号 → 填片数」+「这一层录了 / 我录的」；报盘完后可以自己再领一批（0100，只能盘派给自己的）
 // 盘点只记「在哪个库位找到多少」, 不在盘点时挪货; 挪位放到盘完后 (库位图里「挪」)
+import { hasAny } from '../lib/domain.js';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
@@ -14,7 +15,7 @@ import { BinPick, PRODUCTS_SQL, binDone, ShelfMap, shelvesOf, binsOfShelf, allBi
 
 export function CountPanel({ rooms, items }) {
   const { org, role, toast, refresh } = useApp();
-  const admin = role === 'admin'; const boss = ['admin', 'manager'].includes(role);
+  const admin = role === 'admin'; const boss = hasAny(role, ['admin', 'manager']);
   const { data } = useData(async () => {
     const [[c], [me], hist] = await Promise.all([q(`select * from app.counts where org_id = $1 and status = 'open' order by started_at desc limit 1`, [org]),
       q(`select employee_id from app.members where org_id = $1 and user_id = $2`, [org, USERS[role]]),
@@ -40,7 +41,7 @@ export function CountPanel({ rooms, items }) {
             <div><ConfirmBtn className="btn primary" risk="red" title="开始盘点？" body={`开始后：${pause === 'y' ? '所有出库暂停（找货、报价照常），直到你确认盘点结果或取消。\n' : ''}下一步给每个人派货架。`} okText="开始" onOk={start}>开始盘点</ConfirmBtn></div>
           </> : <span className="muted">现在没有在进行的盘点。中方开始盘点、给你派了货架后，这里会出现你的任务。</span>}
         </div></div>)}
-      {kdTodo.length > 0 && ['admin', 'finance'].includes(role) && <div className="banner" style={{ marginTop: 12 }}>{kdTodo.map((h) => h.no).join('、')} 还有盘亏 / 盘盈 / 错码要录金蝶 <button type="button" className="btn sm" onClick={() => setView(kdTodo[0])}>去看</button></div>}
+      {kdTodo.length > 0 && hasAny(role, ['admin', 'finance']) && <div className="banner" style={{ marginTop: 12 }}>{kdTodo.map((h) => h.no).join('、')} 还有盘亏 / 盘盈 / 错码要录金蝶 <button type="button" className="btn sm" onClick={() => setView(kdTodo[0])}>去看</button></div>}
       {(boss || role === 'finance') && data.hist.length > 0 && <div className="card" style={{ marginTop: 12 }}>
         <div className="card-h"><h2>以前的盘点</h2></div>
         <Grid id="count-hist" compactTools rows={data.hist} rowKey={(r) => r.id} rowActions={[{ label: '看差异 / 金蝶要录的', run: (r) => setView(r) }]} columns={[
@@ -49,7 +50,7 @@ export function CountPanel({ rooms, items }) {
           { key: 'kd', label: '金蝶', w: 90, value: (r) => (r.status !== 'closed' ? '' : r.kd_done_at ? '已录完' : (r.loss || r.gain || r.pool) ? '待录' : '不用录'), render: (r) => (r.status !== 'closed' ? '' : r.kd_done_at ? <span className="pill green">已录完</span> : (r.loss || r.gain || r.pool) ? <span className="pill amber">待录</span> : <span className="pill gray">不用录</span>) },
           { key: 'n', label: '录了几条', w: 80, type: 'number' }, { key: 'pool', label: '错码编码', w: 80, type: 'number' }, { key: 'loss', label: '盘亏（片）', w: 90, type: 'number' }, { key: 'gain', label: '盘盈（片）', w: 90, type: 'number' }]} />
       </div>}
-      {view && <Modal wide title={`${view.no} · 差异和金蝶要录的`} onClose={() => setView(null)} footer={view.status === 'closed' && !view.kd_done_at && ['admin', 'finance'].includes(role) ? <ConfirmBtn className="btn primary" title="金蝶那边都录完了？" body="盘亏 / 盘盈 / 错码改记都在金蝶录好了。点了这次盘点就算三方一致、关闭。" onOk={async () => { try { await call(role, `select app.count_kd_done($1)`, [view.id]); toast('已标记金蝶录完'); refresh(); setView(null); } catch (e) { toast(friendlyError(e), 'err'); } }}>金蝶已录完</ConfirmBtn> : null}>
+      {view && <Modal wide title={`${view.no} · 差异和金蝶要录的`} onClose={() => setView(null)} footer={view.status === 'closed' && !view.kd_done_at && hasAny(role, ['admin', 'finance']) ? <ConfirmBtn className="btn primary" title="金蝶那边都录完了？" body="盘亏 / 盘盈 / 错码改记都在金蝶录好了。点了这次盘点就算三方一致、关闭。" onOk={async () => { try { await call(role, `select app.count_kd_done($1)`, [view.id]); toast('已标记金蝶录完'); refresh(); setView(null); } catch (e) { toast(friendlyError(e), 'err'); } }}>金蝶已录完</ConfirmBtn> : null}>
         <Diffs countId={view.id} closed />
       </Modal>}
     </>

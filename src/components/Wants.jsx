@@ -1,4 +1,5 @@
 // 0078 想要 + 到货分配: 客户只登记想要 (型号 + 大概多少), 有效期默认 14 天; 货到了热线先问「还要吗」, 还要的才进分配; 中方填每人分多少 → 热线电话名单
+import { hasAny } from '../lib/domain.js';
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -15,7 +16,7 @@ const SRC = { manual: '登记的', order_short: '下单没供够', inquiry: '询
 export function WantsBoard() {
   const { org, role, toast, tick, refresh } = useApp();
   const admin = role === 'admin';
-  const staff = ['hotline', 'sales', 'manager', 'sales_manager'].includes(role);
+  const staff = hasAny(role, ['hotline', 'sales', 'manager', 'sales_manager']);
   const [adding, setAdding] = useState(false);
   const [check, setCheck] = useState(null);
   const [alloc, setAlloc] = useState(false);
@@ -118,7 +119,7 @@ function Allocate({ rows, onClose, onOk }) {
 // 热线待办: 现在有货了的想要 (要问还要吗)
 export function WantsTodo() {
   const { org, role, tick, go } = useApp();
-  const { data } = useData(() => (['hotline', 'sales', 'manager', 'sales_manager', 'admin'].includes(role) ? q(`select count(*) filter (where avail > 0 and status <> 'yes')::int n from app.v_open_wants where org_id = $1`, [org]) : Promise.resolve([{ n: 0 }])), [org, role, tick]);
+  const { data } = useData(() => (hasAny(role, ['hotline', 'sales', 'manager', 'sales_manager', 'admin']) ? q(`select count(*) filter (where avail > 0 and status <> 'yes')::int n from app.v_open_wants where org_id = $1`, [org]) : Promise.resolve([{ n: 0 }])), [org, role, tick]);
   const n = data?.[0]?.n || 0;
   if (!n) return null;
   return <div className="row between todo-row" onClick={() => go('unmet')}><b>{n} 条想要现在有货了，打电话问还要吗</b><span className="muted">›</span></div>;

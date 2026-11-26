@@ -1,6 +1,7 @@
 // 378 / 380 (Frank 11-18): ① 「待录金蝶」总表 —— 所有动库存 / 动钱的单据一张清单, 批量回填金蝶单号, 按金蝶单号反查;
 // ② 「和金蝶对账」—— 金蝶导出的表拖进来, 自动认是哪种, 比出五类结果, 每次对账存一份.
 // 系统不往金蝶写, 只记单号、对状态.
+import { hasAny } from '../lib/domain.js';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Modal, FileDrop, Info, Assumed, Choice, Pill } from './ui.jsx';
@@ -27,7 +28,7 @@ export function KdAll() {
   const kinds = [...new Set(all.map((r) => r.kind_name))];
   const todoN = (k) => all.filter((r) => r.state === 'todo' && (!k || r.kind_name === k)).length;
   const rows = all.filter((r) => (show === 'all' || r.state === show || (show === 'todo' && r.state === 'wait')) && (!kind || r.kind_name === kind));
-  const can = ['admin', 'finance', 'manager'].includes(role);
+  const can = hasAny(role, ['admin', 'finance', 'manager']);
   const picked = rows.filter((r) => sel.has(`${r.kind}:${r.row_id}`) && r.state !== 'done' && r.state !== 'skip');
   const go = async () => {
     const list = fill.rows.map((r) => ({ kind: r.kind, row_id: r.row_id, no: (fill.same ? fill.no : fill.nos[`${r.kind}:${r.row_id}`]) || '' }));

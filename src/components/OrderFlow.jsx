@@ -1,5 +1,6 @@
 // 待改 503 (Frank 11-23): 待办里的「订单」—— 每张没走完的单一行: 整条流程都列出来, 卡在哪一步哪一步变红, 没做的灰;
 // 点开看每一步谁做的、用了多久、目标多久; 超时的必须写原因. 时间只算上班时间, 目标和「时效与准确率」是同一份 (kpi_targets).
+import { hasAny } from '../lib/domain.js';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData } from './ui.jsx';
@@ -113,7 +114,7 @@ export default function OrderFlow() {
             <div className="t2-row" onClick={() => setOpen(on ? null : d.key)}>
               <div className="t2-main">
                 <div className="t2-l1"><span onClick={(e) => e.stopPropagation()}><DealLink id={d.id} no={d.biz_no} /></span>{d.ret && <span className="pill gray">退货 {d.ret}</span>}<span onClick={(e) => e.stopPropagation()}><CustLink id={d.customer_id} name={d.customer_name} /></span>
-                  {['admin', 'finance', 'manager', 'sales_manager'].includes(role) && Number(d.amount) !== 0 && <span className="muted">· {money(d.amount, d.currency)} {d.currency}</span>}
+                  {hasAny(role, ['admin', 'finance', 'manager', 'sales_manager']) && Number(d.amount) !== 0 && <span className="muted">· {money(d.amount, d.currency)} {d.currency}</span>}
                   {d.needNote > 0 && <span className="pill red">{d.needNote} 步超时没写原因</span>}</div>
                 <div className="t2-times"><span className="t2-tc"><i>{d.ret ? '收到退货' : '下单'}</i>{dt(d.created_at)}</span>
                   {d.resp != null && !d.ret && <span className="t2-tc" data-tip="建报价到联系上客户确认，用了多久（只算上班时间）"><i>响应</i>{fmtMin(d.resp)}</span>}

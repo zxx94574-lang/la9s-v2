@@ -2,6 +2,7 @@
 
 export const ROLES = {
   admin: { label: '中方', desc: '全部权限，唯一能改价、认领冲账、审批退货和支出' },
+  country_manager: { label: '国家经理', desc: '本地运营全管：订单、仓库、客户、收款、员工工资起草初审都能做；改价、成本利润、审批、系统规则还是中方' },
   manager: { label: '仓库主管', desc: '下推找货、出销售订单、复检打包、出库' },
   hotline: { label: '热线', desc: '接单报价、确认客户、客户确认销售单、回访、发起退货' },
   picker: { label: '库管员', desc: '找货单、初拣（实际供货 + 照片）；看不到价格' },
@@ -65,7 +66,9 @@ const P = {
   step_people: [],              // 11-09: 设置找货人 / 复核人候选
 };
 // 销售主管继承销售员 (SQL 里 app.has_role 同样处理)
-export const roleSet = (role) => (role === 'sales_manager' ? ['sales_manager', 'sales'] : [role]);
+// 11-26：国家经理 = 本地所有岗位能做的都能做（中方专属的除外）；销售主管 = 销售 + 主管
+export const LOCAL_ROLES = ['manager', 'sales_manager', 'sales', 'hotline', 'finance', 'picker'];
+export const roleSet = (role) => (role === 'country_manager' ? ['country_manager', ...LOCAL_ROLES] : role === 'sales_manager' ? ['sales_manager', 'sales'] : [role]);
 export const hasAny = (role, list) => role === 'admin' || roleSet(role).some((r) => list.includes(r));
 // 权限配置 (Frank 11-09 第 5 条): 每个动作谁能做, 中方在「设置 → 权限配置」里勾; 没配的用上面的默认. 存 org_settings 'perm_matrix' = {action: [roles]}
 let PERM_OVERRIDE = {};

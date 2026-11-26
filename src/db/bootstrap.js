@@ -4,6 +4,7 @@ import { seedSops } from './sopDefaults.js';
 
 export const USERS = {
   admin: '00000000-0000-0000-0000-00000000000a',   // 中方
+  country_manager: '00000000-0000-0000-0000-000000000012', // 国家经理
   manager: '00000000-0000-0000-0000-00000000000b', // 仓库主管
   picker: '00000000-0000-0000-0000-00000000000c',  // 找货员
   hotline: '00000000-0000-0000-0000-00000000000d', // 热线
@@ -99,11 +100,12 @@ export async function seedDemo(db) {
     mariam: await emp('Mariam', 'MARIAM DEMO', 'DIRECTION', 'ACCOUNTANT', 'finance', { joined: '2025-11-01', phone: '0700000005' }),
     koffi: await emp('Koffi', 'KOFFI DEMO', 'SPARE PARTS', 'SALES STAFF', 'sales', { joined: '2026-02-01', phone: '0700000006', channel: 'WHOLESALE' }),
     kouame: await emp('Kouamé', 'KOUAME DEMO', 'SPARE PARTS', 'SALES MANAGER', 'sales_manager', { joined: '2025-07-01', phone: '0700000007' }),
+    roland: await emp('Roland', 'ROLAND DEMO', 'DIRECTION', 'COUNTRY MANAGER', 'sales_manager', { joined: '2025-06-01', phone: '0700000008' }),
     cn: await emp('国内采购（演示）', 'CN SUPPORT DEMO', 'CHINA', 'PURCHASING', 'cn_support'),
   };
   await db.query(`update app.employees set emp_no = case id when $1 then 'S01' when $2 then 'S00' end where id in ($1,$2)`, [E.koffi, E.kouame]);
   for (const [u, roles, e] of [[USERS.admin, '{admin}', E.frank], [USERS.manager, '{manager}', E.abowa], [USERS.picker, '{picker}', E.yao],
-    [USERS.hotline, '{hotline}', E.awa], [USERS.finance, '{finance}', E.mariam], [USERS.sales, '{sales}', E.koffi], [USERS.sales_manager, '{sales_manager}', E.kouame], [USERS.cn_support, '{cn_support}', E.cn]]) {
+    [USERS.hotline, '{hotline}', E.awa], [USERS.finance, '{finance}', E.mariam], [USERS.sales, '{sales}', E.koffi], [USERS.sales_manager, '{sales_manager}', E.kouame], [USERS.country_manager, '{country_manager}', E.roland], [USERS.cn_support, '{cn_support}', E.cn]]) {
     await db.query(`insert into app.members (user_id, org_id, employee_id, roles) values ($1,$2,$3,$4)`, [u, org, e, roles]);
   }
 

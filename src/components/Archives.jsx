@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, TierPill, Pill } from './ui.jsx';
-import { STATUS, seesPrice } from '../lib/domain.js';
+import { STATUS, seesPrice, hasAny } from '../lib/domain.js';
 import { money, qty } from '../lib/format.js';
 import ProductDrawer from './ProductDrawer.jsx';
 import { CustomerDrawer } from '../pages/Customers.jsx';
@@ -25,7 +25,7 @@ export function CustLink({ id, name, children }) {
 }
 export function EmpLink({ id, name, children }) {
   const { openArchive, role } = useApp();
-  if (!id || !openArchive || !['admin', 'sales_manager'].includes(role)) return <>{children ?? name}</>;   // 员工档案 (含证件照) 只中方 / 销售主管
+  if (!id || !openArchive || !hasAny(role, ['admin', 'sales_manager'])) return <>{children ?? name}</>;   // 员工档案 (含证件照) 只中方 / 销售主管
   return <button type="button" className="linkbtn" title="打开员工档案" onClick={stop(() => openArchive({ kind: 'employee', id }))}>{children ?? name}</button>;
 }
 

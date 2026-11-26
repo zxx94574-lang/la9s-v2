@@ -9,7 +9,7 @@ import PeoplePick from './PeoplePick.jsx';
 import LineEntry, { finalizeLines } from './LineEntry.jsx';
 import { DocActions, DocSheet } from './Doc.jsx';
 import { EmpLink, ModelLink, DealLink } from './Archives.jsx';
-import { NOTE_OPTIONS, CONFIRM_METHODS, dealPriceVisible } from '../lib/domain.js';
+import { NOTE_OPTIONS, CONFIRM_METHODS, dealPriceVisible, hasAny } from '../lib/domain.js';
 import { qty, money, dt, friendlyError } from '../lib/format.js';
 
 const N = (v) => Number(v || 0);
@@ -18,7 +18,7 @@ export const ADDON_STATUS = {
   reviewed: ['已并进原单', 'green'], cancelled: ['已取消', 'gray'] };
 export const addonOpen = (a) => !['reviewed', 'cancelled'].includes(a.status);
 export const canStartAddon = (deal, role, shipments) => ['picking', 'picked', 'ordered', 'confirmed', 'reviewed'].includes(deal.status) && !(shipments || []).some((s) => !s.voided_at)
-  && ['admin', 'manager', 'sales_manager', 'hotline', 'sales'].includes(role);
+  && hasAny(role, ['admin', 'manager', 'sales_manager', 'hotline', 'sales']);
 
 const ADDON_SQL = `select a.*, pe.short_name as picker_name, re.short_name as reviewer_name from app.deal_addons a
   left join app.employees pe on pe.id = a.picker_employee_id left join app.employees re on re.id = a.reviewer_employee_id where a.deal_id = $1 order by a.no`;
@@ -70,7 +70,7 @@ export function AddonStartModal({ deal, catalog, categories, onClose, onDone }) 
 function Assign({ addon, employees }) {
   const { role, toast, refresh } = useApp();
   const [open, setOpen] = useState(false); const [emp, setEmp] = useState('');
-  const canAssign = ['admin', 'manager'].includes(role);
+  const canAssign = hasAny(role, ['admin', 'manager']);
   const go = async () => {
     if (!emp) return toast('选一个人去找货', 'err');
     try { await call(role, `select app.assign_addon($1,$2)`, [addon.id, emp]); toast(addon.picker_employee_id ? '已改派' : '已派人，他的待办里会出现这一批'); setOpen(false); refresh(); } catch (e) { toast(friendlyError(e), 'err'); }
@@ -170,7 +170,7 @@ function Review({ addon, employees }) {
     if (!photo) return toast('复检要拍打包照片', 'err');
     try { await call(role, `select app.addon_review($1,$2,$3,$4)`, [addon.id, reviewer, photo, JSON.stringify(real.filter((l) => c(l) !== N(l.qty_picked)).map((l) => ({ line_id: l.id, counted: c(l), reason: why[l.id] || null })))]); toast('复检完成，这一批已并进原单，可以一起出库'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); }
   };
-  if (!['admin', 'manager'].includes(role)) return <div className="card-b hint">客户已确认这一批，等主管复检打包。</div>;
+  if (!hasAny(role, ['admin', 'manager'])) return <div className="card-b hint">客户已确认这一批，等主管复检打包。</div>;
   return (
     <div className="card-b stack">
       {real.map((l) => (
@@ -199,7 +199,7 @@ export function AddonPanel({ deal, addon, employees }) {
   const price = dealPriceVisible(role, deal);
   const [label, tone] = ADDON_STATUS[addon.status];
   const meEmp = useData(() => q(`select app.current_employee($1) as e`, [deal.org_id]).catch(() => [{ e: null }]), [deal.org_id]).data?.[0]?.e;
-  const canPick = ['admin', 'manager'].includes(role) || (meEmp && meEmp === addon.picker_employee_id);
+  const canPick = hasAny(role, ['admin', 'manager']) || (meEmp && meEmp === addon.picker_employee_id);
   const soLines = addon.lines.map((l) => ({ ...l, qty_supply: l.qty_final ?? l.qty_picked ?? 0 }));
   const soDeal = { ...deal, so_no: addon.so_no, updated_at: addon.picked_at || deal.updated_at };
   const total = soLines.reduce((a, l) => a + N(l.qty_supply) * N(l.unit_price), 0);
@@ -214,7 +214,7 @@ export function AddonPanel({ deal, addon, employees }) {
           {addon.note && <span className="small muted">{addon.note}</span>}</div>
         <div className="row">
           {addon.so_no && price && addon.status !== 'cancelled' && <DocActions kind="so" deal={soDeal} lines={soLines} copyLabel="复制这一批的销售单图片" hidePrint />}
-          {addonOpen(addon) && ['admin', 'manager', 'sales_manager', 'hotline', 'sales'].includes(role) && <button type="button" className="btn sm" onClick={() => { setReason(''); setCancel(true); }}>取消这一批</button>}
+          {addonOpen(addon) && hasAny(role, ['admin', 'manager', 'sales_manager', 'hotline', 'sales']) && <button type="button" className="btn sm" onClick={() => { setReason(''); setCancel(true); }}>取消这一批</button>}
         </div>
       </div>
       {addon.status === 'cancelled' && <div className="card-b"><div className="lock">这一批已取消：{addon.cancel_reason}（{dt(addon.cancelled_at)}）。预占的库存已放掉。</div></div>}
@@ -226,7 +226,7 @@ export function AddonPanel({ deal, addon, employees }) {
       {addon.status === 'ordered' && <>
         <div className="card-b"><div className="doc-preview"><div className="doc-preview-in"><DocSheet kind="so" deal={soDeal} lines={soLines} /></div></div>
           <div className="small muted" style={{ marginTop: 6 }}>找货：<b>{addon.picker_name}</b> · {dt(addon.picked_at)} · 这一批合计 {price ? `${money(total, deal.currency)} ${deal.currency}` : `${qty(soLines.reduce((a, l) => a + N(l.qty_supply), 0))} 片`}</div></div>
-        {['admin', 'manager', 'sales_manager', 'hotline', 'sales'].includes(role) ? <Confirm addon={addon} /> : <div className="card-b hint">等热线 / 销售跟客户确认这一批。</div>}
+        {hasAny(role, ['admin', 'manager', 'sales_manager', 'hotline', 'sales']) ? <Confirm addon={addon} /> : <div className="card-b hint">等热线 / 销售跟客户确认这一批。</div>}
       </>}
       {addon.status === 'confirmed' && <>
         <div className="card-b small">客户已确认（{optName('confirm_methods', addon.confirm_method, CONFIRM_METHODS) || '—'} · {dt(addon.confirmed_at)}）{addon.confirm_note ? ` · ${addon.confirm_note}` : ''}</div>
@@ -261,10 +261,10 @@ export function AddonTodo() {
     return { me, rows };
   }, [org]);
   if (!data) return null;
-  const boss = ['admin', 'manager'].includes(role);
+  const boss = hasAny(role, ['admin', 'manager']);
   const mine = data.rows.filter((a) => (a.status === 'assign' && boss) || (a.status === 'picking' && (a.picker_employee_id === data.me || boss))
-    || (a.status === 'ordered' && (['admin', 'manager', 'sales_manager', 'hotline'].includes(role) || (role === 'sales' && a.owner_employee_id === data.me))) || (a.status === 'confirmed' && boss));
-  if (!['admin', 'manager', 'sales_manager', 'hotline', 'sales', 'picker'].includes(role)) return null;
+    || (a.status === 'ordered' && (hasAny(role, ['admin', 'manager', 'sales_manager', 'hotline']) || (role === 'sales' && a.owner_employee_id === data.me))) || (a.status === 'confirmed' && boss));
+  if (!hasAny(role, ['admin', 'manager', 'sales_manager', 'hotline', 'sales', 'picker'])) return null;
   const open = (a) => { try { sessionStorage.setItem('la9s.addon', a.id); } catch { /* */ } go('deal/' + a.deal_id); };
   return (
     <div className="card">

@@ -1,6 +1,7 @@
 // 510 (Frank 11-24): 库位与上架 —— 库位 = 房间 - 货架 - 层 (例 SS-A-1; LR / SLR 只有房间名); 布局 ⚙ 可改 (以后会加 / 减货架)
 // 一个库位能放几个型号, 每个型号记片数; 出到 0 这个位置就空出来, 以前放过什么都留记录 (bin_log)
 // 上架: 新到的 / 退回来的货 (没放到库位上的) 放到库位; 补货 = 同库位同型号再放; 挪位 = 从一个库位挪到另一个
+import { hasAny } from '../lib/domain.js';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Modal, FRow, Choice, Info, Assumed } from '../components/ui.jsx';
@@ -90,11 +91,11 @@ export default function Bins({ tab: tab0 }) {
   const items = useBinItems(org);
   const openCount = useData(async () => (await q(`select id from app.counts where org_id = $1 and status = 'open' limit 1`, [org]))[0] || null, [org]).data;
   const [tab, setTab] = useState(tab0 || null);
-  const cur = tab || (openCount && !['admin', 'manager'].includes(role) ? 'count' : 'map');
+  const cur = tab || (openCount && !hasAny(role, ['admin', 'manager']) ? 'count' : 'map');
   const [put, setPut] = useState(null); const [mv, setMv] = useState(null); const [hist, setHist] = useState(null); const [lay, setLay] = useState(false); const [open, setOpen] = useState(null);
   const { data: unb } = useData(async () => q(`select u.product_id, u.on_hand, u.binned, u.on_hand - u.binned as free, p.code, p.model, p.variant, c.name as category from app.v_unbinned u join app.products p on p.id = u.product_id join app.categories c on c.id = p.category_id
          where u.org_id = $1 and u.on_hand > u.binned order by c.name, p.model`, [org]), [org]);
-  const can = ['admin', 'manager', 'picker'].includes(role);
+  const can = hasAny(role, ['admin', 'manager', 'picker']);
   const all = allBinCodes(rooms); const used = all.filter((c) => (items[c] || []).length).length;
   return (
     <>

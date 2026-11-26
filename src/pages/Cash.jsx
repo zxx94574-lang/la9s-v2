@@ -48,9 +48,10 @@ export default function Cash() {
   }, [org, range[0], range[1]]);
   const ctl = useControls();   // 220: 待核对到账 / 员工代收 / 对账盘点 / 月结 / 在途
   const custName = useMemo(() => Object.fromEntries((data?.customers || []).map((c) => [c.id, `${c.code || c.temp_code} ${c.name}`])), [data]);
-  const canReg = can(role, 'cash_register');   // 11-26 手机「新建」卡片：登记支出 / 交款直接弹出
-  useEffect(() => { if (!canReg) return; const k = ['expense', 'handover'].find((x) => readIntent(x)); if (k) setModal({ t: k }); }, [canReg]);
-  useIntent(canReg ? ['expense', 'handover'] : [], (k) => setModal({ t: k }));
+  const canReg = can(role, 'cash_register'), canNotice = can(role, 'payment_notice');   // 11-26 手机「新建」卡片：登记支出 / 交款 / 客户说付了 直接弹出
+  const intents = [...(canReg ? ['expense', 'handover'] : []), ...(canNotice ? ['notice'] : [])];
+  useEffect(() => { const k = intents.find((x) => readIntent(x)); if (k) setModal({ t: k }); }, [canReg, canNotice]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useIntent(intents, (k) => setModal({ t: k }));
   if (!data) return <div className="empty">加载中…</div>;
   const reg = can(role, 'cash_register'), dec = can(role, 'cash_decide'), notice = can(role, 'payment_notice');
   const openNotices = data.notices.filter((n) => n.status === 'open');

@@ -1,6 +1,7 @@
 // 上班打卡 (Frank 10-31): 带定位, 不拍照. 销售看是不是在市场; 办公室 / 仓库员工看是不是在仓库地址.
 // 手机打开 → 点「上班打卡 / 下班打卡」→ 浏览器给定位 → 系统找最近的工作地点, 记「在 / 不在」, 第一次上班卡超过上班时间算迟到.
 // 中方: 今天谁打了卡、在不在地方; 每月汇总 (出勤天数、迟到、不在地方); 维护工作地点 (仓库 / 办公室 / 各个市场, 可以站在那里点「用我现在的位置」).
+import { hasAny } from '../lib/domain.js';
 import { readIntent, useIntent } from '../components/MobileSheet.jsx';
 import React, { useState } from 'react';
 import AttCalendar from '../components/AttCalendar.jsx';
@@ -47,7 +48,7 @@ export default function Attendance() {
   const [leave, setLeave] = useState(() => readIntent('leave')); const [lateDlg, setLateDlg] = useState(false);
   useIntent(['leave'], () => setLeave(true));   // 501: 请假 / 迟到报备
   const admin = role === 'admin';
-  const canName = ['admin', 'manager', 'sales_manager'].includes(role);
+  const canName = hasAny(role, ['admin', 'manager', 'sales_manager']);
   const { data } = useData(async () => {
     const since = new Date(); since.setMonth(since.getMonth() - 2);
     const [myLv, dayLv, myRep] = await Promise.all([
@@ -125,7 +126,7 @@ export default function Attendance() {
       <div className="pagehead"><div><div className="eyebrow">Pointage</div><h1>打卡</h1>
         <div className="sub">用手机打卡，要允许定位，不用拍照。销售看是不是在市场；办公室和仓库员工看是不是在仓库地址。上班时间 {data.st?.start_time?.slice(0, 5) || '08:30'}，晚 {data.st?.grace_min ?? 10} 分钟以上算迟到。</div></div></div>
       {admin && <MetricStrip tag="本月" ids={['staff.ok']} from={periodRange('month')[0]} to={periodRange('month')[1]} />}
-      <div className="tabs" style={{ padding: 0 }}>{[['me', '我打卡'], ...(admin ? [['day', '今天'], ['month', '月汇总']] : []), ...(['admin', 'manager', 'sales_manager'].includes(role) ? [['cal', '按员工看日历']] : []), ['appeals', admin ? `申诉${data.allAp.filter((a) => a.status === 'pending').length ? ` · ${data.allAp.filter((a) => a.status === 'pending').length} 待处理` : ''}` : '我的申诉'], ...(canName ? [['sites', `工作地点${unnamed.length ? ` · ${unnamed.length} 待起名` : ''}`]] : [])].map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
+      <div className="tabs" style={{ padding: 0 }}>{[['me', '我打卡'], ...(admin ? [['day', '今天'], ['month', '月汇总']] : []), ...(hasAny(role, ['admin', 'manager', 'sales_manager']) ? [['cal', '按员工看日历']] : []), ['appeals', admin ? `申诉${data.allAp.filter((a) => a.status === 'pending').length ? ` · ${data.allAp.filter((a) => a.status === 'pending').length} 待处理` : ''}` : '我的申诉'], ...(canName ? [['sites', `工作地点${unnamed.length ? ` · ${unnamed.length} 待起名` : ''}`]] : [])].map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
       {tab === 'me' && (
         <div className="portal">
           <div className="card card-b stack" style={{ textAlign: 'center', gap: 14 }}>

@@ -2,6 +2,7 @@
 // 游客 / 客户账号 / 外跑销售 → 询单 (IQ-年月日-序号, 不带价) → 中方看一眼定价、转成报价 → 通知建单的人 → 后面流程不变.
 // 这个页面: 员工建询单 (销售只列自己名下的客户) + 询单列表 (中方: 转成报价; 大家: 标已联系 / 没成交).
 // 游客和客户账号用的是同一个询单表, 入口在 Guest.jsx / Portal.jsx.
+import { hasAny } from '../lib/domain.js';
 import { RuleGear } from '../components/Rules.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
@@ -195,7 +196,7 @@ export function InquiryTodo() {
       where i.org_id = $1 and (i.status in ('new','contacted') or (i.status = 'quoted' and i.seen_at is null)) order by i.created_at`, [org]);
     return { list, me: me?.id || null };
   }, [org, role, tick]);
-  if (!data || !['admin', 'manager', 'sales_manager', 'hotline', 'sales'].includes(role)) return null;
+  if (!data || !hasAny(role, ['admin', 'manager', 'sales_manager', 'hotline', 'sales'])) return null;
   const fresh = data.list.filter((i) => ['new', 'contacted'].includes(i.status));
   const priced = data.list.filter((i) => i.status === 'quoted' && (role === 'sales' ? (!data.me || i.owner_employee_id === data.me || i.creator_emp === data.me) : role !== 'admin'));
   const seen = async (i) => { await call(role, `select app.inquiry_mark($1,'seen')`, [i.id]).catch(() => {}); refresh(); go('deal/' + i.deal_id); };

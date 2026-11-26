@@ -8,7 +8,7 @@ import { useApp, useData, Pill, Info, Modal, MultiChoice, Assumed } from '../com
 import { IssueList } from '../components/IssueReport.jsx';
 import TierCheck, { useTierCheck } from '../components/TierCheck.jsx';
 import DirectiveBoard from '../components/Directives.jsx';
-import { STATUS, ROLES } from '../lib/domain.js';
+import { STATUS, ROLES, hasAny } from '../lib/domain.js';
 import { money, dt, dDate, today, friendlyError } from '../lib/format.js';
 
 // who acts next on a deal in this status
@@ -51,7 +51,7 @@ export function nextAction(d, role) {
     return d.staged_at ? { roles: ['manager'], what: `等待发货 · 约 ${dDate(d.planned_ship_date)} · 货放在：${d.staged_note || '（没写）'}，到那天再复检打包` } : { roles: ['manager', 'picker'], what: `约 ${dDate(d.planned_ship_date)} 发货：先把货放到暂存位置（不打包），拍照` };
   }
   if (d.status === 'shipped' && Number(d.unsigned_n || 0) > 0) return { roles: ['hotline', 'manager'], what: `联系客户确认收货，${d.unsigned_n} 批待签收（传签收凭证）` };
-  if (Number(d.freight_due_n || 0) > 0 && ['finance', 'admin'].includes(role)) return { roles: ['finance', 'admin'], what: `付 Yango 运费（${d.freight_due_n} 批，司机在等）：付完传支付截图，自动记流水` };
+  if (Number(d.freight_due_n || 0) > 0 && hasAny(role, ['finance', 'admin'])) return { roles: ['finance', 'admin'], what: `付 Yango 运费（${d.freight_due_n} 批，司机在等）：付完传支付截图，自动记流水` };
   if (d.status === 'shipped' && Number(d.open_disc_n || 0) > 0) return { roles: ['admin'], what: '客户反馈收货有差异（少了 / 发错）：查清是谁的问题、货在哪，定怎么处理' };
   if (d.status === 'shipped' && d.balance_pending) return { roles: ['hotline', 'finance'], what: '和客户对账：发 Balance，客户确认后传截图' };
   if (d.status === 'shipped' && Number(d.due) > 0) return { roles: ['finance'], what: `催收 / 登记收款，未付 ${money(d.due)}` };
@@ -311,7 +311,7 @@ function RouteModal({ cur, onClose }) {
 function OpenReturns() {
   const { org, role } = useApp();
   const { data } = useData(() => q(Q.openReturns, [org]), [org]);
-  if (!data?.length || !['admin', 'manager', 'sales_manager', 'hotline', 'finance'].includes(role)) return null;
+  if (!data?.length || !hasAny(role, ['admin', 'manager', 'sales_manager', 'hotline', 'finance'])) return null;
   const P = { decide: ['退货等中方审批', 'amber'], inspect: ['退货待检验（好货 / 坏货）', 'amber'], reconcile: ['退货待和客户对账', 'blue'] };
   return data.map((r) => (
     <div key={r.id} className="row between todo-row" style={{ cursor: 'default' }}>
