@@ -2418,3 +2418,11 @@ body { touch-action: manipulation; }
 /* 本地备货 / FOB 半宽小卡: 卡片窄到四格放不下 (侧栏开着、中等屏幕) → 两行两格, 毛利率色块不再被截 (Frank 11-26 截图) */
 .d2-card.sub { container-type: inline-size; }
 @container (max-width: 460px) { .d2-sub, .d2-sub.c3 { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 12px; } .d2-sub > .d2-m:nth-child(odd) { border-left: 0; padding-left: 0; } }
+/* 523 销售明细合表: 上面一行小标题, 中间粗竖线把「扣掉开支后」分开; 数字能点 */
+.pl-t tr.pl-grp th { font-size: 11px; font-weight: 600; color: var(--muted); text-align: center; background: #fff; border-bottom: 1px solid var(--line-2); padding: 4px 8px; letter-spacing: .05em; }
+.pl-t tr.pl-grp th:first-child { background: #fff; }
+.pl-t th.pl-vs, .pl-t td.pl-vs { border-left: 2px solid var(--ink); }
+.pl-t tr.pl-grp th.pl-vs { color: var(--brand); }
+.pl-lk { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; border-bottom: 1px dashed transparent; }
+.pl-lk:hover { color: var(--brand); border-bottom-color: currentColor; }
+.pl-t tr.pl-chg td span[data-tip] { cursor: help; }

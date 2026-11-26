@@ -9,7 +9,7 @@ where c.org_id = $1
 order by c.status, c.code nulls last, c.name`;
 
 export const employees = `
-select id, short_name, full_name, department, position, emp_no from app.employees where org_id = $1 and active order by department, short_name`;
+select id, short_name, full_name, department, position, emp_no, sys_role::text as sys_role from app.employees where org_id = $1 and active order by department, short_name`;
 
 export const categories = `select id, name from app.categories where org_id = $1 order by sort, name`;
 

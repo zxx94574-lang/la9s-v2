@@ -164,7 +164,8 @@ export default function QuoteNew() {
   };
 
   // 0076 熟客直接下单: 不走报价确认, 下推找货前自动查 价格 / 欠款 / 特批 三道关
-  const directOk = !!(cust && cust.status === 'active' && cust.tier && cust.tier_confirmed_at && currency === 'XOF' && can(role, 'direct_order'));
+  // 524 (Frank 11-26 16:25): 删掉「熟客直接下单」—— 它在找货前就查欠款, 违反「只拦出库不拦找货」; 截图第 4 步客户确认时本来就要. 一律 保存报价 → 第 1 步确认 → 下推找货. 后台 create_direct_order 留着, 老单照常
+  const directOk = false;
   const submitDirect = async () => {
     setErrs(true);
     const fin = finalizeLines(lines);
@@ -268,7 +269,7 @@ export default function QuoteNew() {
             </React.Fragment>))}
         </div>
         <div className="flow2-now">
-          <span>新订单 · <b>第 1 步 报价</b> <Info>选客户、选货{canPrice ? '、给价' : ''} → 保存 → 下面接着联系客户确认。报价不预占库存，确认下推找货时才预占。选了客户、填够 5 行会自动存草稿（订单总览 →「草稿」里找得到，7 天没动自动删）。</Info>{draftId ? <span className="small muted"> · 草稿已自动保存</span> : customer && realLines.length > 0 && realLines.length < minLines ? <span className="small muted"> · 还没存草稿：再加 {minLines - realLines.length} 行才会自动存</span> : null}</span>
+          <span>新订单 · <b>第 1 步 报价</b> <Info>选客户、选货{canPrice ? '、给价' : ''} → 保存 → 下面接着联系客户确认。报价不预占库存，确认下推找货时才预占。选了客户、填够 5 行会自动存草稿（订单总览 →「草稿」里找得到，7 天没动自动删）。</Info>{draftId ? <span className="small muted"> · 草稿已自动保存</span> : customer && realLines.length > 0 ? <span className="small muted" title={`填够 ${minLines} 行还会存成草稿，别的电脑 / 手机也找得到`}> · 已自动保存在这台设备</span> : null}</span>
           <span className="grow" />
           {role === 'admin' && <PageGear items={[[edit ? '退出调整版面' : '调整版面', () => setLayoutEdit(!edit)]]} />}
         </div>

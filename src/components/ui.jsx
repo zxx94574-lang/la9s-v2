@@ -187,6 +187,12 @@ export function MonthPicker({ value, onChange, label, align }) {
   );
 }
 
+// 525: 日期 + 时间 (以前用浏览器自带的 datetime-local, 显示成美式 11/26/2026 04:52 PM) —— 日期走系统日历, 时间一个小框. value = 'YYYY-MM-DDTHH:MM'
+export function DateTimeIn({ value, onChange }) {
+  const [d, t] = String(value || '').split('T');
+  return <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}><DatePicker value={d || ''} onChange={(x) => onChange(`${x || ''}T${t || '00:00'}`)} /><input className="in" type="time" value={(t || '').slice(0, 5)} onChange={(e) => onChange(`${d || ''}T${e.target.value}`)} style={{ width: 110 }} /></span>;
+}
+
 export function DatePicker({ value, onChange, range, label, align, ...rest }) {
   if (range) return <RangePicker value={value} onChange={onChange} label={label} {...rest} />;
   return <DatePicker1 value={value} onChange={onChange} label={label} align={align} />;

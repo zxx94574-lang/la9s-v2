@@ -60,3 +60,14 @@ test('在库批次：现在的库存从最后一次进货往前倒推；老批�
   assert.equal(rows.NEW, Math.min(onHand, Math.max(onHand, 1)));
   assert.equal(rows.OLD, 0);
 });
+
+test('0104 经营总览: dash_rows 多一列 freight (我们出的运费), 本地行 cost 里含它, FOB 行是 0', async () => {
+  const t = await setup(); const org = t.ids.org;
+  const rows = await t.as(U.admin, `select supply, cost, freight from app.dash_rows($1)`, [org]);
+  for (const r of rows) {
+    assert.ok(r.freight !== undefined, 'freight 这一列要有');
+    assert.ok(Number(r.freight) >= 0);
+    if (r.supply === 'fob') assert.equal(Number(r.freight), 0);
+    if (r.cost != null) assert.ok(Number(r.cost) + 0.01 >= Number(r.freight), '成本里已经含运费, 减了不会变负');
+  }
+});

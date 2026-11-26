@@ -28,7 +28,9 @@ const ACC_KIND = { bank: '银行公户', cash: '现金', wave: 'Wave', orange: '
 
 export default function Cash() {
   const { org, role, toast, refresh } = useApp();
-  const [tab, setTab] = useState('open');
+  // 523: 从经营总览「日常开支」点进来 → 直接开「流水」页签、只看支出 (sessionStorage la9s.cash.kind, 用一次就清)
+  const [onlyKind, setOnlyKind] = useState(() => { try { const k = sessionStorage.getItem('la9s.cash.kind') || ''; sessionStorage.removeItem('la9s.cash.kind'); return k; } catch { return ''; } });
+  const [tab, setTab] = useState(onlyKind ? 'moves' : 'open');
   const P = usePeriod('cash'); const range = [P.from, P.to];
   const [modal, setModal] = useState(null);
   const [dragAcc, setDragAcc] = useState(null);
@@ -171,7 +173,8 @@ export default function Cash() {
         {tab === 'open' && <Grid id="cash-open" table="cash_moves" columns={openCols} rows={unclaimed} empty="没有待认领的到账" />}
         {tab === 'pending' && <Grid id="cash-pending" table="cash_moves" columns={pendCols} rows={pending} empty="没有要中方处理的交款 / 支出" />}
         {tab === 'notices' && <Grid id="cash-notices" table="payment_notices" columns={noticeCols} rows={data.notices} empty="没有付款通知" />}
-        {tab === 'moves' && <Grid id="cash-moves" table="cash_moves" columns={moveCols} rows={data.moves} empty="这段时间没有流水" />}
+        {tab === 'moves' && onlyKind && <div className="row" style={{ gap: 8, margin: '8px 0' }}><span className="pill">只看支出</span><button type="button" className="btn sm" onClick={() => setOnlyKind('')}>看全部流水 ✕</button></div>}
+        {tab === 'moves' && <Grid id="cash-moves" table="cash_moves" columns={moveCols} rows={onlyKind ? data.moves.filter((m) => m.kind === onlyKind) : data.moves} empty="这段时间没有流水" />}
         <ControlPanels tab={tab} ctl={ctl} acc={data.acc} classes={data.classes} />
       </div>
       {modal?.t === 'claim' && <ClaimModal m={modal.m} customers={data.customers} notices={openNotices} onClose={() => setModal(null)} />}

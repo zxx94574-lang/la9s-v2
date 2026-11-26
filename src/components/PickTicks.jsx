@@ -1,7 +1,7 @@
 // 398 / 399 (Frank 11-18): 主管派人找货 + 手机打勾找货 (无纸化). 电脑上也是同一个页面.
 // 设计按「一只手、防误触」: 整行就是按钮 (≥ 56px 高, 全宽), 点一下打勾变绿、再点取消; 改数量用大号 − / ＋, 不用找格子打字;
 // 少于要的数自动出原因; 找完的沉到下面; 顶上固定进度; 最后「提交」才是不能撤的那一步, 放在底部、和别的按钮隔开.
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { call } from '../db/client.js';
 import { useApp, Modal, PhotoInput, Assumed, Info } from './ui.jsx';
 import { OptChoice, OptGear, useOptList } from './Opts.jsx';
@@ -9,16 +9,17 @@ import { EmpLink } from './Archives.jsx';
 import { NOTE_OPTIONS, can, hasAny } from '../lib/domain.js';
 import { qty, dt, friendlyError } from '../lib/format.js';
 import { flagAnomaly } from './IssueReport.jsx';
+import { staffOrder } from './PeoplePick.jsx';
 
 const N = (v) => Number(v || 0);
 
 export function AssignBar({ deal, employees, role }) {
   const { toast, refresh } = useApp();
-  const [open, setOpen] = useState(false); const [emp, setEmp] = useState(deal.pick_assignee_employee_id || ''); const [note, setNote] = useState('');
+  const [open, setOpen] = useState(false); const [emp, setEmp] = useState(deal.pick_assignee_employee_id || ''); const [note, setNote] = useState(''); const [tried, setTried] = useState(false);
   const canAssign = hasAny(role, ['admin', 'manager', 'sales_manager']);
   const who = (employees || []).find((e) => e.id === deal.pick_assignee_employee_id);
   const go = async () => {
-    if (!emp) return toast('选一个人去找货', 'err');
+    setTried(true); if (!emp) return toast('选一个人去找货', 'err');
     try { await call(role, `select app.assign_picker($1,$2,$3)`, [deal.id, emp, note || null]); toast(who ? '已改派' : '已派人，他的待办里会出现这张找货单'); setOpen(false); setNote(''); refresh(); } catch (e) { toast(friendlyError(e), 'err'); }
   };
   return (
@@ -29,8 +30,8 @@ export function AssignBar({ deal, employees, role }) {
       {canAssign && <button type="button" className={`btn ${who ? 'sm' : 'primary'}`} onClick={() => { setEmp(deal.pick_assignee_employee_id || ''); setOpen(true); }}>{who ? '改派' : '派人去找'}</button>}
       {open && <Modal title={who ? `改派 · ${deal.pick_no || deal.biz_no}` : `派人去找货 · ${deal.pick_no || deal.biz_no}`} onClose={() => setOpen(false)} footer={<><button type="button" className="btn" onClick={() => setOpen(false)}>取消</button><button type="button" className="btn primary" onClick={go}>{who ? '确认改派' : '派给他'}</button></>}>
         <div className="stack">
-          <div className="field req"><label>谁去找</label><OptChoice optKey="emp_list" title="员工名单" data value={emp} onChange={setEmp} flat={false} placeholder="选员工…" err={!emp}
-            options={(employees || []).filter((e) => e.active !== false).map((e) => [e.id, e.short_name, [e.emp_no, e.department].filter(Boolean).join(' · ')])} /></div>
+          <div className="field req"><label>谁去找</label><OptChoice optKey="emp_list" title="员工名单" data value={emp} onChange={setEmp} flat={false} placeholder="选员工…" err={tried && !emp}
+            options={staffOrder((employees || []).filter((e) => e.active !== false && e.status !== 'left')).map((e) => [e.id, e.short_name, [e.emp_no, e.department].filter(Boolean).join(' · ')])} /></div>
           {who && <div className="field"><label>为什么改派（选填）</label><input className="in" value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如 上午的人下午放假" /></div>}
           <div className="hint">{who ? '已经打过勾的行会保留，新的人接着找没找的。改派留记录。' : '派了以后，他的待办里会出现这张找货单；随时可以改派。'}</div>
         </div>
@@ -43,23 +44,28 @@ export default function PickTicks({ deal, lines, employees, role, act }) {
   const real = lines.filter((l) => l.product_id && N(l.qty_supply) > 0);
   const none = lines.filter((l) => l.product_id && N(l.qty_supply) === 0);
   const [local, setLocal] = useState({});    // line → { qty, reason } 没打勾时暂存的数
-  const [busy, setBusy] = useState(null);
+  const busyRef = useRef(new Set()); const [, bump] = useState(0);   // 525: 每一行各自在保存, 不挡别的行 (以前一行在存时点别的行会被吞掉)
+  const tickedAt = useRef({});        // 刚打上勾的时间: 1.5 秒内再点同一行不算取消 (选完原因自动打勾后顺手又点了一下)
+  const [sink, setSink] = useState({}); // 沉到下面的行: 手停下 1.5 秒后再挪, 不在手指底下跳
   const [byBin, setByBin] = useState(true);
   const [photo, setPhoto] = useState(''); const [dup, setDup] = useState([]); const [errs, setErrs] = useState(false);
   const [numFor, setNumFor] = useState(null);
   const { list: reasons } = useOptList('note_diff', NOTE_OPTIONS.diff);
   const ticked = (l) => l.pick_tick_qty != null;
   const cur = (l) => (ticked(l) ? { qty: N(l.pick_tick_qty), reason: l.pick_tick_reason || '' } : { qty: N(l.qty_supply), reason: '', ...(local[l.id] || {}) });
-  const sorted = useMemo(() => { const k = (l) => (byBin ? String(l.bin || '~') : String(l.seq).padStart(4, '0')); return [...real].sort((a, b) => (ticked(a) - ticked(b)) || k(a).localeCompare(k(b), 'zh-CN', { numeric: true })); }, [real, byBin]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const doneIds = real.filter(ticked).map((l) => l.id).join(',');
+  useEffect(() => { const t = setTimeout(() => setSink(Object.fromEntries(doneIds.split(',').filter(Boolean).map((x) => [x, 1]))), 1500); return () => clearTimeout(t); }, [doneIds]);
+  const sorted = useMemo(() => { const k = (l) => (byBin ? String(l.bin || '~') : String(l.seq).padStart(4, '0')); const sk = (l) => (sink[l.id] ? 1 : 0); return [...real].sort((a, b) => (sk(a) - sk(b)) || k(a).localeCompare(k(b), 'zh-CN', { numeric: true })); }, [real, byBin, sink]);   // eslint-disable-line react-hooks/exhaustive-deps
   const done = real.filter(ticked).length;
   const mine = can(role, 'submit_pick') || ['sales', 'sales_manager', 'hotline'].includes(role);
   const save = async (l, q, reason) => {
-    setBusy(l.id);
-    try { await call(role, `select app.pick_tick($1,$2,$3)`, [l.id, q, reason || null]); if (navigator.vibrate) navigator.vibrate(15); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(null); }
+    busyRef.current.add(l.id); bump((n) => n + 1);
+    if (q != null) tickedAt.current[l.id] = Date.now();
+    try { await call(role, `select app.pick_tick($1,$2,$3)`, [l.id, q, reason || null]); if (navigator.vibrate) navigator.vibrate(15); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } finally { busyRef.current.delete(l.id); bump((n) => n + 1); }
   };
   const tap = (l) => {
-    if (!mine || busy) return;
-    if (ticked(l)) return save(l, null, null);            // 再点一下 = 取消
+    if (!mine || busyRef.current.has(l.id)) return;
+    if (ticked(l)) { if (Date.now() - (tickedAt.current[l.id] || 0) < 1500) return; return save(l, null, null); }   // 再点一下 = 取消 (刚勾上的 1.5 秒内不算)
     const c = cur(l);
     if (c.qty < N(l.qty_supply) && !c.reason) { setLocal((x) => ({ ...x, [l.id]: { ...c, ask: true } })); return toast(`${l.model} 找到的比要的少，先点一个原因`, 'err'); }
     save(l, c.qty, c.reason);
@@ -84,7 +90,7 @@ export default function PickTicks({ deal, lines, employees, role, act }) {
         <Info>同一个架子的排在一起，少走路。点整行 = 找到了（变绿），再点一下 = 取消。少了就按 − 改数量，再点原因。找完的自动排到下面。</Info>
       </div>
       {sorted.map((l) => { const c = cur(l); const t = ticked(l); const short = c.qty < N(l.qty_supply); return (
-        <div key={l.id} data-tick={l.id} className={`tick-row ${t ? 'done' : ''} ${short ? 'short' : ''} ${busy === l.id ? 'busy' : ''}`}>
+        <div key={l.id} data-tick={l.id} className={`tick-row ${t ? 'done' : ''} ${short ? 'short' : ''} ${busyRef.current.has(l.id) ? 'busy' : ''}`}>
           <button type="button" className="tick-main" onClick={() => tap(l)} disabled={!mine} aria-pressed={t}>
             <span className="tick-box">{t ? '✓' : ''}</span>
             <span className="tick-info"><b className="tick-model">{l.model}</b><span className="tick-sub"><span className="tick-binl">{l.bin || '—'}<small>{l.warehouse}</small></span>{l.category} · {l.code}{l.variant ? ` · ${l.variant}` : ''}</span></span>

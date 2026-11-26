@@ -36,10 +36,10 @@ export async function rememberContact(role, customerId, who) {
 }
 
 // value: { role, name, phone, key? }. roles: 只列哪些身份 (不给 = 全部). needPhone: 电话是不是必填.
-export function ContactPick({ customerId, value, onChange, errs, needPhone, askRole = true, placeholder = '选联系人（可以搜名字 / 电话）' }) {
+export function ContactPick({ customerId, value, onChange, errs, needPhone, askRole = true, newRole = '', placeholder = '选联系人（可以搜名字 / 电话）' }) {
   const list = useContacts(customerId);
   const v = value || {}; const [fresh, setFresh] = useState(false);
-  const pick = (k) => { if (k === '__new') { setFresh(true); onChange({ role: v.role || '', name: '', phone: '' }); return; } const c = list.find((x) => x.key === k); if (c) { setFresh(false); onChange({ ...c, phone: c.phone ? fmtPhone(c.phone) : '' }); } };
+  const pick = (k) => { if (k === '__new') { setFresh(true); onChange({ role: newRole, name: '', phone: '' }); return; } /* 525: 新的人不再沿用上一个人的身份 (以前收货人被存成老板) */ const c = list.find((x) => x.key === k); if (c) { setFresh(false); onChange({ ...c, phone: c.phone ? fmtPhone(c.phone) : '' }); } };
   const cur = !fresh && v.key ? v.key : '';
   const typing = fresh || (!!v.name && !v.key) || !list.length;
   return (
@@ -52,6 +52,7 @@ export function ContactPick({ customerId, value, onChange, errs, needPhone, askR
         <PhoneInput value={v.phone || ''} onChange={(p) => onChange({ ...v, phone: p, key: undefined })} invalid={errs && needPhone && !(v.phone?.trim() && phoneValid(v.phone))} style={{ width: 170 }} placeholder={needPhone ? '电话' : '电话（可不填）'} />
       </div>}
       {!typing && v.name && <div className="small muted">{v.name} · {contactRole(v.role)}{v.phone ? ` · ${v.phone}` : ' · 没留电话'}</div>}
+      {!typing && v.phone && !phoneValid(v.phone) && <div className="small" style={{ color: 'var(--red)' }}>这个人档案里的电话位数不对（{v.phone}）：选「＋ 新的人」重填，或去客户档案改</div>}
     </div>);
 }
 

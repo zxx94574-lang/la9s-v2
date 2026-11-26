@@ -64,7 +64,7 @@ export function RepBanner({ customerId, deal }) {
       <span className="grow" />
       {!released && deal && data.appeal?.status !== 'open' && role !== 'admin' && <button type="button" className="btn sm" onClick={() => setAppeal(true)}>客户说已经付了 → 申诉</button>}
       {!released && deal && role === 'admin' && <button type="button" className="btn sm primary" onClick={() => setRel(true)}>放行这张单</button>}
-      {rel && <ReleaseModal deal={deal} debt={data.rows.reduce((a, r) => a + Number(r.due), 0)} onClose={() => setRel(false)} onDone={() => { setRel(false); refresh(); }} role={role} toast={toast} />}
+      {rel && <ReleaseModal deal={deal} debt={data.rows.reduce((a, r) => a + Number(r.due), 0)} who={`销售员 ${data.rep} 名下其他客户还欠 ${money(data.rows.reduce((a, r) => a + Number(r.due), 0))} XOF（${custs.map((c) => c.customer_name).slice(0, 3).join('、')}）；这个客户自己没欠`} onClose={() => setRel(false)} onDone={() => { setRel(false); refresh(); }} role={role} toast={toast} />}
       {appeal && (
         <Modal title={`申诉：${deal.biz_no} 客户说已经付了`} onClose={() => setAppeal(false)}
           footer={<><button type="button" className="btn" onClick={() => setAppeal(false)}>取消</button><span className="grow" /><button type="button" className="btn primary" disabled={!note.trim() || !proof} onClick={send}>提交申诉</button></>}>
@@ -78,14 +78,28 @@ export function RepBanner({ customerId, deal }) {
   );
 }
 
-function ReleaseModal({ deal, debt, onClose, onDone, role, toast }) {
+// 525: 出库这一步要提前知道会不会被销售员欠款拦 —— 按钮旁直接写「还差：中方放行」, 不让人填完才报错
+export function useRepBlock(deal) {
+  const { org, role } = useApp();
+  const { data } = useData(async () => {
+    if (!deal?.customer_id || deal.debt_released_at) return null;
+    const [[c], [rule]] = await Promise.all([q(`select cu.owner_employee_id, coalesce(e.short_name, e.full_name) as rep from app.customers cu left join app.employees e on e.id = cu.owner_employee_id where cu.id = $1`, [deal.customer_id]),
+      q(`select value from app.org_settings where org_id = $1 and key = 'rep_debt_rules'`, [org])]);
+    if (!c?.owner_employee_id || rule?.value?.on === false) return null;
+    const rows = await call(role, `select * from app.rep_debt($1)`, [c.owner_employee_id]).catch(() => []);
+    return rows.length ? { rep: c.rep, n: new Set(rows.map((r) => r.customer_id)).size, due: rows.reduce((a, r) => a + Number(r.due), 0) } : null;
+  }, [deal?.id, deal?.debt_released_at, org]);
+  return data;
+}
+
+function ReleaseModal({ deal, debt, who, onClose, onDone, role, toast }) {
   const [note, setNote] = useState('答应这次付清');
   const go = async () => { try { await call(role, `select app.release_debt_block($1,$2)`, [deal.id, note.trim()]); toast('已放行，这张单可以出库'); onDone(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
     <Modal title={`放行 ${deal.biz_no}`} onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>不放行</button><span className="grow" /><button type="button" className="btn primary" disabled={!note.trim()} onClick={go}>确认放行</button></>}>
       <div className="stack">
-        <div className="hint">客户还欠 {money(debt)} XOF。放行后这张单可以出库，原因记进操作记录。</div>
+        <div className="hint">{who || `客户还欠 ${money(debt)} XOF`}。放行后这张单可以出库，原因记进操作记录。</div>
         <div className="chips">{['答应这次付清', '已付款待到账', '老客户信得过', '先发一部分'].map((x) => <button type="button" key={x} className={`chip ${note === x ? 'on' : ''}`} onClick={() => setNote(x)}>{x}</button>)}</div>
         <input className="in" value={note} onChange={(e) => setNote(e.target.value)} placeholder="放行原因（必填）" />
       </div>

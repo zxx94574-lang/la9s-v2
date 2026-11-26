@@ -5,7 +5,7 @@ import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Modal, PhotoInput, Pill, Info, Assumed, FRow } from './ui.jsx';
 import { OptChoice, OptNote, OptGear, useOptList, optName } from './Opts.jsx';
-import PeoplePick from './PeoplePick.jsx';
+import PeoplePick, { staffOrder } from './PeoplePick.jsx';
 import LineEntry, { finalizeLines } from './LineEntry.jsx';
 import { DocActions, DocSheet, FitDoc } from './Doc.jsx';
 import { EmpLink, ModelLink, DealLink } from './Archives.jsx';
@@ -69,10 +69,10 @@ export function AddonStartModal({ deal, catalog, categories, onClose, onDone }) 
 
 function Assign({ addon, employees }) {
   const { role, toast, refresh } = useApp();
-  const [open, setOpen] = useState(false); const [emp, setEmp] = useState('');
+  const [open, setOpen] = useState(false); const [emp, setEmp] = useState(''); const [tried, setTried] = useState(false);
   const canAssign = hasAny(role, ['admin', 'manager']);
   const go = async () => {
-    if (!emp) return toast('选一个人去找货', 'err');
+    setTried(true); if (!emp) return toast('选一个人去找货', 'err');
     try { await call(role, `select app.assign_addon($1,$2)`, [addon.id, emp]); toast(addon.picker_employee_id ? '已改派' : '已派人，他的待办里会出现这一批'); setOpen(false); refresh(); } catch (e) { toast(friendlyError(e), 'err'); }
   };
   return (
@@ -83,8 +83,8 @@ function Assign({ addon, employees }) {
       {canAssign && <button type="button" className={`btn ${addon.picker_employee_id ? 'sm' : 'primary'}`} onClick={() => { setEmp(addon.picker_employee_id || ''); setOpen(true); }}>{addon.picker_employee_id ? '改派' : '派人去找'}</button>}
       {open && <Modal title={`派人找追加的货 · 3.${addon.no}`} onClose={() => setOpen(false)} footer={<><button type="button" className="btn" onClick={() => setOpen(false)}>取消</button><button type="button" className="btn primary" onClick={go}>确定</button></>}>
         <div className="stack" style={{ minHeight: 260 }}>
-          <div className="field req"><label>谁去找</label><OptChoice optKey="emp_list" title="员工名单" data value={emp} onChange={setEmp} flat={false} placeholder="选员工…" err={!emp} width={240}
-            options={(employees || []).filter((e) => e.active !== false).map((e) => [e.id, e.short_name, [e.emp_no, e.department].filter(Boolean).join(' · ')])} /></div>
+          <div className="field req"><label>谁去找</label><OptChoice optKey="emp_list" title="员工名单" data value={emp} onChange={setEmp} flat={false} placeholder="选员工…" err={tried && !emp} width={240}
+            options={staffOrder((employees || []).filter((e) => e.active !== false && e.status !== 'left')).map((e) => [e.id, e.short_name, [e.emp_no, e.department].filter(Boolean).join(' · ')])} /></div>
         </div>
       </Modal>}
     </div>);

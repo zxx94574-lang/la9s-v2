@@ -7,6 +7,7 @@ import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 // a read-only record once it has been pushed (待改 13). Every button calls exactly one SQL business function.
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import PeoplePick from '../components/PeoplePick.jsx';
+import { useRepBlock } from '../components/DebtBanner.jsx';
 import { fmtPhone, telHref } from '../lib/phone.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Grid from '../components/Grid.jsx';
@@ -16,7 +17,7 @@ import { DocActions, DocSheet, BalanceCopy, BalancePreview, FitDoc } from '../co
 import { BlActions } from '../components/Bl.jsx';
 import { flagAnomaly } from '../components/IssueReport.jsx';
 import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus , ReceiptDone } from '../components/ReceiptForm.jsx';
-import { Modal, Shared, tierOpt, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip, Choice, Assumed, MoneyIn, AcctImpact, useKeep, clearKeep } from '../components/ui.jsx';
+import { Modal, Shared, tierOpt, Pill, CopyButton, copyToClipboard, PhotoInput, Thumb, OptionNote, DatePicker, BigNum, useApp, useData, useHistory, UndoBar, Info, FRow , PhoneInput, phoneValid, Bang, lowTip, Choice, Assumed, MoneyIn, AcctImpact, useKeep, clearKeep, DateTimeIn } from '../components/ui.jsx';
 import { ImpactFor } from '../components/Impact.jsx';
 import PickTicks, { AssignBar } from '../components/PickTicks.jsx';
 import { ContactPick, useContacts, rememberContact, contactRole } from '../components/Contacts.jsx';
@@ -223,6 +224,13 @@ export function ConfirmBlock({ deal, events, act, role, lines }) {
               <FRow label="结果"><OptNote optKey="note_hotline" title="确认结果" options={NOTE_OPTIONS.hotline} value={note} onChange={setNote} /></FRow>
               <FRow label="截图"><PhotoInput value={proof} onChange={setProof} label="WhatsApp 截图（可选）" /></FRow>
             </div>
+            {(() => {   // 525: 可售不够 → 确认前提醒热线跟客户说清楚只能先给多少 (以前确认 200、系统只预占 100, 到销售单才看出来)
+              const sh = (lines || []).filter((l) => l.product_id && N(l.qty_req) > N(l.qty_available));
+              if (!sh.length) return null;
+              const want = (lines || []).filter((l) => l.product_id).reduce((a, l) => a + N(l.qty_req), 0);
+              const can2 = (lines || []).filter((l) => l.product_id).reduce((a, l) => a + Math.min(N(l.qty_req), Math.max(0, N(l.qty_available))), 0);
+              return <div className="banner warn small" style={{ margin: '8px 0' }}>⚠ 现在可售不够：客户要 <b>{qty(want)}</b> 片，确认后只能先预占 <b>{qty(can2)}</b> 片（{sh.slice(0, 4).map((l) => `${l.model} 缺 ${qty(N(l.qty_req) - Math.max(0, N(l.qty_available)))}`).join('、')}{sh.length > 4 ? '…' : ''}）。先跟客户说清楚只能先给多少；缺的会自动记进「未满足需求」，到货再问他。</div>;
+            })()}
             <div className="actbar">
               <button type="button" className="btn" title="客户现在忙、没法确认：单子留在这一步、进待办，提醒照旧" onClick={() => act(`已记下：${deal.customer_name} 这张单稍后再联系（30 分钟后提醒）`, `select app.hotline_busy($1,$2)`, [deal.id, note || null]).then(() => nav('todo'), () => {})}>客户现在忙，稍后再联系</button>
               <button type="button" className="btn primary lg" onClick={go}>{when === 'today' ? '确认 → 下推找货' : '确认 →'}</button>
@@ -829,6 +837,7 @@ export function ShipPanel(props) {
   );
 }
 function ShipForm({ deal, lines, shipments, act }) {
+  const repBlock = useRepBlock(deal);   // 525: 会被销售员欠款拦就先写出来, 不等填完才报错
   const { toast, role, refresh } = useApp();
   const [date, setDate] = useState(today());
   const [time, setTime] = useState(nowTime());
@@ -886,7 +895,7 @@ function ShipForm({ deal, lines, shipments, act }) {
       .then(() => call(role, `select app.record_ship_freight((select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1), $2, $3, $4) as mv`, [deal.id, bearer, bearer === 'customer' ? null : N(freight), proof])
         .then((r) => { if (bearer !== 'customer' && r?.[0]?.mv) window.dispatchEvent(new CustomEvent('la9s:flow', { detail: { text: `运费 ${money(N(freight))} XOF 已记一笔支出流水（本地物流费 · Wave-XOF）`, to: 'cash' } })); refresh(); }, (e) => toast('运费没记上：' + (e?.message || e), 'err')))
       .then(() => (partial && preason.trim() ? call(role, `select app.set_partial_reason((select id from app.shipments where deal_id = $1 and voided_at is null order by created_at desc limit 1), $2)`, [deal.id, preason.trim()]).then(() => refresh(), () => {}) : null))
-      .then(() => setSummary(null), () => {});
+      .then(() => setSummary(null), () => setSummary(null));   // 525: 报错也关掉确认框, 错误看提示条
   };
   return (
     <div className="card">
@@ -911,7 +920,7 @@ function ShipForm({ deal, lines, shipments, act }) {
                 <OptChoice optKey="ship_places" title="收货地址" value={place} onChange={setPlace} options={placeBase} flat={false} placeholder="选地址…" err={errs && !placeText} />
                 {place === OTHER_PLACE && <input className={`in ${errs && !placeNote.trim() ? 'err-in' : ''}`} style={{ marginTop: 6, width: 220 }} value={placeNote} onChange={(e) => setPlaceNote(e.target.value)} placeholder="写清楚送到哪" />}</div>
               <div className="field req grow"><label>联系人（收货的人）</label>
-                <ContactPick customerId={deal.customer_id} value={contact} onChange={setContact} errs={errs} /></div>
+                <ContactPick customerId={deal.customer_id} value={contact} onChange={setContact} errs={errs} newRole="driver" /></div>
             </div></div>
           <div className="fgroup"><div className="fgroup-t">③ 运费</div>
             <div className="row" style={{ gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -936,7 +945,8 @@ function ShipForm({ deal, lines, shipments, act }) {
       </div>
       <Grid id="deal-ship" slimTools table="deal_lines" columns={cols} rows={left} foot={(rows) => ({ code: '合计', model: `${rows.length} 个型号`, ship_now: `${qty(rows.reduce((a, l) => a + now(l), 0))} 件` })} />
       <div className="actionbar"><span className="hint">本次发 <b>{qty(thisTime)}</b> 件 · 订单共 {qty(total)} 件 · 剩 <b>{qty(total - shippedBefore - thisTime)}</b> 件下次发</span>
-        <button type="button" className="btn primary lg" onClick={check}>确认出库 →</button></div>
+        {repBlock && <span className="why" style={{ color: 'var(--red)' }}>⛔ 还差：中方放行（销售员 {repBlock.rep} 名下 {repBlock.n} 个客户欠 {money(repBlock.due)}，上面红条里放行）</span>}
+        <button type="button" className="btn primary lg" onClick={() => (repBlock ? toast(`⛔ 销售员 ${repBlock.rep} 名下还有欠款没收回，要中方先在上面红条里放行这张单`, 'err') : check())}>确认出库 →</button></div>
       {askPartial && (
         <Modal title="改为分批出库？" onClose={() => setAskPartial(false)}
           footer={<><button type="button" className="btn" onClick={() => setAskPartial(false)}>不，整单出库</button><button type="button" className="btn primary" onClick={() => { setPartial(true); setAskPartial(false); }}>是，本次只发一部分</button></>}>
@@ -1223,7 +1233,7 @@ export function ReturnPanel({ deal, lines, returns, act, role }) {
           <div className="stack">
             <div className="card card-b" style={{ background: 'var(--amber-bg)' }}><b>① 收到退货</b> <span className="small muted">收到货才做退货单；没收到不做</span>
               <div className="row" style={{ gap: 14, marginTop: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                <div className="field req"><label>收到退货的时间</label><input className="in" type="datetime-local" value={form.at} onChange={(e) => setForm({ ...form, at: e.target.value })} /></div>
+                <div className="field req"><label>收到退货的时间</label><DateTimeIn value={form.at} onChange={(v) => setForm({ ...form, at: v })} /></div>
                 <div className="field req"><label>实物照片（不是盒子；少量要看得清几片，多量拍整体）</label><PhotoInput value={form.photo} onChange={(v) => setForm({ ...form, photo: v })} invalid={form.errs && !form.photo} label="拍退回的货" /></div>
               </div></div>
             <b>② 退的什么、为什么</b>
@@ -1594,7 +1604,7 @@ function SignRow({ s, act, role, discs = [], lines = [], deal }) {
       {!s.customer_received_at && (can(role, 'mark_received') ? (
         <>
           <div className="fgrid" style={{ marginTop: 8 }}>
-            <FRow label="签收时间" req><input className="in" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} style={{ width: 210 }} /></FRow>
+            <FRow label="签收时间" req><DateTimeIn value={at} onChange={setAt} /></FRow>
             <FRow label="跟谁确认的" req><div className="stack" style={{ gap: 6, flex: 1, minWidth: 0 }}>
               <OptChoice optKey="sign_roles" title="跟谁确认的（身份）" value={who.role} onChange={setRoleOf} options={SIGN_ROLES} flat={false} placeholder="选身份：老板 / 店员 / 销售员…" err={errs && !who.role} />
               {who.role && <ContactPick customerId={deal?.customer_id} value={who} onChange={(c) => setWho({ ...c, role: c.role || who.role })} errs={errs} askRole={false} placeholder="选是哪一位（可以搜名字 / 电话）" />}

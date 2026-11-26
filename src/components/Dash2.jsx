@@ -5,14 +5,14 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Modal, TierPill } from './ui.jsx';
+import { useApp, useData, Modal, TierPill, presetPeriod } from './ui.jsx';
 import { CustLink, EmpLink, DealLink, ModelLink } from './Archives.jsx';
 import { useMarginRules } from './Margin.jsx';
 import { usePublicHeld } from './PublicHeld.jsx';
 import { useRemits, useRemitRules, remitFlag, remitCols } from './Remit.jsx';
 import { RuleGear, useRuleValues, ruleNum, useBudget } from './Rules.jsx';
 import Grid from './Grid.jsx';
-import { Fold, total, pctTone, Pct, ShareBar, MixBar } from './DashBlocks.jsx';
+import { Fold, total, pctTone, Pct, ShareBar } from './DashBlocks.jsx';
 import PLTable from './PLTable.jsx';
 import { money, qty, dDate, today } from '../lib/format.js';
 import { Spark, weekly } from './MonthReport.jsx';
@@ -131,7 +131,6 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
   const s = useSec('sale', 'CNY'); const m = useMemo(() => ({ target: s.cur }), [s.cur]);
   const rv = useRuleValues(DASH_RULES);
   const [o0, tg0] = useSlot('s0'); const [o1, tg1] = useSlot('s1');
-  const [ovTab, setOvTab] = useLs('la9s.d2.sale.ovtab', 'biz');
   const [dim, setDim] = useLs('la9s.d2.sale.dim', 'category');
   const [exp, setExp] = useState({});
   const [missOpen, setMissOpen] = useState(false);
@@ -144,45 +143,55 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
     const avg = (pick) => (kind) => { const xs = ws.map((w) => pick(total(kind === 'all' ? w : w.filter((r) => (kind === 'fob') === isFob(r)), m))); return xs.some((x) => x) ? xs.reduce((a, b) => a + b, 0) / 3 : null; };
     return { rev: avg((t) => t.rev), qty: avg((t) => t.qty), profit: avg((t) => t.profit) };
   }, [all, from, to, m]);
-  // 日常开支 (506): 不进毛利, 另算净利. 订单运费 (本地物流费 · 运费 xxx) 已经在毛利里扣过, 这里不重复算
-  // 上期 = 前 3 期里最近的那一期 (利润表「上期」列)
-  const [pf, pt] = useMemo(() => baseWindows(from, to)[0], [from, to]);
-  const Tp = useMemo(() => total(all.filter((r) => inR(r, pf, pt)), m), [all, pf, pt, m]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const { data: exps0 } = useData(() => q(`select coalesce(m.category, '没选科目') as category, a.currency, (m.on_date >= $2::date) as cur, sum(m.amount) as amount, count(*) as n
+  // 日常开支 (506 → 523 Frank 11-26 16:22): 资金流水里记的支出都算 (订单运费、日常维护、办事处…), 退给客户的钱不算; 有工资表用工资表 (实发 + 社保), 资金账户里的工资不重复算.
+  // 运费只算一次: 看板的成本已经不含我们出的运费 (0104 dash_rows.freight), 这里算进开支.
+  // 「较平均」= 跟前 3 期平均比 (和卡片上的 ▲ 同一个基数), 所以开支也要拿前 3 期的.
+  const wins = useMemo(() => baseWindows(from, to), [from, to]);
+  const w0 = wins.reduce((a, [x]) => (x < a ? x : a), from);
+  const { data: mv } = useData(() => q(`select m.on_date::text as d, coalesce(m.category, '没选科目') as category, a.currency, m.amount
     from app.cash_moves m join app.cash_accounts a on a.id = m.account_id
-    where m.org_id = $1 and m.kind = 'expense' and m.status in ('approved', 'confirmed') and ((m.on_date >= $2::date and m.on_date <= $3::date) or (m.on_date >= $4::date and m.on_date <= $5::date))
-      and not (coalesce(m.category, '') = '本地物流费' and coalesce(m.note, '') like '运费 %')
-      and m.receipt_id is null and coalesce(m.category, '') not like '%退款%'
-    group by 1, 2, 3`, [org, from, to, pf, pt]).catch(() => []), [org, from, to, pf, pt, tick]);
-  const exps = useMemo(() => (exps0 || []).filter((e) => e.cur), [exps0]);
-  const { data: payP } = useData(() => q(`select coalesce(sum(coalesce(p.net, 0) + coalesce(p.cnps, 0)), 0) as v, count(*) as n
-    from app.payroll p where p.org_id = $1 and p.month >= date_trunc('month', $2::date)::date and p.month <= $3::date`, [org, pf, pt]).catch(() => []), [org, pf, pt, tick]);
-  // 工资 (公司成本 = 实发 + 社保): 这段时间里的那几个月的工资表 (草稿也算, 没建工资表的月份就没有)
-  const { data: pay } = useData(() => q(`select coalesce(sum(coalesce(p.net, 0) + coalesce(p.cnps, 0)), 0) as v, count(*) as n, count(distinct p.month) as months
-    from app.payroll p where p.org_id = $1 and p.month >= date_trunc('month', $2::date)::date and p.month <= $3::date`, [org, from, to]).catch(() => []), [org, from, to, tick]);
+    where m.org_id = $1 and m.kind = 'expense' and m.status in ('approved', 'confirmed') and m.on_date >= $2::date and m.on_date <= $3::date
+      and m.receipt_id is null and coalesce(m.category, '') not like '%退款%'`, [org, w0, to]).catch(() => []), [org, w0, to, tick]);
+  const { data: payM } = useData(() => q(`select p.month::text as mon, coalesce(sum(coalesce(p.net, 0) + coalesce(p.cnps, 0)), 0) as v, count(*) as n
+    from app.payroll p where p.org_id = $1 and p.month >= date_trunc('month', $2::date)::date and p.month <= $3::date group by 1`, [org, w0, to]).catch(() => []), [org, w0, to, tick]);
   const { data: psd } = useData(() => q(`select rmb_per_xof, xof_per_usd from app.price_settings where org_id = $1`, [org]), [org, tick]);
   const ps = psd?.[0];
   const conv = (xof) => (s.cur === 'XOF' ? xof : s.cur === 'CNY' ? xof * N(ps?.rmb_per_xof) : N(ps?.xof_per_usd) ? xof / N(ps.xof_per_usd) : 0);
-  const expRows = useMemo(() => { const by = {}; for (const e of exps || []) { const x = by[e.category] || (by[e.category] = { id: e.category, name: e.category, v: 0, n: 0 }); x.v += conv(toXof(N(e.amount), e.currency, ps)); x.n += N(e.n); } return Object.values(by).sort((a, b) => b.v - a.v); }, [exps, ps, s.cur]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const payV = conv(N(pay?.[0]?.v)); const hasPay = N(pay?.[0]?.n) > 0;
-  // 有工资表就用工资表, 资金账户里记的「工资」支出不重复算
-  const expShown = hasPay ? [{ id: '__pay', name: `工资（工资表 ${N(pay[0].months)} 个月，公司成本）`, v: payV, n: N(pay[0].n) }, ...expRows.filter((e) => !/工资|薪|salaire|CNPS|社保/i.test(e.name))] : expRows;
-  const expT = expShown.reduce((a, e) => a + e.v, 0);
-  // 上期开支: 同样的口径 (有工资表用工资表, 资金账户里的工资不重复算), 按科目对上本期每一行
-  const prevBy = useMemo(() => { const by = {}; for (const e of exps0 || []) { if (e.cur) continue; by[e.category] = (by[e.category] || 0) + conv(toXof(N(e.amount), e.currency, ps)); } return by; }, [exps0, ps, s.cur]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const payPV = conv(N(payP?.[0]?.v)); const hasPayP = N(payP?.[0]?.n) > 0;
   const isPayCat = (k) => /工资|薪|salaire|CNPS|社保/i.test(k);
-  const expPrevT = Object.entries(prevBy).filter(([k]) => !(hasPayP && isPayCat(k))).reduce((a, [, v]) => a + v, 0) + (hasPayP ? payPV : 0);
-  const plExps = expShown.map((e) => ({ name: e.name, v: e.v, prev: e.id === '__pay' ? (hasPayP ? payPV : null) : (prevBy[e.id] ?? null) }));
+  const expOf = useCallback((a, b) => {
+    const by = {};
+    for (const e of mv || []) { if (e.d < a || e.d > b) continue; const x = by[e.category] || (by[e.category] = { id: e.category, name: e.category, v: 0, n: 0 }); x.v += conv(toXof(N(e.amount), e.currency, ps)); x.n += 1; }
+    const pm = (payM || []).filter((x) => x.mon >= `${a.slice(0, 7)}-01` && x.mon <= b);
+    const pv = conv(pm.reduce((t, x) => t + N(x.v), 0)); const hasPay = pm.some((x) => N(x.n) > 0);
+    let list = Object.values(by).sort((x, y) => y.v - x.v);
+    if (hasPay) list = [{ id: '__pay', name: `工资（工资表 ${pm.length} 个月，实发 + 社保）`, v: pv, n: pm.reduce((t, x) => t + N(x.n), 0) }, ...list.filter((e) => !isPayCat(e.name))];
+    return { list, T: list.reduce((t, e) => t + e.v, 0), hasPay };
+  }, [mv, payM, ps, s.cur]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const E = useMemo(() => expOf(from, to), [expOf, from, to]);
+  const expShown = E.list; const expT = E.T; const hasPay = E.hasPay;
+  // 窗口名: 整月 → 「10 月」, 其他 → 「10-01~10-26」
+  const wName = (a, b) => (a.slice(8) === '01' && a.slice(0, 7) === b.slice(0, 7) ? `${Number(a.slice(5, 7))} 月` : `${a.slice(5)}~${b.slice(5)}`);
+  const cmp = useMemo(() => {
+    const per = wins.map(([a, b]) => { const t = total(all.filter((r) => inR(r, a, b)), m); const e = expOf(a, b).T; return { name: wName(a, b), rev: t.rev, qty: t.qty, cost: t.cost, gp: t.profit, gpPct: t.pct, exp: e, net: t.profit - e, netPct: t.known ? (t.profit - e) / t.known * 100 : null }; });
+    if (!per.some((x) => x.rev || x.exp)) return null;
+    const keys = ['rev', 'qty', 'cost', 'gp', 'exp', 'net']; const base = {}; const parts = {};
+    for (const k of keys) { base[k] = per.reduce((t, x) => t + x[k], 0) / per.length; parts[k] = per.map((x) => [x.name, x[k]]); }
+    for (const k of ['gpPct', 'netPct']) { const xs = per.filter((x) => x[k] != null); base[k] = xs.length ? xs.reduce((t, x) => t + x[k], 0) / xs.length : null; parts[k] = per.map((x) => [x.name, x[k]]); }
+    return { label: '较平均', baseName: '前 3 期平均', base, parts };
+  }, [all, wins, m, expOf]);   // eslint-disable-line react-hooks/exhaustive-deps
   const { budget } = useBudget(from.slice(0, 7)); const inMonth = from.slice(8) === '01' && from.slice(0, 7) === to.slice(0, 7);
   const revCny = useMemo(() => (budget > 0 && inMonth ? total(rows, { target: 'CNY' }).rev : 0), [rows, budget, inMonth]);
   const miss = [...T.all.missModels.values()].sort((a, b) => b.qty - a.qty);
   useEffect(() => { onAlert?.('sale', T.all.profit < 0 ? [{ tone: 'red', text: `这段时间整体亏钱 ${s.f(-T.all.profit)} ${s.cur}`, go: 'margin' }] : []); }, [T.all.profit, s.cur, s.short]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  const goOrders = () => { presetPeriod('orders', 'custom', [from, to]); go('orders'); };
+  const goFob = () => go('fob');
+  const goMargin = () => { presetPeriod('margin', 'custom', [from, to]); go('margin'); };
+  const goCash = () => { try { sessionStorage.setItem('la9s.cash.kind', 'expense'); } catch { /* 没有也行 */ } presetPeriod('cash', 'custom', [from, to]); go('cash'); };
   const cells = (t, kind, main) => (<>
     <Cell label="销售额" main={main} cur={main ? s.cur : null} onClick={() => go('margin')} sub={<Cmp now={t.rev} base={base.rev(kind)} f={s.f} />}>{s.f(t.rev)}</Cell>
     <Cell label="销量" unit="片" onClick={() => go('margin')} sub={main && <Cmp now={t.qty} base={base.qty(kind)} f={qty} />}>{qty(t.qty)}</Cell>
-    <Cell label="利润" tone={t.profit < 0 ? 'num-red' : ''} tip="利润 = 销售额 − 货的到岸成本（退货、我们出的运费和手续费已经扣掉）。日常开支不在里面，看 ☰ 明细的「利润表」。" onClick={() => go('margin')} sub={main && <Cmp now={t.profit} base={base.profit(kind)} f={s.f} />}>{s.f(t.profit)}</Cell>
+    <Cell label="利润" tone={t.profit < 0 ? 'num-red' : ''} tip="利润 = 销售额 − 货的到岸成本（退货、收款手续费已经扣掉）。我们出的运费和其他支出都算日常开支，看 ☰ 明细的「净利」。" onClick={() => go('margin')} sub={main && <Cmp now={t.profit} base={base.profit(kind)} f={s.f} />}>{s.f(t.profit)}</Cell>
     <Cell label="毛利率" block={pctTone(t.pct, lowPct)} tip={`毛利率 = 利润 ÷ 销售额。负数红，低于 ${lowPct}% 黄，其余绿。`} onClick={() => go('margin')}>{t.pct == null ? '—' : `${t.pct.toFixed(1)}%`}</Cell></>);
 
   // 明细: 本地 种类 → 档位 → 型号 (或 档位 → 种类 → 型号); FOB 客户 → 订单 → 型号
@@ -191,6 +200,26 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
   const list1 = useMemo(() => rows.filter((r) => (kind1 === 'fob') === isFob(r)), [rows, kind1]);
   const t1 = kind1 === 'fob' ? T.fob : T.loc;
   const table = useMemo(() => (o1 ? treeRows(list1, levels, exp, m) : []), [o1, list1, exp, dim, m]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // 523: 两张小明细最右一列「较平均」—— 每一行 (种类 / 档位 / 客户 / 订单 / 型号) 跟自己前 3 期的平均销售额比
+  const subBase = useMemo(() => {
+    if (!o1) return null;
+    const acc = {}; const names = wins.map(([a, b]) => wName(a, b));
+    wins.forEach(([a, b], wi) => {
+      const list = all.filter((r) => inR(r, a, b) && (kind1 === 'fob') === isFob(r));
+      const walk = (rows, lvl, path) => { const lv = levels[lvl]; if (!lv) return; const by = new Map(); for (const r of rows) { const k = String(lv.key(r)); if (!by.has(k)) by.set(k, []); by.get(k).push(r); }
+        for (const [k, rs] of by) { const id = `${path}/${k}`; const x = acc[id] || (acc[id] = [0, 0, 0]); x[wi] += total(rs, m).rev; walk(rs, lvl + 1, id); } };
+      walk(list, 0, '');
+    });
+    return { acc, names };
+  }, [o1, all, wins, kind1, dim, m]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const subCmp = (r) => {
+    const x = subBase?.acc[r.id]; const avg = x ? (x[0] + x[1] + x[2]) / 3 : 0;
+    const tip = `前 3 期平均销售额：${s.f(avg)}（${(subBase?.names || []).map((n, i) => `${n} ${s.f(x ? x[i] : 0)}`).join(' · ')} 的平均）\n本期：${s.f(r.t.rev)}`;
+    if (!avg) return <span className="muted" data-tip={`${tip}\n前 3 期没卖过，没法比`}>{r.t.rev ? '新' : '—'}</span>;
+    const d = (r.t.rev - avg) / avg * 100;
+    if (Math.abs(d) < 0.5) return <span className="muted" data-tip={tip}>持平</span>;
+    return <span className={d > 0 ? 'pl-up' : 'pl-down'} data-tip={`${tip}\n算法：(本期 − 平均) ÷ 平均`}>{d > 0 ? '▲' : '▼'} {Math.abs(d) >= 999 ? '>999' : Math.abs(d).toFixed(0)}%</span>;
+  };
   const parentOf = useCallback((r) => r.parent, []);
   const nameOf = (r) => {
     const x = r.ref;
@@ -211,39 +240,24 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
     { key: 'profit', label: `利润 ${C}`, w: 130, type: 'money', sortable: false, value: (r) => r.t.profit, render: (r) => <span className={r.t.profit < 0 ? 'red-t2' : ''}>{s.f(r.t.profit)}</span> },
     { key: 'pct', label: '毛利率', w: 90, type: 'number', sortable: false, value: (r) => r.t.pct, render: (r) => <Pct p={r.t.pct} low={lowPct} /> },
     { key: 'n', label: '单', w: 60, type: 'number', sortable: false, value: (r) => r.t.n, render: (r) => r.t.n },
-  ];
-  const biz = [['本地备货', T.loc, 'var(--brand)'], ['FOB', T.fob, '#8DB4EE']].map(([name, t, color]) => ({ id: name, name, color, t }));
-  const pl = [
-    { id: 'rev', name: '销售额', v: T.all.rev, b: 1 }, { id: 'cost', name: '− 货的成本', v: -T.all.cost },
-    { id: 'gp', name: '= 毛利', v: T.all.profit, b: 1, pct: T.all.pct },
-    ...expShown.map((e) => ({ id: 'e:' + e.id, name: `− ${e.name}`, v: -e.v, n: e.n, sub: 1 })),
-    { id: 'exp', name: '− 日常开支合计', v: -expT },
-    { id: 'net', name: '= 净利', v: T.all.profit - expT, b: 1, pct: T.all.known ? (T.all.profit - expT) / T.all.known * 100 : null },
+    { key: 'cmp', label: '较平均', w: 90, sortable: false, filterable: false, value: () => '', render: subCmp },
   ];
   return (
     <div className="d2-sec">
       <DCard title="销售" sub="销售额与毛利 · 只算已经出库的" tog={<Tog s={s} />} gear={<RuleGear ids={['dash.budget', 'margin.low']} title="销售看板的规则" />} open={o0 === 'ov'} onFold={() => tg0('ov')}
         foot={<>{budget > 0 && inMonth && <span className="d2-goal" data-tip={`本月预算 ${money(budget, 'CNY')} CNY，已完成 ${money(revCny, 'CNY')} CNY`}><i><em style={{ width: `${Math.min(100, revCny / budget * 100)}%` }} /></i>预算 {Math.round(revCny / budget * 100)}%</span>}
           <span>{T.all.n} 单 · {T.all.c} 位客户</span>
-          <MixBar label="销售额占比" fmt={(v) => `${s.f(v)} ${s.cur}`} parts={[{ name: '本地', v: T.loc.rev, color: 'var(--brand)' }, { name: 'FOB', v: T.fob.rev, color: '#8DB4EE' }]} />
+          {T.all.rev > 0 && <span data-tip={`本地备货 ${s.f(T.loc.rev)} ${s.cur} · FOB ${s.f(T.fob.rev)} ${s.cur}`}>本地：{Math.round(T.loc.rev / T.all.rev * 100)}% / FOB：{Math.round(T.fob.rev / T.all.rev * 100)}%</span>}
           {T.all.miss > 0 && <button type="button" className="d2-warn" onClick={() => setMissOpen(true)} data-tip="这些货出库时没有到岸成本，销售额算了，成本和毛利没算">{qty(T.all.miss)} 片没成本</button>}</>}>
         {!rows.length ? <div className="muted small" style={{ padding: '8px 0' }}>这个时间段还没有出库</div> : <div className="d2-hero">{cells(T.all, 'all', true)}</div>}
       </DCard>
-      {o0 === 'ov' && <Detail title={ovTab === 'biz' ? '按业务' : '利润表'} right={<Seg value={ovTab} onChange={setOvTab} options={[['biz', '按业务'], ['pl', '利润表']]} />}>
-        {ovTab === 'biz' ? <Grid id="d2-ov" noTools rows={biz} columns={[
-          { key: 'name', label: '业务', w: 120, sortable: false, filterable: false, render: (r) => <span className="dk-row0"><i className="dk-dot" style={{ background: r.color }} /><b>{r.name}</b></span> },
-          { key: 'share', label: '占比', w: 140, sortable: false, filterable: false, value: (r) => (T.all.rev ? r.t.rev / T.all.rev * 100 : 0), render: (r) => <Share p={T.all.rev ? r.t.rev / T.all.rev * 100 : 0} color={r.color} /> },
-          { key: 'rev', label: `销售额 ${C}`, w: 140, type: 'money', sortable: false, value: (r) => r.t.rev, render: (r) => s.f(r.t.rev) },
-          { key: 'qty', label: '销量 片', w: 100, type: 'number', sortable: false, value: (r) => r.t.qty, render: (r) => qty(r.t.qty) },
-          { key: 'cost', label: `成本 ${C}`, w: 140, type: 'money', sortable: false, value: (r) => r.t.cost, render: (r) => s.f(r.t.cost) },
-          { key: 'profit', label: `利润 ${C}`, w: 140, type: 'money', sortable: false, value: (r) => r.t.profit, render: (r) => <span className={r.t.profit < 0 ? 'red-t2' : ''}>{s.f(r.t.profit)}</span> },
-          { key: 'pct', label: '毛利率', w: 90, type: 'number', sortable: false, value: (r) => r.t.pct, render: (r) => <Pct p={r.t.pct} low={lowPct} /> },
-          { key: 'n', label: '单', w: 70, type: 'number', sortable: false, value: (r) => r.t.n }, { key: 'c', label: '客户', w: 70, type: 'number', sortable: false, value: (r) => r.t.c },
-        ]} foot={() => ({ name: '合计', rev: s.f(T.all.rev), qty: qty(T.all.qty), cost: s.f(T.all.cost), profit: s.f(T.all.profit), pct: T.all.pct == null ? '—' : `${T.all.pct.toFixed(1)}%`, n: T.all.n, c: T.all.c })} />
-          : <PLTable cur={C} f={s.f} low={lowPct} gpPct={T.all.pct}
-            c={{ loc: { rev: T.loc.rev, cost: T.loc.cost, gp: T.loc.profit }, fob: { rev: T.fob.rev, cost: T.fob.cost, gp: T.fob.profit }, all: { rev: T.all.rev, cost: T.all.cost, gp: T.all.profit } }}
-            prev={Tp.rev || Tp.cost ? { rev: Tp.rev, cost: Tp.cost, gp: Tp.profit } : null} exps={plExps} expPrev={Tp.rev || expPrevT ? expPrevT : null}
-            note={<span data-tip="开支 = 资金账户里已批的支出（按科目）+ 工资表（实发 + 社保）。订单运费已经在毛利里扣过、退给客户的钱不算开支，都不重复算。上期 = 上一个同样长的时间段。">{hasPay ? '' : '这段时间还没建工资表，净利里没扣工资。'}开支只记在合计里（不分本地 / FOB）；只算系统里记了的，没记进来的减不掉。</span>} />}
+      {o0 === 'ov' && <Detail title="明细">
+        <PLTable cur={C} f={s.f} qtyF={qty} low={lowPct} cmp={cmp}
+          rows={{ loc: { rev: T.loc.rev, qty: T.loc.qty, cost: T.loc.cost, gp: T.loc.profit, gpPct: T.loc.pct }, fob: { rev: T.fob.rev, qty: T.fob.qty, cost: T.fob.cost, gp: T.fob.profit, gpPct: T.fob.pct },
+            all: { rev: T.all.rev, qty: T.all.qty, cost: T.all.cost, gp: T.all.profit, gpPct: T.all.pct, exp: expT, net: T.all.profit - expT, netPct: T.all.known ? (T.all.profit - expT) / T.all.known * 100 : null } }}
+          links={{ rev: { loc: goOrders, fob: goFob, all: goMargin }, qty: { loc: goOrders, fob: goFob, all: goMargin }, cost: goMargin, gp: goMargin, exp: goCash }}
+          expTip={`${expShown.length ? expShown.map((e) => `${e.name} ${s.f(e.v)}`).join('\n') : '这段时间没有记支出'}\n点开看资金流水里的支出`}
+          note={<span data-tip="日常开支 = 资金流水里这段时间记的所有支出（订单运费、日常维护、办事处…）+ 工资表（实发 + 社保）；退给客户的钱不算。运费只算一次：毛利里不再扣。">{hasPay ? '' : '这段时间还没建工资表，净利里没扣工资。'}开支只记在合计里；只算系统里记了的。</span>} />
       </Detail>}
       <div className="d2-row">
         <DCard small title="本地备货" to={['orders', '订单总览']} open={o1 === 'local'} onFold={() => { setExp({}); tg1('local'); }} foot={<span>{T.loc.n} 单 · {T.loc.c} 位客户</span>}><div className="d2-sub">{cells(T.loc, 'local', false)}</div></DCard>

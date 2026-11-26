@@ -32,12 +32,13 @@ export function toCur(r, m) {
   const t = m.target; const cur = r.currency || 'XOF'; const k = N(r.k) || 1;
   const lock = (xof) => (t === 'XOF' ? xof : t === 'CNY' ? xof * N(r.rmb_per_xof) : N(r.xof_per_usd) ? xof / N(r.xof_per_usd) : 0);
   let rev, cost;
+  const c0 = N(r.cost) - N(r.freight);   // 0104 / 523: 看板的成本 = 货的成本; 我们出的运费 (freight, XOF) 算进日常开支, 不在毛利里扣
   if (m.rates) {
     rev = cur === t ? N(r.revenue) / k : N(r.revenue) / k * N(m.rates[cur]);
-    cost = t === 'XOF' ? N(r.cost) : N(r.cost) * N(m.rates.XOF);
+    cost = t === 'XOF' ? c0 : c0 * N(m.rates.XOF);
   } else {
     rev = cur === t ? N(r.revenue) / k : lock(N(r.revenue));
-    cost = cur === t && t !== 'XOF' ? N(r.cost) / k : lock(N(r.cost));
+    cost = cur === t && t !== 'XOF' ? c0 / k : lock(c0);
   }
   return { rev, cost: r.cost_missing ? 0 : cost, known: r.cost_missing ? 0 : rev, qty: N(r.qty), miss: r.cost_missing ? N(r.qty) : 0 };
 }

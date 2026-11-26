@@ -54,10 +54,11 @@ export default function Report() {
          from app.v_deal_due d join app.customers c on c.id = d.customer_id where d.org_id = $1 and d.currency = 'XOF' and d.due > 0 group by 1, 2, c.credit_days`, [org]),
       q(`select value from app.org_settings where org_id = $1 and key = 'report_rates'`, [org]),
       q(`select r.method::text as method, r.currency, sum(r.amount) as amount, count(*) as n from app.receipts r where r.org_id = $1 and r.received_on between $2::date and $3::date and r.voided_at is null group by 1, 2`, [org, a, b]),
-      q(`select coalesce(m.category, '没选科目') as category, a.currency, sum(m.amount) as amount from app.cash_moves m join app.cash_accounts a on a.id = m.account_id
-         where m.org_id = $1 and m.kind = 'expense' and m.status in ('approved', 'confirmed') and m.on_date between $2::date and $3::date
-           and not (coalesce(m.category, '') = '本地物流费' and coalesce(m.note, '') like '运费 %') and m.receipt_id is null and coalesce(m.category, '') not like '%退款%' group by 1, 2`, [org, a, b]).catch(() => []),
-      q(`select coalesce(sum(coalesce(p.net, 0) + coalesce(p.cnps, 0)), 0) as v, count(*) as n from app.payroll p where p.org_id = $1 and p.month = $2::date`, [org, a]).catch(() => [{ v: 0, n: 0 }]),
+      // 523: 资金流水里记的支出都算日常开支 (含订单运费); 上个月的也拿来做「较上月」
+      q(`select coalesce(m.category, '没选科目') as category, a.currency, (m.on_date >= $2::date) as cur, sum(m.amount) as amount from app.cash_moves m join app.cash_accounts a on a.id = m.account_id
+         where m.org_id = $1 and m.kind = 'expense' and m.status in ('approved', 'confirmed') and m.on_date between ($2::date - interval '1 month')::date and $3::date
+           and m.receipt_id is null and coalesce(m.category, '') not like '%退款%' group by 1, 2, 3`, [org, a, b]).catch(() => []),
+      q(`select (p.month = $2::date) as cur, coalesce(sum(coalesce(p.net, 0) + coalesce(p.cnps, 0)), 0) as v, count(*) as n from app.payroll p where p.org_id = $1 and p.month in ($2::date, ($2::date - interval '1 month')::date) group by 1`, [org, a]).catch(() => []),
       q(`select c.id, c.name, c.created_at, e.short_name as owner from app.customers c left join app.employees e on e.id = c.owner_employee_id where c.org_id = $1`, [org]).catch(() => q(`select id, name, created_at, null as owner from app.customers where org_id = $1`, [org])),
       q(`select count(*) as n, coalesce(sum(amount), 0) as amount from app.returns where org_id = $1 and requested_at::date between $2::date and $3::date`, [org, a, b]),
       q(`select count(*) filter (where status in ('done', 'closed')) as done, count(*) filter (where status in ('done', 'closed') and (due_on is null or done_at::date <= due_on)) as ontime, count(*) as n
@@ -68,7 +69,7 @@ export default function Report() {
       q(`select coalesce(sum(l.offer_qty), 0) as n from app.purchase_request_lines l join app.purchase_requests r on r.id = l.request_id where r.org_id = $1 and l.offer_qty is not null and r.status not in ('closed', 'cancelled', 'done')`, [org]).catch(() => [{ n: null }]),
       q(`select id, model from app.products where org_id = $1`, [org]),
     ]);
-    return { lay, tr, snap, ar, rates: rates[0]?.value || {}, rcpt, exps, pay: pay[0], custs, rets: rets[0], dirs: dirs[0] || {}, deals: deals[0] || {}, pendN: pend[0]?.n, model: Object.fromEntries(prods.map((p) => [p.id, p.model])) };
+    return { lay, tr, snap, ar, rates: rates[0]?.value || {}, rcpt, exps, pay, custs, rets: rets[0], dirs: dirs[0] || {}, deals: deals[0] || {}, pendN: pend[0]?.n, model: Object.fromEntries(prods.map((p) => [p.id, p.model])) };
   }, [org, role, tick, a, b]);
   const [rateIn, setRateIn] = useState(null);
   const rate = N(rateIn ?? data?.rates?.[month] ?? 0.011);
@@ -80,14 +81,14 @@ export default function Report() {
     const c = (xof) => xof * rate;
     const pick = (x, y) => all.filter((r) => { const d = ymd(r.shipped_on); return d >= x && d <= y; });
     const agg = (rows) => { const t = { q: 0, v: 0, cost: 0, pf: 0, miss: 0, loc: { q: 0, v: 0, pf: 0 }, fob: { q: 0, v: 0, pf: 0 }, deals: new Set(), cus: new Set(), loss: 0, lossV: 0 };
-      for (const r of rows) { const k = r.supply === 'fob' ? 'fob' : 'loc'; const v = c(N(r.revenue)); const pf = c(N(r.profit));
-        t.q += N(r.qty); t.v += v; t[k].q += N(r.qty); t[k].v += v; if (r.cost_missing) t.miss += N(r.qty); else { t.pf += pf; t[k].pf += pf; t.cost += c(N(r.cost)); if (N(r.profit) < 0) { t.loss += 1; t.lossV += -pf; } }
+      for (const r of rows) { const k = r.supply === 'fob' ? 'fob' : 'loc'; const v = c(N(r.revenue)); const pf = c(N(r.profit) + N(r.freight));   // 523: 运费算进开支, 毛利不再扣
+        t.q += N(r.qty); t.v += v; t[k].q += N(r.qty); t[k].v += v; if (r.cost_missing) t.miss += N(r.qty); else { t.pf += pf; t[k].pf += pf; t.cost += c(N(r.cost) - N(r.freight)); if (N(r.profit) < 0) { t.loss += 1; t.lossV += -pf; } }
         t.deals.add(r.deal_id); t.cus.add(r.customer_id); }
       return t; };
     const cur = agg(pick(a, b)); const prev = agg(pick(`${addMonth(month, -1)}-01`, lastDay(addMonth(month, -1))));
     const avg3 = [1, 2, 3].map((k) => agg(pick(`${addMonth(month, -k)}-01`, lastDay(addMonth(month, -k))))); const av = (f) => (avg3.some((x) => f(x)) ? avg3.reduce((s, x) => s + f(x), 0) / 3 : null);
     const rows = pick(a, b);
-    const groupBy = (key) => { const by = {}; for (const r of rows) { const k = key(r) || '其他'; const x = (by[k] ||= { k, q: 0, v: 0, pf: 0, cost: 0 }); x.q += N(r.qty); x.v += c(N(r.revenue)); if (!r.cost_missing) { x.pf += c(N(r.profit)); x.cost += c(N(r.cost)); } } return Object.values(by).sort((p1, p2) => p2.v - p1.v); };
+    const groupBy = (key) => { const by = {}; for (const r of rows) { const k = key(r) || '其他'; const x = (by[k] ||= { k, q: 0, v: 0, pf: 0, cost: 0 }); x.q += N(r.qty); x.v += c(N(r.revenue)); if (!r.cost_missing) { x.pf += c(N(r.profit) + N(r.freight)); x.cost += c(N(r.cost) - N(r.freight)); } } return Object.values(by).sort((p1, p2) => p2.v - p1.v); };
     const byCat = groupBy((r) => r.category); const byTier = groupBy((r) => TIER[r.tier] || r.tier);
     const owner = Object.fromEntries((data.custs || []).map((x) => [x.id, x.owner]));
     const bySales = groupBy((r) => owner[r.customer_id] || '没归属');
@@ -98,11 +99,14 @@ export default function Report() {
     const ld = Number(b.slice(8)); const cut = td < b ? td : b;
     const weeks = [[1, 8], [9, 15], [16, 22], [23, ld]].map(([x, y], i) => { const wa = `${month}-${String(x).padStart(2, '0')}`, wb = `${month}-${String(y).padStart(2, '0')}`; return { i: i + 1, x, y, started: wa <= cut, w: agg(pick(wa, wb)).v, acc: agg(pick(a, wb < cut ? wb : cut)).v }; });
     // 毛利 → 净利
-    const expBy = {}; for (const e of data.exps || []) { const xof = e.currency === 'XOF' ? N(e.amount) : e.currency === 'CNY' ? N(e.amount) / rate : N(e.amount) * 600; expBy[e.category] = (expBy[e.category] || 0) + c(xof); }
-    const hasPay = N(data.pay?.n) > 0; const payV = c(N(data.pay?.v));
-    const expList = Object.entries(expBy).filter(([k]) => !(hasPay && /工资|薪|salaire|CNPS|社保/i.test(k))).map(([k, v]) => ({ k, v })).sort((x, y) => y.v - x.v);
-    if (hasPay) expList.unshift({ k: '工资（工资表，公司成本）', v: payV });
-    const expT = expList.reduce((s, e) => s + e.v, 0);
+    const expCalc = (isCur) => {
+      const expBy = {}; for (const e of (data.exps || []).filter((x) => !!x.cur === isCur)) { const xof = e.currency === 'XOF' ? N(e.amount) : e.currency === 'CNY' ? N(e.amount) / rate : N(e.amount) * 600; expBy[e.category] = (expBy[e.category] || 0) + c(xof); }
+      const p = (data.pay || []).find((x) => !!x.cur === isCur); const hasPay = N(p?.n) > 0; const payV = c(N(p?.v));
+      const list = Object.entries(expBy).filter(([k]) => !(hasPay && /工资|薪|salaire|CNPS|社保/i.test(k))).map(([k, v]) => ({ k, v })).sort((x, y) => y.v - x.v);
+      if (hasPay) list.unshift({ k: '工资（工资表，实发 + 社保）', v: payV });
+      return { list, T: list.reduce((s, e) => s + e.v, 0) };
+    };
+    const { list: expList, T: expT } = expCalc(true); const expPrevT = expCalc(false).T;
     // 回款与应收
     const rc = { by: {}, t: 0 }; for (const x of data.rcpt || []) { const xof = x.currency === 'XOF' ? N(x.amount) : x.currency === 'CNY' ? N(x.amount) / rate : N(x.amount) * 600; const v = c(xof); rc.by[x.method] = (rc.by[x.method] || 0) + v; rc.t += v; }
     const arRows = (data.ar || []).map((x) => ({ ...x, v: c(N(x.due)), over: N(x.age) > N(x.credit) }));
@@ -122,7 +126,7 @@ export default function Report() {
     const series = (k) => data.snap.filter((x) => x.key === k).map((x) => [x.day, c(N(x.value))]);
     const monthEnd = (k) => { const p = data.snap.filter((x) => x.key === k && x.day < a); return p.length ? c(N(p[p.length - 1].value)) : null; };
     const trend = [5, 4, 3, 2, 1, 0].map((k) => { const m = addMonth(month, -k); const t = agg(pick(`${m}-01`, lastDay(m))); return { k: m.slice(2).replace('-', '/'), a: t.v, b: t.pf }; });
-    return { cur, prev, av, byCat, byTier, bySales, byCus, newCus, lost, weeks, expList, expT, rc, arRows, arT, arOver, arSeg, stockT, scrT: tot(scr), segAll: seg(local), segScr: seg(scr), o120, o21, o120s: over(scr, 120), tr, cover, slow, trend,
+    return { cur, prev, av, expPrevT, byCat, byTier, bySales, byCus, newCus, lost, weeks, expList, expT, rc, arRows, arT, arOver, arSeg, stockT, scrT: tot(scr), segAll: seg(local), segScr: seg(scr), o120, o21, o120s: over(scr, 120), tr, cover, slow, trend,
       stockPrev: monthEnd('stock_cost'), stockLine: weekly(series('stock_cost')), oldLine: weekly(series('q120_cost')) };
   }, [data, all, month, rate, a, b, td]);
 
@@ -181,10 +185,13 @@ export default function Report() {
         </div></section>
 
         <section className="card rp-sec2"><div className="card-h"><h2>二、毛利与净利</h2></div><div className="card-b rp-grid">
-          <div className="rp-wide"><h4>利润表</h4><PLTable cur="万元" f={wan1} low={mLo} gpPct={mg}
-            c={{ loc: { rev: R.cur.loc.v, cost: R.cur.loc.v - R.cur.loc.pf, gp: R.cur.loc.pf }, fob: { rev: R.cur.fob.v, cost: R.cur.fob.v - R.cur.fob.pf, gp: R.cur.fob.pf }, all: { rev: R.cur.v, cost: R.cur.cost, gp: R.cur.pf } }}
-            prev={R.prev.v ? { rev: R.prev.v, cost: R.prev.cost, gp: R.prev.pf } : null} exps={R.expList.map((e) => ({ name: e.k, v: e.v }))}
-            note="上期 = 上个月；开支只记在合计里，上期开支没算。" /></div>
+          <div className="rp-wide"><h4>利润表</h4><PLTable cur="万元" f={wan1} qtyF={(v) => qty(v)} low={mLo}
+            rows={{ loc: { rev: R.cur.loc.v, qty: R.cur.loc.q, cost: R.cur.loc.v - R.cur.loc.pf, gp: R.cur.loc.pf, gpPct: R.cur.loc.v ? R.cur.loc.pf / R.cur.loc.v * 100 : null },
+              fob: { rev: R.cur.fob.v, qty: R.cur.fob.q, cost: R.cur.fob.v - R.cur.fob.pf, gp: R.cur.fob.pf, gpPct: R.cur.fob.v ? R.cur.fob.pf / R.cur.fob.v * 100 : null },
+              all: { rev: R.cur.v, qty: R.cur.q, cost: R.cur.cost, gp: R.cur.pf, gpPct: mg, exp: R.expT, net: R.cur.pf - R.expT, netPct: R.cur.v ? (R.cur.pf - R.expT) / R.cur.v * 100 : null } }}
+            cmp={R.prev.v || R.expPrevT ? { label: '较上月', baseName: '上月', base: { rev: R.prev.v, qty: R.prev.q, cost: R.prev.cost, gp: R.prev.pf, gpPct: R.prev.v ? R.prev.pf / R.prev.v * 100 : null, exp: R.expPrevT, net: R.prev.pf - R.expPrevT, netPct: R.prev.v ? (R.prev.pf - R.expPrevT) / R.prev.v * 100 : null } } : null}
+            expTip={R.expList.length ? R.expList.map((e) => `${e.k} ${wan1(e.v)}`).join('\n') : '这个月没有记支出'}
+            note="日常开支 = 资金流水里记的所有支出（含订单运费）+ 工资表；退给客户的钱不算。" /></div>
           <div><h4>要注意</h4><ul className="rp-warn">
             {R.cur.loss > 0 && <li className="red-t2">{R.cur.loss} 行卖亏了，共亏 {wan1(R.cur.lossV)} 万（订单总览 → 亏损诊断）</li>}
             {R.cur.miss > 0 && <li>{qty(R.cur.miss)} 片没有成本，没算进毛利</li>}

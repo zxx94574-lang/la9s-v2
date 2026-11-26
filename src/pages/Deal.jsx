@@ -104,8 +104,10 @@ export default function Deal({ id }) {
   const allDone = reached >= LAST_STEP;
   // 212: 下一步换了岗位 (签收 → 收款 是财务的事; 出库 → 签收 是热线的事) 就停在自己刚做完的那一步, 不自动跳过去
   let defKey = cancelled ? 'quote' : allDone ? 'pay' : STEP_KEYS[current];
-  const STEP_PERM = { sign: 'mark_received', pay: 'receipt' };
-  for (let i = STEP_KEYS.indexOf(defKey); i > 0 && STEP_PERM[STEP_KEYS[i]] && !can(role, STEP_PERM[STEP_KEYS[i]]); i -= 1) defKey = STEP_KEYS[i - 1];
+  // 525 (11-26 跑单): 签收 · 对账这一步财务也要做 (和客户对账、发 Balance) → 财务打开也停在这一步, 不退回出库
+  const STEP_PERM = { sign: ['mark_received', 'receipt'], pay: ['receipt'] };
+  const okStep = (k) => !STEP_PERM[k] || STEP_PERM[k].some((p) => can(role, p));
+  for (let i = STEP_KEYS.indexOf(defKey); i > 0 && !okStep(STEP_KEYS[i]); i -= 1) defKey = STEP_KEYS[i - 1];
   // Frank 11-11 16:31: 签收完 (不管收没收款) 谁来看都停在「签收 · 对账」: 上面显示已签收, 下面接着和客户对账; 收款是财务在收款页做的, 要看点流程条「收款」
   if (defKey === 'pay' && !cancelled && live.length) defKey = 'sign';
   const curKey = view || defKey;
@@ -173,7 +175,7 @@ export default function Deal({ id }) {
         <AddonBranch deal={deal} addons={addons} curKey={curKey} setView={setView} mainLabel={STATUS[deal.status]?.label} />
         <div className="flow2-now" ref={stepsRef}>
           <Light v={dealLight(deal)} />
-          <span>卡在：<b>{stuckOf(deal)}</b>{!cancelled && dealLight(deal) !== 'done' && nextLabel && <span className="muted"> · 下一步：{nextLabel}</span>}</span>
+          <span>{dealLight(deal) === 'done' || cancelled ? '' : '卡在：'}<b>{stuckOf(deal)}</b>{!cancelled && dealLight(deal) !== 'done' && nextLabel && <span className="muted"> · 下一步：{nextLabel}</span>}</span>
           {(overdue || dueToday) && <span className={`pill ${overdue ? 'red' : 'amber'}`}>约定 {dDate(deal.planned_ship_date)} 发货{overdue ? ' · 已过期未出库' : ' · 今天该出库'}</span>}
           <span className="grow" />
           {!atNow && !cancelled && curKey !== 'return' && !isAddon && <><span className="pill gray">回看已完成的步骤 · 只读</span><button type="button" className="btn sm" onClick={() => setView(null)}>回到当前步 →</button></>}

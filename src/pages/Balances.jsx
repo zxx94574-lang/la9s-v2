@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { PhotoInput, TierPill, Light, useApp, useData, Pill, Modal, OptionNote, BigNum, Info, Choice, MoneyIn, usePeriod, PeriodBar } from '../components/ui.jsx';
+import { PhotoInput, TierPill, Light, useApp, useData, Pill, Modal, OptionNote, BigNum, Info, Choice, MoneyIn, usePeriod, PeriodBar, DateTimeIn } from '../components/ui.jsx';
 import { ModelLink, CustLink, EmpLink, DealLink } from '../components/Archives.jsx';
 import Grid from '../components/Grid.jsx';
 import { BalanceCopy } from '../components/Doc.jsx';
@@ -181,7 +181,7 @@ function CustomerReturnModal({ customerId, name, onClose }) {
               hint: N(split[l.line_id]) > maxOf(l) ? <span className="red-t">最多可退 {maxOf(l)}</span> : null, onChange: (v) => setSplit({ ...split, [l.line_id]: v.replace(/\D/g, '') }) }) },
           ]} foot={() => ({ biz_no: '合计', rq: `${qty(sum)} 件${N(total) && sum !== N(total) ? `（总数 ${total}）` : ''}` })} />}
           <div className="row" style={{ gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div className="field req"><label>收到退货的时间</label><input className="in" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></div>
+            <div className="field req"><label>收到退货的时间</label><DateTimeIn value={at} onChange={setAt} /></div>
             <div className="field req"><label>实物照片（不是盒子）</label><PhotoInput value={photo} onChange={setPhoto} invalid={errs && !photo} label="拍退回的货" /></div>
           </div>
           <div className="field req"><label>退货类型</label><div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><OptChoice optKey="return_types" title="退货类型" bases={RETURN_BASES} value={type} onChange={(k) => setType(k)} options={Object.entries(RETURN_REASONS)} />
