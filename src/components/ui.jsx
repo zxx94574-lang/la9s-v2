@@ -417,7 +417,7 @@ export function PhotoInput({ value, onChange, label = '拍照 / 上传', camera 
         onClick={(e) => { if (!e.target.closest('button,img')) box.current.focus(); }}>
         {value ? <Thumb src={value} size={56} /> : <span className="pb-ico">⧉</span>}
         <span className="pb-text">{value ? <><b>已上传</b><span className="small muted">{proofMeta(value)?.srcLabel || '演示凭证'} · 可再粘贴替换</span></>
-          : <><b>{label}</b><span className="small muted">点这里后 ⌘/Ctrl+V 粘贴截图 · 拖进来</span></>}</span>
+          : <><b>{label}</b><span className="small muted hide-touch">点这里后 ⌘/Ctrl+V 粘贴截图 · 拖进来</span></>}</span>
         {camera && <button type="button" className="btn sm" onClick={() => cam.current.click()}>📷 拍照</button>}
         <button type="button" className="btn sm" onClick={() => pick.current.click()}>选图</button>
         {value && <button type="button" className="btn sm ghost" onClick={() => { onChange(''); setDup([]); }} title="清除">×</button>}

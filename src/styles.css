@@ -2283,3 +2283,40 @@ body { touch-action: manipulation; }
 }
 .kb-proxy { position: fixed; left: 0; top: 40%; width: 1px; height: 1px; opacity: 0; font-size: 16px; border: 0; padding: 0; pointer-events: none; }
 @media (max-width: 760px) { .cell-in, .cell-pop .cell-in { font-size: 16px !important; min-height: 36px; } }
+
+/* 11-26 Frank「找货页手机上太丑太占地方」：一行一个型号、两行高 —— 左：勾 + 型号 + 种类编码；右：库位小牌 + 数量小药丸（− 5/5 +） */
+@media (pointer: coarse) { .hide-touch { display: none !important; } }
+@media (max-width: 760px) {
+  .ticks { padding: 6px 8px 10px; }
+  .tick-row { grid-template-columns: minmax(0, 1fr) auto !important; align-items: center; border-width: 1px; border-radius: 14px; margin-bottom: 6px; }
+  .tick-main { grid-template-columns: 26px minmax(0, 1fr) !important; gap: 10px; min-height: 58px; padding: 8px 4px 8px 12px; }
+  .tick-box { width: 24px; height: 24px; font-size: 14px; border-width: 1.5px; }
+  .tick-model { font-size: 16px; }
+  .tick-sub { font-size: 11.5px; }
+  .tick-main .tick-bin { display: none; }
+  .tick-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding: 6px 10px 6px 0; }
+  .tick-side .tick-binb { font-size: 12px; font-weight: 800; color: var(--brand); background: var(--brand-soft); border-radius: 7px; padding: 1px 7px; white-space: nowrap; }
+  .tick-side .tick-binb small { font-weight: 600; color: #5b77a6; margin-right: 4px; }
+  .tick-qty { padding: 0 !important; justify-content: flex-end; gap: 0; border: 1px solid var(--line); border-radius: 999px; background: #fff; overflow: hidden; }
+  .tick-qty .step { width: 34px !important; min-width: 34px !important; max-width: 34px !important; flex: 0 0 34px !important; height: 32px !important; border: 0 !important; border-radius: 0 !important; font-size: 18px; background: none; }
+  .tick-qty .num { min-width: 44px !important; height: 32px !important; font-size: 15px !important; flex-direction: row !important; gap: 2px; align-items: baseline !important; padding-top: 6px; }
+  .tick-qty .num small { font-size: 10.5px; }
+  .tick-row.done .tick-qty { border-color: #86efac; }
+  .tick-why { padding: 0 10px 8px; }
+}
+@media (min-width: 761px) { .tick-side { display: contents; } .tick-side .tick-binb { display: none; } }
+/* 找货页手机底部：照片和提交挤成一条，别挡住清单 */
+@media (max-width: 760px) {
+  .ticks-foot { flex-wrap: nowrap !important; align-items: center !important; gap: 8px !important; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)) !important; }
+  .ticks-foot .field { flex: 0 0 auto !important; margin: 0; }
+  .ticks-foot .field > label { display: none; }
+  .ticks-foot .proofbox { padding: 4px; border-width: 1px; gap: 4px; min-height: 0; }
+  .ticks-foot .proofbox .pb-ico, .ticks-foot .proofbox .pb-text { display: none; }
+  .ticks-foot .proofbox.has .pb-text { display: none; }
+  .ticks-foot .proofbox.err { border-color: var(--red); }
+  .ticks-submit { width: auto !important; flex: 1 1 auto; min-height: 46px !important; font-size: 15px; }
+}
+.pinbtn { border: 0; background: none; padding: 0 2px; font-size: 12px; opacity: .3; filter: grayscale(1); cursor: pointer; line-height: 1; }
+.pinbtn.on { opacity: 1; filter: none; }
+@media (max-width: 760px) { .grid .t th .grip { display: none; } }
+@media (max-width: 760px) { .ticks-submit { white-space: nowrap; font-size: 14px !important; padding-left: 10px; padding-right: 10px; } }

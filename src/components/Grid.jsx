@@ -193,7 +193,10 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   const vis0 = layout.order.filter((k) => !layout.hidden.includes(k) && byKey[k]).map((k) => byKey[k]);
   // 11-26 Frank：手机上「要填的」挪到前面 —— 钉住的名字列 → 要填 / 能改的列（数量、单价、总价…）→ 其余信息往右放；电脑上照原来的顺序
   const isFillCol = (c) => !!(c.fill || c.tint || c.edit);
-  const pinFirst = pin || vis0.find((c) => c.label)?.key;
+  // 11-26 Frank：钉哪一列自己选（做单时编码放前面，找货时看机型）—— 手机上点表头的 📌，记在这台手机上
+  const [userPin, setUserPin] = useState(() => { try { return localStorage.getItem('la9s.gpin.' + id) || null; } catch { return null; } });
+  const choosePin = (k) => { setUserPin(k); try { localStorage.setItem('la9s.gpin.' + id, k); } catch { /* ignore */ } };
+  const pinFirst = (userPin && vis0.some((c) => c.key === userPin) ? userPin : null) || pin || vis0.find((c) => c.label)?.key;
   const vis = useMemo(() => (narrow ? [...vis0.filter((c) => c.key === pinFirst), ...vis0.filter((c) => c.key !== pinFirst && isFillCol(c)), ...vis0.filter((c) => c.key !== pinFirst && !isFillCol(c))] : vis0), [narrow, pinFirst, vis0]);   // eslint-disable-line react-hooks/exhaustive-deps
   // 手机（< 640px）：只看不改的表默认变成一行一张卡片（标题 = 第一列，其余「列名 · 值」）；有可改的列照旧表格；右上角能切换
   useEffect(() => { const f = () => setNarrow(window.innerWidth < 640); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, []);
@@ -953,6 +956,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
                       <span className="grip" onPointerDown={(e) => startDrag(e, c.key)} title="拖动调整列顺序">⠿</span>
                       {fill && <span className="pen" title="这一列要填">✎</span>}
                       <span className="th-label" onClick={() => !skipSort.current && c.sortable !== false && toggleSort(c.key)} title="点 = 排序；按住横着拖 = 选几列一起拖 / 隐藏 / 复制（Shift 点 = 选到这列，⌘ 点 = 加减一列）">{c.head || c.label}</span>
+                      {narrow && c.label && <button type="button" className={`pinbtn ${c.key === pinKey ? 'on' : ''}`} title="把这一列钉在左边（往右滑时一直看得到）" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); choosePin(c.key); }}>📌</button>}
                       {c.sortable !== false && <span className={`sort ${sort?.key === c.key ? 'on' : ''}`} onClick={() => !skipSort.current && toggleSort(c.key)}>{sort?.key === c.key ? (sort.dir === 'asc' ? '▲' : '▼') : '⇅'}</span>}
                       {c.filterable !== false && (
                         <button type="button" className={`funnel gf-keep ${f ? 'on' : ''}`} title="按这一列筛选" onClick={(e) => { e.stopPropagation(); if (panel?.forKey === c.key) setPanel(null); else openPanel(c, e.currentTarget); }}>⏷</button>

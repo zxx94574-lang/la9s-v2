@@ -90,11 +90,12 @@ export default function PickTicks({ deal, lines, employees, role, act }) {
             <span className="tick-info"><b className="tick-model">{l.model}</b><span className="tick-sub">{l.category} · {l.code}{l.variant ? ` · ${l.variant}` : ''}</span></span>
             <span className="tick-bin">{l.warehouse}<b>{l.bin || '—'}</b></span>
           </button>
+          <span className="tick-side"><span className="tick-binb"><small>{l.warehouse}</small>{l.bin || '—'}</span>
           <span className="tick-qty">
             <button type="button" className="step" disabled={!mine || c.qty <= 0} onClick={() => step(l, -1)} aria-label="少一片">−</button>
             <button type="button" className="num" disabled={!mine} onClick={() => setNumFor(l)} title="点这里直接输入数量">{qty(c.qty)}<small>/ {qty(l.qty_supply)}</small></button>
             <button type="button" className="step" disabled={!mine || c.qty >= N(l.qty_supply)} onClick={() => step(l, 1)} aria-label="多一片">＋</button>
-          </span>
+          </span></span>
           {short && <div className="tick-why">{t ? <span className="pill amber">少 {qty(N(l.qty_supply) - c.qty)} 片 · {c.reason}</span> : <>
             <span className="small">少 {qty(N(l.qty_supply) - c.qty)} 片，原因：</span>
             {reasons.map(([v, n]) => <button type="button" key={v} className={`chip ${c.reason === v ? 'on' : ''} ${c.ask && !c.reason ? 'err' : ''}`} onClick={() => pickReason(l, v)}>{n}</button>)}<OptGear optKey="note_diff" title="找少了的原因" options={NOTE_OPTIONS.diff} /></>}</div>}
