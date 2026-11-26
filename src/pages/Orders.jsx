@@ -190,7 +190,7 @@ export default function Orders() {
           <span className="small muted">{period === 'custom' && custom ? `${custom[0]} – ${custom[1]} · ` : ''}{rows.length} 张</span><span className="grow" />
           <button type="button" className="btn sm" onClick={() => { setFcust([]); setFmodel([]); setFcat(''); setFemp(''); setFtier([]); setFpay([]); setText(''); setLight(''); setStepF(''); setGrp(''); setFromAsk(false); }}>清除全部筛选</button></div>}
         {stepF && <div className="banner" style={{ marginBottom: 8 }}>只看现在卡在「{STEPS.find((x) => x.key === stepF)?.label}」这一步的单（{rows.length} 张） <button type="button" className="btn sm ghost" onClick={() => setStepF('')}>看全部 ×</button></div>}
-        {light !== 'draft' && mode === 'orders' && <Grid id="orders" table="deals" columns={cols} rows={rows} onShown={(rs, conds, qq) => { const ms = conds.filter((c) => c.key === 'models').flatMap((c) => (c.op === 'in' ? c.vals || [] : c.op === 'contains' ? [c.a] : [])).map((v) => String(v || '').toUpperCase()).filter(Boolean); setPeekHighlight([...ms, qq]); setGridShown({ rows: rs, models: (conds.find((c) => c.key === 'models' && c.op === 'in')?.vals || []).map((v) => String(v).toUpperCase()) }); }} onRowClick={(d) => go('deal/' + d.id)} empty={!data ? '加载中…' : light ? `${custom && period === 'custom' ? `${custom[0]} 至 ${custom[1]} ` : '这个时间段'}没有「${LIGHT_LABEL[light]}」的订单` : (data.length ? '没有符合条件的订单' : '这个时间段还没有订单')}
+        {light !== 'draft' && mode === 'orders' && <Grid id="orders" table="deals" mFirst={['customer_name', 'light', 'amount', 'due']} columns={cols} rows={rows} onShown={(rs, conds, qq) => { const ms = conds.filter((c) => c.key === 'models').flatMap((c) => (c.op === 'in' ? c.vals || [] : c.op === 'contains' ? [c.a] : [])).map((v) => String(v || '').toUpperCase()).filter(Boolean); setPeekHighlight([...ms, qq]); setGridShown({ rows: rs, models: (conds.find((c) => c.key === 'models' && c.op === 'in')?.vals || []).map((v) => String(v).toUpperCase()) }); }} onRowClick={(d) => go('deal/' + d.id)} empty={!data ? '加载中…' : light ? `${custom && period === 'custom' ? `${custom[0]} 至 ${custom[1]} ` : '这个时间段'}没有「${LIGHT_LABEL[light]}」的订单` : (data.length ? '没有符合条件的订单' : '这个时间段还没有订单')}
           foot={(rows) => ({ biz_no: `合计 ${rows.length} 单`, qty: `${qty(rows.reduce((a, d) => a + Number(['quoted', 'hotline_ok'].includes(d.status) ? d.qty_req : d.qty_supply), 0))} 件`,
             amount: price ? money(rows.reduce((a, d) => a + Number(d.amount), 0)) : '', due: price ? money(rows.reduce((a, d) => a + Math.max(0, Number(d.due)), 0)) : '' })} />}
       </div>}
@@ -238,7 +238,7 @@ function ShipmentsList({ from, to }) {
   ];
   return (
     <div className="card">
-      <Grid id="shipments-all" table="shipments" columns={cols} rows={data || []} onRowClick={(s) => go('deal/' + s.deal_id)} empty={data ? '这段时间没有出库' : '加载中…'}
+      <Grid id="shipments-all" table="shipments" mFirst={['customer_name', 'status', 'qty']} columns={cols} rows={data || []} onRowClick={(s) => go('deal/' + s.deal_id)} empty={data ? '这段时间没有出库' : '加载中…'}
         foot={(rs) => ({ out_no: `合计 ${rs.length} 张`, qty: `${qty(rs.reduce((a, s) => a + Number(s.qty), 0))} 件`, amount: price ? money(rs.filter((s) => !s.voided_at).reduce((a, s) => a + Number(s.amount), 0)) : '' })} />
       <div className="card-b hint">像飞书表格一样：点表头的漏斗按客户、单号、BL 号、机型、状态筛；点一行进订单，BL 打印和签收照片在订单的「出库记录」里。</div>
     </div>

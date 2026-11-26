@@ -152,7 +152,7 @@ function CardEdit({ ed, align, onCommit }) {
 }
 
 export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyProp = (r) => r.id, rowClass, onRowClick, onDelete, selectable: selectableProp, foot, tools, empty = '暂无数据', maxHeight, noTools,
-  onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors, onShown, compactTools, slimTools, rowActions, parentOf, pin }) {
+  onSelChange, onPasteSel, onCellOpen, onClearSel, onReorder, api, table, attrsEditable, errors, onShown, compactTools, slimTools, rowActions, parentOf, pin, mFirst }) {
   // 行没有 id 的表 (汇总表): 退到 key / employee_id / deal_id, 免得 React 报 key 重复、选区错位
   const rowKey = (r) => rowKeyProp(r) ?? r?.key ?? r?.employee_id ?? r?.deal_id ?? r?.code;
   // ── 每张表的自定义列 (Frank 11-08): 传 table="xxx" 就自动长出「选项设置」里加的列, 值存 row_attrs ──
@@ -197,7 +197,15 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   const [userPin, setUserPin] = useState(() => { try { return localStorage.getItem('la9s.gpin.' + id) || null; } catch { return null; } });
   const choosePin = (k) => { setUserPin(k); try { localStorage.setItem('la9s.gpin.' + id, k); } catch { /* ignore */ } };
   const pinFirst = (userPin && vis0.some((c) => c.key === userPin) ? userPin : null) || pin || vis0.find((c) => c.label)?.key;
-  const vis = useMemo(() => (narrow ? [...vis0.filter((c) => c.key === pinFirst), ...vis0.filter((c) => c.key !== pinFirst && isFillCol(c)), ...vis0.filter((c) => c.key !== pinFirst && !isFillCol(c))] : vis0), [narrow, pinFirst, vis0]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // 手机: 钉住列 → 要填的列 → 页面指定的「手机上先看」列 (mFirst, 例: 订单先看客户 / 状态 / 金额) → 其余
+  const mf = (mFirst || []).join(',');
+  const vis = useMemo(() => {
+    if (!narrow) return vis0;
+    const firsts = mf ? mf.split(',') : [];
+    const rest = vis0.filter((c) => c.key !== pinFirst);
+    const fill = rest.filter(isFillCol); const pri = firsts.map((k) => rest.find((c) => c.key === k && !isFillCol(c))).filter(Boolean);
+    return [...vis0.filter((c) => c.key === pinFirst), ...fill, ...pri, ...rest.filter((c) => !isFillCol(c) && !pri.includes(c))];
+  }, [narrow, pinFirst, vis0, mf]);   // eslint-disable-line react-hooks/exhaustive-deps
   // 手机（< 640px）：只看不改的表默认变成一行一张卡片（标题 = 第一列，其余「列名 · 值」）；有可改的列照旧表格；右上角能切换
   useEffect(() => { const f = () => setNarrow(window.innerWidth < 640); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, []);
   const autoCards = false;   // 11-26 Frank：手机默认就是表格（卡片太占地方），表格在手机上能横滑、点一下就改
@@ -870,7 +878,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
           {liveConds.map((f) => <span key={f.id} className="pill blue gf-chip gf-keep" onClick={(e) => openPanel(byKey[f.key], e.currentTarget)} title="点开修改">{byKey[f.key].label}{f.op === 'in' ? '：' : f.op === 'not_in' ? ' 不是：' : f.op === 'empty' ? ' 为空' : f.op === 'not_empty' ? ' 不为空' : f.op === 'contains' ? ' 包含 ' : f.op === 'not_contains' ? ' 不包含 ' : { eq: ' = ', ne: ' ≠ ', gt: ' > ', lt: ' < ', between: ' 介于 ' }[f.op] || ' '}{['in', 'not_in'].includes(f.op) ? ((f.vals || []).length > 2 ? `${f.vals.length} 个` : (f.vals || []).join('、')) : ['empty', 'not_empty'].includes(f.op) ? '' : f.op === 'between' ? `${f.a}–${f.b}` : f.a}
             <button type="button" className="x-mini" title="去掉这个条件" onClick={(e) => { e.stopPropagation(); setFilters((cs) => cs.filter((c) => c.id !== f.id)); }}>×</button></span>)}
           <button type="button" ref={groupBtn} className={`btn sm gf-keep ${groupDefs.length ? 'primary' : ''}`} onClick={() => (gpanel ? setGpanel(null) : openGroup())}>▤ 分组{groupDefs.length ? `：${groupDefs.map((d) => byKey[d.key].label).join(' › ')}` : ''}</button>
-          <input className="in sm gf-search" placeholder="⌕ 搜这张表（单号、名字、机型…）" value={gf.q || ''} onChange={(e) => setGf((g) => ({ ...g, q: e.target.value }))} />
+          <input className="in sm gf-search" placeholder={narrow ? '⌕ 搜索' : '⌕ 搜这张表（单号、名字、机型…）'} value={gf.q || ''} onChange={(e) => setGf((g) => ({ ...g, q: e.target.value }))} />
           <Schemes id={id || 'grid'} current={{ ...gf, groups: groupDefs }} onApply={(s2) => { setFolded(new Set()); setGf({ conds: (s2.conds || []).map((c) => ({ ...c })), any: !!s2.any, q: s2.q || '', groups: (s2.groups || []).map((g) => ({ ...g })) }); }} />
           {nFilters > 0 && <span className="pill blue">筛出 {shown.length}/{rows.length} 行</span>}
           {(nFilters > 0 || sort) && <button type="button" className="btn sm" onClick={() => { setGf({ conds: [], any: false, q: '' }); setSort(null); }} title="清掉所有筛选和排序，回到最初的样子">↺ 清空</button>}

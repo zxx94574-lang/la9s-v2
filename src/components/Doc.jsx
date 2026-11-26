@@ -2,7 +2,7 @@
 // One header for all (待改 11): logo top-left (big) · title centred · top-right: customer name (biggest) + date, doc no in grey.
 // No address / phone / contact details anywhere. Client documents carry no 业务号 and no currency cell — the currency
 // lives only inside the amounts. Alignment: price & amount right, quantities centre, everything else left.
-import React, { createContext, useContext, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toBlob } from 'html-to-image';
 import { money, qty, dDate, dt, today } from '../lib/format.js';
@@ -280,12 +280,51 @@ export function BalancePreview({ customerId, currency = 'XOF', deal, title = '�
     if (deal) { const [fresh] = await q(Q.dealById, [deal.id]); d = fresh; }
     return { b: { ...b, currency, open }, d };
   }, [customerId, currency, deal?.id, deal?.updated_at]);
+  const narrow = useNarrow(); const [full, setFull] = useState(false);
   if (!data?.b) return <div className="card card-b muted small">对账单生成中…</div>;
   return (
     <div className="card">
       <div className="card-h"><h2>{title} <Info>下面就是发给客户的那张图，实时更新</Info><Assumed>11-18 按你说的加了两样：「累计购买数量」和「之前的老账 ＋ 本单新账 ＝ 最新余额」。「本单新账」= 这张单还没付的部分（已经付的不算进新账）；老账是负数 = 客户之前有预付。这两点是我的理解，不对告诉我。</Assumed></h2>
         <div className="row" style={{ gap: 6 }}>{extra}<DocActions kind="balance" balance={data.b} deal={data.d} copyLabel="复制 Balance 图片（发客户群）" primary="copy" /></div></div>
-      <div className="card-b doc-preview"><div className="doc-preview-in"><DocSheet kind="balance" balance={data.b} deal={data.d} /></div></div>
+      {narrow && !full ? <BalanceMini b={data.b} deal={data.d} onFull={() => setFull(true)} />
+        : <div className="card-b doc-preview">{narrow && <button type="button" className="btn sm bm-back" onClick={() => setFull(false)}>‹ 回到简要</button>}<FitDoc on={narrow}><DocSheet kind="balance" balance={data.b} deal={data.d} /></FitDoc></div>}
+    </div>
+  );
+}
+
+// 518 (Frank 11-26「那么大一坨对账的，我怎么看得清」): 手机上先看简要 —— 最新余额最大, 本单三个数, 老账 + 新账, 没结清的单一单一行;
+// 完整单据点「看完整单据」, 按屏幕宽度等比缩小 (发给客户的图不变)
+const useNarrow = () => {
+  const [n, set] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  useEffect(() => { const f = () => set(window.innerWidth < 640); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, []);
+  return n;
+};
+export function FitDoc({ on: on0, children }) {
+  const nw = useNarrow(); const on = on0 ?? nw;
+  const box = useRef(null); const inner = useRef(null); const [k, setK] = useState(1); const [h, setH] = useState(null);
+  useEffect(() => {
+    if (!on || !box.current || !inner.current) { setK(1); setH(null); return undefined; }
+    const fit = () => { const w = box.current.clientWidth - 16; const iw = inner.current.scrollWidth; const z = iw > w ? w / iw : 1; setK(z); setH(inner.current.scrollHeight * z); };
+    fit(); const ro = new ResizeObserver(fit); ro.observe(box.current); ro.observe(inner.current); return () => ro.disconnect();
+  }, [on]);
+  return <div ref={box} className="fitdoc" style={on && h ? { height: h + 16 } : undefined}><div ref={inner} className="doc-preview-in" style={on ? { transform: `scale(${k})` } : undefined}>{children}</div></div>;
+}
+function BalanceMini({ b, deal, onFull }) {
+  const cur = b.currency || 'XOF'; const w = balanceWords(b.balance, cur);
+  const has = deal && N(deal.shipped_amount) > 0;
+  const rec = has ? N(deal.shipped_amount) - N(deal.returned_amount) : 0;
+  const open = b.open || [];
+  return (
+    <div className="card-b bm">
+      <div className={`bm-big ${w.tone}`}><span>{b.name}</span><small>{w.label === '预付' ? '没有欠款，这是预付' : w.label}</small><b>{w.amount > 0 ? money(w.amount, cur) : '0'} <em>{cur}</em></b></div>
+      {has && <div className="bm-sec"><div className="bm-h">本单 <span className="mono">{deal.biz_no}</span></div>
+        <div className="bm-3"><div><small>应收</small><b>{money(rec, cur)}</b></div><div><small>已付</small><b>{money(deal.allocated_amount, cur)}</b></div><div><small>待付</small><b className={N(deal.due) > 0 ? 'red-t2' : 'green-t'}>{N(deal.due) > 0 ? money(deal.due, cur) : '已付清'}</b></div></div>
+        <div className="bm-eq">之前 {money(N(b.balance) - N(deal.due), cur)} ＋ 本单 {money(deal.due, cur)} ＝ <b>{money(b.balance, cur)}</b></div></div>}
+      <div className="bm-sec"><div className="bm-h">总账 <small>累计买 {money(b.total_sold, cur)} · 付 {money(b.total_paid, cur)}{N(b.total_returned) > 0 ? ` · 退 ${money(b.total_returned, cur)}` : ''}</small></div>
+        {open.length ? open.slice(0, 8).map((o) => <div key={o.deal_id} className="bm-row"><span className="mono">{o.kind === 'opening' ? '期初欠款' : o.biz_no}</span><span className="muted">{dDate(o.first_shipped_at) || '历史'}</span><b>{money(o.due, cur)}</b></div>)
+          : <div className="muted small">没有没结清的单</div>}
+        {open.length > 8 && <div className="bm-row muted"><span>其余 {open.length - 8} 单</span><span /><b>{money(open.slice(8).reduce((a, o) => a + N(o.due), 0), cur)}</b></div>}</div>
+      <button type="button" className="btn bm-full" onClick={onFull}>看完整单据（发给客户的那张图）›</button>
     </div>
   );
 }

@@ -105,7 +105,7 @@ export default function Receipts({ preset }) {
 
       <div className="card">
         <div className="card-h"><h2>收款记录（每一笔进账）{customer && <span className="muted small"> · 只看这个客户</span>}</h2><span className="hint">单号可点开查看；「冲账情况」写清这笔钱去了哪</span></div>
-        <Grid id="rcv-list2" table="receipts" columns={listCols} rows={mine} rowActions={can(role, 'receipt') ? [verifyRcvAction(role, toast, refresh), { label: '改冲账', tone: '', when: (r) => !r.voided_at && (r.allocations.length > 0 || N(r.unallocated) > 0), run: (r) => setRealloc(r) },
+        <Grid id="rcv-list2" table="receipts" mFirst={['customer_name', 'amount', 'vstate']} columns={listCols} rows={mine} rowActions={can(role, 'receipt') ? [verifyRcvAction(role, toast, refresh), { label: '改冲账', tone: '', when: (r) => !r.voided_at && (r.allocations.length > 0 || N(r.unallocated) > 0), run: (r) => setRealloc(r) },
             { label: '把预付冲到订单', tone: '', when: (r) => !r.voided_at && N(r.unallocated) > 0, run: async (r) => { try { await call(role, `select app.apply_unallocated($1,'oldest','[]')`, [r.id]); toast('预付已冲到最老的未付单'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } } },
             { label: '↶ 撤销这笔收款', tone: 'soft-red', when: (r) => !r.voided_at, run: (r) => setVoidRc(r) }] : undefined} empty="本年还没有收款"
           foot={(rows) => ({ rcv_no: `合计 ${rows.filter((r) => !r.voided_at).length} 笔`, converted: `${money(rows.filter((r) => !r.voided_at && r.account_currency === 'XOF').reduce((a, r) => a + N(r.converted), 0))} XOF` })} />

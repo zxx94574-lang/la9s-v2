@@ -52,6 +52,23 @@ export function total(rows, m) {
 }
 export const pctTone = (p, low) => (p == null ? '' : p < 0 ? 'red' : p < low ? 'amber' : 'green');
 export const Pct = ({ p, low }) => (p == null ? <span className="muted">—</span> : <span className={`pill ${pctTone(p, low)}`}>{p.toFixed(1)}%</span>);
+// 占比条 (514 / 520, Frank 11-26): 百分比白字写在条里; 条太短放不下 → 条尾巴后面一个小白块写数. 全站占比条都用这个
+const pctTxt = (p) => (p > 0 && p < 1 ? '<1' : p.toFixed(0));
+export const ShareBar = ({ p, sub, color, tip }) => {
+  const w = Math.max(0, Math.min(100, Number(p) || 0)); const inside = w >= 24;
+  return <span className={`sbar ${sub ? 'sub' : ''}`} data-tip={tip}><i style={{ width: `${w}%`, background: color }}>{inside && <em>{pctTxt(w)}%</em>}</i>{!inside && <em className="sbar-chip" style={{ left: `calc(${w}% + 4px)` }}>{pctTxt(w)}%</em>}</span>;
+};
+// 两段 (本地备货 / FOB) 拼一根: 名字 + 百分比写在段里, 段太窄放外面
+export const MixBar = ({ parts, label = '占比' }) => {
+  const T = parts.reduce((a, x) => a + Math.max(0, x.v), 0);
+  if (!T) return null;
+  const ps = parts.map((x) => ({ ...x, p: Math.max(0, x.v) / T * 100 }));
+  const out = ps.filter((x) => x.p < 22);
+  return <div className="mixbar"><span className="mixbar-l">{label}</span>
+    <div className="mixbar-bar">{ps.filter((x) => x.p > 0).map((x) => <i key={x.name} style={{ width: `${x.p}%`, background: x.color }} data-tip={`${x.name} ${x.p.toFixed(1)}%`}>{x.p >= 22 && <em>{x.name} {pctTxt(x.p)}%</em>}</i>)}</div>
+    {out.length > 0 && <div className="mixbar-out">{out.map((x) => <span key={x.name}><i style={{ background: x.color }} />{x.name} {pctTxt(x.p)}%</span>)}</div>}
+  </div>;
+};
 // 看板卡片上的百分比 = 同一种色块, 大一号 (Frank 11-20: 和表格里的小块一样, 只是更大)
 export const BigPct = ({ p, low }) => (p == null ? <span className="dk-v muted">—</span> : <span className={`pill dk-pct ${pctTone(p, low)}`}>{p.toFixed(1)}<small>%</small></span>);
 
@@ -103,7 +120,7 @@ export function Overview({ rows }) {
         {open && <div style={{ marginTop: 10 }}><Grid id="dash-ov" noTools rows={biz} columns={[
           { key: 'name', label: '业务', w: 110, sortable: false, filterable: false, render: (r) => <span className="dk-row0"><i className="dk-dot" style={{ background: r.color }} /><b>{r.name}</b></span> },
           { key: 'share', label: '占比', w: 130, sortable: false, filterable: false, value: (r) => (all.rev ? r.t.rev / all.rev * 100 : 0),
-            render: (r) => { const p = all.rev ? r.t.rev / all.rev * 100 : 0; return <span className="dk-share"><span className="dbar"><i style={{ width: `${p}%`, background: r.color }} /></span><small>{p.toFixed(0)}%</small></span>; } },
+            render: (r) => { const p = all.rev ? r.t.rev / all.rev * 100 : 0; return <ShareBar p={p} color={r.color} />; } },
           { key: 'rev', label: `销售额 ${target}`, w: 140, type: 'money', sortable: false, value: (r) => r.t.rev, render: (r) => money(r.t.rev, target) },
           { key: 'cost', label: `成本 ${target}`, w: 140, type: 'money', sortable: false, value: (r) => r.t.cost, render: (r) => money(r.t.cost, target) },
           { key: 'profit', label: `利润 ${target}`, w: 140, type: 'money', sortable: false, value: (r) => r.t.profit, render: (r) => <span className={r.t.profit < 0 ? 'red-t2' : ''}>{money(r.t.profit, target)}</span> },
@@ -159,7 +176,7 @@ export function SalesSection({ kind, rows, transit }) {
         ? <span className="dk-row0"><button type="button" className={`peek-eye dk-exp ${exp[r.pk] ? 'on' : ''}`} aria-label={exp[r.pk] ? '收起' : '展开'} onClick={(e) => { e.stopPropagation(); setExp((x) => ({ ...x, [r.pk]: !x[r.pk] })); }}>☰</button>{fob ? <CustLink id={r.ref.customer_id} name={r.label} /> : r.tier ? <TierPill tier={r.tier} /> : <b>{r.label}</b>}</span>
         : <span className="dk-row1">{fob ? (r.ref.fob_project_id ? <button type="button" className="linkbtn mono" onClick={(e) => { e.stopPropagation(); go('fob/' + r.ref.fob_project_id); }}>{r.label}</button> : <DealLink id={r.ref.deal_id} no={r.label} />) : r.tier ? <TierPill tier={r.tier} /> : r.label}</span>) },
     { key: 'share', label: '占比', w: 110, sortable: false, filterable: false, value: (r) => (t.rev ? r.t.rev / t.rev * 100 : 0),
-      render: (r) => { const p = t.rev ? r.t.rev / t.rev * 100 : 0; return <span className={`dbar ${r.lvl ? 'sub' : ''}`} data-tip={`占销售额 ${p.toFixed(1)}%`}><i style={{ width: `${Math.max(0, Math.min(100, p))}%` }} /></span>; } },
+      render: (r) => { const p = t.rev ? r.t.rev / t.rev * 100 : 0; return <ShareBar p={p} sub={r.lvl > 0} tip={`占销售额 ${p.toFixed(1)}%`} />; } },
     { key: 'rev', label: `销售额 ${C}`, w: 130, type: 'money', sortable: false, value: (r) => r.t.rev, render: (r) => (r.lvl ? money(r.t.rev, C) : <b>{money(r.t.rev, C)}</b>) },
     { key: 'qty', label: '销量 片', w: 90, type: 'number', sortable: false, value: (r) => r.t.qty, render: (r) => qty(r.t.qty) },
     { key: 'cost', label: `成本 ${C}`, w: 130, type: 'money', sortable: false, value: (r) => r.t.cost, render: (r) => <>{money(r.t.cost, C)}{r.t.miss > 0 && <span className="pill red" style={{ marginLeft: 4 }} title={`${qty(r.t.miss)} 片没成本，没算进成本和毛利`}>缺</span>}</> },

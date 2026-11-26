@@ -7,7 +7,7 @@ import { useApp, useData, Modal, PhotoInput, Pill, Info, Assumed, FRow } from '.
 import { OptChoice, OptNote, OptGear, useOptList, optName } from './Opts.jsx';
 import PeoplePick from './PeoplePick.jsx';
 import LineEntry, { finalizeLines } from './LineEntry.jsx';
-import { DocActions, DocSheet } from './Doc.jsx';
+import { DocActions, DocSheet, FitDoc } from './Doc.jsx';
 import { EmpLink, ModelLink, DealLink } from './Archives.jsx';
 import { NOTE_OPTIONS, CONFIRM_METHODS, dealPriceVisible, hasAny } from '../lib/domain.js';
 import { qty, money, dt, friendlyError } from '../lib/format.js';
@@ -224,7 +224,7 @@ export function AddonPanel({ deal, addon, employees }) {
         {addon.status === 'assign' && <AddonLines addon={addon} price={price} cur={deal.currency} />}
       </div>}
       {addon.status === 'ordered' && <>
-        <div className="card-b"><div className="doc-preview"><div className="doc-preview-in"><DocSheet kind="so" deal={soDeal} lines={soLines} /></div></div>
+        <div className="card-b"><div className="doc-preview"><FitDoc><DocSheet kind="so" deal={soDeal} lines={soLines} /></FitDoc></div>
           <div className="small muted" style={{ marginTop: 6 }}>找货：<b>{addon.picker_name}</b> · {dt(addon.picked_at)} · 这一批合计 {price ? `${money(total, deal.currency)} ${deal.currency}` : `${qty(soLines.reduce((a, l) => a + N(l.qty_supply), 0))} 片`}</div></div>
         {hasAny(role, ['admin', 'manager', 'sales_manager', 'hotline', 'sales']) ? <Confirm addon={addon} /> : <div className="card-b hint">等热线 / 销售跟客户确认这一批。</div>}
       </>}

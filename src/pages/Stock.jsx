@@ -57,7 +57,7 @@ export default function Stock() {
       <div className="card">
         {hasAny(role, ['admin', 'manager']) && <div className="card-h"><h2>库存</h2><button type="button" className="btn sm soft-red" disabled={pick.size !== 1} title={pick.size === 1 ? '' : '先在下面勾选一行'} onClick={() => setFreeze(rows.find((r) => pick.has(r.stock_item_id)))}>⏸ 暂停出库（问题库存）</button></div>}
         {freeze && <FreezeModal row={freeze} onClose={() => { setFreeze(null); setPick(new Set()); }} />}
-        <Grid id="stock" table="stock_items" columns={cols} rows={rows} rowKey={(r) => r.stock_item_id} selectable={hasAny(role, ['admin', 'manager']) ? { selected: pick, onChange: setPick } : undefined} rowClass={(r) => (Number(r.qty_available) <= 0 ? 'warn' : '')}
+        <Grid id="stock" table="stock_items" pin="model" mFirst={['category', 'qty_available', 'qty_on_hand', 'warehouse', 'bin']} columns={cols} rows={rows} rowKey={(r) => r.stock_item_id} selectable={hasAny(role, ['admin', 'manager']) ? { selected: pick, onChange: setPick } : undefined} rowClass={(r) => (Number(r.qty_available) <= 0 ? 'warn' : '')}
           foot={{ warehouse: `${rows.length} 行`, qty_on_hand: qty(s('qty_on_hand')), qty_reserved: qty(s('qty_reserved')), qty_available: qty(s('qty_available')) }} />
       </div>
     </>

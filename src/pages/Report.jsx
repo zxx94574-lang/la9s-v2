@@ -1,6 +1,7 @@
 // 月报 (Frank 11-25: 不要在经营总览上放大按钮; 单独一页, 所有数据捞进来, 给老板一眼看明白)
 // 口径照他自己的月报: 金额人民币「万元」截掉零头; 报告月取整月; XOF 按这个月定的汇率折 (默认 0.011, 每月存一次); 超期 = 超 21 天, 严重超期 = 超 120 天; 库龄 7 段
 // 顺序 = 老板读报告的顺序: 一句话结论 → 8 个关键数 → 销售 (达成 / 结构 / 客户 / 销售员) → 毛利与净利 → 回款与应收 → 库存 (库龄 / 周转 / 在途 / 滞销) → 运营 → 走势 → 文字版
+import PLTable from '../components/PLTable.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, MonthPicker, MoneyIn, Assumed, Info } from '../components/ui.jsx';
@@ -180,11 +181,10 @@ export default function Report() {
         </div></section>
 
         <section className="card rp-sec2"><div className="card-h"><h2>二、毛利与净利</h2></div><div className="card-b rp-grid">
-          <div><h4>利润表</h4><T head={['', '万元']} rows={<>
-            <tr><th>销售额</th><td>{wan1(R.cur.v)}</td></tr><tr><th>销售成本</th><td>{wan1(R.cur.cost)}</td></tr>
-            <tr><th>毛利</th><td><b>{wan1(R.cur.pf)}</b>　<Pc p={mg} lo={mLo} hi={mHi} /></td></tr>
-            {R.expList.map((e) => <tr key={e.k}><th className="rp-ind">− {e.k}</th><td>{wan1(e.v)}</td></tr>)}
-            <tr><th>净利</th><td><b className={net < 0 ? 'red-t2' : ''}>{wan1(net)}</b></td></tr></>} /></div>
+          <div className="rp-wide"><h4>利润表</h4><PLTable cur="万元" f={wan1} low={mLo} gpPct={mg}
+            c={{ loc: { rev: R.cur.loc.v, cost: R.cur.loc.v - R.cur.loc.pf, gp: R.cur.loc.pf }, fob: { rev: R.cur.fob.v, cost: R.cur.fob.v - R.cur.fob.pf, gp: R.cur.fob.pf }, all: { rev: R.cur.v, cost: R.cur.cost, gp: R.cur.pf } }}
+            prev={R.prev.v ? { rev: R.prev.v, cost: R.prev.cost, gp: R.prev.pf } : null} exps={R.expList.map((e) => ({ name: e.k, v: e.v }))}
+            note="上期 = 上个月；开支只记在合计里，上期开支没算。" /></div>
           <div><h4>要注意</h4><ul className="rp-warn">
             {R.cur.loss > 0 && <li className="red-t2">{R.cur.loss} 行卖亏了，共亏 {wan1(R.cur.lossV)} 万（订单总览 → 亏损诊断）</li>}
             {R.cur.miss > 0 && <li>{qty(R.cur.miss)} 片没有成本，没算进毛利</li>}

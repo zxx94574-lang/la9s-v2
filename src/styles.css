@@ -1040,7 +1040,7 @@ input.in.gf-search { width: 230px; max-width: 100%; flex: 0 1 230px; }
   /* 表格工具栏: 一行 (筛选 · 搜索 · 其余横滑) */
   .grid-tools { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 6px 8px; }
   .grid-tools > * { flex: 0 0 auto; }
-  .grid-tools input.in.gf-search { width: 150px !important; flex: 1 0 150px !important; min-width: 0; }
+  .grid-tools input.in.gf-search { width: 130px !important; flex: 1 0 130px !important; min-width: 0; order: -1; }
   .grid-tools .grow { flex: 0 0 4px; }
   .grid-tools > .hint, .grid-tools .row-acts-hint { display: none; }
 
@@ -2364,3 +2364,55 @@ body { touch-action: manipulation; }
 .modal-f > .grow, .actbar > .grow { order: 50; }
 .modal-f > .grow ~ .btn:not(.primary):not(.danger) { order: 60; }
 .row:not(:has(> input, > select, > textarea, > .in)) > .btn.primary:not(.lg) { order: 99; }
+
+/* 占比条 (520): 百分比白字在条里, 短条放尾巴后面的小白块 */
+.sbar { position: relative; display: block; width: 100%; min-width: 64px; height: 18px; border-radius: 9px; background: #eef2f7; }
+.sbar > i { display: flex; align-items: center; justify-content: flex-end; height: 100%; border-radius: 9px; background: var(--brand); min-width: 0; transition: width .35s ease; }
+.sbar.sub > i { background: #8fb0e8; }
+.sbar em { font-style: normal; font-size: 11px; font-weight: 700; color: #fff; padding: 0 7px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sbar em.sbar-chip { position: absolute; top: 50%; transform: translateY(-50%); padding: 0 6px; line-height: 16px; border-radius: 8px; background: #fff; color: var(--ink); border: 1px solid var(--line); font-weight: 600; }
+.mixbar { display: flex; align-items: center; gap: 10px; margin: 2px 4px; flex-wrap: wrap; } .mixbar-l { font-size: 12px; color: var(--muted); }
+.mixbar-bar { flex: 1 1 200px; display: flex; height: 20px; border-radius: 10px; overflow: hidden; background: #eef2f7; gap: 2px; }
+.mixbar-bar > i { display: flex; align-items: center; min-width: 4px; transition: width .35s ease; }
+.mixbar-bar em { font-style: normal; font-size: 12px; font-weight: 700; color: #fff; padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mixbar-out { display: flex; gap: 12px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.mixbar-out i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+
+/* 利润表 (522): 标准损益表, 项目一行一行往下算 */
+.pl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.pl-t { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.pl-t th, .pl-t td { padding: 8px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line-2); }
+.pl-t thead th { font-size: 12px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); background: #fafbfd; }
+.pl-t th:first-child { text-align: left; position: sticky; left: 0; background: #fff; z-index: 1; min-width: 150px; }
+.pl-t thead th:first-child { background: #fafbfd; } .pl-t thead small { font-weight: 400; }
+.pl-t tbody th { font-weight: 400; color: var(--ink); }
+.pl-t tr.pl-b th, .pl-t tr.pl-b td { font-weight: 700; }
+.pl-t tr.pl-ind th { padding-left: 28px; }
+.pl-t tr.pl-ind2 th, .pl-t tr.pl-ind2 td { padding-left: 46px; font-size: 12px; color: var(--muted); padding-top: 5px; padding-bottom: 5px; }
+.pl-t tr.pl-sep th, .pl-t tr.pl-sep td { border-top: 1.5px solid var(--ink); }
+.pl-t tr.pl-sep2 th, .pl-t tr.pl-sep2 td { border-top: 1.5px solid var(--ink); border-bottom: 3px double var(--ink); background: #f7f9fd; }
+.pl-t tr.pl-sep2 th:first-child { background: #f7f9fd; }
+.pl-up { color: #15803d; font-size: 12px; } .pl-down { color: var(--red); font-size: 12px; }
+.pl-note { margin-top: 6px; }
+@media (max-width: 640px) { .pl-t { font-size: 12px; } .pl-t th, .pl-t td { padding: 7px 8px; } .pl-t th:first-child { min-width: 112px; box-shadow: 2px 0 4px -2px rgba(0,0,0,.12); } .pl-t tr.pl-ind th { padding-left: 18px; } .pl-t tr.pl-ind2 th { padding-left: 28px; } }
+.rp-grid > .rp-wide { grid-column: 1 / -1; } @media print { .pl-t { min-width: 0; } }
+
+/* 518 手机对账简要 */
+.bm { display: flex; flex-direction: column; gap: 12px; }
+.bm-big { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 2px 8px; padding: 14px 16px; border-radius: 12px; background: #f4f7fc; }
+.bm-big > span { font-weight: 700; font-size: 15px; grid-column: 1 / -1; }
+.bm-big small { color: var(--muted); font-size: 12px; }
+.bm-big b { font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums; } .bm-big b em { font-style: normal; font-size: 12px; color: var(--muted); font-weight: 500; }
+.bm-big.red b { color: var(--red); } .bm-big.green b { color: #15803d; }
+.bm-sec { border-top: 1px solid var(--line-2); padding-top: 10px; }
+.bm-h { font-weight: 700; font-size: 13px; margin-bottom: 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; } .bm-h small { font-weight: 400; color: var(--muted); }
+.bm-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .bm-3 small { display: block; color: var(--muted); font-size: 11px; } .bm-3 b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.bm-eq { margin-top: 8px; font-size: 12px; color: var(--muted); } .bm-eq b { color: var(--ink); }
+.bm-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line-2); font-size: 13px; font-variant-numeric: tabular-nums; } .bm-row:last-child { border-bottom: 0; }
+.bm-full { align-self: stretch; min-height: 40px; }
+.bm-back { margin: 8px; align-self: flex-start; }
+.fitdoc { width: 100%; overflow: hidden; padding: 8px; box-sizing: border-box; }
+.fitdoc .doc-preview-in { transform-origin: top left; width: max-content; }
+@media (max-width: 640px) { .doc-preview { flex-direction: column; align-items: stretch; } }
+@media (max-width: 560px) { .d2-m .d:empty { min-height: 0; margin-top: 0; } }
+@media (max-width: 640px) { .pl-t th:first-child { white-space: normal; max-width: 150px; } }

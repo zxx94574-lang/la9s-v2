@@ -12,7 +12,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Grid from '../components/Grid.jsx';
 import { call, q } from '../db/client.js';
 import LineEntry, { newKey, finalizeLines, tierPrice, PromoTag } from '../components/LineEntry.jsx';
-import { DocActions, DocSheet, BalanceCopy, BalancePreview } from '../components/Doc.jsx';
+import { DocActions, DocSheet, BalanceCopy, BalancePreview, FitDoc } from '../components/Doc.jsx';
 import { BlActions } from '../components/Bl.jsx';
 import { flagAnomaly } from '../components/IssueReport.jsx';
 import ReceiptForm, { BalanceLine, VoidReceiptModal, RcvStatus , ReceiptDone } from '../components/ReceiptForm.jsx';
@@ -1322,7 +1322,7 @@ function ReturnRecon({ r, deal, act, role }) {
             <button type="button" className="btn" onClick={exportCsv}>⇩ 导出 Excel</button>
           </span>
         </div>
-        <div className="doc-preview"><div className="doc-preview-in"><DocSheet kind="return" deal={deal} ret={{ ...r, amount: amt, recBefore, recAfter, balBefore, balAfter, statusText: st }} /></div></div>
+        <div className="doc-preview"><FitDoc><DocSheet kind="return" deal={deal} ret={{ ...r, amount: amt, recBefore, recAfter, balBefore, balAfter, statusText: st }} /></FitDoc></div>
       </div>
       {/* ④ 客户对账凭证 → 对账完成 (Frank 11-09 14:03: 先发对账单, 客户对完给凭证, 截图放这里, 最后才点完成) */}
       {approved && (
