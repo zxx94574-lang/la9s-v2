@@ -1,7 +1,7 @@
 // 366 (Frank 11-18): 「异常的单」总入口 —— 亏钱 / 价格 / 数量 / 欠款拦截 / 账对不上 / 任务卡流程 统一收在这里, 按类型打小标, 每行能跳到那张单;
 // 处理完自动从「待处理」消失, 转进「已处理记录」(当时的数字、谁、什么时候、怎么处理的), 记录不可改不可删.
 // 371: 板块常驻 (没有也显示 0), Always = 给「没内容就不渲染」的老板块补一个一行的空态.
-import { hasAny } from '../lib/domain.js';
+import { hasAny, roleSet } from '../lib/domain.js';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Info, Assumed, DatePicker } from './ui.jsx';
@@ -14,6 +14,9 @@ export const ANOM = {
   qty_over: ['数量', 'red'], discrepancy: ['数量', 'red'], partial: ['数量', 'amber'], credit: ['欠款', 'red'], debt_block: ['欠款', 'red'], rep_debt: ['欠款', 'red'],
   ledger: ['账', 'red'], task_block: ['任务', 'amber'] };
 const GROUPS = ['亏钱', '价格', '数量', '欠款', '账', '任务'];
+// 自查 (11-26): 每个岗位只看跟自己有关的几类 (以前库管员也看到「销售员欠款」+「去处理」, 他处理不了). 中方 / 国家经理看全部.
+const GROUPS_FOR = { picker: ['数量', '任务'], manager: ['价格', '数量', '欠款', '任务'], hotline: ['价格', '数量', '欠款', '任务'], sales: ['欠款', '任务'], sales_manager: ['亏钱', '价格', '数量', '欠款', '任务'], finance: ['亏钱', '欠款', '账'] };
+const groupsOf = (role) => (hasAny(role, ['country_manager']) || role === 'admin' ? GROUPS : GROUPS.filter((g) => roleSet(role).some((r) => (GROUPS_FOR[r] || []).includes(g))));
 const N = (v) => Number(v || 0);
 // 当时的数字 (只中方拿得到 detail)
 const numbers = (a) => {
@@ -40,7 +43,8 @@ export function AnomalyHub() {
   const { data: open } = useData(() => (staff ? call(role, `select * from app.anomaly_list($1, true)`, [org]).catch(() => []) : Promise.resolve([])), [org, role]);
   const { data: hist } = useData(() => (staff && tab === 'hist' ? call(role, `select * from app.anomaly_list($1, false, $2, $3)`, [org, from, to]).catch(() => []) : Promise.resolve(null)), [org, role, tab, from, to]);
   if (!staff) return null;
-  const rows = open || [];
+  const mine = groupsOf(role);
+  const rows = (open || []).filter((a) => mine.includes(ANOM[a.kind]?.[0]));
   const cnt = (name) => rows.filter((a) => ANOM[a.kind]?.[0] === name).length;
   const shown = g ? rows.filter((a) => ANOM[a.kind]?.[0] === g) : rows;
   return (
@@ -53,7 +57,7 @@ export function AnomalyHub() {
       {tab === 'open' && <>
         <div className="card-b" style={{ paddingBottom: 6 }}><div className="chips">
           <button type="button" className={`chip ${!g ? 'on' : ''}`} onClick={() => setG('')}>全部 {rows.length}</button>
-          {GROUPS.map((name) => <button type="button" key={name} className={`chip ${g === name ? 'on' : ''}`} onClick={() => setG(g === name ? '' : name)}>{name} {cnt(name)}</button>)}</div></div>
+          {mine.map((name) => <button type="button" key={name} className={`chip ${g === name ? 'on' : ''}`} onClick={() => setG(g === name ? '' : name)}>{name} {cnt(name)}</button>)}</div></div>
         {shown.length === 0 ? <div className="card-b small muted">没有待处理的异常 ✓</div> : shown.map((a) => (
           <div key={a.id} className="todo-line" style={{ padding: '8px 18px' }}>
             <span className={`pill ${ANOM[a.kind]?.[1] || 'gray'}`}>{ANOM[a.kind]?.[0] || a.kind}</span>

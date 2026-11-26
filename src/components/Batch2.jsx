@@ -56,9 +56,15 @@ function CloseHoldModal({ h, onClose }) {
 }
 export function HoldsCard({ compact }) {
   const { role } = useApp();
-  const holds = useHolds(); const [open, setOpen] = useState(null);
+  const holds = useHolds(); const [open, setOpen] = useState(null); const [hist, setHist] = useState(false);
   const active = (holds || []).filter((h) => h.status === 'active');
   if (!holds || (compact && !active.length)) return null;
+  // 自查: 没有冻结中的货时不再摆一整张空表 (工具条 + 表头 + 「没有冻结记录」), 只留一行; 有历史记录可以点开看
+  if (!compact && !active.length && !hist) return (
+    <div className="card row" style={{ marginBottom: 12, padding: '10px 16px', gap: 10, alignItems: 'center' }}>
+      <b>暂停出库的货</b><span className="pill green">没有</span><span className="grow" />
+      {holds.length > 0 && <button type="button" className="btn sm" onClick={() => setHist(true)}>看以前的记录（{holds.length}）</button>}
+    </div>);
   const canDo = hasAny(role, ['admin', 'manager']);
   return (
     <div className="card" style={{ marginBottom: 12, borderColor: active.length ? '#f3c6c6' : undefined }}>

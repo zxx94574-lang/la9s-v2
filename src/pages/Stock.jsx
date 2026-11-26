@@ -43,7 +43,7 @@ export default function Stock() {
         <div className="sub">可售 = 实存 − 预占。本地出货只用 LA / 9S；FOB、待检、报废仓永不自动参与匹配。库存变动只能由出库、退货检验、采购入库产生。</div></div>
         <div className="row">
           <div className="seg">{[['local', 'LA + 9S 本地仓'], ['other', 'FOB / 待检 / 报废'], ['all', '全部']].map(([k, l]) => <button type="button" key={k} className={wh === k ? 'on' : ''} onClick={() => setWh(k)}>{l}</button>)}</div>
-          <input className="in" style={{ width: 220 }} placeholder="⌕ 型号 / 编码 / 库位 / 通用型号" value={text} onChange={(e) => setText(e.target.value)} />{text && <button type="button" className="btn sm" onClick={() => setText('')}>清除筛选</button>}
+          <input className="in ph-search" style={{ width: 220 }} placeholder="⌕ 型号 / 编码 / 库位 / 通用型号" value={text} onChange={(e) => setText(e.target.value)} />{text && <button type="button" className="btn sm" onClick={() => setText('')}>清除筛选</button>}
         </div>
       </div>
       <SumBar items={[

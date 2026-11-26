@@ -25,7 +25,7 @@ select * from (
   from app.v_open_returns r where r.org_id = $1 and r.pending = 'decide'
   union all
   select 'cash', m.id, null, null, null, m.created_at,
-    array[case m.kind when 'expense' then '支出：' when 'handover' then '交款：' else '资金：' end || coalesce(m.note, '')], false,
+    array[case m.kind when 'expense' then '支出：' when 'handover' then '交款：' else '资金：' end || coalesce(nullif(m.category, '') || ' ', '') || coalesce(nullif(m.note, ''), nullif(m.payer, ''), (select a.name from app.cash_accounts a where a.id = m.account_id), '')], false,
     m.amount, null, 0, 'XOF', null
   from app.cash_moves m where m.org_id = $1 and m.status = 'pending'
 ) x order by at`;

@@ -151,6 +151,7 @@ export function CustomerInfo({ deal }) {
           <div><CustLink id={deal.customer_id} name={deal.customer_name} /> <span className="mono muted small">{deal.customer_code || deal.temp_code}</span></div>
           <div className="small muted">{deal.city || '—'}</div>
           <div>{tel(phone)}</div>
+          {phone && !phoneValid(phone) && <div className="small" style={{ color: 'var(--red)' }}>电话位数不对，到出库时会卡住：先去客户档案改</div>}
           {deal.source === 'guest' && <div><Pill tone="amber">游客询价</Pill> {deal.guest_info?.shop || ''}</div>}
         </div>
         <div className="info4-b"><div className="info4-t">收货人</div>

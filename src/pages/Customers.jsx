@@ -77,7 +77,7 @@ export default function Customers() {
     { key: 'shop_type', label: '店铺类型', w: 100, value: (c) => optLabel(O.shop_types, c.shop_type), ...optTag(O.shop_types, (c) => c.shop_type), edit: sel('shop_type', O.shop_types) },
     { key: 'follow_status', label: '跟进状态', w: 100, value: (c) => optLabel(O.follow_statuses, c.follow_status), ...optTag(O.follow_statuses, (c) => c.follow_status), edit: sel('follow_status', O.follow_statuses) },
     { key: 'contact_name', label: '收货人', w: 110, value: (c) => c.contact_name || '', edit: txt('contact_name') },
-    { key: 'phone', label: '电话', w: 150, value: (c) => c.phone || '', render: (c) => fmtPhone(c.phone), edit: (c) => (canEdit ? { type: 'text', value: c.phone || '', onChange: (v, m) => { const n = normPhone(v); if (!n.valid) return toast(`电话位数不对：${v}（+${n.cc} 要 ${n.need} 位）`, 'err'); saveCell(c, 'phone', n.formatted, m); } } : null) },
+    { key: 'phone', label: '电话', w: 150, value: (c) => c.phone || '', render: (c) => (c.phone && !normPhone(c.phone).valid ? <span title="位数不对，出库时会卡住，点一下改">{fmtPhone(c.phone)} <span className="pill red">位数不对</span></span> : fmtPhone(c.phone)), edit: (c) => (canEdit ? { type: 'text', value: c.phone || '', onChange: (v, m) => { const n = normPhone(v); if (!n.valid) return toast(`电话位数不对：${v}（+${n.cc} 要 ${n.need} 位）`, 'err'); saveCell(c, 'phone', n.formatted, m); } } : null) },
     { key: 'address', label: '地址', w: 160, hidden: true, value: (c) => c.address || '', edit: txt('address') },
     { key: 'kind', label: '类型', w: 90, value: (c) => KIND[c.kind], render: (c) => (c.kind === 'spare' ? KIND.spare : <Pill tone="blue">{KIND[c.kind]}</Pill>) },
     { key: 'tier', label: '档位', w: 130, value: (c) => (c.status === 'prospect' ? '潜客' : TIERS[c.tier]),
@@ -109,7 +109,7 @@ export default function Customers() {
       </div>
       <div className="card">
         <div className="tabs">{TABS.filter(([k]) => (price || !['warn', 'byowner'].includes(k)) && (k !== 'opts' || role === 'admin')).map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l} {!['byowner', 'opts'].includes(k) && <span className="muted small">{n(k)}</span>}</button>)}</div>
-        {tab === 'byowner' ? <ByOwner /> : tab === 'opts' ? <CustomerOptionsEditor opts={O} /> : <Grid id="customers2" table="customers" columns={cols} rows={rows} onRowClick={(c) => setOpen(c.id)} empty="这一类没有客户" tools={seesPrice(role) ? <><span className="small muted">订单占比看</span><Choice size="sm" flat={false} width={120} value={shareK} onChange={setShareK} options={SHARE_RANGES} /><ShareNote /></> : null}
+        {tab === 'byowner' ? <ByOwner /> : tab === 'opts' ? <CustomerOptionsEditor opts={O} /> : <Grid id="customers2" table="customers" pin="name" columns={cols} rows={rows} onRowClick={(c) => setOpen(c.id)} empty="这一类没有客户" tools={seesPrice(role) ? <><span className="small muted">订单占比看</span><Choice size="sm" flat={false} width={120} value={shareK} onChange={setShareK} options={SHARE_RANGES} /><ShareNote /></> : null}
           tools={canEdit ? <Info>点一下选格子，再点一下改，改完自动保存；行号旁 ↗ 打开客户抽屉。城市 / 店铺类型 / 跟进状态等选项在「选项设置」里加，表头漏斗按它筛。</Info> : null} />}
       </div>
       {open && <CustomerDrawer id={open} onClose={() => setOpen(null)} />}

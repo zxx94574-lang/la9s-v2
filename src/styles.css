@@ -2426,3 +2426,5 @@ body { touch-action: manipulation; }
 .pl-lk { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; border-bottom: 1px dashed transparent; }
 .pl-lk:hover { color: var(--brand); border-bottom-color: currentColor; }
 .pl-t tr.pl-chg td span[data-tip] { cursor: help; }
+/* 自查: 页头那一排在手机上横着滑 (老规则), 但带搜索框的那排换行, 搜索框占一整行, 不再被挤到右边看不见 */
+@media (max-width: 640px) { .pagehead > .row:has(> .ph-search) { flex-wrap: wrap !important; overflow: visible; row-gap: 8px; } .pagehead > .row > .ph-search { flex: 1 1 100% !important; width: 100% !important; } }

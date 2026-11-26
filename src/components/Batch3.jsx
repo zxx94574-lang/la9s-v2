@@ -7,7 +7,7 @@ import { useApp, useData, Pill, Info, Thumb, TierText } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { CustLink, DealLink, EmpLink } from './Archives.jsx';
 import { NoteModal } from '../pages/DealPanels.jsx';
-import { EVENT_LABELS, STATUS, ROLES, TIERS, hasAny } from '../lib/domain.js';
+import { EVENT_LABELS, STATUS, ROLES, TIERS, PAY_METHODS, hasAny } from '../lib/domain.js';
 import { money, qty, dt, friendlyError } from '../lib/format.js';
 
 export function MoneyUrgent() {
@@ -96,12 +96,14 @@ export function noticeText(n) {
     case 'gate_released': return `中方放行出库（${d.kind === 'qty' ? '数量超过客户确认的' : '超欠款上限 / 账期'}）：${d.note || ''}`;
     case 'tier_changed': return `${d.customer || '客户'} 档位 ${TIERS[d.from] || d.from} → ${TIERS[d.to] || d.to}`;
     case 'fob_to_local': return `FOB ${d.fob_no || ''} 客户不要了：${d.qty} 片转进 ${d.warehouse} 仓（${d.reason || ''}）${Number(d.over) > 0 ? `，多收订金 ${money(d.over)} ${({ credit: '转预付', keep: '不退', refund: '要退' })[d.deposit] || ''}` : ''}`;
-    case 'receipt_in': return `收款 ${d.rcv_no || ''}：${money(d.amount, d.currency)} ${d.currency}${d.currency !== d.account_currency ? `（折 ${money(d.converted, d.account_currency)} ${d.account_currency}）` : ''} · ${d.method || ''}`;
+    case 'receipt_in': return `收款 ${d.rcv_no || ''}：${money(d.amount, d.currency)} ${d.currency}${d.currency !== d.account_currency ? `（折 ${money(d.converted, d.account_currency)} ${d.account_currency}）` : ''} · ${PAY_METHODS[d.method] || d.method || ''}`;
     case 'dup_photo': return `重复照片：「${d.where || '凭证'}」用的图已经用在 ${d.uses || '别处'}`;
     default: return EVENT_LABELS[n.kind] || n.kind;
   }
 }
 // 11-18 (Frank 第 7 点): 大变动 = 红 (撤销出库 / 撤销收款 / 确认后改数量改价 / 找货后作废 / 抹零核销 / 改档位); 其余黄
+// 自查: 两张表各写一套类型名, 未看那张漏了「收款」(显示成 receipt_in) → 合成一个
+const kindName = (k) => ({ dup_photo: '重复照片', price_decided: '改价审批', payment_appeal: '付款申诉', receipt_in: '收款', fob_to_local: 'FOB 转本地' }[k] || EVENT_LABELS[k] || k);
 const KIND_TONE = { qty_changed: 'red', cancelled: 'red', written_off: 'red', bad_debt_written_off: 'red', tier_changed: 'red', quote_edited: 'red', price_set: 'red', price_requested: 'red', price_decided: 'red', price_adjusted: 'red', shipment_voided: 'red', receipt_voided: 'red', dup_photo: 'amber', receipt_in: 'green', fob_to_local: 'red' };
 
 export function ChangeNotices() {
@@ -140,7 +142,7 @@ export function ChangeNotices() {
         { key: 'by_name', label: '谁做的', w: 90, value: (n) => n.by_name || '' },
         { key: 'biz_no', label: '订单', w: 130, render: (n) => (n.deal_id ? <DealLink id={n.deal_id} no={n.biz_no} /> : '—') },
         { key: 'customer_name', label: '客户', w: 120, render: (n) => (n.customer_id ? <CustLink id={n.customer_id} name={n.customer_name} /> : '') },
-        { key: 'kind', label: '类型', w: 110, value: (n) => (n.kind === 'receipt_in' ? '收款' : n.kind === 'fob_to_local' ? 'FOB 转本地' : EVENT_LABELS[n.kind] || (n.kind === 'dup_photo' ? '重复照片' : n.kind)), render: (n) => <Pill tone="gray">{n.kind === 'dup_photo' ? '重复照片' : n.kind === 'price_decided' ? '改价审批' : n.kind === 'payment_appeal' ? '付款申诉' : n.kind === 'receipt_in' ? '收款' : EVENT_LABELS[n.kind] || n.kind}</Pill> },
+        { key: 'kind', label: '类型', w: 110, value: (n) => kindName(n.kind), render: (n) => <Pill tone="gray">{kindName(n.kind)}</Pill> },
         { key: 'text', label: '改了什么', w: 420, value: noticeText, render: (n) => (n.kind === 'tier_changed' ? <TierText>{noticeText(n)}</TierText> : noticeText(n)) },
       ]} />}
       {!hist && list.length > 0 && <>      <Grid id="todo-notices" noTools rows={[...list].sort((a, b) => (KIND_TONE[b.kind] === 'red') - (KIND_TONE[a.kind] === 'red'))} selectable={{ selected: sel, onChange: setSel }} columns={[
@@ -148,7 +150,7 @@ export function ChangeNotices() {
         { key: 'by_name', label: '谁', w: 110, value: (n) => n.by_name || '', render: (n) => <>{n.by_name || '—'} <span className="small muted">{(n.roles || []).map((r) => ROLES[r]?.label || r).join(' / ')}</span></> },
         { key: 'biz_no', label: '订单', w: 130, render: (n) => (n.deal_id ? <DealLink id={n.deal_id} no={n.biz_no} /> : '—') },
         { key: 'customer_name', label: '客户', w: 120, render: (n) => (n.customer_id ? <CustLink id={n.customer_id} name={n.customer_name} /> : '') },
-        { key: 'kind', label: '类型', w: 110, value: (n) => EVENT_LABELS[n.kind] || (n.kind === 'dup_photo' ? '重复照片' : n.kind), render: (n) => <Pill tone={KIND_TONE[n.kind] || 'amber'}>{n.kind === 'dup_photo' ? '重复照片' : n.kind === 'price_decided' ? '改价审批' : n.kind === 'payment_appeal' ? '付款申诉' : EVENT_LABELS[n.kind] || n.kind}</Pill> },
+        { key: 'kind', label: '类型', w: 110, value: (n) => kindName(n.kind), render: (n) => <Pill tone={KIND_TONE[n.kind] || 'amber'}>{kindName(n.kind)}</Pill> },
         { key: 'text', label: '改了什么', w: 420, value: noticeText, render: (n) => (n.kind === 'tier_changed' ? <TierText>{noticeText(n)}</TierText> : noticeText(n)) },
       ]} /></>}
     </div>
