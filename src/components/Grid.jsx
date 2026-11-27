@@ -1015,7 +1015,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
                           onBlur={() => commitEdit()} inputMode={type === 'number' ? 'decimal' : undefined} style={{ textAlign: alignOf(c) }} />;
                       }
                     } else if (ed && !ed.disabled) {
-                      const shownV = ed.type === 'select' ? ((ed.options || []).find(([v]) => v === ed.value)?.[1] ?? ed.value ?? '') : ed.display ?? (ed.type === 'number' && ed.value !== '' && ed.value != null && kindOf(c) === 'money' ? Number(ed.value).toLocaleString('en-US') : ed.value ?? '');
+                      const shownV = ed.type === 'select' ? ((ed.options || []).find(([v]) => v === ed.value)?.[1] ?? ed.value ?? '') : ed.display ?? (ed.type === 'number' && ed.value !== '' && ed.value != null && kindOf(c) === 'money' ? Number(ed.value).toLocaleString('en-US') : ed.type === 'number' && ed.value !== '' && ed.value != null && isFinite(Number(ed.value)) ? Number(ed.value).toLocaleString('en-US', { maximumFractionDigits: 6 }) : ed.value ?? '');   // 11-27: 数字格不再显示库里的尾零 (22.2600 → 22.26、100.00 → 100), 千分位
                       inner = <span className={`cell-txt ${ed.invalid ? 'err' : ''}`} title={ed.title}>{shownV === '' || shownV == null ? <span className="cell-ph">{ed.placeholder || ''}</span> : (ed.type === 'date' ? dateChip(String(shownV)) : shownV)}</span>;
                       if (ed.hint) inner = <>{inner}<div className="cell-hint">{ed.hint}</div></>;
                     } else {

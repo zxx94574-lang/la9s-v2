@@ -45,3 +45,16 @@ test('下班后锁系统: 打了下班卡就锁, 中方 / 国家经理不锁, �
   await t.as(U.admin, `select app.grant_access_unlock($1,$2,'今晚盘点')`, [t.ids.org, emp]);
   assert.equal((await t.val(U.picker, `select app.offhours_state($1)`, [t.ids.org])).locked, false);
 });
+
+test('0107: FOB 出库 / FOB 收款进「待录金蝶」, 回填单号后变已录', async () => {
+  const t = await setup();
+  await t.db.query(`select app.ensure_cash_accounts($1)`, [t.ids.org]);
+  const f = await t.val(U.hotline, `select app.create_fob($1,$2,'CI','warehouse','XOF',$3)`, [t.ids.org, t.ids.bigS, JSON.stringify([{ product_id: t.ids.x6516, qty: 10 }])]);
+  const wave = await t.val(U.admin, `select id from app.cash_accounts where org_id = $1 and name = 'Wave-XOF'`, [t.ids.org]);
+  const pay = await t.val(U.finance, `select app.record_fob_payment2($1,$2)`, [f, JSON.stringify({ kind: 'deposit', amount: 5000, proof: 'p.jpg', account_id: wave })]);
+  let rows = await t.as(U.admin, `select * from app.v_kingdee_all where org_id = $1 and kind = 'fob_pay'`, [t.ids.org]);
+  assert.equal(rows.length, 1); assert.equal(rows[0].state, 'todo'); assert.equal(rows[0].row_id, pay);
+  await t.as(U.finance, `select app.kingdee_fill($1,$2)`, [t.ids.org, JSON.stringify([{ kind: 'fob_pay', row_id: pay, no: 'SKD001' }])]);
+  rows = await t.as(U.admin, `select * from app.v_kingdee_all where org_id = $1 and kind = 'fob_pay'`, [t.ids.org]);
+  assert.equal(rows[0].state, 'done'); assert.equal(rows[0].kd_no, 'SKD001');
+});

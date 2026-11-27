@@ -27,7 +27,10 @@ export function KdAll() {
   // 自查: 收款 / 销售出库录金蝶要金额, 以前这张表只有数量 (收款连数量都没有) —— 金额另取一次贴上去
   const { data: amt } = useData(() => q(`select 'receipt' as k, r.id, r.amount as v, r.currency from app.receipts r where r.org_id = $1
     union all select 'outbound', k.id, sum(sl.qty * dl.unit_price), max(d.currency) from app.kingdee_outbox k join app.shipment_lines sl on sl.shipment_id = k.shipment_id
-      join app.deal_lines dl on dl.id = sl.deal_line_id join app.deals d on d.id = dl.deal_id where k.org_id = $1 group by k.id`, [org]).catch(() => []), [org]);
+      join app.deal_lines dl on dl.id = sl.deal_line_id join app.deals d on d.id = dl.deal_id where k.org_id = $1 group by k.id
+    union all select 'fob_pay', x.id, x.amount, f.currency from app.fob_payments x join app.fob_projects f on f.id = x.project_id where f.org_id = $1
+    union all select 'fob_ship', e.kd_uid, sum((r->>'qty')::numeric * coalesce(l.unit_price, 0)), max(f.currency) from app.fob_events e join app.fob_projects f on f.id = e.project_id
+      cross join jsonb_array_elements(coalesce(e.detail->'rows', '[]')) r left join app.fob_lines l on l.id = (r->>'line_id')::uuid where f.org_id = $1 and e.action = 'shipped' group by e.kd_uid`, [org]).catch(() => []), [org]);
   const amtOf = useMemo(() => Object.fromEntries((amt || []).map((x) => [`${x.k}:${x.id}`, x])), [amt]);
   // 自查: 「其他出入库 / 退货入库 / 调拨」这几类以前「系统单据」只写一个代码 (return_in), 没有单号、客户、型号、仓 —— 财务没法照着录
   const { data: mi } = useData(() => q(`select m.id, m.reason, p.code, p.model, w.code as wh, r.rt_no, r.deal_id, d.customer_id, c.name as customer_name

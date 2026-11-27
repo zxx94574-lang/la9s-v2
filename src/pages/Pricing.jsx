@@ -48,7 +48,7 @@ export default function Pricing() {
     try { await call(role, `select app.set_product_cost($1,$2,$3,$4,$5,$6,$7)`, [r.id, N(row.rmb_cost), N(row.freight_xof), N(row.fee_s), N(row.fee_a), N(row.fee_b), N(row.fee_c)]); if (!meta?.batch || meta.last) { toast(meta?.batch ? `已保存 ${meta.total} 格，价格已重算` : '已保存，价格已重算'); refresh(); } }
     catch (e) { toast(friendlyError(e), 'err'); }
   };
-  const ed = (k) => (r) => (admin ? { type: 'number', value: r[k] ?? '', onChange: (v, m) => saveCell(r, k, v, m) } : null);
+  const ed = (k) => (r) => (admin ? { type: 'number', value: r[k] ?? '', display: r[k] == null || r[k] === '' ? '' : money(r[k], k === 'rmb_cost' ? 'CNY' : 'XOF'), onChange: (v, m) => saveCell(r, k, v, m) } : null);   // 显示: CNY 两位小数、XOF 整数
   const cols = [
     { key: 'code', label: '编码', w: 80, render: (r) => <span className="mono">{r.code}</span> },
     { key: 'category', label: '种类', w: 100 },
@@ -56,10 +56,10 @@ export default function Pricing() {
     { key: 'model', label: '型号', w: 110, render: (r) => <button type="button" className="linkbtn" title="打开物料档案" onClick={(e) => { e.stopPropagation(); setOpenP(r); }}><b>{r.model}</b></button> },
     { key: 'variant', label: '区分', w: 120, render: (r) => (r.variant ? <span className="small">{r.variant}</span> : '') },
     { key: 'on_hand', label: '实存', w: 60 },
-    { key: 'rmb_cost', label: '人民币成本', w: 100, edit: ed('rmb_cost'), render: (r) => r.rmb_cost ?? '—' },
-    { key: 'freight_xof', label: '运费 XOF', w: 90, edit: ed('freight_xof'), render: (r) => r.freight_xof ?? '—' },
+    { key: 'rmb_cost', label: '人民币成本', w: 100, edit: ed('rmb_cost'), render: (r) => (r.rmb_cost == null ? '—' : money(r.rmb_cost, 'CNY')) },   // 11-27: CNY 两位小数（以前显示 22.2600）
+    { key: 'freight_xof', label: '运费 XOF', w: 90, edit: ed('freight_xof'), render: (r) => (r.freight_xof == null ? '—' : money(r.freight_xof)) },   // XOF 不带小数
     { key: 'landed', label: '到岸成本 XOF', w: 110, value: landed, render: (r) => (landed(r) == null ? <span className="muted">缺成本</span> : <b>{money(landed(r))}</b>) },
-    ...TIERS4.map(([tier, label, fk]) => ({ key: fk, label: `${label} FEE`, head: <><TierPill tier={tier} short /> FEE</>, w: 100, edit: ed(fk), render: (r) => r[fk] ?? '—' })),
+    ...TIERS4.map(([tier, label, fk]) => ({ key: fk, label: `${label} FEE`, head: <><TierPill tier={tier} short /> FEE</>, w: 100, edit: ed(fk), render: (r) => (r[fk] == null ? '—' : money(r[fk])) })),
     ...TIERS4.map(([tier, label, fk]) => ({ key: `p_${tier}`, label: `${label} 价`, head: <><TierPill tier={tier} short /> 价</>, w: 120, value: (r) => r.prices[tier]?.price,
       render: (r) => {
         const cur = r.prices[tier]; const l = landed(r); const fee = N(val(r, fk));
