@@ -134,7 +134,7 @@ export function PlanTodo() {
       {data.map((r, i) => (
         <div key={r.directive_id + i} className="orow" style={{ gridTemplateColumns: 'auto 1fr auto' }} onClick={() => openArchive?.({ kind: 'customer', id: r.customer_id })}>
           <span className="age red">过期</span>
-          <span className="small"><b>{r.customer_name}</b> 答应 {dDate(r.plan_on)} 付 {money(r.amount)}{r.ref_label ? ` · ${r.ref_label}` : ''} · 到这天该付 {money(r.due_total)}，实收 {money(r.paid)} · 现在还欠 {money(r.balance)}</span>
+          <span className="small"><b><CustLink id={r.customer_id} name={r.customer_name} /></b> 答应 {dDate(r.plan_on)} 付 {money(r.amount)}{r.ref_label ? ` · ${r.ref_label}` : ''} · 到这天该付 {money(r.due_total)}，实收 {money(r.paid)} · 现在还欠 {money(r.balance)}</span>
           <b style={{ color: 'var(--red)' }}>差 {money(r.short)}</b>
         </div>))}
     </div>);

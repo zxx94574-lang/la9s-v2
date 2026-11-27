@@ -151,7 +151,7 @@ export function CustomerInfo({ deal }) {
           <div><CustLink id={deal.customer_id} name={deal.customer_name} /> <span className="mono muted small">{deal.customer_code || deal.temp_code}</span></div>
           <div className="small muted">{deal.city || '—'}</div>
           <div>{tel(phone)}</div>
-          {phone && !phoneValid(phone) && <div className="small" style={{ color: 'var(--red)' }}>电话位数不对，到出库时会卡住：先去客户档案改</div>}
+          {phone && !phoneValid(phone) && <div className="small" style={{ color: 'var(--red)' }}>{['shipped', 'partial', 'paid', 'closed'].includes(deal.status) ? '电话位数不对：去客户档案改' : '电话位数不对，到出库时会卡住：先去客户档案改'}</div>}
           {deal.source === 'guest' && <div><Pill tone="amber">游客询价</Pill> {deal.guest_info?.shop || ''}</div>}
         </div>
         <div className="info4-b"><div className="info4-t">收货人</div>
@@ -1341,7 +1341,7 @@ function ReturnRecon({ r, deal, act, role }) {
           <div style={{ marginBottom: 8 }}><b>④ 客户对账凭证 → 对账完成</b> <span className="small muted">把上面的图发给客户；客户认没认要有记录：通话截图或 WhatsApp 截图放这里，再点「对账完成」</span></div>
           {doneRecon ? (
             <div className="row" style={{ gap: 10 }}>{r.reconciled_proof ? <Thumb src={r.reconciled_proof} size={48} label={`${r.rt_no} 客户对账凭证`} /> : <span className="small muted">（旧单，没有凭证）</span>}<Pill tone="green">对账完成 {dt(r.reconciled_at)}</Pill></div>
-          ) : can(role, 'mark_received') ? (
+          ) : (can(role, 'mark_received') || can(role, 'receipt')) ? (   /* 自查: 退货对账财务也能点完成 (后台本来就放财务, 前台漏了) */
             <div className="row" style={{ gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div className="field req"><label>客户确认凭证（通话截图 / WhatsApp 截图）</label><PhotoInput value={reconProof} onChange={setReconProof} label="放客户确认截图" /></div>
               <span className="grow" />
@@ -1364,7 +1364,8 @@ function InspectButtons({ x, act }) {
   const [g, setG] = useState(String(left));
   return (
     <span className="row" style={{ gap: 4 }}>
-      好<input className="cell-in" style={{ width: 54, border: '1px solid var(--line)' }} value={g} onChange={(e) => setG(e.target.value.replace(/\D/g, ''))} />
+      好<input className="cell-in" style={{ width: 54, border: '1px solid var(--line)' }} value={g} onChange={(e) => setG(e.target.value.replace(/\D/g, ''))} title="好货几片，回原仓" />
+      <span className="small muted" title="剩下的进报废仓">坏 {left - Math.min(N(g), left)}</span>
       <button type="button" className="btn sm" onClick={() => act('检验完成', `select app.inspect_return_line($1,$2,$3)`, [x.id, Math.min(N(g), left), left - Math.min(N(g), left)]).catch(() => {})}>检验</button>
     </span>
   );

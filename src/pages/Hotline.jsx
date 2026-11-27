@@ -7,6 +7,7 @@ import { q } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, DatePicker, usePeriod, PeriodBar } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
+import { CustLink } from '../components/Archives.jsx';
 import { CallModal, ProspectModal, ResultPill, KIND, CALL_RESULTS } from '../components/Crm.jsx';
 import { CustomerDrawer } from './Customers.jsx';
 import { can } from '../lib/domain.js';
@@ -48,7 +49,7 @@ export default function Hotline() {
   const todayCalls = data.calls.filter((c) => dDate(c.at) === td);
   const qCols = [
     { key: 'code', label: '编码', w: 90, value: (c) => c.code || c.temp_code, render: (c) => <span className="mono">{c.code || c.temp_code}</span> },
-    { key: 'name', label: '客户', w: 170, render: (c) => <b>{c.name}</b> },
+    { key: 'name', label: '客户', w: 170, render: (c) => <CustLink id={c.id} name={c.name} /> },
     { key: 'city', label: '城市', w: 90 },
     { key: 'phone', label: '电话', w: 140, render: (c) => (c.phone ? <a href={telHref(c.phone)} onClick={(e) => e.stopPropagation()}>{fmtPhone(c.phone)}</a> : '—') },
     { key: 'why', label: '为什么要打', w: 200, render: (c) => (c.rank === 0 ? <Pill tone="red">{c.why}</Pill> : <span className="muted">{c.why}</span>) },
@@ -56,7 +57,7 @@ export default function Hotline() {
   ];
   const lCols = [
     { key: 'at', label: '时间', w: 130, value: (r) => r.at, render: (r) => dt(r.at) },
-    { key: 'name', label: '客户', w: 170, value: (r) => `${r.code || r.temp_code} ${r.name}`, render: (r) => <><span className="mono muted">{r.code || r.temp_code}</span> <b>{r.name}</b></> },
+    { key: 'name', label: '客户', w: 170, value: (r) => `${r.code || r.temp_code} ${r.name}`, render: (r) => <><span className="mono muted">{r.code || r.temp_code}</span> <CustLink id={r.customer_id} name={r.name} /></> },
     { key: 'line', label: '线', w: 60, value: (r) => (r.line === 'recycle' ? '回收' : '备件') },
     { key: 'channel', label: '方式', w: 80, value: (r) => ({ call: '电话', whatsapp: 'WhatsApp', visit: '上门' })[r.channel] },
     { key: 'result', label: '结果', w: 100, value: (r) => (CALL_RESULTS.find((x) => x[0] === r.result) || [])[1], render: (r) => <ResultPill v={r.result} /> },

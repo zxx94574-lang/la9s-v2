@@ -6,6 +6,7 @@ import { useControls, CONTROL_TABS, ControlPanels, ControlAlerts, RefundModal } 
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import PublicHeld from '../components/PublicHeld.jsx';
 import RemitCard from '../components/Remit.jsx';
+import { CustLink } from '../components/Archives.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import { readIntent, useIntent } from '../components/MobileSheet.jsx';
 import { q, call } from '../db/client.js';
@@ -90,7 +91,7 @@ export default function Cash() {
   ];
   const noticeCols = [
     { key: 'paid_on', label: '客户说哪天付', w: 110, render: (n) => dDate(n.paid_on) },
-    { key: 'name', label: '客户', w: 180, value: (n) => `${n.code} ${n.name}`, render: (n) => <><span className="mono muted">{n.code}</span> <b>{n.name}</b></> },
+    { key: 'name', label: '客户', w: 180, value: (n) => `${n.code} ${n.name}`, render: (n) => <><span className="mono muted">{n.code}</span> <CustLink id={n.customer_id} name={n.name} /></> },
     { key: 'amount', label: '金额', w: 120, value: (n) => Number(n.amount), render: (n) => money(n.amount, n.currency) },
     { key: 'method', label: '方式', w: 80, value: (n) => PAY_METHODS[n.method] || n.method, render: (n) => PAY_METHODS[n.method] || n.method },
     { key: 'proof', label: '截图', w: 60, render: (n) => n.proof && <Thumb src={n.proof} size={30} /> },

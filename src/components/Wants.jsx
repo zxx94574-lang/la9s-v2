@@ -108,7 +108,7 @@ function Allocate({ rows, onClose, onOk }) {
         const left = Number(ws[0].avail) - ws.reduce((a, w) => a + (Number(v[w.id]) || 0), 0);
         return (<div key={model} className="card" style={{ marginBottom: 8 }}>
           <div className="card-h"><h2>{model}</h2><span className="small muted">可售 {qty(ws[0].avail)}</span><span className="grow" /><Pill tone={left < 0 ? 'red' : 'gray'}>{left < 0 ? `超了 ${qty(-left)}` : `还剩 ${qty(left)}`}</Pill></div>
-          {ws.map((w) => <div key={w.id} className="orow" style={{ gridTemplateColumns: '1fr auto auto' }}><span><b>{w.customer_name}</b> <span className="small muted">要 {qty(w.qty)}</span></span><span className="small">分</span>
+          {ws.map((w) => <div key={w.id} className="orow" style={{ gridTemplateColumns: '1fr auto auto' }}><span><CustLink id={w.customer_id} name={w.customer_name} /> <span className="small muted">要 {qty(w.qty)}</span></span><span className="small">分</span>
             <MoneyIn className="in" style={{ width: 90 }} value={v[w.id]} onChange={(e) => setV({ ...v, [w.id]: e.target.value })} /></div>)}
         </div>);
       })}

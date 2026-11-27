@@ -29,7 +29,19 @@ export function KdAll() {
     union all select 'outbound', k.id, sum(sl.qty * dl.unit_price), max(d.currency) from app.kingdee_outbox k join app.shipment_lines sl on sl.shipment_id = k.shipment_id
       join app.deal_lines dl on dl.id = sl.deal_line_id join app.deals d on d.id = dl.deal_id where k.org_id = $1 group by k.id`, [org]).catch(() => []), [org]);
   const amtOf = useMemo(() => Object.fromEntries((amt || []).map((x) => [`${x.k}:${x.id}`, x])), [amt]);
-  const all = useMemo(() => (data || []).map((r) => { const a = amtOf[`${r.kind}:${r.row_id}`]; return a ? { ...r, amount: Number(a.v), currency: a.currency } : r; }), [data, amtOf]);
+  // 自查: 「其他出入库 / 退货入库 / 调拨」这几类以前「系统单据」只写一个代码 (return_in), 没有单号、客户、型号、仓 —— 财务没法照着录
+  const { data: mi } = useData(() => q(`select m.id, m.reason, p.code, p.model, w.code as wh, r.rt_no, r.deal_id, d.customer_id, c.name as customer_name
+    from app.kingdee_misc m join app.stock_items s on s.id = m.stock_item_id join app.products p on p.id = s.product_id join app.warehouses w on w.id = s.warehouse_id
+    left join app.returns r on m.ref_type = 'return' and r.id = m.ref_id left join app.deals d on d.id = r.deal_id left join app.customers c on c.id = d.customer_id
+    where m.org_id = $1`, [org]).catch(() => []), [org]);
+  const miOf = useMemo(() => Object.fromEntries((mi || []).map((x) => [x.id, x])), [mi]);
+  const RS = { return_in: '退货进待检', inspect_good: '检验好货回仓', inspect_scrap: '检验坏货报废', hold_to_pending: '冻结转待检', adjust: '盘点调整', discrepancy_back: '收货差异退回', discrepancy_fix: '收货差异补发', fob_to_local: 'FOB 转本地' };
+  const all = useMemo(() => (data || []).map((r) => {
+    const a = amtOf[`${r.kind}:${r.row_id}`]; let x = a ? { ...r, amount: Number(a.v), currency: a.currency } : r;
+    const m = r.kind === 'misc' ? miOf[r.row_id] : null;
+    if (m) x = { ...x, label: `${m.rt_no ? `${m.rt_no} · ` : ''}${RS[m.reason] || m.reason} · ${m.model} ${m.code} · ${({ LA: 'LA 仓', '9S': '9S 仓', FOB: 'FOB 仓', PENDING: '待检仓', SCRAP: '报废仓 LA', 'SCRAP-9S': '报废仓 9S' })[m.wh] || m.wh}`, deal_id: x.deal_id || m.deal_id, customer_id: x.customer_id || m.customer_id, customer_name: x.customer_name || m.customer_name };
+    return x;
+  }), [data, amtOf, miOf]);   // eslint-disable-line react-hooks/exhaustive-deps
   const kinds = [...new Set(all.map((r) => r.kind_name))];
   const todoN = (k) => all.filter((r) => r.state === 'todo' && (!k || r.kind_name === k)).length;
   const rows = all.filter((r) => (show === 'all' || r.state === show || (show === 'todo' && r.state === 'wait')) && (!kind || r.kind_name === kind));

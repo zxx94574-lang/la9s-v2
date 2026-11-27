@@ -1,4 +1,5 @@
 // 销售拜访 (Frank 2026-10-29): 照飞书 Fiche de visite 的字段. 新店现场建潜客 (临时编码), 门店照片必拍.
+import { CustLink } from '../components/Archives.jsx';
 import React, { useEffect, useState } from 'react';
 import { takeWorkCust } from '../lib/dirWork.js';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
@@ -25,7 +26,7 @@ export default function Visits() {
     { key: 'at', label: '时间', w: 130, value: (r) => r.at, render: (r) => dt(r.at) },
     { key: 'photo', label: '照片', w: 60, render: (r) => r.photo && <Thumb src={r.photo} size={32} group="visits" label={r.name} /> },
     { key: 'name', label: '客户', w: 180, value: (r) => `${r.code || r.temp_code} ${r.name}`,
-      render: (r) => <><span className="mono muted">{r.code || r.temp_code}</span> <b>{r.name}</b>{r.status === 'prospect' && <span className="muted small"> 潜客</span>}</> },
+      render: (r) => <><span className="mono muted">{r.code || r.temp_code}</span> <CustLink id={r.customer_id} name={r.name} />{r.status === 'prospect' && <span className="muted small"> 潜客</span>}</> },
     { key: 'city', label: '城市', w: 90 },
     { key: 'result', label: '结果', w: 90, value: (r) => (VISIT_RESULTS.find((x) => x[0] === r.result) || [])[1], render: (r) => <ResultPill v={r.result} visit /> },
     { key: 'products_wanted', label: '想要的货', w: 160 },
