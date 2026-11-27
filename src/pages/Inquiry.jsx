@@ -111,7 +111,7 @@ export default function Inquiry({ embedded, from, to } = {}) {   // from / to：
           <div className="field"><label>Yango 运费 <Info>默认客户付。只有单特别大才由我们付；客户自己来拿就没有运费。</Info></label><OptChoice optKey="inq_yango" title="Yango 运费谁付" options={YANGO} value={yango} onChange={setYango} /></div>
           <div className="field"><label>Wave 手续费</label><OptChoice optKey="inq_wave" title="Wave 手续费谁付" options={WAVE} value={wave} onChange={setWave} /></div>
           <div className="field"><label>备注</label><input className="in" value={note} onChange={(e) => setNote(e.target.value)} /></div>
-          <div className="field"><div className="row" style={{ gap: 6 }}><button type="button" className="btn primary grow" disabled={!ok} onClick={submit}>提交询单</button><Info>询单不带价、不预占库存。提交后进中方待办；中方定价转成报价后，你对自己名下的客户可以接着「确认客户 → 下推找货 → 发销售单给客户确认」。</Info></div></div>
+          <div className="field"><div className="row" style={{ gap: 6 }}><button type="button" className="btn primary grow" disabled={!ok} title={ok ? "" : !cust ? "还差：先选客户" : "还差：加型号并填需求数量"} onClick={submit}>提交询单</button><Info>询单不带价、不预占库存。提交后进中方待办；中方定价转成报价后，你对自己名下的客户可以接着「确认客户 → 下推找货 → 发销售单给客户确认」。</Info></div></div>
         </div>
       </div>}
       {tab === 'list' && <div className="card">

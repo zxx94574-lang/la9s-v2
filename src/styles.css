@@ -2430,3 +2430,9 @@ body { touch-action: manipulation; }
 /* 自查: 页头那一排在手机上横着滑 (老规则), 但带搜索框的那排换行, 搜索框占一整行, 不再被挤到右边看不见 */
 @media (max-width: 640px) { .pagehead > .row:has(> .ph-search) { flex-wrap: wrap !important; overflow: visible; row-gap: 8px; } .pagehead > .row > .ph-search { flex: 1 1 100% !important; width: 100% !important; } }
 .acc-blocks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr)); gap: 0 16px; }
+
+/* 11-27: 弹窗底栏灰按钮不接点击, 点了由底栏说明还差什么 (ui.jsx explainDisabled) */
+.btn.primary:disabled { pointer-events: none; }
+@keyframes flashReq { 0%, 100% { box-shadow: none; } 15%, 60% { box-shadow: 0 0 0 2px var(--red, #c0392b); } }
+.flash-req { animation: flashReq 2.4s ease; border-radius: 8px; }
+.flash-req > label { color: var(--red, #c0392b); }

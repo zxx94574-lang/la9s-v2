@@ -16,7 +16,7 @@ import Decisions from './pages/Decisions.jsx';
 import PoProfit from './pages/PoProfit.jsx';
 import Bins from './pages/Bins.jsx';
 import { DirectiveGate, DirBar } from './components/Directives.jsx';
-import { resetPeriods, Ctx, Modal, useToasts, Info, useStickyPagehead, useInstantTips } from './components/ui.jsx';
+import { resetPeriods, Ctx, Modal, useToasts, Info, useStickyPagehead, useInstantTips, useExplainDisabled } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
 import { ExportPanel } from './components/SettingsPanels.jsx';
 import { loadAllOpts } from './components/Opts.jsx';
@@ -78,6 +78,7 @@ export default function App() {
   const [role, setRoleState] = useState(() => store.get('la9s.role', 'admin'));
   const [tick, setTick] = useState(0);
   const [toast, toastView] = useToasts();
+  useExplainDisabled(toast);   // 11-27: 点灰掉的主按钮 → 说还差什么
   const [settings, setSettings] = useState(false);
   const [drawer, setDrawer] = useState(false);
   const [openGroups, setOpenGroups] = useState(() => store.get('la9s.navgroups3', {}));

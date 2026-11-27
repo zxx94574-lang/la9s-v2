@@ -55,6 +55,36 @@ export function Modal({ title, onClose, children, footer, wide, risk }) {
   );
 }
 
+// 11-27 (Frank「自己结合所有建议，改」): 主按钮灰着点不动时, 以前什么都不说.
+// 现在灰的主按钮不接点击 (CSS pointer-events:none, 点击落到后面), App 里全局听点击 (useExplainDisabled), 点的位置正好是灰主按钮 →
+// 按钮自己写了 title 就说 title; 没写就把弹窗里标 * 还空着的项闪红, 提示「还差：…」. 全站 100 多处弹窗一次生效.
+export function useExplainDisabled(toast) {
+  useEffect(() => { const h = (e) => explainDisabled(e, toast); document.addEventListener('click', h); return () => document.removeEventListener('click', h); }, [toast]);
+}
+const PH_RE = /^(请选择|选[^ ]{0,8}…|—|选日期|自选日期)\s*▾?$/;
+function reqEmpty(f) {
+  const pb = f.querySelector('.proofbox'); if (pb) return !pb.classList.contains('has');
+  const segs = f.querySelectorAll('.seg, .chips');
+  if (segs.length && ![...segs].some((g) => g.querySelector('.on'))) return true;
+  const ins = [...f.querySelectorAll('input, textarea, select')].filter((i) => !['file', 'checkbox', 'radio', 'hidden'].includes(i.type) && i.offsetParent !== null);
+  if (ins.length) return ins.every((i) => !String(i.value || '').trim());
+  return [...f.querySelectorAll('button, .in, .choice-btn')].some((x) => PH_RE.test((x.textContent || '').trim()));
+}
+export function explainDisabled(e, toast) {
+  const b = [...document.querySelectorAll('.btn.primary:disabled')].find((x) => { const r = x.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; });
+  if (!b) return;
+  const txt = (b.textContent || '').trim();
+  if (/中…$|…$/.test(txt)) return;                     // 正在保存
+  if (b.title) { toast?.(b.title, 'err'); return; }
+  const box = b.closest('.modal') || b.closest('.drawer') || b.closest('.card') || b.closest('main');
+  const empt = [...(box?.querySelectorAll('.field.req, .frow') || [])].filter((f) => (f.classList.contains('field') || f.querySelector(':scope > .fl.req')) && f.offsetParent !== null && reqEmpty(f));
+  empt.forEach((f) => { f.classList.remove('flash-req'); void f.offsetWidth; f.classList.add('flash-req'); setTimeout(() => f.classList.remove('flash-req'), 2600); });
+  const ownText = (el) => { if (!el) return ''; const t = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(''); return t.trim() ? t : el.textContent; };   // 只取标签自己的字, 不带 ⓘ 里的解说
+  const names = empt.map((f) => ownText(f.querySelector('label, .fl')).replace(/[*＊]/g, '').replace(/[（(].*$/, '').trim()).filter(Boolean);
+  if (empt[0]) empt[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  toast?.(names.length ? `还差：${[...new Set(names)].join('、')}` : '还有没填完的（标 * 的是必填）', 'err');
+}
+
 // 502 (Frank 11-23): 影响大 / 撤不回的操作一律先弹确认 —— 写清「点了会发生什么」. 用法和普通按钮一样, 多给 title + body.
 export function ConfirmBtn({ className = 'btn sm', title, body, okText = '确认', risk = 'yellow', onOk, disabled, tip, children }) {
   const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false);
