@@ -102,13 +102,13 @@ export function DirectiveGate() {
     check(); const t = setInterval(check, 60e3); return () => clearInterval(t);
   }, [mine, at]);
   if (!un.length) return remind ? (
-    <Modal title={remind.kind === 'urgent' ? `紧急指令还没做完（${remind.rows.length} 条）· 每小时提醒` : `今天要做完的指令（${remind.rows.length} 条）`} onClose={() => setRemind(null)}
+    <Modal center title={remind.kind === 'urgent' ? `紧急指令还没做完（${remind.rows.length} 条）· 每小时提醒` : `今天要做完的指令（${remind.rows.length} 条）`} onClose={() => setRemind(null)}
       footer={<><span className="small muted">做完到「我的待办」点「去做」或「做完了」</span><span className="grow" /><button type="button" className="btn primary" onClick={() => setRemind(null)}>知道了</button></>}>
       <div className="stack" style={{ gap: 6 }}>{remind.rows.map((d) => <div key={d.id} className="row" style={{ gap: 8 }}>{d.no && <span className="t2-no">{d.no}</span>}{d.urgent && <span className="pill red">紧急</span>}<b>{d.title}</b><span className="grow" /><DueChip d={d} /></div>)}</div>
     </Modal>) : null;
   const ack = async (d) => { try { await call(role, `select app.ack_directive2($1,$2)`, [d.id, why[d.id] || null]); toast('已收到，做完到「我的待办」点完成'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
   return (
-    <Modal title={`中方给你的指令（${un.length} 条没点收到）`} onClose={() => {}} footer={<span className="small muted">每一条都要点「收到」；规定 {ACK_MIN} 分钟内收到，超了要写原因。做完后到「我的待办」点完成、填结果。</span>}>
+    <Modal center title={`中方给你的指令（${un.length} 条没点收到）`} onClose={() => {}} footer={<span className="small muted">每一条都要点「收到」；规定 {ACK_MIN} 分钟内收到，超了要写原因。做完后到「我的待办」点完成、填结果。</span>}>
       <div className="stack">{un.map((d) => { const late = lateMin(d) >= ACK_MIN; return (
         <div key={d.id} className="pd-sec">
           <div className="pd-h">{d.urgent && <span className="pill red">紧急</span>} {d.title}</div>

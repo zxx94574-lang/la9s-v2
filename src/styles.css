@@ -1082,6 +1082,9 @@ input.in.gf-search { width: 230px; max-width: 100%; flex: 0 1 230px; }
   .modal-h { padding: 12px 14px; position: sticky; top: 0; background: #fff; z-index: 2; }
   .modal-b { padding: 12px 14px; }
   .modal-f { padding: 10px 14px max(10px, env(safe-area-inset-bottom)); position: sticky; bottom: 0; background: #fff; z-index: 2; flex-wrap: wrap; }
+  /* 533 (Frank 11-27): 通知类弹窗 (中方指令收到 / 指令提醒) 在屏幕中间, 不从底下升 */
+  .overlay.center { padding: 14px; place-items: center; }
+  .overlay.center .modal { border-radius: 16px; max-height: 86vh; animation: popIn .18s ease; }
   .drawer { width: 100% !important; }
   .drawer-b { padding: 10px; }
   .kv { grid-template-columns: 1fr 1fr !important; gap: 8px 10px; }
@@ -2436,3 +2439,5 @@ body { touch-action: manipulation; }
 @keyframes flashReq { 0%, 100% { box-shadow: none; } 15%, 60% { box-shadow: 0 0 0 2px var(--red, #c0392b); } }
 .flash-req { animation: flashReq 2.4s ease; border-radius: 8px; }
 .flash-req > label { color: var(--red, #c0392b); }
+
+@keyframes popIn { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
