@@ -77,7 +77,8 @@ export function normalize(kind, rows) {
     const os = objects(rows, '单据编号', ['订单日期', '业务类型.名称', '备注', '订货供应商', '关闭状态', '发出日期', '物流公司', '运输方式', '交货日期']);
     return [{ kind, rows: os.filter((o) => S(o['单据编号'])).map((o) => ({ doc_no: S(o['单据编号']), d: day(o['订单日期']), party_name: S(o['订货供应商']), code: S(o['物料编码']),
       qty: num(o['数量']), amount: num(o['价税合计']), currency: 'USD', biz: S(o['业务类型.名称']),
-      extra: { model: S(o['规格型号']), price: num(o['单价']), received: num(o['已入库数量']) || 0, closed: S(o['行关闭状态']) === '已关闭', remark: S(o['备注']), mode: S(o['运输方式']), eta: day(o['交货日期']) } })) }];
+      extra: { model: S(o['规格型号']), price: num(o['单价']), received: num(o['已入库数量']) || 0, closed: S(o['行关闭状态']) === '已关闭', remark: S(o['备注']), mode: S(o['运输方式']), eta: day(o['交货日期']),
+        forwarder: S(o['物流公司']), tracking: S(o['物流单号']), pieces: num(o['件数']), freight: num(o['预估物流费']), wv: S(o['货物重量与体积']), shipped: day(o['发出日期']) } })) }];
   }
   if (kind === 'grn') {
     const os = objects(rows, '单据编号', ['供货供应商', '业务日期', '来源单据编号']);
@@ -115,6 +116,16 @@ export function poImportRows(lines) {
     const e = l.extra || {}; const qty = e.closed ? e.received : l.qty;
     return { po_no: l.doc_no, supplier: l.party_name, mode: /空/.test(e.mode || '') ? 'air' : 'sea', ordered_on: l.d, eta: e.eta, code: l.code, model: e.model, qty, qty_received: Math.min(e.received || 0, qty || 0), remark: e.remark };
   }).filter((r) => r.qty > 0);
+}
+// 0106: 采购订单表头的物流信息（物流公司 / 物流单号 / 件数 / 预估物流费 / 重量体积 / 发出日期）→ 每张采购单一行
+export function poLogisticsRows(lines) {
+  const m = new Map();
+  for (const l of lines) {
+    if (/回收/.test(l.biz || '') || !l.doc_no || m.has(l.doc_no)) continue;
+    const e = l.extra || {};
+    m.set(l.doc_no, { po_no: l.doc_no, forwarder: e.forwarder || null, tracking_no: e.tracking || null, pieces: e.pieces || null, freight_est: e.freight || null, weight_vol: e.wv || null, shipped_on: e.shipped || null });
+  }
+  return [...m.values()];
 }
 // 采购入库（金蝶）→ 采购批次：同一采购单同一编码合成一批，单价按数量加权；回收仓不进
 export function batchRows(lines) {

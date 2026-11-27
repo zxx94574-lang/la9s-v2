@@ -2,7 +2,8 @@ import { AskButton, NewMenu } from './components/AskBox.jsx';
 import { ActionSheet, MoreSheet } from './components/MobileSheet.jsx';
 import { installScrollLayers } from './lib/scrollLayers.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { openDb, resetDemo, q, isPersistent, REAL, TEST, SERVER, serverMe, setCustomerSession, customerSession } from './db/client.js';
+import { openDb, resetDemo, q, call, isPersistent, REAL, TEST, SERVER, serverMe, setCustomerSession, customerSession } from './db/client.js';
+import { logout } from './db/server.js';
 import { StaffLogin, doLogout } from './components/StaffLogin.jsx';
 import { CustomerLogin, GuestShop, MustChange } from './pages/Guest.jsx';
 import * as Q from './db/queries.js';
@@ -176,6 +177,16 @@ export default function App() {
     check(); const t = setInterval(check, 60e3); return () => clearInterval(t);
   }, [org, role, toast]);
 
+  // 0106 (Frank 11-27): 下班卡后锁系统 —— 本地员工打了下班卡 / 过了晚上截止 / 早上开门前, 进不了系统; 每分钟查一次, 打卡后马上查
+  const [lock, setLock] = useState(null);
+  useEffect(() => {
+    if (!org || !boot.ready || customerSession()) return undefined;
+    let alive = true;
+    const chk = async () => { try { const [{ s }] = await call(role, `select app.offhours_state($1) as s`, [org]); if (alive) setLock(s?.locked ? s : null); } catch { /* 迁移还没到 / 数据库没好 */ } };
+    chk(); const t = setInterval(chk, 60e3); window.addEventListener('la9s:punched', chk);
+    return () => { alive = false; clearInterval(t); window.removeEventListener('la9s:punched', chk); };
+  }, [org, role, boot.ready]);
+  useEffect(() => { if (lock && SERVER) logout().catch(() => {}); }, [lock]);   // 线上: 真的退出登录 (明天要重新登)
   const go = useCallback((path) => { location.hash = '#/' + path; }, []);
   const refresh = useCallback(() => setTick((t) => t + 1), []);
   // quiet = 客户自己登录 (不清登录状态, 不弹提示); 右上角手动切岗位 = 演示身份, 退出客户登录
@@ -192,6 +203,7 @@ export default function App() {
   const ctx = useMemo(() => ({ org, role, go, refresh, tick, toast, lang, setRole, openArchive }), [org, role, go, refresh, tick, toast, lang, setRole, openArchive]);
 
   if (!boot.ready && SERVER && (boot.needLogin || boot.noMember)) return <StaffLogin noMember={boot.noMember} />;
+  if (lock) return <LockScreen lock={lock} demoSwitch={!SERVER ? () => { setLock(null); setRole('admin'); } : null} />;
   if (!boot.ready) {
     return (
       <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', textAlign: 'center', padding: 20 }}>
@@ -427,5 +439,23 @@ function FlowPrompt({ role }) {
     <Modal title="已生成流水" onClose={() => setMsg(null)} footer={<><button type="button" className="btn" onClick={() => setMsg(null)}>不用，留在这里</button><span className="grow" /><button type="button" className="btn primary" onClick={() => { setMsg(null); window.location.hash = '#/' + msg.to; }}>立即查看 →</button></>}>
       <div>{msg.text}。是否立即查看？</div>
     </Modal>
+  );
+}
+
+// 0106: 下班后锁屏 —— 线上会同时退出登录; 测试版留一个「切回中方」的口子 (不然演示时就卡住了)
+function LockScreen({ lock, demoSwitch }) {
+  const hm = lock.out_at ? new Date(lock.out_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Abidjan' }) : '';
+  const why = lock.reason === 'out' ? `你今天 ${hm} 已经打了下班卡`
+    : lock.reason === 'late' ? `已经过了 ${lock.cutoff}，系统下班了` : '还没到上班时间';
+  return (
+    <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', padding: 20, textAlign: 'center' }}>
+      <div className="card card-b stack" style={{ maxWidth: 380, gap: 14 }}>
+        <img src="./la9s-logo.png" alt="LA&9S" style={{ width: 160, margin: '0 auto' }} />
+        <h2 style={{ margin: 0 }}>{why}</h2>
+        <div className="muted">明天 {lock.reopen || '06:00'} 以后再登录。<br />今晚确实还要用（盘点、急单），找中方在「打卡」页放行。</div>
+        {SERVER ? <button type="button" className="btn primary" onClick={() => location.reload()}>好的</button>
+          : demoSwitch && <button type="button" className="btn" onClick={demoSwitch}>测试版：切回中方看</button>}
+      </div>
+    </div>
   );
 }

@@ -7,7 +7,7 @@ import { q, call } from '../db/client.js';
 import { useApp, useData, FileDrop, Info, Assumed, Pill } from './ui.jsx';
 import Grid from './Grid.jsx';
 import { RuleGear, useRuleValues, ruleNum } from './Rules.jsx';
-import { readFiles, normalize, feishuRows, poImportRows, batchRows, KIND_L } from '../lib/kdImport.js';
+import { readFiles, normalize, feishuRows, poImportRows, poLogisticsRows, batchRows, KIND_L } from '../lib/kdImport.js';
 import { applyPoRemarks } from '../lib/poApply.js';
 import { money, dDate, friendlyError } from '../lib/format.js';
 
@@ -54,6 +54,7 @@ export default function HistRecon() {
             const rows = poImportRows(part.rows);
             const [{ r: p }] = await call(role, `select app.import_purchase_orders($1,$2) as r`, [org, JSON.stringify(rows)]);
             const n = await applyPoRemarks((s, a) => call(role, s, a), org, rows);
+            await call(role, `select app.set_po_logistics_bulk($1,$2)`, [org, JSON.stringify(poLogisticsRows(part.rows))]).catch(() => {});   // 0106 物流公司 / 物流单号 / 件数…进对应格子
             out.push(`　→ 采购单 ${p.po ?? ''} 张建好 / 更新${p.skipped ? `，${p.skipped} 张系统里已经收过货的没动` : ''}${n ? `，${n} 张按备注认了本地 / FOB` : ''}`);
           }
           if (part.kind === 'grn' && role === 'admin') {

@@ -21,6 +21,10 @@ export const RULES = [
   ['kpi.s5', 'kpi_targets', 's5', '时效目标：打包完 → 出库', 60, '分钟', 'num', { page: 'kpi', anchor: 'kpi-targets', where: '时效与准确率 · 每一步用了多久' }],
   ['dir.ack', 'directive_rules', 'ack_minutes', '指令：下达后几分钟内必须点「收到」', 5, '分钟', 'num', { page: 'kpi', anchor: 'kpi-dir', where: '时效与准确率 · 中方指令' }],
   ['dir.remind_at', 'directive_rules', 'remind_at', '指令：普通的每天几点提醒一次（紧急的每小时）', '09:30', '', 'text', { page: 'todo', where: '我的待办 · 中方指令' }],
+  ['po.eta_days', 'po_rules', 'eta_days', '采购单：没填预计到货时，按发货日 + 几天算（2 个半月 ≈ 75）', 75, '天', 'num', { page: 'po', where: '采购单与到货 · 物流' }],
+  ['off.on', 'offhours_lock', 'enabled', '下班卡后锁系统：本地员工打了下班卡就进不了系统，第二天早上再登（中方 / 国家经理 / 国内不锁）', true, '', 'bool', { page: 'attendance', where: '打卡 · 下班后锁系统' }],
+  ['off.cutoff', 'offhours_lock', 'cutoff', '下班后锁系统：忘了打下班卡的，到几点也锁', '21:00', '', 'text', { page: 'attendance', where: '打卡 · 下班后锁系统' }],
+  ['off.reopen', 'offhours_lock', 'reopen', '下班后锁系统：早上几点开始能登录', '06:00', '', 'text', { page: 'attendance', where: '打卡 · 下班后锁系统' }],
   ['wh.comm', 'wh_commission', 'per_piece', '仓库提成：正确出货每片多少', 5, 'XOF', 'num', { page: 'kpi', anchor: 'kpi-wh', where: '时效与准确率 · 仓库提成' }],
   ['kpi.pay_on', 'kpi_pay', 'on', '时效 / 准确率联动工资（工资单「时效准确奖扣」一栏自动带出）', true, '', 'bool', { page: 'kpi', anchor: 'kpi-pay', where: '工资单 · 时效准确奖扣' }],
   ['kpi.pay_min', 'kpi_pay', 'min_n', '联动工资：一个月至少几段 / 几行才算（太少不奖不扣）', 10, '段', 'num', { page: 'kpi', anchor: 'kpi-pay', where: '工资单 · 时效准确奖扣' }],
@@ -81,6 +85,10 @@ const BY_ID = Object.fromEntries(RULES.map((r) => [r[0], r]));
 // 每条规则在「工作地图」上的位置 + 三句说明 (Frank 11-20: 一眼知道从哪来、作用在哪、触发后怎样)
 // area = WorkMap 的环节; short = 一行里显示的短名字; src / apply / effect = 悬停小图标看到的三行; me = Claude 先定的、Frank 没拍板
 export const META = {
+  'po.eta_days': { area: 'po', short: '默认预计到货天数', src: 'Frank 11-27（两个半月，快的两个月）', apply: '新采购单 / 改物流信息没填预计到货时', effect: '预计到货 = 发货日 + 这么多天', me: 0 },
+  'off.on': { area: 'staff', short: '下班卡后锁系统', src: 'Frank 11-27', apply: '本地员工（销售、仓库、热线、财务…）', effect: '打了下班卡 → 当天进不了系统；中方可在打卡页放行一次', me: 0 },
+  'off.cutoff': { area: 'staff', short: '晚上几点锁', src: 'Claude 先定', apply: '忘了打下班卡的人', effect: '过了这个点也锁', me: 1 },
+  'off.reopen': { area: 'staff', short: '早上几点开', src: 'Claude 先定', apply: '所有被锁的人', effect: '这个点之前登不进', me: 1 },
   'recon.ok': { area: 'cash', short: '对账 · 对上的差额', src: 'Claude 先定', apply: '按客户对应收、按单对', effect: '差额在这以内算对上（绿）', me: 1 },
   'recon.warn': { area: 'cash', short: '对账 · 标黄的差额', src: 'Claude 先定', apply: '按客户对应收、按单对', effect: '超过「对上」、在这以内标黄；再大标红', me: 1 },
   'recon.po_days': { area: 'po', short: '在途超期天数', src: 'Claude 先定', apply: '金蝶导进来的采购单', effect: '超过天数没入库也没关闭，列进「在途超期」', me: 1 },

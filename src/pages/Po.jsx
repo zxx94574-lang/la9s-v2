@@ -4,13 +4,13 @@ import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 // 规矩: 采购单分「本地备货」「FOB」(一张单只有一种); 国内发了货才有采购单 → 没下推入库的部分一律算在途;
 // 到货时按箱勾「到了哪些箱」→ 一次下推一张采购入库单 (本地进 LA / 9S, FOB 进 FOB 仓); 少到的差额只有中方能关, 必须选结果 + 传凭证.
 // 箱单 (飞书「98.箱单 › 科特」里那种 Excel) 直接拖进来: 按内容认页签 (页签名字不可靠), 读需求批次 / 入仓号 / 每箱型号数量 / 单价 / 金蝶料号.
-import { OptChoice } from '../components/Opts.jsx';
+import { OptChoice, OptNote } from '../components/Opts.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Pill, Modal, Info, PhotoInput, FileDrop, Drawer, Thumb, DatePicker, Choice } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, Info, PhotoInput, FileDrop, Drawer, Thumb, DatePicker, Choice, ConfirmBtn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { ModelLink } from '../components/Archives.jsx';
-import { can } from '../lib/domain.js';
+import { can, hasAny } from '../lib/domain.js';
 import { parsePackingBook } from '../lib/packingList.js';
 import { ReceiveModal as LineReceive } from './Replenish.jsx';
 import { dDate, dt, qty, money, today, friendlyError } from '../lib/format.js';
@@ -20,10 +20,25 @@ import { periodRange } from '../lib/format.js';
 const N = (v) => Number(v) || 0;
 export const PURPOSE = { local: ['本地备货', 'blue'], fob: ['FOB', 'amber'], mixed: ['混装', 'amber'], supplies: ['物资', 'gray'], unknown: ['待定', 'gray'] };
 const SOURCE = { kingdee: '金蝶导入', system: '系统建单', packing_list: '箱单导入' };
+// 0106 物流进度 (Frank 11-27): 发货 → 到港 → 清关完 → 可提货 (有提货单) → 已提货 → 入库
+export const MODE_L = { sea: '海运', air: '空运', other: '其他' };
+export function stageOf(p) {
+  if (p.status === 'closed') return ['已入库', 'green'];
+  if (N(p.received) > 0) return ['部分入库', 'amber'];
+  if (p.picked_on) return ['已提货', 'blue'];
+  if (p.cleared_on) return p.has_pickup ? ['可提货', 'green'] : ['清关完 · 缺提货单', 'red'];
+  if (p.arrived_on) return p.has_pickup ? ['到港 · 有提货单', 'blue'] : ['到港 · 缺提货单', 'red'];
+  if (p.eta && dDate(p.eta) < today()) return ['过了预计还没到', 'red'];
+  if (p.shipped_on) return ['在路上', 'blue'];
+  return ['还没发货', 'gray'];
+}
 export const GAP_RESULTS = ['破损', '少发', '国内取消', '丢失', '补发中（另开单）', '其他'];
 
 export const poListSql = `
 select p.id, p.po_no, p.batch_name, p.warehouse_nos, p.purpose, p.fob_customer_codes, p.status, p.source, p.supplier, p.ordered_on, p.shipped_on, p.eta, p.mode, p.created_at,
+  p.forwarder, p.tracking_no, p.container_no, p.weight_vol, p.freight_est, p.freight_none, p.arrived_on, p.cleared_on, p.picked_on, p.eta_first, p.eta_changes, p.boxes, p.pcs, p.note, p.remark,
+  exists (select 1 from app.po_docs d where d.po_id = p.id and d.kind = 'pickup' and not d.removed) as has_pickup,
+  (select count(*) from app.po_docs d where d.po_id = p.id and not d.removed)::int as docs_n,
   f.fob_no, (select coalesce(sum(l.qty),0) from app.po_lines l where l.po_id = p.id)::int as qty,
   (select coalesce(sum(l.qty_received),0) from app.po_lines l where l.po_id = p.id)::int as received,
   (select coalesce(sum(l.closed_qty),0) from app.po_lines l where l.po_id = p.id)::int as closed,
@@ -92,7 +107,11 @@ export default function PoPage() {
     { key: 'inbound', label: '入仓号', w: 120, value: (p) => (p.warehouse_nos || []).join(' / ') },
     { key: 'models', label: '货', w: 150, value: (p) => p.models || '', render: (p) => (p.lines_n ? <span title={p.models}>{p.lines_n} 个型号 · 共 {qty(p.qty)} 片</span> : '') },
     { key: 'shipped_on', label: '发货日', w: 100, render: (p) => dDate(p.shipped_on) },
-    { key: 'eta', label: '预计到', w: 100, render: (p) => dDate(p.eta) },
+    { key: 'eta', label: '预计到', w: 130, render: (p) => <span className="row" style={{ gap: 4 }}>{dDate(p.eta)}{N(p.eta_changes) > 0 && <Pill tone="amber" title={`第一次定的 ${dDate(p.eta_first)}`}>延 {p.eta_changes} 次</Pill>}</span> },
+    { key: 'stage', label: '物流进度', w: 150, value: (p) => stageOf(p)[0], render: (p) => <Pill tone={stageOf(p)[1]}>{stageOf(p)[0]}</Pill> },
+    { key: 'forwarder', label: '物流公司', w: 110, value: (p) => [p.forwarder, MODE_L[p.mode]].filter(Boolean).join(' · ') },
+    { key: 'tracking_no', label: '物流单号', w: 140, mono: true },
+    { key: 'pickup', label: '提货单', w: 80, value: (p) => (p.has_pickup ? '有' : ''), render: (p) => (p.has_pickup ? <Pill tone="green">有</Pill> : p.arrived_on ? <Pill tone="red">缺</Pill> : '') },
     { key: 'qty', label: '采购数', w: 90, type: 'number', render: (p) => qty(p.qty) },
     { key: 'transit', label: '在途', w: 90, type: 'number', value: transitOf, render: (p) => (transitOf(p) > 0 ? <b>{qty(transitOf(p))}</b> : '') },
     { key: 'boxes', label: '箱（到 / 共）', w: 110, value: (p) => p.boxes_n, render: (p) => (p.boxes_n ? `${p.boxes_in} / ${p.boxes_n}` : <span className="muted small">没有箱单</span>) },
@@ -159,10 +178,13 @@ export function PoDrawer({ id, onClose }) {
       q(`select l.*, pr.code, pr.model as pmodel, c.name as category from app.po_lines l left join app.products pr on pr.id = l.product_id left join app.categories c on c.id = pr.category_id where l.po_id = $1 order by l.qty desc`, [id]),
       q(`select b.*, coalesce(pr.model, l.descr, l.model) as model, pr.id as product_id from app.po_boxes b left join app.po_lines l on l.id = b.po_line_id left join app.products pr on pr.id = l.product_id where b.po_id = $1 order by b.box_no`, [id]),
       q(`select * from app.po_receipts where po_id = $1 order by created_at desc`, [id])]);
-    return { po, lines, boxes, grns };
+    const [docs, etaLog] = await Promise.all([
+      q(`select id, kind, name, file, note, created_at from app.po_docs where po_id = $1 and not removed order by created_at desc`, [id]).catch(() => []),
+      q(`select old_eta, new_eta, reason, created_at from app.po_eta_log where po_id = $1 order by created_at`, [id]).catch(() => [])]);
+    return { po: { ...po, has_pickup: docs.some((d) => d.kind === 'pickup') }, lines, boxes, grns, docs, etaLog };
   }, [id, org]);
   if (!data?.po) return null;
-  const { po, lines, boxes, grns } = data;
+  const { po, lines, boxes, grns, docs, etaLog } = data;
   const left = (l) => N(l.qty) - N(l.qty_received) - N(l.closed_qty);
   const transitBoxes = boxes.filter((b) => b.status === 'transit');
   const selBoxes = transitBoxes.filter((b) => sel.has(b.box_no));
@@ -199,16 +221,15 @@ export function PoDrawer({ id, onClose }) {
       <div className="kv" style={{ marginBottom: 12 }}>
         <div><div className="k">需求批次</div><div className="v">{po.batch_name || '—'}</div></div>
         <div><div className="k">入仓号</div><div className="v mono">{(po.warehouse_nos || []).join(' / ') || '—'}</div></div>
-        <div><div className="k">发货日 / 预计到</div><div className="v">{dDate(po.shipped_on) || '—'} → {dDate(po.eta) || '—'}</div></div>
         <div><div className="k">箱数 / 件数</div><div className="v">{po.boxes ?? boxes.length} 箱 · {qty(po.pcs ?? lines.reduce((a, l) => a + N(l.qty), 0))} 片</div></div>
         <div><div className="k">来源</div><div className="v">{SOURCE[po.source] || po.source}</div></div>
         {po.supplier && <div><div className="k">供应商</div><div className="v">{po.supplier}</div></div>}
         {po.note && <div><div className="k">备注</div><div className="v">{po.note}</div></div>}
       </div>
-      {can(role, 'po_edit') && <div className="row" style={{ gap: 6, marginBottom: 12 }}>
-        <button type="button" className="btn sm" onClick={() => setInfo({ eta: dDate(po.eta), shipped_on: dDate(po.shipped_on), supplier: po.supplier || '', note: po.note || '' })}>改预计到货 / 备注</button>
-        {!lines.some((l) => N(l.qty_received) || N(l.closed_qty)) && po.source === 'system' && <button type="button" className="btn sm ghost" onClick={() => setEdit({ id: po.id, purpose: po.purpose, fob_project_id: po.fob_project_id || '', batch_name: po.batch_name || '', inbound_no: (po.warehouse_nos || [])[0] || '', shipped_on: dDate(po.shipped_on), eta: dDate(po.eta), supplier: po.supplier || '', lines: lines.map((l) => ({ product_id: l.product_id, descr: l.descr || l.pmodel || l.model, qty: l.qty, unit_price: l.unit_price ?? '' })) })}>改采购行</button>}
+      {can(role, 'po_edit') && !lines.some((l) => N(l.qty_received) || N(l.closed_qty)) && po.source === 'system' && <div className="row" style={{ gap: 6, marginBottom: 12 }}>
+        {<button type="button" className="btn sm ghost" onClick={() => setEdit({ id: po.id, mode: po.mode || 'sea', forwarder: po.forwarder || '', tracking_no: po.tracking_no || '', boxes: po.boxes ?? '', purpose: po.purpose, fob_project_id: po.fob_project_id || '', batch_name: po.batch_name || '', inbound_no: (po.warehouse_nos || [])[0] || '', shipped_on: dDate(po.shipped_on), eta: dDate(po.eta), supplier: po.supplier || '', lines: lines.map((l) => ({ product_id: l.product_id, descr: l.descr || l.pmodel || l.model, qty: l.qty, unit_price: l.unit_price ?? '' })) })}>改采购行</button>}
       </div>}
+      <PoLogistics po={po} docs={docs} etaLog={etaLog} canEdit={can(role, 'po_edit')} onEdit={() => setInfo(true)} />
       <section className="card" style={{ marginBottom: 12 }}>
         <div className="card-h"><h2>采购行</h2><Info>在途 = 采购数 − 已入库 − 已关差额。没对上编码的行不能入库：点中那一行 → 上方「对上编码」，挑一次系统就记住这种写法。</Info></div>
         <Grid id="po-lines" noTools rows={lines} columns={lineCols}
@@ -233,15 +254,7 @@ export function PoDrawer({ id, onClose }) {
       {recv && <ReceiveModal po={po} boxes={selBoxes} onClose={() => setRecv(false)} onDone={() => { setRecv(false); setSel(new Set()); refresh(); }} />}
       {gap && <GapModal line={gap} left={left(gap)} onClose={() => setGap(null)} onDone={() => { setGap(null); refresh(); }} />}
       {lineRecv && <LineReceive po={{ ...po, lines: lines.map((l) => ({ id: l.id, product_id: l.product_id, model: l.pmodel || l.descr || l.model, category: l.category, qty: N(l.qty) - N(l.closed_qty), received: N(l.qty_received), fob_qty: l.fob_qty, fob_customer: l.fob_customer })) }} onClose={() => { setLineRecv(false); refresh(); }} />}
-      {info && <Modal title={`改资料：${po.po_no}`} onClose={() => setInfo(null)}
-        footer={<><button type="button" className="btn" onClick={() => setInfo(null)}>取消</button><span className="grow" /><button type="button" className="btn primary" onClick={async () => { try { await call(role, `select app.set_po_info($1,$2)`, [po.id, JSON.stringify(info)]); toast('已保存'); setInfo(null); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } }}>保存</button></>}>
-        <div className="rgrid">
-          <div className="field"><label>预计到货</label><DatePicker value={info.eta} onChange={(v) => setInfo({ ...info, eta: v })} /></div>
-          <div className="field"><label>发货日</label><DatePicker value={info.shipped_on} onChange={(v) => setInfo({ ...info, shipped_on: v })} /></div>
-          <div className="field"><label>供应商</label><input className="in" value={info.supplier} onChange={(e) => setInfo({ ...info, supplier: e.target.value })} /></div>
-          <div className="field"><label>备注（写给另一边看：为什么改日期、哪箱有问题…）</label><input className="in" value={info.note} onChange={(e) => setInfo({ ...info, note: e.target.value })} /></div>
-        </div>
-      </Modal>}
+      {info && <LogiModal po={po} onClose={() => setInfo(null)} />}
       {edit && <PoForm init={edit} onClose={() => { setEdit(null); refresh(); }} />}
       {map && <MapModal line={map} onClose={() => setMap(null)} onDone={() => { setMap(null); refresh(); }} />}
     </Drawer>
@@ -310,7 +323,7 @@ function MapModal({ line, onClose, onDone }) {
 // ───────────────────────── 新建 / 改采购单 (系统建单, 国内用) ─────────────────────────
 export function PoForm({ init, onClose }) {
   const { org, role, toast, refresh } = useApp();
-  const [f, setF] = useState({ purpose: 'local', batch_name: '', inbound_no: '', shipped_on: today(), eta: '', supplier: '', fob_project_id: '', request_id: '', ...init });
+  const [f, setF] = useState({ purpose: 'local', batch_name: '', inbound_no: '', shipped_on: today(), eta: '', supplier: '', fob_project_id: '', request_id: '', mode: 'sea', forwarder: '', tracking_no: '', boxes: '', ...init });
   const [lines, setLines] = useState(() => [...(init.lines || []), ...Array.from({ length: Math.max(0, 5 - (init.lines || []).length) }, () => ({ descr: '', qty: '', unit_price: '' }))]);
   const { data: fobs } = useData(() => q(`select f.id, f.fob_no from app.fob_projects f where f.org_id = $1 and f.status not in ('closed','cancelled') order by f.fob_no`, [org]), [org]);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
@@ -318,23 +331,29 @@ export function PoForm({ init, onClose }) {
   const real = lines.filter((l) => String(l.descr || l.product_id || '').trim() && N(l.qty) > 0);
   const save = async () => {
     try {
-      await call(role, `select app.save_po($1,$2,$3,$4)`, [org, init.id || null, JSON.stringify(f), JSON.stringify(real.map((l) => ({ product_id: l.product_id || null, descr: l.descr, qty: N(l.qty), unit_price: l.unit_price === '' ? null : N(l.unit_price), currency: 'CNY' })))]);
+      const [{ id: poId }] = await call(role, `select app.save_po($1,$2,$3,$4) as id`, [org, init.id || null, JSON.stringify(f), JSON.stringify(real.map((l) => ({ product_id: l.product_id || null, descr: l.descr, qty: N(l.qty), unit_price: l.unit_price === '' ? null : N(l.unit_price), currency: 'CNY' })))]);
+      // 0106: 物流信息各进各的格子 (不再写进备注)
+      await call(role, `select app.set_po_info2($1,$2)`, [poId || init.id, JSON.stringify({ mode: f.mode, forwarder: f.forwarder, tracking_no: f.tracking_no, boxes: f.boxes, warehouse_nos: f.inbound_no, batch_name: f.batch_name, shipped_on: f.shipped_on, ...(f.eta ? { eta: f.eta, eta_reason: init.id ? '改采购单' : '' } : {}) })]);
       toast('采购单已保存，算在途'); refresh(); onClose();
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
   return (
     <Modal wide title={init.id ? '改采购单' : '新建采购单'} onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><span className="small muted">{real.length} 行 · {qty(real.reduce((a, l) => a + N(l.qty), 0))} 片</span><button type="button" className="btn primary" disabled={!real.length || (f.purpose === 'fob' && !f.fob_project_id && !String(f.fob_customer || '').trim())} onClick={save}>保存（算在途）</button></>}>
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><span className="small muted">{real.length} 行 · {qty(real.reduce((a, l) => a + N(l.qty), 0))} 片</span><button type="button" className="btn primary" disabled={!real.length || (f.purpose === 'fob' && !f.fob_project_id && !String(f.fob_customer || '').trim()) || !f.batch_name.trim() || !f.inbound_no.trim() || !f.forwarder || !f.mode || String(f.boxes || '') === '' || !f.shipped_on} title={!real.length ? '还差：至少一行型号和数量' : ''} onClick={save}>保存（算在途）</button></>}>
       <div className="stack">
         <div className="hint">国内发了货再建单：保存后这些货就算在途，本地看得到什么时候到。单价以国内实际录入为准。{init.request_id ? ' 这张单来自本地的物料申请，保存后申请自动变成「国内已下单」。' : ''}</div>
         <div className="rgrid">
           <div className="field req"><label>用途</label><Choice value={f.purpose} onChange={(k) => set('purpose', k)} options={[['local', '本地备货'], ['fob', 'FOB']]} /></div>
           {f.purpose === 'fob' && <div className="field"><label>FOB 项目（系统里有就选）</label><Choice value={f.fob_project_id} onChange={(v) => set('fob_project_id', v)} options={(fobs || []).map((x) => [x.id, x.fob_no])} empty="— 不挂项目 —" flat={false} /></div>}
           {f.purpose === 'fob' && !f.fob_project_id && <div className="field req"><label>FOB 客户（例 LA9S-KABRE）</label><input className="in" value={f.fob_customer || ''} onChange={(e) => set('fob_customer', e.target.value.toUpperCase())} /></div>}
-          <div className="field"><label>需求批次（例 20260715-KABRE海运-3批）</label><input className="in" value={f.batch_name} onChange={(e) => set('batch_name', e.target.value)} /></div>
-          <div className="field"><label>入仓号（货代给的，例 CG2601995A）</label><input className="in" value={f.inbound_no} onChange={(e) => set('inbound_no', e.target.value.toUpperCase())} /></div>
-          <div className="field"><label>发货日</label><DatePicker value={f.shipped_on} onChange={(v) => set('shipped_on', v)} /></div>
-          <div className="field"><label>预计到货</label><DatePicker value={f.eta} onChange={(v) => set('eta', v)} /></div>
+          <div className="field req"><label>需求批次（例 20260715-KABRE海运-3批）</label><input className="in" value={f.batch_name} onChange={(e) => set('batch_name', e.target.value)} /></div>
+          <div className="field req"><label>入仓号（货代给的，例 CG2601995A）</label><input className="in" value={f.inbound_no} onChange={(e) => set('inbound_no', e.target.value.toUpperCase())} /></div>
+          <div className="field req"><label>运输方式</label><OptChoice optKey="po_mode" title="运输方式" value={f.mode} onChange={(v) => set('mode', v)} options={[['sea', '海运'], ['air', '空运'], ['other', '其他']]} /></div>
+          <div className="field req"><label>物流公司</label><OptChoice optKey="po_forwarder" title="物流公司" value={f.forwarder} onChange={(v) => set('forwarder', v)} options={[['赛时', '赛时'], ['捷道', '捷道'], ['古月', '古月'], ['速鹰', '速鹰'], ['利信达', '利信达']]} placeholder="选物流公司…" /></div>
+          <div className="field req"><label>箱数</label><input className="in" inputMode="numeric" value={f.boxes} onChange={(e) => set('boxes', e.target.value.replace(/\D/g, ''))} /></div>
+          <div className="field"><label>物流单号 / 提单号</label><input className="in mono" value={f.tracking_no} onChange={(e) => set('tracking_no', e.target.value.toUpperCase())} /></div>
+          <div className="field req"><label>发货日</label><DatePicker value={f.shipped_on} onChange={(v) => set('shipped_on', v)} /></div>
+          <div className="field"><label>预计到货（不填 = 发货日 + 2 个半月）</label><DatePicker value={f.eta} onChange={(v) => set('eta', v)} /></div>
           <div className="field"><label>供应商</label><input className="in" value={f.supplier} onChange={(e) => set('supplier', e.target.value)} /></div>
         </div>
         <Grid id="po-form-lines" noTools rows={lines.map((l, i) => ({ ...l, _i: i }))} rowKey={(l) => l._i} columns={[
@@ -423,13 +442,18 @@ export function PurchaseTodo() {
   if (cn) open.filter((p) => !p.boxes_n).forEach((p) => T.push({ g: 'info',  what: `${p.po_no} 还没有箱单：发货后把箱单 Excel 导进来，本地才知道每箱是什么`, po: p }));
   if (cn) open.filter((p) => !p.eta).forEach((p) => T.push({ g: 'info',  what: `${p.po_no} 没填预计到货日：问货代后填上`, po: p }));
   if (cn || wh) open.filter((p) => p.unmatched_n > 0).forEach((p) => T.push({ g: 'code',  red: p.eta && dDate(p.eta) <= in3, what: `${p.po_no} 有 ${p.unmatched_n} 行没对上系统编码：到货前必须对上，不然不能入库`, po: p }));
-  if (cn) open.filter((p) => p.eta && dDate(p.eta) < td && N(p.received) === 0).forEach((p) => T.push({ g: 'late',  red: true, what: `${p.po_no} 预计 ${dDate(p.eta)} 到，过了还没到：跟货代确认，改预计到货日`, po: p }));
+  if (cn) open.filter((p) => p.eta && dDate(p.eta) < td && N(p.received) === 0 && !p.arrived_on).forEach((p) => T.push({ g: 'late',  red: true, what: `${p.po_no} 预计 ${dDate(p.eta)} 到，过了还没到：跟货代确认，在「改物流信息」里填新日期 + 原因${N(p.eta_changes) ? `（已经延了 ${p.eta_changes} 次）` : ''}`, po: p }));
+  // 0106: 到期前 7 天提醒确认; 到港 / 清关完了还没有提货单 → 国内每天补
+  const in7 = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  if (cn) open.filter((p) => p.eta && dDate(p.eta) >= td && dDate(p.eta) <= in7 && !p.arrived_on && N(p.received) === 0).forEach((p) => T.push({ g: 'soon',  what: `${p.po_no} 预计 ${dDate(p.eta)} 到（7 天内）：跟货代确认船期，变了就改日期`, po: p }));
+  if (cn || role === 'admin') open.filter((p) => (p.arrived_on || p.cleared_on) && !p.has_pickup && N(p.received) === 0).forEach((p) => T.push({ g: 'pickup',  red: true, what: `${p.po_no} ${p.cleared_on ? '清关完了' : '到港了'}，还没有提货单：拿到 PDF 马上传到采购单「文件」里`, po: p }));
+  if (cn) open.filter((p) => p.shipped_on && !p.forwarder).forEach((p) => T.push({ g: 'info',  what: `${p.po_no} 发货了没填物流公司：在「改物流信息」里补上`, po: p }));
   if (wh) open.filter((p) => p.eta && dDate(p.eta) <= in3 && p.boxes_n > p.boxes_in).forEach((p) => T.push({ g: 'due',  red: dDate(p.eta) <= td, what: `${p.po_no} ${dDate(p.eta) <= td ? '应该到了' : `${dDate(p.eta)} 到`}（${p.boxes_n - p.boxes_in} 箱）：货到当天勾箱、拍照、下推入库`, po: p }));
   if (role === 'admin') open.filter((p) => N(p.received) > 0 && p.boxes_n > 0 && p.boxes_in === p.boxes_n && transitOf(p) > 0).forEach((p) => T.push({ g: 'gap',  red: true, what: `${p.po_no} 箱都到了还差 ${qty(transitOf(p))} 片：选结果 + 传凭证关差额`, po: p }));
   if (!T.length && role !== 'cn_support') return null;
   T.sort((a, b) => (b.red ? 1 : 0) - (a.red ? 1 : 0));
   // 311 (Frank 11-14 / 11-17 再强调): 看板 / 待办看总数, 不看明细 —— 一类事一个数字块, 点开才列出来
-  const GROUPS = [['due', '该到货 / 快到'], ['late', '过期没到'], ['code', '编码没对上'], ['info', '资料不全'], ['gap', '差额待关'], ['req', '本地申请等下单']];
+  const GROUPS = [['pickup', '缺提货单'], ['due', '该到货 / 快到'], ['late', '过期没到'], ['soon', '7 天内到'], ['code', '编码没对上'], ['info', '资料不全'], ['gap', '差额待关'], ['req', '本地申请等下单']];
   const blocks = GROUPS.map(([g, label]) => { const rows = T.filter((x) => x.g === g); return { g, label, rows, red: rows.some((x) => x.red) }; }).filter((b) => b.rows.length);
   const cur = blocks.find((b) => b.g === openG);
   return (
@@ -451,5 +475,112 @@ export function PurchaseTodo() {
         </div>))}
       {form && <PoForm init={form} onClose={() => setForm(null)} />}
     </div>
+  );
+}
+
+// ───────────────────────── 0106 物流全程 + 文件 (Frank 11-27) ─────────────────────────
+export const DOC_KINDS = [['packing', '装箱单'], ['invoice', '发票'], ['bl', '提单 / 电放'], ['pickup', '提货单'], ['customs', '海关文件'], ['other', '其他']];
+const STEPS = [['shipped_on', '发货'], ['arrived_on', '到港'], ['cleared_on', '清关完'], ['pickup', '提货单'], ['picked_on', '已提货'], ['in', '入库']];
+const readFile = (f) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+const dataToFile = async (d) => { const b = await (await fetch(d.file)).blob(); return new File([b], d.name || `${d.kind}.pdf`, { type: b.type }); };
+
+function PoLogistics({ po, docs, etaLog, canEdit, onEdit }) {
+  const { role, toast, refresh } = useApp();
+  const [kind, setKind] = useState('pickup');
+  const [busy, setBusy] = useState(false);
+  const canDoc = hasAny(role, ['admin', 'manager', 'cn_support']);
+  const done = (k) => (k === 'pickup' ? po.has_pickup : k === 'in' ? po.status === 'closed' : !!po[k]);
+  const upload = async (files) => {
+    setBusy(true);
+    try { for (const f of files) await call(role, `select app.add_po_doc($1,$2,$3,$4)`, [po.id, kind, f.name, await readFile(f)]); toast(`已上传 ${files.length} 个文件`); refresh(); }
+    catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
+  };
+  const share = async (d) => {   // 手机: 直接调起分享 (WhatsApp 等); 电脑: 下载
+    try { const f = await dataToFile(d); if (navigator.canShare?.({ files: [f] })) { await navigator.share({ files: [f], title: `${po.po_no} ${d.name || ''}` }); return; } } catch { /* 取消分享 */ }
+    const a = document.createElement('a'); a.href = d.file; a.download = d.name || `${po.po_no}-${d.kind}`; a.click();
+  };
+  const kindL = (k) => (DOC_KINDS.find((x) => x[0] === k) || [k, k])[1];
+  const late = po.eta && !po.arrived_on && dDate(po.eta) < today();
+  return (
+    <section className="card" style={{ marginBottom: 12 }}>
+      <div className="card-h"><h2>物流</h2>
+        <Info>国内发货后填物流公司、单号；到港、清关完、提货各记一天。提货单（PDF）一拿到就传在下面「文件」里，没有提货单不能标「已提货」。预计到货没填时按发货日 + 2 个半月；改日期要写原因，每次都留记录。</Info>
+        <span className="grow" />{canEdit && <button type="button" className="btn sm" onClick={onEdit}>改物流信息</button>}</div>
+      <div className="card-b stack" style={{ gap: 12 }}>
+        <div className="flowline">{STEPS.map(([k, l], i) => <span key={k} className={`fl ${done(k) ? 'done' : ''}`}>{done(k) ? '✓ ' : `${i + 1} `}{l}{k !== 'pickup' && k !== 'in' && po[k] ? ` ${dDate(po[k]).slice(5)}` : ''}</span>)}</div>
+        <div className="kv">
+          <div><div className="k">预计到货</div><div className="v">{dDate(po.eta) || '—'} {late && <Pill tone="red">过了还没到</Pill>} {N(po.eta_changes) > 0 && <Pill tone="amber">延 {po.eta_changes} 次</Pill>}</div></div>
+          <div><div className="k">物流公司 · 方式</div><div className="v">{[po.forwarder, MODE_L[po.mode]].filter(Boolean).join(' · ') || <span className="red-t2">没填</span>}</div></div>
+          <div><div className="k">物流单号 / 提单号</div><div className="v mono">{po.tracking_no || '—'}</div></div>
+          <div><div className="k">柜号</div><div className="v mono">{po.container_no || '—'}</div></div>
+          <div><div className="k">重量 / 体积</div><div className="v">{po.weight_vol || '—'}</div></div>
+          <div><div className="k">预估物流费</div><div className="v">{po.freight_none ? '无物流费' : po.freight_est ? money(po.freight_est, 'CNY') : '—'}</div></div>
+        </div>
+        {etaLog.length > 0 && <div className="small"><b>延误记录</b>{etaLog.map((e, i) => <div key={i} className="muted">{dt(e.created_at).slice(0, 10)}：{dDate(e.old_eta)} → <b>{dDate(e.new_eta)}</b>（{e.reason}）</div>)}
+          {po.eta_first && <div className="muted">第一次定的是 {dDate(po.eta_first)}，现在晚了 {Math.round((new Date(po.eta) - new Date(po.eta_first)) / 864e5)} 天</div>}</div>}
+        <div>
+          <div className="row" style={{ gap: 8, marginBottom: 6 }}><b>文件</b>{po.arrived_on && !po.has_pickup && <Pill tone="red">到港了，还没有提货单</Pill>}</div>
+          {docs.length ? <div className="stack" style={{ gap: 4 }}>{docs.map((d) => (
+            <div key={d.id} className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              <Pill tone={d.kind === 'pickup' ? 'green' : 'blue'}>{kindL(d.kind)}</Pill>
+              <a className="linkbtn" href={d.file} download={d.name || undefined}>{d.name || '文件'}</a>
+              <span className="small muted">{dt(d.created_at)}</span><span className="grow" />
+              <button type="button" className="btn sm" onClick={() => share(d)}>发出去</button>
+              {canDoc && <ConfirmBtn className="btn sm ghost" title="删掉这个文件？" body={`${kindL(d.kind)}「${d.name || ''}」从采购单上拿掉（留在操作记录里）。`} okText="删掉" onOk={async () => { try { await call(role, `select app.remove_po_doc($1)`, [d.id]); toast('已删'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } }}>删</ConfirmBtn>}
+            </div>))}</div> : <div className="small muted">还没有文件</div>}
+          {canDoc && <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'stretch' }}>
+            <OptChoice optKey="po_doc_kind" title="文件类型" value={kind} onChange={setKind} options={DOC_KINDS} />
+            <FileDrop compact multiple accept=".pdf,image/*,.xls,.xlsx,.doc,.docx" label={busy ? '上传中…' : '把文件拖到这里，或点这里选（PDF / 图片 / Excel）'} onFiles={upload} style={{ flex: 1, minWidth: 220 }} />
+          </div>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function LogiModal({ po, onClose }) {
+  const { role, toast, refresh } = useApp();
+  const init = { mode: po.mode || 'sea', forwarder: po.forwarder || '', tracking_no: po.tracking_no || '', container_no: po.container_no || '', weight_vol: po.weight_vol || '',
+    freight_est: po.freight_est ?? '', freight_none: !!po.freight_none, batch_name: po.batch_name || '', warehouse_nos: (po.warehouse_nos || []).join(' / '), boxes: po.boxes ?? '', pcs: po.pcs ?? '',
+    shipped_on: dDate(po.shipped_on), eta: dDate(po.eta), eta_reason: '', arrived_on: dDate(po.arrived_on), cleared_on: dDate(po.cleared_on), picked_on: dDate(po.picked_on), supplier: po.supplier || '', note: po.note || '' };
+  const [f, setF] = useState(init);
+  const [busy, setBusy] = useState(false);
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const etaChanged = po.eta && f.eta !== dDate(po.eta);
+  const ok = f.mode && f.forwarder.trim() && f.shipped_on && f.warehouse_nos.trim() && String(f.boxes) !== '' && (!etaChanged || f.eta_reason.trim()) && (!f.picked_on || po.has_pickup);
+  const save = async () => {
+    setBusy(true);
+    try {
+      const p = Object.fromEntries(Object.entries(f).filter(([k, v]) => k === 'eta_reason' || v !== init[k]));
+      if (!etaChanged) delete p.eta_reason; if (!('eta' in p)) delete p.eta_reason;
+      await call(role, `select app.set_po_info2($1,$2)`, [po.id, JSON.stringify(p)]);
+      toast('已保存'); refresh(); onClose();
+    } catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
+  };
+  return (
+    <Modal wide title={`物流信息：${po.po_no}`} onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><button type="button" className="btn primary" disabled={busy || !ok} title={f.picked_on && !po.has_pickup ? '还差：先在「文件」里传提货单' : ''} onClick={save}>保存</button></>}>
+      <div className="rgrid">
+        <div className="field req"><label>运输方式</label><OptChoice optKey="po_mode" title="运输方式" value={f.mode} onChange={(v) => set('mode', v)} options={[['sea', '海运'], ['air', '空运'], ['other', '其他']]} /></div>
+        <div className="field req"><label>物流公司</label><OptChoice optKey="po_forwarder" title="物流公司" value={f.forwarder} onChange={(v) => set('forwarder', v)} options={[['赛时', '赛时'], ['捷道', '捷道'], ['古月', '古月'], ['速鹰', '速鹰'], ['利信达', '利信达']]} placeholder="选物流公司…" /></div>
+        <div className="field req"><label>发货日</label><DatePicker value={f.shipped_on} onChange={(v) => set('shipped_on', v)} /></div>
+        <div className="field"><label>预计到货{!po.eta && f.shipped_on && !f.eta ? '（不填 = 发货日 + 2 个半月）' : ''}</label><DatePicker value={f.eta} onChange={(v) => set('eta', v)} /></div>
+        {etaChanged && <div className="field req" style={{ gridColumn: '1 / -1' }}><label>为什么改预计到货</label><OptNote optKey="po_eta_reason" value={f.eta_reason} onChange={(v) => set('eta_reason', v)} options={['船晚开', '中转慢', '清关慢', '国内晚发', '货代没给准信']} placeholder="例：船晚开 5 天" /></div>}
+        <div className="field req"><label>入仓号（多个用 / 隔开）</label><input className="in mono" value={f.warehouse_nos} onChange={(e) => set('warehouse_nos', e.target.value.toUpperCase())} placeholder="CG2602735A" /></div>
+        <div className="field req"><label>箱数</label><input className="in" inputMode="numeric" value={f.boxes} onChange={(e) => set('boxes', e.target.value.replace(/\D/g, ''))} /></div>
+        <div className="field"><label>件数（片）</label><input className="in" inputMode="numeric" value={f.pcs} onChange={(e) => set('pcs', e.target.value.replace(/\D/g, ''))} /></div>
+        <div className="field"><label>需求批次</label><input className="in" value={f.batch_name} onChange={(e) => set('batch_name', e.target.value)} placeholder="20261123-KABRE海运-1" /></div>
+        <div className="field"><label>物流单号 / 提单号</label><input className="in mono" value={f.tracking_no} onChange={(e) => set('tracking_no', e.target.value.toUpperCase())} placeholder="MSKU1234567" /></div>
+        <div className="field"><label>柜号（+ 封条号）</label><input className="in mono" value={f.container_no} onChange={(e) => set('container_no', e.target.value.toUpperCase())} /></div>
+        <div className="field"><label>重量 / 体积</label><input className="in" value={f.weight_vol} onChange={(e) => set('weight_vol', e.target.value)} placeholder="820kg · 6.2方" /></div>
+        <div className="field"><label>预估物流费 CNY</label><div className="row" style={{ gap: 8 }}><input className="in" inputMode="decimal" disabled={f.freight_none} value={f.freight_none ? '' : f.freight_est} onChange={(e) => set('freight_est', e.target.value.replace(/[^\d.]/g, ''))} />
+          <label className="row small" style={{ gap: 4, whiteSpace: 'nowrap' }}><input type="checkbox" checked={f.freight_none} onChange={(e) => set('freight_none', e.target.checked)} />无物流费</label></div></div>
+        <div className="field"><label>到港</label><DatePicker value={f.arrived_on} onChange={(v) => set('arrived_on', v)} /></div>
+        <div className="field"><label>清关完</label><DatePicker value={f.cleared_on} onChange={(v) => set('cleared_on', v)} /></div>
+        <div className="field"><label>已提货{!po.has_pickup ? '（要先传提货单）' : ''}</label><DatePicker value={f.picked_on} onChange={(v) => set('picked_on', v)} /></div>
+        <div className="field"><label>供应商</label><input className="in" value={f.supplier} onChange={(e) => set('supplier', e.target.value)} /></div>
+        <div className="field" style={{ gridColumn: '1 / -1' }}><label>备注（只写说明，单号都有自己的格子）</label><input className="in" value={f.note} onChange={(e) => set('note', e.target.value)} /></div>
+      </div>
+    </Modal>
   );
 }

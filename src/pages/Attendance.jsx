@@ -75,6 +75,7 @@ export default function Attendance() {
       const nm = r.kind === 'in' ? '打卡' : '下班打卡';
       toast(r.new_site ? `已${nm} · 新地点（第一次来，等中方起名）${r.late ? ' · 迟到' : ''}` : r.ok ? `${nm}成功 · ${r.site}（${r.distance} 米）${r.late ? ' · 迟到' : ''}${r.early ? ' · 早退' : ''}` : `已${nm}，但不在规定地点（最近：${r.site || '没设地点'} ${r.distance ?? ''} 米）`, r.ok ? undefined : 'err');
       if (r.kind === 'out') await call(role, `select app.punch_left($1,$2)`, [org, data.left || 0]).catch(() => {});
+      if (r.kind === 'out') setTimeout(() => window.dispatchEvent(new Event('la9s:punched')), 1800);   // 0106: 下班卡 → 锁系统 (先让人看到「下班打卡成功」)
       setEarly(null); refresh();
     } catch (e) { setFail(e.denied ? 'denied' : e.message); if (!e.denied) toast(friendlyError(e), 'err'); } finally { setBusy(false); }
   };
@@ -158,6 +159,7 @@ export default function Attendance() {
         </div>)}
       {tab === 'cal' && <EmpCalList />}
       {tab === 'day' && data.dayLv.length > 0 && <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}><span className="small muted">这天请假：</span>{data.dayLv.map((l) => <span key={l.id} className="pill gray" title={l.reason || ''}>{l.short_name} · {LV_KIND(l)}</span>)}</div>}
+      {tab === 'day' && hasAny(role, ['country_manager']) && <OffhoursCard />}
       {tab === 'day' && <div className="card"><Grid id="att-day" table="attendance" columns={dCols} rows={data.dayRows} empty="这一天没人打卡" tools={<DatePicker value={day} onChange={setDay} />} /></div>}
       {tab === 'month' && <div className="card"><Grid id="att-month" columns={mCols} rows={data.monthRows} tools={<MonthPicker value={month} onChange={setMonth} label="月份" />} /></div>}
       {tab === 'appeals' && <div className="card">
@@ -330,6 +332,32 @@ function EmpCalList() {
         { key: 'position', label: '职位', w: 150, value: (e) => optLabel(data.opts.positions, e.position) },
       ]} />
       {open && <Drawer title={`${open.emp_no ? open.emp_no + ' · ' : ''}${open.full_name || open.short_name} 的打卡日历`} onClose={() => setOpen(null)}><AttCalendar employeeId={open.id} /></Drawer>}
+    </div>
+  );
+}
+
+// 0106 (Frank 11-27): 下班后锁系统 —— 中方看今天谁打了下班卡被锁, 要加班的放行一次 (写原因, 留记录)
+function OffhoursCard() {
+  const { org, role, toast, refresh, tick } = useApp();
+  const [who, setWho] = useState(null); const [why, setWhy] = useState('');
+  const { data } = useData(() => call(role, `select * from app.offhours_today($1)`, [org]).catch(() => null), [org, tick]);
+  if (!data) return null;
+  const locked = data.filter((r) => r.out_at && !r.unlocked);
+  const freed = data.filter((r) => r.unlocked);
+  return (
+    <div className="card" style={{ marginBottom: 10 }}>
+      <div className="card-h"><h2>下班后锁系统</h2>{locked.length ? <Pill tone="gray">{locked.length} 人已锁</Pill> : <Pill tone="green">今天还没人下班</Pill>}
+        <Info>本地员工打了下班卡就自动退出、当天进不了系统，第二天早上再登；忘了打下班卡的到晚上截止时间也锁。中方、国家经理、国内不锁。今晚有人确实要用（盘点、急单）→ 点「放行」写原因，只放今天一天。</Info>
+        <span className="grow" /><RuleGear ids={['off.on', 'off.cutoff', 'off.reopen']} title="下班后锁系统" /></div>
+      {(locked.length > 0 || freed.length > 0) && <div className="card-b stack" style={{ gap: 6 }}>
+        {locked.map((r) => <div key={r.employee_id} className="row" style={{ gap: 8 }}><b>{r.name}</b><span className="small muted">{dt(r.out_at).slice(11, 16)} 打下班卡 · 已锁</span><span className="grow" /><button type="button" className="btn sm" onClick={() => { setWho(r); setWhy(''); }}>放行今天</button></div>)}
+        {freed.map((r) => <div key={r.employee_id} className="row" style={{ gap: 8 }}><b>{r.name}</b><Pill tone="blue">今天已放行</Pill><span className="small muted">{r.unlock_reason}</span></div>)}
+      </div>}
+      {who && <Modal title={`放行 ${who.name}（只今天）`} onClose={() => setWho(null)}
+        footer={<><button type="button" className="btn" onClick={() => setWho(null)}>取消</button><span className="grow" /><button type="button" className="btn primary" disabled={!why.trim()} onClick={async () => {
+          try { await call(role, `select app.grant_access_unlock($1,$2,$3)`, [org, who.employee_id, why]); toast(`已放行 ${who.name}，今天能再登录`); setWho(null); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } }}>放行</button></>}>
+        <div className="field req"><label>为什么放行</label><OptNote optKey="unlock_reason" value={why} onChange={setWhy} options={['今晚盘点', '急单要出', '补录今天的单', '其他']} placeholder="例：今晚盘点" /></div>
+      </Modal>}
     </div>
   );
 }
