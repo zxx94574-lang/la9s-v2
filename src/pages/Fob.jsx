@@ -12,6 +12,8 @@ import ModelPicker from '../components/ModelPicker.jsx';
 import { can, seesPrice, PAY_METHODS } from '../lib/domain.js';
 import { money, qty, dDate, dt, today, friendlyError } from '../lib/format.js';
 import { ModelLink, CustLink, EmpLink } from '../components/Archives.jsx';
+import { OptChoice } from '../components/Opts.jsx';
+import { ProdPick, PRODUCTS_SQL } from './Bins.jsx';
 
 const N = (v) => Number(v || 0);
 export const FOB_STEPS = [['applied', '申请'], ['purchasing', '采购'], ['in_transit', '在途'], ['arrived', '到货'], ['released', '放货'], ['shipped', '出库'], ['closed', '结清']];
@@ -139,6 +141,7 @@ function FobDetail({ id }) {
   const { role, toast, refresh, go } = useApp();
   const [m, setM] = useState(null);
   const [prices, setPrices] = useState({});
+  const [codeFor, setCodeFor] = useState(null);
   const { data } = useData(async () => {
     const [[f], lines, pays, events] = await Promise.all([q(Q.fobById, [id]), q(Q.fobLines, [id]), q(Q.fobPayments, [id]), q(Q.fobEvents, [id])]);
     return { f, lines, pays, events };
@@ -151,19 +154,28 @@ function FobDetail({ id }) {
   const cur = FOB_STEPS.findIndex(([k]) => k === f.status);
   const deposit = Math.round(N(f.total) * N(f.deposit_pct) / 100), due = N(f.total) - N(f.paid);
   const cols = [
-    { key: 'code', label: '编码', w: 90, render: (l) => <span className="mono">{l.code || <Pill tone="amber">没编码</Pill>}</span> },
+    { key: 'code', label: '编码', w: 110, render: (l) => (l.code ? <span className="mono">{l.code}</span>
+      : admin && !['shipped', 'closed', 'cancelled'].includes(f.status) ? <button type="button" className="btn sm" title="物料里建好编码后，在这里挂到这一行，才能入库 / 出库" onClick={() => setCodeFor(l)}>挂编码</button>
+      : <Pill tone="amber">没编码</Pill>) },
     { key: 'category', label: '种类', w: 90 },
     { key: 'model', label: '型号', w: 120, render: (l) => <ModelLink id={l.product_id} model={l.model} /> },
     { key: 'qty', label: '数量', w: 80, value: (l) => N(l.qty) },
     ...(price ? [{ key: 'unit_price', label: '单价', w: 110, value: (l) => N(prices[l.id] ?? l.unit_price),
-      edit: admin && ['applied', 'purchasing'].includes(f.status) ? (l) => ({ type: 'number', value: prices[l.id] ?? (l.unit_price == null ? '' : String(Number(l.unit_price))), placeholder: '定价', onChange: (v) => setPrices((p) => ({ ...p, [l.id]: v.replace(/[^\d.]/g, '') })) }) : null,
+      edit: admin && ['applied', 'purchasing'].includes(f.status) ? (l) => ({ type: 'number', value: prices[l.id] ?? (l.unit_price == null ? '' : String(Number(l.unit_price))), placeholder: '定价', onChange: (v, meta) => savePrice(l, v, meta) }) : null,
       render: (l) => (l.unit_price == null ? <Pill tone="amber">待中方定价</Pill> : money(l.unit_price, f.currency)) },
-      { key: 'amount', label: '金额', w: 120, value: (l) => N(l.qty) * N(l.unit_price), render: (l) => (l.unit_price == null ? '' : money(N(l.qty) * N(l.unit_price), f.currency)) }] : []),
+      { key: 'amount', label: '金额', w: 120, sum: true, value: (l) => N(l.qty) * N(l.unit_price), render: (l) => (l.unit_price == null ? '' : money(N(l.qty) * N(l.unit_price), f.currency)) }] : []),
     ...(f.control === 'warehouse' ? [{ key: 'qty_received', label: '已入 FOB 仓', w: 100, value: (l) => N(l.qty_received) }] : []),
     { key: 'qty_shipped', label: '已出', w: 80, value: (l) => N(l.qty_shipped) },
     { key: 'qty_local', label: '转本地', w: 80, value: (l) => N(l.qty_local), render: (l) => (N(l.qty_local) ? <Pill tone="amber">{qty(l.qty_local)}</Pill> : '') },
   ];
-  const savePrices = async () => { for (const [lid, v] of Object.entries(prices)) if (v !== '') await call(role, `select app.set_fob_price($1,$2)`, [lid, Number(v)]); toast('已定价'); setPrices({}); refresh(); };
+  // 改一格存一格（11-07 全局规则）：回车就存，不再要「保存定价」按钮；采购中也能改
+  const savePrice = async (l, v, meta) => {
+    const n = String(v ?? '').replace(/[^\d.]/g, '');
+    if (n === '' || Number(n) <= 0) { if (!meta?.batch || meta.last) toast('单价要大于 0', 'err'); return; }
+    setPrices((p) => ({ ...p, [l.id]: n }));
+    try { await call(role, `select app.set_fob_price($1,$2)`, [l.id, Number(n)]); if (!meta?.batch || meta.last) { toast('已定价'); setPrices({}); refresh(); } }
+    catch (e) { toast(friendlyError(e), 'err'); setPrices((p) => { const q = { ...p }; delete q[l.id]; return q; }); }
+  };
   return (
     <>
       <div className="pagehead"><div><div className="eyebrow"><a href="#/fob">FOB 项目</a></div><h1 className="mono">{f.fob_no}</h1>
@@ -171,12 +183,11 @@ function FobDetail({ id }) {
         {f.status !== 'cancelled' && !['shipped', 'closed'].includes(f.status) && can(role, 'fob_advance') && <button type="button" className="btn" onClick={() => setM('cancel')}>取消项目</button>}
       </div>
       <div className="card card-b">
-        <div className="flowline">{FOB_STEPS.map(([k, l], i) => <span key={k} className={`fl ${i < cur ? 'done' : i === cur ? 'cur' : ''}`}>{i < cur ? '✓ ' : `${i + 1} `}{l}</span>)}</div>
+        <div className="flowline">{FOB_STEPS.map(([k, l], i) => <span key={k} className={`fl ${i <= cur ? 'done' : i === cur + 1 ? 'cur' : ''}`}>{i <= cur ? '✓ ' : `${i + 1} `}{l}</span>)}</div>
         {f.status === 'cancelled' && <div className="banner warn" style={{ marginTop: 8 }}>项目已取消</div>}
         <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-          {f.status === 'applied' && admin && Object.keys(prices).length > 0 && <button type="button" className="btn primary" onClick={savePrices}>保存定价</button>}
           {f.status === 'applied' && can(role, 'fob_advance') && <button type="button" className="btn primary" disabled={N(f.unpriced) > 0} onClick={() => setM('purchase')}>下采购 →</button>}
-          {f.status === 'applied' && N(f.unpriced) > 0 && <span className="small muted">{f.unpriced} 行等中方定价，定完才能下采购</span>}
+          {f.status === 'applied' && N(f.unpriced) > 0 && <span className="small muted">{f.unpriced} 行等中方定价（点单价格子直接填，回车就存），定完才能下采购</span>}
           {f.status === 'purchasing' && can(role, 'fob_advance') && <button type="button" className="btn primary" onClick={() => setM('transit')}>已发货（在途）→</button>}
           {f.status === 'in_transit' && can(role, 'fob_advance') && (f.control === 'warehouse'
             ? <button type="button" className="btn primary" onClick={() => setM('receive')}>到货入 FOB 仓 →</button>
@@ -189,7 +200,7 @@ function FobDetail({ id }) {
         </div>
       </div>
       {price && (
-        <div className="kpis" style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}>
+        <div className="kpis k2m" style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}>
           {[['金额', money(f.total, f.currency)], [`订金 ${N(f.deposit_pct)}%`, money(deposit, f.currency)], ['已收', money(f.paid, f.currency)], ['待收', money(Math.max(due, 0), f.currency)]].map(([l, v], i) => (
             <div key={l} className="kpi" style={{ cursor: 'default' }}><div className="t" style={{ fontSize: 14 }}>{l}</div><BigNum size={22}>{v}</BigNum>
               {i === 1 && N(f.total) > 0 && (N(f.paid) >= deposit ? <Pill tone="green">订金已到</Pill> : <Pill tone="amber">订金还差 {money(deposit - N(f.paid), f.currency)}</Pill>)}</div>))}
@@ -200,36 +211,54 @@ function FobDetail({ id }) {
           {pays.length === 0 ? <div className="muted small">还没收款</div> : <Grid id="fob-pays" table="fob_payments" noTools rows={pays} columns={[
             { key: 'on', label: '日期', w: 100, value: (p) => dDate(p.on_date) },
             { key: 'kind', label: '类型', w: 70, value: (p) => ({ deposit: '订金', balance: '尾款', other: '其他' })[p.kind] },
-            { key: 'method', label: '方式', w: 80, value: (p) => PAY_METHODS[p.method] },
+            { key: 'method', label: '收到哪', w: 110, value: (p) => p.account || PAY_METHODS[p.method], render: (p) => (p.account || <span className="muted" title="0105 之前登记的，没进资金账户">{PAY_METHODS[p.method]}（没进账户）</span>) },
             { key: 'amount', label: '金额', w: 110, align: 'right', value: (p) => (price ? N(p.amount) : null), render: (p) => (price ? money(p.amount, f.currency) : '—') },
-            { key: 'proof', label: '凭证', w: 50, value: (p) => (p.proof ? '有' : ''), render: (p) => (p.proof ? <Thumb src={p.proof} size={26} /> : '') },
+            { key: 'proof', label: '凭证', w: 50, value: (p) => (p.proof ? '有' : ''), render: (p) => (p.proof ? <Thumb src={p.proof} size={26} /> : <Pill tone="red">没凭证</Pill>) },
           ]} />}
         </div>
         <div className="card card-b"><h3 style={{ marginTop: 0 }}>操作记录</h3>
-          <ul className="timeline">{events.map((e) => <li key={e.id}><b>{({ created: '申请', price: '定价', purchasing: '下采购', in_transit: '发货在途', arrived: '到货', received: '入 FOB 仓', payment: '收款', released: '放货', shipped: '出库', cancelled: '取消', to_local: '客户不要了 → 转本地' })[e.action] || e.action}{e.action === 'shipped' && e.detail?.partial ? '（分批）' : ''}</b>
-            <span className="muted small"> {dt(e.at)}</span>{e.action === 'released' && e.detail?.note && <div className="small">原因：{e.detail.note}</div>}{e.action === 'to_local' && <div className="small">进 {e.detail?.warehouse} 仓 · {e.detail?.reason}</div>}</li>)}</ul>
+          <ul className="timeline">{events.map((e) => <li key={e.id}><b>{({ created: '申请', price: '定价', code: '挂编码', purchasing: '下采购', in_transit: '发货在途', arrived: '到货', received: '入 FOB 仓', payment: '收款', released: '放货', shipped: '出库', cancelled: '取消', to_local: '客户不要了 → 转本地' })[e.action] || e.action}{e.action === 'shipped' && e.detail?.partial ? '（分批）' : ''}</b>
+            <span className="muted small"> {dt(e.at)}</span>{e.action === 'released' && e.detail?.note && <div className="small">原因：{e.detail.note}</div>}{e.action === 'to_local' && <div className="small">进 {e.detail?.warehouse} 仓 · {e.detail?.reason}</div>}{e.action === 'code' && <div className="small">{e.detail?.was} → {e.detail?.model}</div>}{e.action === 'payment' && price && <div className="small">{({ deposit: '订金', balance: '尾款', other: '其他' })[e.detail?.kind] || ''} {money(e.detail?.amount, f.currency)}{e.detail?.account ? ` · ${e.detail.account}` : ''}</div>}</li>)}</ul>
         </div>
       </div>
-      {m === 'purchase' && <SimpleForm title="下采购" fields={[['po_no', '采购单号（金蝶）', true]]} onClose={() => setM(null)} onOk={(v) => act('已下采购', `select app.fob_advance($1,'purchasing',$2)`, [f.id, JSON.stringify(v)])} />}
-      {m === 'transit' && <SimpleForm title="已发货（在途）" fields={[['logistics', '物流公司'], ['tracking', '物流单号'], ['eta', '预计到货', false, 'date']]} onClose={() => setM(null)} onOk={(v) => act('已标记在途', `select app.fob_advance($1,'in_transit',$2)`, [f.id, JSON.stringify(v)])} />}
+      {m === 'purchase' && <SimpleForm title="下采购" fields={[['po_no', '采购单号（金蝶）', true]]} note={price && N(f.paid) < deposit ? `订金 ${N(f.deposit_pct)}% 是 ${money(deposit, f.currency)}，现在只收了 ${money(f.paid, f.currency)}。常规是先收订金再下采购——确定要先下？` : null} onClose={() => setM(null)} onOk={(v) => act('已下采购', `select app.fob_advance($1,'purchasing',$2)`, [f.id, JSON.stringify(v)])} />}
+      {m === 'transit' && <SimpleForm title="已发货（在途）" fields={[['logistics', '物流公司'], ['tracking', '物流单号'], ['eta', '预计到货', false, 'date', '']]} onClose={() => setM(null)} onOk={(v) => act('已标记在途', `select app.fob_advance($1,'in_transit',$2)`, [f.id, JSON.stringify(v)])} />}
       {m === 'cancel' && <SimpleForm title="取消 FOB 项目" fields={[['note', '原因', true]]} onClose={() => setM(null)} onOk={(v) => act('已取消', `select app.fob_advance($1,'cancelled',$2)`, [f.id, JSON.stringify(v)])} />}
       {m === 'release' && <SimpleForm title={due > 0 ? `放货（还差 ${money(due, f.currency)} 没收）` : '放货'} fields={[['note', due > 0 ? '没收齐也放的原因' : '备注', due > 0]]} onClose={() => setM(null)} onOk={(v) => act('已放货', `select app.fob_release($1,$2)`, [f.id, v.note || ''])} />}
       {m === 'receive' && <ReceiveFob f={f} lines={lines} onClose={() => setM(null)} act={act} />}
       {m === 'ship' && <ShipFob f={f} lines={lines} onClose={() => setM(null)} act={act} />}
       {m === 'local' && <ToLocalFob f={f} lines={lines} onClose={() => setM(null)} act={act} />}
+      {codeFor && <CodeFob line={codeFor} onClose={() => setCodeFor(null)} act={(msg, sql, p) => act(msg, sql, p).then(() => setCodeFor(null))} />}
       {m === 'pay' && <PayFob f={f} deposit={deposit} due={due} onClose={() => setM(null)} act={act} />}
     </>
   );
 }
 
-export function SimpleForm({ title, fields, onClose, onOk }) {
-  const [v, setV] = useState(Object.fromEntries(fields.map(([k, , , type]) => [k, type === 'date' ? today() : ''])));
+export function SimpleForm({ title, fields, onClose, onOk, note }) {
+  const [v, setV] = useState(Object.fromEntries(fields.map(([k, , , type, def]) => [k, def !== undefined ? def : type === 'date' ? today() : ''])));
   const ok = fields.every(([k, , req]) => !req || String(v[k] || '').trim());
   return (
     <Modal title={title} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!ok} onClick={() => onOk(v)}>确定</button></>}>
+      {note && <div className="banner warn" style={{ marginBottom: 10 }}>{note}</div>}
       <div className="stack">{fields.map(([k, l, req, type]) => (
         <div key={k} className={`field ${req ? 'req' : ''}`}><label>{l}</label>
           {type === 'date' ? <DatePicker value={v[k]} onChange={(x) => setV({ ...v, [k]: x })} /> : <input className="in" value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} />}</div>))}</div>
+    </Modal>
+  );
+}
+
+// 0105: 没编码的新货 —— 物料里建好编码后挂到这一行
+function CodeFob({ line, onClose, act }) {
+  const { org } = useApp();
+  const [pid, setPid] = useState('');
+  const { data: prods } = useData(() => q(PRODUCTS_SQL, [org]), [org]);
+  return (
+    <Modal title={`给「${line.model}」挂编码`} onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>取消</button>
+      <button type="button" className="btn primary" disabled={!pid} onClick={() => act('已挂编码', `select app.set_fob_line_product($1,$2)`, [line.id, pid])}>挂上</button></>}>
+      <div className="stack">
+        <div className="small muted">还没有这个编码？先到「物料与定价」建档，再回来挂。</div>
+        {prods ? <ProdPick products={prods} value={pid} onChange={setPid} autoFocus /> : <div className="muted">加载中…</div>}
+      </div>
     </Modal>
   );
 }
@@ -238,10 +267,10 @@ function ReceiveFob({ f, lines, onClose, act }) {
   const open = lines.filter((l) => l.qty > l.qty_received);
   const [v, setV] = useState(Object.fromEntries(open.map((l) => [l.id, String(l.qty - l.qty_received)])));
   return (
-    <Modal title="到货入 FOB 仓" onClose={onClose} footer={<><span className="small muted">没编码的行先让中方建编码</span><span className="grow" /><button type="button" className="btn" onClick={onClose}>取消</button>
+    <Modal title="到货入 FOB 仓" onClose={onClose} footer={<>{open.some((l) => !l.product_id) && <span className="small muted">没编码的行先在 FOB 单的「编码」列点「挂编码」</span>}<span className="grow" /><button type="button" className="btn" onClick={onClose}>取消</button>
       <button type="button" className="btn primary" onClick={() => act('已入 FOB 仓', `select app.fob_receive($1,$2)`, [f.id, JSON.stringify(open.filter((l) => l.product_id && Number(v[l.id]) > 0).map((l) => ({ line_id: l.id, qty: Number(v[l.id]) })))])}>入库</button></>}>
       <Grid id="fob-receive" noTools rows={open} columns={[
-        { key: 'model', label: '型号', w: 160, value: (l) => l.model, render: (l) => <><ModelLink id={l.product_id} model={l.model} /> {!l.product_id && <Pill tone="amber">没编码</Pill>}</> },
+        { key: 'model', label: '型号', w: 200, value: (l) => l.model, render: (l) => <>{l.category ? <span className="pill blue" style={{ marginRight: 4 }}>{l.category}</span> : null}<ModelLink id={l.product_id} model={l.model} /> {!l.product_id && <Pill tone="amber">没编码</Pill>}</> },
         { key: 'left', label: '还没到', w: 80, value: (l) => l.qty - l.qty_received },
         { key: 'now', label: '这次到了', w: 100, fill: true, value: (l) => v[l.id], edit: (l) => ({ type: 'number', value: v[l.id] ?? '', disabled: !l.product_id, onChange: (x) => setV((o) => ({ ...o, [l.id]: String(x ?? '').replace(/\D/g, '') })) }) },
       ]} />
@@ -264,7 +293,7 @@ function ShipFob({ f, lines, onClose, act }) {
       <div className="stack">
         <Grid id="fob-ship" noTools rows={open} columns={[
           { key: 'code', label: '编码', w: 90, render: (l) => <span className="mono">{l.code || '—'}</span> },
-          { key: 'model', label: '型号', w: 140, render: (l) => <ModelLink id={l.product_id} model={l.model} /> },
+          { key: 'model', label: '型号', w: 190, render: (l) => <>{l.category ? <span className="pill blue" style={{ marginRight: 4 }}>{l.category}</span> : null}<ModelLink id={l.product_id} model={l.model} /></> },
           { key: 'left', label: '还能出', w: 80, value: (l) => leftOf(f, l) },
           { key: 'now', label: '这次出', w: 100, fill: true, value: (l) => Number(v[l.id] || 0), edit: (l) => ({ type: 'number', value: v[l.id], onChange: (x) => setV((y) => ({ ...y, [l.id]: String(Math.min(leftOf(f, l), Number(String(x ?? '').replace(/\D/g, '') || 0))) })) }) },
         ]} />
@@ -289,7 +318,7 @@ function ToLocalFob({ f, lines, onClose, act }) {
       <div className="stack">
         <Grid id="fob-tolocal" noTools rows={open} columns={[
           { key: 'code', label: '编码', w: 90, render: (l) => <span className="mono">{l.code || <Pill tone="amber">没编码</Pill>}</span> },
-          { key: 'model', label: '型号', w: 140, render: (l) => <ModelLink id={l.product_id} model={l.model} /> },
+          { key: 'model', label: '型号', w: 190, render: (l) => <>{l.category ? <span className="pill blue" style={{ marginRight: 4 }}>{l.category}</span> : null}<ModelLink id={l.product_id} model={l.model} /></> },
           { key: 'left', label: '没出的', w: 80, value: (l) => leftOf(f, l) },
           { key: 'now', label: '转本地', w: 100, fill: true, value: (l) => Number(v[l.id] || 0), edit: (l) => ({ type: 'number', value: v[l.id], onChange: (x) => setV((y) => ({ ...y, [l.id]: String(Math.min(leftOf(f, l), Number(String(x ?? '').replace(/\D/g, '') || 0))) })) }) },
         ]} />
@@ -305,17 +334,26 @@ function ToLocalFob({ f, lines, onClose, act }) {
 }
 
 function PayFob({ f, deposit, due, onClose, act }) {
-  const [v, setV] = useState({ kind: N(f.paid) < deposit ? 'deposit' : 'balance', amount: String(Math.max(N(f.paid) < deposit ? deposit - N(f.paid) : due, 0)), date: today(), method: 'bank', proof: '', note: '' });
+  const { org } = useApp();
+  const [v, setV] = useState({ kind: N(f.paid) < deposit ? 'deposit' : 'balance', amount: String(Math.max(N(f.paid) < deposit ? deposit - N(f.paid) : due, 0)), date: today(), account: '', proof: '', note: '' });
+  const [tried, setTried] = useState(false);
+  // 0105: FOB 收款也要进资金账户 + 必须有凭证（同普通收款）；收款方式跟着账户走
+  const { data: accs } = useData(() => q(`select id, name, kind, currency from app.cash_accounts where org_id = $1 and active order by sort nulls last, name`, [org]).catch(() => []), [org]);
+  const mine = (accs || []).filter((a) => a.currency === f.currency);
+  const ok = Number(v.amount) > 0 && v.account && v.proof;
+  const save = () => { setTried(true); if (!ok) return; act('已登记收款，已进资金账户', `select app.record_fob_payment2($1,$2)`, [f.id, JSON.stringify({ kind: v.kind, amount: Number(v.amount), on_date: v.date, account_id: v.account, proof: v.proof, note: v.note || null })]); };
   return (
     <Modal title="登记 FOB 收款" onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={!(Number(v.amount) > 0)}
-        onClick={() => act('已登记收款', `select app.record_fob_payment($1,$2,$3,$4,$5,$6,$7)`, [f.id, v.kind, Number(v.amount), v.date, v.method, v.proof || null, v.note || null])}>保存</button></>}>
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" onClick={save}>保存</button></>}>
       <div className="stack">
         <div className="seg">{[['deposit', '订金'], ['balance', '尾款'], ['other', '其他']].map(([k, l]) => <button type="button" key={k} className={v.kind === k ? 'on' : ''} onClick={() => setV({ ...v, kind: k })}>{l}</button>)}</div>
-        <div className="grid2"><div className="field req"><label>金额 {f.currency}</label><MoneyIn className="in" inputMode="numeric" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value.replace(/[^\d.]/g, '') })} /></div>
+        <div className="grid2"><div className="field req"><label>金额 {f.currency}</label><MoneyIn className={`in ${tried && !(Number(v.amount) > 0) ? 'err-in' : ''}`} inputMode="numeric" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value.replace(/[^\d.]/g, '') })} /></div>
           <div className="field"><label>日期</label><DatePicker value={v.date} onChange={(x) => setV({ ...v, date: x })} /></div></div>
-        <div className="seg">{Object.entries(PAY_METHODS).map(([k, l]) => <button type="button" key={k} className={v.method === k ? 'on' : ''} onClick={() => setV({ ...v, method: k })}>{l}</button>)}</div>
-        <div className="field"><label>凭证</label><PhotoInput value={v.proof} onChange={(x) => setV({ ...v, proof: x })} /></div>
+        <div className="field req"><label>收到哪个账户</label>
+          {accs && !mine.length ? <div className="banner warn">没有 {f.currency} 的资金账户，先到「收款与总账 → 资金账户」建一个</div>
+            : <OptChoice optKey="cash_accounts" title="资金账户" data value={v.account} onChange={(x) => setV({ ...v, account: x })} options={mine.map((a) => [a.id, a.name, a.currency])} placeholder="选账户…" err={tried && !v.account} flat={false} style={{ width: 240 }} />}</div>
+        <div className={`field req ${tried && !v.proof ? 'err' : ''}`}><label>付款凭证（现金也要拍照）</label><PhotoInput value={v.proof} onChange={(x) => setV({ ...v, proof: x })} />
+          {tried && !v.proof && <div className="small" style={{ color: 'var(--red, #c0392b)' }}>没有凭证不算收款</div>}</div>
       </div>
     </Modal>
   );

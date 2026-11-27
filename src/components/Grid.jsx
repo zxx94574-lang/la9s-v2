@@ -388,7 +388,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
   const filterCols = vis.concat(layout.order.filter((k) => layout.hidden.includes(k) && byKey[k]).map((k) => byKey[k])).filter((c) => c.label && c.filterable !== false);
   const toggleSort = (k) => setSort((s) => (!s || s.key !== k ? { key: k, dir: 'asc' } : s.dir === 'asc' ? { key: k, dir: 'desc' } : null));
 
-  const editFor = (r, ci) => vis[ci]?.edit?.(shown[r], r);
+  const editFor = (r, ci) => (shown[r] ? vis[ci]?.edit?.(shown[r], r) : undefined);   // 行被外面删掉了 (例: 提交后清空) 时, 选中 / 编辑的格子还指着旧行号
   // ── 格子编辑状态 (11-07): editing = {r, c, draft} ──
   const [editing, setEditing] = useState(null);
   const editRef = useRef(null);
@@ -426,6 +426,7 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
     }
   };
   const cancelEdit = () => { editingRef.current = null; setEditing(null); };
+  useEffect(() => { if (editing && !shown[editing.r]) setEditing(null); if (sel && (!shown[sel.a[0]] || !shown[sel.b[0]])) setSel(null); }, [shown.length]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (editing && editRef.current) { const el = editRef.current; el.focus(); if (window.matchMedia?.('(pointer: coarse)').matches) setTimeout(() => el.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 300); if (editing.type !== 'select' && editing.type !== 'date') { if (editing.typed) { const n = el.value.length; el.setSelectionRange?.(n, n); } else el.select?.(); } } // eslint-disable-next-line
   }, [editing?.r, editing?.c]);
   // 老式键盘导航 (TEXTAREA / 页面自己渲染的 input 还会用到)
@@ -509,6 +510,9 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
     if (e.target.closest('button,a,.cell-pop,.dp-pop,.cell-sel')) return;
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     e.preventDefault();   // 拖选格子时不要浏览器自己的「选文字」(会把整张表涂蓝)
+    // preventDefault 也拦掉了「点别处 = 输入框失焦」: 表外面的搜索框还拿着焦点, 打字会进搜索框而不是这一格 (11-27 自查, 询单页)
+    { const ae = document.activeElement, tb = e.currentTarget.closest('table');
+      if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae !== proxyRef.current && !(tb && tb.contains(ae))) ae.blur(); }
     if (editing && (editing.r !== r || editing.c !== c)) commitEdit();
     // 再点一下已选中的那一格 = 进编辑 (飞书; Frank 11-07); 已经在编辑这一格就不动
     if (!e.shiftKey && sel && sel.a[0] === r && sel.a[1] === c && sel.b[0] === r && sel.b[1] === c) {

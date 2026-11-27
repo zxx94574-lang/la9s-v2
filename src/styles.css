@@ -866,6 +866,7 @@ fieldset.lockset:disabled .in, fieldset.lockset:disabled select, fieldset.lockse
 /* 216: 卡片行写死几列的 (资金账户等) 窄屏自动降列, 不许挤出框 */
 @media (max-width: 900px) { .kpis[style] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
 @media (max-width: 480px) { .kpis[style] { grid-template-columns: minmax(0, 1fr) !important; } }
+@media (max-width: 480px) { .kpis.k2m[style] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } .kpis.k2m > .kpi:nth-child(odd) { border-left: 0; padding-left: 4px; } }
 /* 224 ⑤ (Frank 11-11): 每页标题下面的说明小字全站收成标题旁的 ⓘ, 鼠标移上去 / 手机点一下才显示 */
 header .info-tip { left: auto; right: 0; }
 .pagehead > div:first-child { position: relative; min-width: 0; }

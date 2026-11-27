@@ -30,7 +30,7 @@ const YANGO = [{ v: 'customer', l: '客户付' }, { v: 'us', l: '我们付' }, {
 const WAVE = [{ v: '', l: '没说' }, { v: 'customer', l: '客户付' }, { v: 'us', l: '我们付' }];
 const N = (v) => Number(v || 0);
 export const inqListSql = `
-select i.*, c.name as customer_name, c.code, c.temp_code, c.tier, c.status as cust_status, e.short_name as owner_name, d.biz_no, d.status as deal_status,
+select i.*, c.name as customer_name, c.code, c.temp_code, c.tier, c.tier_confirmed_at, c.status as cust_status, e.short_name as owner_name, d.biz_no, d.status as deal_status,
   (select coalesce(m.employee_id::text, '') from app.members m where m.user_id = i.created_by and m.org_id = i.org_id limit 1) as creator_emp
 from app.inquiries i left join app.customers c on c.id = i.customer_id left join app.employees e on e.id = i.owner_employee_id left join app.deals d on d.id = i.deal_id
 where i.org_id = $1 order by i.created_at desc limit 500`;
@@ -95,7 +95,7 @@ export default function Inquiry({ embedded, from, to } = {}) {   // from / to：
         {done && <div className="card-b" style={{ background: 'var(--green-bg)' }}>✓ 询单已提交，单号 <b className="mono">{done}</b>。中方定好价会转成报价，到时这里和你的待办里都会显示「价格出来了」。<button type="button" className="btn sm ghost" onClick={() => { setDone(null); setTab('list'); }}>看询单列表 →</button></div>}
         <div className="card-b row" style={{ gap: 10, flexWrap: 'wrap' }}>
           <div className="grow" style={{ maxWidth: 460 }}><CustomerSelect onlyActive={false} customers={own} value={cust} onChange={setCust} /></div>
-          {role === 'sales' && <span className="small muted">只列你名下的客户和还没归属的潜客；别人的客户只能看、不能接。</span>}
+          {role === 'sales' && <Info>这里只列你名下的客户和还没归属的潜客；别人的客户只能看、不能接。</Info>}
         </div>
         <div className="card-b" style={{ paddingTop: 0 }}><ModelPicker catalog={data.catalog} categories={data.categories} onPick={add} picked={new Set(lines.filter((l) => l.product_id).map((l) => l.product_id))} onUnpick={(p) => setLines((l) => l.filter((x) => x.product_id !== p.id))} showPrice={false} /></div>
         <Grid id="inq-lines" noTools rowKey={(l) => l._k} rows={lines.map((l, i) => ({ ...l, _k: String(i) }))} onDelete={(l, i, rs) => { const ks = new Set((rs || [l]).map((y) => y._k)); setLines((x) => x.filter((_, j) => !ks.has(String(j)))); }} empty="上面选型号，或在下面填客户要的没编码的货" columns={[
@@ -111,9 +111,8 @@ export default function Inquiry({ embedded, from, to } = {}) {   // from / to：
           <div className="field"><label>Yango 运费 <Info>默认客户付。只有单特别大才由我们付；客户自己来拿就没有运费。</Info></label><OptChoice optKey="inq_yango" title="Yango 运费谁付" options={YANGO} value={yango} onChange={setYango} /></div>
           <div className="field"><label>Wave 手续费</label><OptChoice optKey="inq_wave" title="Wave 手续费谁付" options={WAVE} value={wave} onChange={setWave} /></div>
           <div className="field"><label>备注</label><input className="in" value={note} onChange={(e) => setNote(e.target.value)} /></div>
-          <div className="field"><button type="button" className="btn primary" disabled={!ok} onClick={submit}>提交询单</button></div>
+          <div className="field"><div className="row" style={{ gap: 6 }}><button type="button" className="btn primary grow" disabled={!ok} onClick={submit}>提交询单</button><Info>询单不带价、不预占库存。提交后进中方待办；中方定价转成报价后，你对自己名下的客户可以接着「确认客户 → 下推找货 → 发销售单给客户确认」。</Info></div></div>
         </div>
-        <div className="card-b small muted" style={{ paddingTop: 0 }}>询单不带价、不预占库存。提交后进中方待办；中方定价转成报价后，你对自己名下的客户可以接着「确认客户 → 下推找货 → 发销售单给客户确认」。</div>
       </div>}
       {tab === 'list' && <div className="card">
         <Grid id="inquiries" columns={cols} rows={rows} empty="还没有询单"
@@ -169,6 +168,7 @@ function ConvertModal({ inq, catalog, categories, onClose }) {
       <div className="stack">
         <div className="kv-row"><span><Pill tone={INQ_SOURCE[inq.source][1]}>{INQ_SOURCE[inq.source][0]}</Pill></span><span>客户 <b>{whoOf(inq)}</b>{!inq.customer_id && inq.guest_info?.phone ? ` · ${fmtPhone(inq.guest_info.phone)}` : ''}{inq.guest_info?.city ? ` · ${inq.guest_info.city}` : ''}</span>
           {inq.customer_id ? <span className="small muted">档位 <TierPill tier={inq.tier} empty="没定" /></span> : <span className="pill amber">游客自报：{GUEST_LEVELS.find((x) => x.v === inq.guest_info?.level)?.l.split(' · ')[0] || '没填'} → 转报价时建成潜客，先按 <TierPill tier={inq.guest_info?.level === 'REPAIR' ? 'REPAIR' : 'RETAIL'} />（系统默认 · 未确认），档位要你定</span>}<span className="small muted">{dt(inq.created_at)}</span></div>
+        {!view && inq.customer_id && !inq.tier_confirmed_at && <div className="banner warn">这个客户的档位还没定，价格先按 <TierPill tier={inq.tier} /> 带出。转成报价后要在单子里「定档位」，价格会按定的档位重算（这里手改过的单价不动）。</div>}
         {inq.note && <div className="hint">备注：{inq.note}</div>}
         <Grid id="inq-conv" noTools rows={rows} rowKey={(r) => String(r._i)} columns={[
           { key: 'code', label: '编码', w: 80, mono: true, value: (r) => r.p?.code || '没编码', render: (r) => r.p?.code || <Pill tone="amber">没编码</Pill> },

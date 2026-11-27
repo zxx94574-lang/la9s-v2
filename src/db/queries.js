@@ -449,7 +449,7 @@ select l.*, p.code, c.name as category, p.variant,
   (select coalesce(sum(s.qty_on_hand), 0) from app.stock_items s join app.warehouses w on w.id = s.warehouse_id where s.product_id = l.product_id and w.kind = 'fob') as fob_stock
 from app.fob_lines l left join app.products p on p.id = l.product_id left join app.categories c on c.id = p.category_id
 where l.project_id = $1 order by l.model`;
-export const fobPayments = `select * from app.fob_payments where project_id = $1 order by on_date, created_at`;
+export const fobPayments = `select x.*, a.name as account from app.fob_payments x left join app.cash_accounts a on a.id = x.account_id where x.project_id = $1 order by x.on_date, x.created_at`;
 export const fobEvents = `select * from app.fob_events where project_id = $1 order by at`;
 
 export const staffList = `

@@ -42,8 +42,8 @@ export default function CustomerSelect({ customers, value, onChange, onlyActive 
               }} />
           </div>
           {list.map((c, i) => (
-            <button type="button" key={c.id} className={i === focus ? 'focus' : ''} style={{ gridTemplateColumns: '60px 1fr auto' }} onMouseEnter={() => setFocus(i)} onClick={() => pick(c)}>
-              <span className="mono muted">{c.code || c.temp_code}</span><span><span className="m">{c.name}</span> <span className="muted small">{c.city}{dupOf(c) > 1 && c.phone ? ` · ${c.phone}` : ''}</span><DupPill c={c} />{c.status === 'prospect' && <span className="pill amber" style={{ marginLeft: 6 }}>潜客</span>}</span><TierPill tier={c.tier} />
+            <button type="button" key={c.id} className={i === focus ? 'focus' : ''} style={{ gridTemplateColumns: 'minmax(60px, max-content) 1fr auto' }} onMouseEnter={() => setFocus(i)} onClick={() => pick(c)}>
+              <span className="mono muted" style={{ whiteSpace: 'nowrap', fontSize: c.code ? undefined : 12 }}>{c.code || c.temp_code}</span><span><span className="m">{c.name}</span> <span className="muted small">{c.city}{dupOf(c) > 1 && c.phone ? ` · ${c.phone}` : ''}</span><DupPill c={c} />{c.status === 'prospect' && <span className="pill amber" style={{ marginLeft: 6 }}>潜客</span>}</span><TierPill tier={c.tier} />
             </button>
           ))}
           {list.length === 0 && <div className="empty">没有匹配的客户</div>}
