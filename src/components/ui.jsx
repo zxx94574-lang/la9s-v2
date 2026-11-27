@@ -328,7 +328,7 @@ function DatePicker1({ value, onChange, range, label, align }) {
         </span>
       ) : (
         <button type="button" className="dp-btn" onClick={() => show('from')}>
-          <span>▦</span>{label && <span className="muted small">{label}</span>}<b>{value}</b>
+          <span>▦</span>{label && <span className="muted small">{label}</span>}{value ? <b>{value}</b> : !label && <span className="muted">选日期</span>}   {/* 11-27: 空的日期框以前只有一个图标 */}
         </button>)}
       {open && (
         <div className="dp-pop" style={align === 'right' ? { left: 'auto', right: 0 } : null}>

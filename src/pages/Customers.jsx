@@ -92,7 +92,7 @@ export default function Customers() {
     ...(price ? [{ key: 'balance', label: '欠款 XOF', w: 110, value: (c) => Number(c.balance || 0), render: (c) => (Number(c.balance) ? money(c.balance) : '—') },
       { key: 'warn', label: '预警', w: 170, value: (c) => creditWarn(c).join(' / '),
         render: (c) => { const w = creditWarn(c); return w.length ? <span className="row" style={{ gap: 4 }}>{w.map((x) => <Pill key={x} tone="red">{x}</Pill>)}{c.has_agreement && <Pill tone="gray">有协议</Pill>}</span> : c.has_agreement ? <Pill tone="gray">有协议</Pill> : ''; } }] : []),
-    ...(price ? [{ key: 'block_on_debt', label: '有欠款不出货', w: 110, value: (c) => (c.block_on_debt ? '是' : ''),
+    ...(price ? [{ key: 'block_on_debt', label: '有欠款不出货', type: 'text', w: 110, value: (c) => (c.block_on_debt ? '是' : ''),
       edit: (c) => (role === 'admin' ? { type: 'select', value: c.block_on_debt ? '1' : '', options: [['', '否（只提醒）'], ['1', '是（报价审批 + 出库拦）']],
         onChange: async (v) => { try { await call(role, `select app.set_block_on_debt($1,$2)`, [c.id, v === '1']); toast(v === '1' ? `${c.name}：有欠款就不出货（报价进审批、出库拦住）` : `${c.name}：改回只提醒`); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } } } : null),
       render: (c) => (c.block_on_debt ? <Pill tone="red">欠款不出货</Pill> : '') }] : []),

@@ -35,7 +35,7 @@ const TEXT_OPS = [['contains', '包含'], ['not_contains', '不包含'], ['eq', 
 const NUM_OPS = [['eq', '等于'], ['ne', '不等于'], ['gt', '大于'], ['lt', '小于'], ['between', '介于'], ['empty', '为空'], ['not_empty', '不为空']];
 // alignment rule (待改 12): money right, quantities centre, everything else left — inferred from the label when a column does not say
 const MONEY_RE = /单价|金额|价格|售价|底价|欠款|应收|实收|已收|待付|余额|合计金额|收款额|总额|预付|抹零|手续费|Balance|小计|总价|未付|未收|已冲|未冲|将冲|折合|累计|收款（|这笔收款|汇率/;
-const QTY_RE = /数量|实存|预占|可售|已出库|已退|缺口|供货|找到|件数|行数|笔数|^需求$|复核数|可退|型号数|被问次数/;
+const QTY_RE = /数量|实存|预占|可售|已出库|已退|缺口|实际供货|找到|件数|行数|笔数|^需求$|复核数|可退|型号数|被问次数/;
 const kindOf = (c) => c.type || (MONEY_RE.test(c.label) ? 'money' : QTY_RE.test(c.label) ? 'number' : 'text');
 const isNumCol = (c) => kindOf(c) !== 'text';
 // 374: 金额 / 价格 / 数量一律右对齐 (固定); 其余列: 公司给这一列单独设的 > 列自己写的 > 公司的文字默认
