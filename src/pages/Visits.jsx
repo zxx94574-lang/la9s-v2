@@ -5,7 +5,7 @@ import { takeWorkCust } from '../lib/dirWork.js';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
-import { useApp, useData, Modal, PhotoInput, DatePicker, Thumb, PhoneInput, Choice, MoneyIn, usePeriod, PeriodBar } from '../components/ui.jsx';
+import { useApp, useData, Modal, PhotoInput, DatePicker, Thumb, PhoneInput, Choice, MoneyIn, usePeriod, PeriodBar, useKeep, clearKeep } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
 import { ResultPill, FollowDate, VISIT_RESULTS } from '../components/Crm.jsx';
@@ -55,11 +55,14 @@ export default function Visits() {
 
 function VisitModal({ onClose, initCust }) {
   const { org, role, toast, refresh } = useApp();
-  const [mode, setMode] = useState(initCust ? 'old' : 'new');
-  const [cust, setCust] = useState(initCust || '');
-  const [p, setP] = useState({ name: '', phone: '', city: '', market: '', shop_type: '' });
-  const [f, setF] = useState({ photo: '', location: '', activity: '', products_wanted: '', monthly_qty: '', buys_from: '', transport: '', nearby_suppliers: '', result: '', note: '', next_follow_on: '' });
+  // 手机上填到一半被打断 / 误关 → 本机自动存 3 天 (11-26 长表单规则); 从客户档案点进来 (initCust) 的不存
+  const ks = initCust ? null : 'visit';
+  const [mode, setMode] = useKeep(ks, 'mode', initCust ? 'old' : 'new');
+  const [cust, setCust] = useKeep(ks, 'cust', initCust || '');
+  const [p, setP] = useKeep(ks, 'p', { name: '', phone: '', city: '', market: '', shop_type: '' });
+  const [f, setF] = useKeep(ks, 'f', { photo: '', location: '', activity: '', products_wanted: '', monthly_qty: '', buys_from: '', transport: '', nearby_suppliers: '', result: '', note: '', next_follow_on: '' });
   const [busy, setBusy] = useState(false);
+  const [tried, setTried] = useState(false);
   const { data: customers } = useData(() => q(Q.customers, [org]), [org]);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e?.target ? e.target.value : e }));
   const setPv = (k) => (e) => setP((x) => ({ ...x, [k]: e.target ? e.target.value : e }));
@@ -68,6 +71,8 @@ function VisitModal({ onClose, initCust }) {
     () => toast('拿不到定位，可以手写地标', 'err'), { timeout: 8000 });
   const okCust = mode === 'old' ? !!cust : p.name.trim() && p.phone.trim();
   const save = async () => {
+    setTried(true);
+    if (!okCust || !f.photo || !f.result) { toast(`还差：${[!okCust && (mode === 'old' ? '客户' : '店名和电话'), !f.photo && '门店照片', !f.result && '结果'].filter(Boolean).join('、')}`, 'err'); return; }
     setBusy(true);
     try {
       let id = cust;
@@ -76,38 +81,38 @@ function VisitModal({ onClose, initCust }) {
           JSON.stringify({ market: p.market || null, shop_type: p.shop_type || null, source: 'visit', location: f.location || null })]);
       }
       await call(role, `select app.log_visit($1,$2,$3)`, [id, f.result, JSON.stringify(f)]);
-      toast(mode === 'new' ? `已建潜客并记录拜访：${p.name.toUpperCase()}` : '已记录拜访'); refresh(); onClose();
+      toast(mode === 'new' ? `已建潜客并记录拜访：${p.name.toUpperCase()}` : '已记录拜访'); if (ks) clearKeep(ks); refresh(); onClose();
     } catch (e) { toast(friendlyError(e), 'err'); } finally { setBusy(false); }
   };
   return (
-    <Modal wide title="记一次拜访 · Fiche de visite" onClose={onClose}
+    <Modal wide title="记一次拜访" onClose={onClose}
       footer={<><span className="grow" /><button type="button" className="btn" onClick={onClose}>取消</button>
-        <button type="button" className="btn primary" disabled={busy || !okCust || !f.photo || !f.result} onClick={save}>{busy ? '保存中…' : '保存'}</button></>}>
+        <button type="button" className="btn primary" disabled={busy} onClick={save}>{busy ? '保存中…' : '保存'}</button></>}>
       <div className="stack">
         <div className="seg">{[['new', '新店（建潜客）'], ['old', '老客户 / 已有潜客']].map(([v, l]) => <button type="button" key={v} className={mode === v ? 'on' : ''} onClick={() => setMode(v)}>{l}</button>)}</div>
         {mode === 'old' ? (
           <div className="field req"><label>客户</label>{customers && <CustomerSelect onlyActive={false} customers={customers.map((c) => ({ ...c, code: c.code || c.temp_code }))} value={cust} onChange={setCust} />}</div>
         ) : (
           <div className="grid2">
-            <div className="field req"><label>店名 Nom de la boutique</label><input className="in" value={p.name} onChange={setPv('name')} /></div>
-            <div className="field req"><label>电话 Téléphone</label><PhoneInput value={p.phone} onChange={(v) => setP((x) => ({ ...x, phone: v }))} /></div>
-            <div className="field"><label>城市 / 区 Commune</label><input className="in" value={p.city} onChange={setPv('city')} /></div>
-            <div className="field"><label>市场 Marché</label><input className="in" value={p.market} onChange={setPv('market')} /></div>
+            <div className="field req"><label>店名</label><input className="in" value={p.name} onChange={setPv('name')} /></div>
+            <div className="field req"><label>电话</label><PhoneInput value={p.phone} onChange={(v) => setP((x) => ({ ...x, phone: v }))} /></div>
+            <div className="field"><label>城市 / 区</label><input className="in" value={p.city} onChange={setPv('city')} /></div>
+            <div className="field"><label>市场</label><input className="in" value={p.market} onChange={setPv('market')} /></div>
             <div className="field"><label>店铺类型</label><div className="chips">{['Wholesale shop', 'Retail shop', 'Repair shop'].map((v) =>
               <button type="button" key={v} className={`chip ${p.shop_type === v ? 'on' : ''}`} onClick={() => setPv('shop_type')(p.shop_type === v ? '' : v)}>{v}</button>)}</div></div>
           </div>)}
         <div className="grid2">
-          <div className="field req"><label>门店照片 Photo</label><PhotoInput value={f.photo} onChange={set('photo')} label="拍门店" invalid={!f.photo} /></div>
-          <div className="field"><label>位置 Localisation</label><div className="row" style={{ gap: 6 }}><input className="in" value={f.location} onChange={set('location')} placeholder="地标 / 坐标" /><button type="button" className="btn sm" onClick={locate}>⌖ 定位</button></div></div>
-          <div className="field"><label>主营 Activité</label><OptChoice optKey="visit_activity" title="店铺做什么" value={f.activity} onChange={(v) => set('activity')(v)} options={['Réparation', 'Vente détail', 'Grossiste', 'Recyclage']} empty="—" /></div>
-          <div className="field"><label>想要的货 Produits recherchés</label><input className="in" value={f.products_wanted} onChange={set('products_wanted')} placeholder="LCD TECNO / BATTERY …" /></div>
-          <div className="field"><label>月用量（件）Quantité / mois</label><MoneyIn className="in" inputMode="numeric" value={f.monthly_qty} onChange={(e) => set('monthly_qty')(e.target.value.replace(/\D/g, ''))} style={{ maxWidth: 120 }} /></div>
-          <div className="field"><label>现在从哪买 Fournisseur actuel</label><input className="in" value={f.buys_from} onChange={set('buys_from')} placeholder="Adjamé / 某某批发" /></div>
-          <div className="field"><label>怎么拿货 Transport</label><OptChoice optKey="visit_transport" title="怎么拿货" value={f.transport} onChange={(v) => set('transport')(v)} options={['Yango moto', 'Taxi', 'Vient lui-même', 'Livreur']} empty="—" /></div>
-          <div className="field"><label>附近同行 Concurrents proches</label><input className="in" value={f.nearby_suppliers} onChange={set('nearby_suppliers')} /></div>
+          <div className="field req"><label>门店照片</label><PhotoInput value={f.photo} onChange={set('photo')} label="拍门店" invalid={tried && !f.photo} /></div>
+          <div className="field"><label>位置</label><div className="row" style={{ gap: 6 }}><input className="in" value={f.location} onChange={set('location')} placeholder="地标 / 坐标" /><button type="button" className="btn sm" onClick={locate}>⌖ 定位</button></div></div>
+          <div className="field"><label>主营</label><OptChoice optKey="visit_activity" title="店铺做什么" value={f.activity} onChange={(v) => set('activity')(v)} options={['Réparation', 'Vente détail', 'Grossiste', 'Recyclage']} empty="—" /></div>
+          <div className="field"><label>想要的货</label><input className="in" value={f.products_wanted} onChange={set('products_wanted')} placeholder="LCD TECNO / BATTERY …" /></div>
+          <div className="field"><label>月用量（件）</label><MoneyIn className="in" inputMode="numeric" value={f.monthly_qty} onChange={(e) => set('monthly_qty')(e.target.value.replace(/\D/g, ''))} style={{ maxWidth: 120 }} /></div>
+          <div className="field"><label>现在从哪买</label><input className="in" value={f.buys_from} onChange={set('buys_from')} placeholder="Adjamé / 某某批发" /></div>
+          <div className="field"><label>怎么拿货</label><OptChoice optKey="visit_transport" title="怎么拿货" value={f.transport} onChange={(v) => set('transport')(v)} options={['Yango moto', 'Taxi', 'Vient lui-même', 'Livreur']} empty="—" /></div>
+          <div className="field"><label>附近同行</label><input className="in" value={f.nearby_suppliers} onChange={set('nearby_suppliers')} /></div>
         </div>
-        <div className="field req"><label>结果 Résultat</label><OptChoice optKey="visit_results" title="拜访结果" value={f.result} onChange={(v) => set('result')(v)} options={VISIT_RESULTS} /></div>
-        <div className="field"><label>说明 Remarque</label><input className="in" value={f.note} onChange={set('note')} /></div>
+        <div className="field req"><label>结果</label><OptChoice optKey="visit_results" title="拜访结果" value={f.result} onChange={(v) => set('result')(v)} options={VISIT_RESULTS} /></div>
+        <div className="field"><label>说明</label><input className="in" value={f.note} onChange={set('note')} /></div>
         <div className="field"><label>下次跟进</label><FollowDate value={f.next_follow_on} onChange={set('next_follow_on')} /></div>
       </div>
     </Modal>

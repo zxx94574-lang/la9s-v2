@@ -5,7 +5,7 @@
 import { kpiPayRows } from '../lib/kpiPay.js';
 import { normPhone, fmtPhone } from '../lib/phone.js';
 import { ConfirmEdit, HistoryBlock } from '../components/ProductDrawer.jsx';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import AttCalendar from '../components/AttCalendar.jsx';
 import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
@@ -276,6 +276,15 @@ function Payroll({ staff, opts }) {
     return { months, head: head[0] || null, lines, comm: Object.fromEntries(comm.map((c) => [c.employee_id, c])), rate: Number(rate[0]?.value?.per_piece ?? 5), srate: Number(srate[0]?.value?.per_piece ?? 17) };
   }, [org, month]);
   const byEmp = useMemo(() => Object.fromEntries(staff.map((e) => [e.id, e])), [staff]);
+  // 11-27 自查: 本月草稿的「实到工作日」是建单那天的默认值 (满勤 25), 不点「按打卡重算」就一直是错的, 和灰字说的「按打卡自动算」对不上.
+  // 打开本月草稿时自动按打卡算一次 (手改过的行不动, 同那个按钮); 每次打开页面只跑一次.
+  const autoRan = useRef('');
+  const headSt = data?.head?.status;
+  useEffect(() => {
+    if (!headSt || headSt === 'paid' || month !== today().slice(0, 7) || !hasAny(role, ['admin', 'country_manager']) || autoRan.current === month) return;
+    autoRan.current = month;
+    call(role, `select app.payroll_refresh_auto($1,$2)`, [org, month + '-01']).then(() => refresh()).catch(() => {});
+  }, [headSt, month, org, role, refresh]);
   if (!data) return <div className="empty">加载中…</div>;
   const h = data.head; const draft = h && h.status !== 'paid'; const admin = role === 'admin';
   const run = async (msg, sql, p) => { try { await call(role, sql, p); toast(msg); refresh(); return true; } catch (e) { toast(friendlyError(e), 'err'); return false; } };

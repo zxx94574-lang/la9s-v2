@@ -24,7 +24,7 @@ export function FollowDate({ value, onChange }) {
   return (
     <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
       <div className="chips">{opts.map(([v, l]) => <button type="button" key={l} className={`chip ${(value || '') === v ? 'on' : ''}`} onClick={() => onChange(v)}>{l}</button>)}</div>
-      <DatePicker value={!preset && value ? value : plusDays(14)} onChange={onChange} label={!preset && value ? '' : '自选'} />
+      <DatePicker value={!preset && value ? value : null} onChange={onChange} label={!preset && value ? '' : '自选日期'} />   {/* 没自选时只显示「自选日期」, 不再摆一个 +14 天的日期 (看着像已经定了) */}
     </div>
   );
 }
