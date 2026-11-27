@@ -242,7 +242,7 @@ export function SimpleForm({ title, fields, onClose, onOk, note }) {
       {note && <div className="banner warn" style={{ marginBottom: 10 }}>{note}</div>}
       <div className="stack">{fields.map(([k, l, req, type]) => (
         <div key={k} className={`field ${req ? 'req' : ''}`}><label>{l}</label>
-          {type === 'date' ? <DatePicker value={v[k]} onChange={(x) => setV({ ...v, [k]: x })} /> : <input className="in" value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} />}</div>))}</div>
+          {type === 'date' ? <DatePicker value={v[k]} label={v[k] ? '' : '选日期'} onChange={(x) => setV({ ...v, [k]: x })} /> : <input className="in" value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} />}</div>))}</div>
     </Modal>
   );
 }

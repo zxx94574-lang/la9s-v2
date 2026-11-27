@@ -73,7 +73,7 @@ test('出库拦截: 超欠款上限要中方放行; 关掉开关不拦', async (
 test('出库拦截: 超账期', async () => {
   const t = await setup();
   await t.db.query(`delete from app.org_settings where key = 'credit_gate'`);
-  const d0 = await t.toConfirmed(t.ids.camaraAbobo, [{ product_id: t.ids.bg6mCover, qty_req: 10 }]); await t.shipAll(d0);   // 很久以前出的, 没付
+  const d0 = await t.toConfirmed(t.ids.camaraAbobo, [{ product_id: t.ids.bg6mCover, qty_req: 10 }]); await t.shipAll(d0, null, new Date(Date.now() - 30 * 864e5).toISOString());   // 很久以前出的, 没付
   const d = await t.toConfirmed(t.ids.camaraAbobo, [{ product_id: t.ids.bg6mCover, qty_req: 10 }]);
   await t.db.query(`update app.customers set credit_days = 3 where id = $1`, [t.ids.camaraAbobo]);
   await rejects(t.shipAll(d, null, NOW()), /CREDIT_BLOCK.*账期/);

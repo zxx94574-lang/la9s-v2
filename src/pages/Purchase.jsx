@@ -29,7 +29,9 @@ export function etaPill(r) {
 
 // 481 (0082): 国内商务在申请单每行回复 —— 能给多少 / 单价 / 哪天发 / 货权; 改一格存一格; 每行都回了 = 已回复 (通知中方)
 const offerState = (r) => { const ls = r.lines || []; const n = ls.filter((l) => l.offer_qty != null && l.offer_price != null && l.offer_ship).length;
-  return r.offered_at || (ls.length && n === ls.length) ? ['已回复', 'green'] : n ? [`回了 ${n}/${ls.length} 行`, 'amber'] : ['等国内回复', 'gray']; };
+  if (r.offered_at || (ls.length && n === ls.length)) return ['已回复', 'green'];
+  if (!['draft', 'submitted'].includes(r.status)) return ['没逐行回复', 'gray'];   // 国内已经下单 / 发货了, 不再显示「等国内回复」(11-27 自查: 已发货的单还写着等回复)
+  return n ? [`回了 ${n}/${ls.length} 行`, 'amber'] : ['等国内回复', 'gray']; };
 function OfferModal({ r, onClose }) {
   const { role, toast, refresh } = useApp();
   const mine = role === 'cn_business';
@@ -132,8 +134,8 @@ function EditPR({ r, onClose }) {
         <div className="grid2">
           <div className="field req"><label>申请什么（标题）</label><input className="in" value={f.title} placeholder={f.kind === 'supplies' ? '例：仓库工服 30 套' : '例：10 月屏幕补货'} onChange={(e) => setF({ ...f, title: e.target.value })} /></div>
           <div className="field"><label>运输方式</label><div className="seg">{Object.entries(MODE).map(([k, l]) => <button type="button" key={k} className={f.mode === k ? 'on' : ''} onClick={() => setF({ ...f, mode: k })}>{l}</button>)}</div></div>
-          <div className="field"><label>要求到货日</label><DatePicker value={f.need_by || today()} onChange={(v) => setF({ ...f, need_by: v })} /></div>
-          <div className="field"><label>期望发货日</label><DatePicker value={f.planned_ship || today()} onChange={(v) => setF({ ...f, planned_ship: v })} /></div>
+          <div className="field"><label>要求到货日</label><DatePicker value={f.need_by} label={f.need_by ? '' : '选日期'} onChange={(v) => setF({ ...f, need_by: v })} /></div>
+          <div className="field"><label>期望发货日</label><DatePicker value={f.planned_ship} label={f.planned_ship ? '' : '选日期'} onChange={(v) => setF({ ...f, planned_ship: v })} /></div>
         </div>
         <div className="field"><label>具体描述（尺码、颜色、怎么装箱、分柜要求…）</label><textarea className="in" rows={2} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
         {f.kind !== 'supplies' && <ModelPicker catalog={data.catalog} categories={data.categories} showPrice={false}

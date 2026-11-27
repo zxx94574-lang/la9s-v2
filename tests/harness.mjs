@@ -98,7 +98,7 @@ export async function setup() {
     if (review) await as(U.manager, `select app.review_pick($1,$2,'photo://pack.jpg')`, [deal, ids.reviewer]);
     return deal;
   };
-  const shipAll = (deal, items = null, at = '2026-10-27T10:00:00Z') =>
+  const shipAll = (deal, items = null, at = new Date(Date.now() - 3600e3).toISOString()) =>
     val(U.manager, `select app.ship($1,$2,'yango_moto','+2250700000000','Abobo marché','proof://yango.jpg',$3)`,
       [deal, at, items && JSON.stringify(items)]);
 

@@ -872,7 +872,11 @@ export default function Grid({ id, columns: baseColumns, rows, rowKey: rowKeyPro
             {!actList.length && <span className="small muted">这一行现在没有要做的</span>}</span>
         ) : <span className="small muted row-acts-hint">点一行来操作<Info>点中表里的一行，这里就会出现这一行能做的事：{rowActions.filter((a) => !a.danger).map((a) => a.label).join('、')}。</Info></span>}{dangerBtns}</div>)}
       {!noTools && compactTools && !toolsOpen && (
-        <div className="grid-tools mini"><span className="grow" />{nFilters > 0 && <span className="pill blue">筛出 {shown.length}/{rows.length} 行</span>}<button type="button" className="btn sm ghost" title="筛选 / 搜索 / 显示哪些列" onClick={() => setToolsOpen(true)}>⏷ ☷</button></div>)}
+        <div className="grid-tools mini">{rowActions?.length > 0 && (actRow ? (
+          <span className="row-acts"><span className="small">第 {shown.indexOf(actRow) + 1} 行：</span>
+            {actList.map((a) => <button type="button" key={a.label} className={`btn sm ${a.tone || 'primary'}`} onClick={() => a.run(actRow)}>{a.label}</button>)}
+            {!actList.length && <span className="small muted">这一行现在没有要做的</span>}</span>
+        ) : <span className="small muted row-acts-hint">点一行来操作<Info>点中表里的一行，这里就会出现这一行能做的事：{rowActions.filter((a) => !a.danger).map((a) => a.label).join('、')}。</Info></span>)}<span className="grow" />{nFilters > 0 && <span className="pill blue">筛出 {shown.length}/{rows.length} 行</span>}<button type="button" className="btn sm ghost" title="筛选 / 搜索 / 显示哪些列" onClick={() => setToolsOpen(true)}>⏷ ☷</button></div>)}
       {!noTools && (!compactTools || toolsOpen) && (
         <div className="grid-tools">
           {tools}
