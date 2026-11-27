@@ -10,7 +10,7 @@ import { useApp, useData, Choice } from './ui.jsx';
 import { ordersJump } from '../lib/dirWork.js';
 import { ITEMS, visibleTo } from './Nav.jsx';
 import { presetPeriod } from './ui.jsx';
-import { periodRange, ymd } from '../lib/format.js';
+import { periodRange, ymd, dDate } from '../lib/format.js';
 import { parse, METRIC, NOW, GROUP, looksLikeQuestion } from '../lib/askParse.js';   // 关键词全在 lib/askParse.js（纯函数，tests/ask.test.mjs 回归）
 
 const fmt = (n) => Math.round(Number(n || 0)).toLocaleString('en-US');
@@ -147,11 +147,15 @@ const whenKey = (P) => (P.from === '2000-01-01' ? 'all' : WHEN_OPTS.find(([k]) =
 function AskPanel({ onClose }) {
   const { org, go, openArchive, role } = useApp();
   const { data: dict } = useData(async () => {
-    const [emps, custs, cats, prods, deals] = await Promise.all([q(`select id, short_name, full_name, emp_no from app.employees where org_id = $1`, [org]),
+    const [emps, custs, cats, prods, deals, pos] = await Promise.all([q(`select id, short_name, full_name, emp_no from app.employees where org_id = $1`, [org]),
       q(`select c.id, c.name, coalesce(c.code, c.temp_code) as code, c.city from app.customers c where c.org_id = $1`, [org]), q(`select id, name from app.categories where org_id = $1`, [org]),
       q(PROD_SQL, [org]),
-      q(`select d.id, d.biz_no, d.so_no, d.quote_no, d.status, d.created_at, c.name as customer from app.deals d join app.customers c on c.id = d.customer_id where d.org_id = $1 order by d.created_at desc limit 5000`, [org])]);
-    return { emps, custs, cats, prods, deals, models: [...new Set(prods.map((p) => p.model).filter(Boolean))] };
+      q(`select d.id, d.biz_no, d.so_no, d.quote_no, d.status, d.created_at, c.name as customer from app.deals d join app.customers c on c.id = d.customer_id where d.org_id = $1 order by d.created_at desc limit 5000`, [org]),
+      // 11-27 Frank: 搜几个数字也要能找到采购单 —— 采购单号 / 入仓号 / 物流单号 / 柜号 / 需求批次 / 金蝶入库单号
+      q(`select p.id, p.po_no, p.batch_name, p.warehouse_nos, p.tracking_no, p.container_no, p.forwarder, p.eta, p.status,
+           (select string_agg(coalesce(r.kd_no, '') || ' ' || coalesce(r.grn_no, ''), ' ') from app.po_receipts r where r.po_id = p.id) as grn_nos
+         from app.purchase_orders p where p.org_id = $1 order by coalesce(p.shipped_on, p.ordered_on) desc nulls last limit 3000`, [org]).catch(() => [])]);
+    return { emps, custs, cats, prods, deals, pos, models: [...new Set(prods.map((p) => p.model).filter(Boolean))] };
   }, [org]);
   const [text, setText] = useState(() => { try { return sessionStorage.getItem('la9s.ask.last') || ''; } catch { return ''; } });
   const [P, setP] = useState(null); const [asked, setAsked] = useState(''); const [rows, setRows] = useState(null); const [busy, setBusy] = useState(false); const [hi, setHi] = useState(-1);
@@ -188,7 +192,15 @@ function AskPanel({ onClose }) {
     const prods = T.length >= 2 ? dict.prods.map((p) => [p, sc(p)]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1] || (b[0].avail - a[0].avail)).slice(0, 8).map(([p]) => p) : [];
     const emps = hasAny(role, ['admin', 'sales_manager']) ? dict.emps.filter((e) => [e.short_name, e.full_name, e.emp_no].some((x) => x && String(x).toLowerCase().includes(low))).slice(0, 3) : [];
     const pages = Object.entries(ITEMS).filter(([r, v]) => String(v[1]).includes(t) && visibleTo(r, role)).slice(0, 4);
-    return { deals, custs, prods, emps, pages };
+    // 采购单: 打字母数字都行; 只打数字时也去掉单号里的字母再比 (搜 300649 → LKY300649Y)
+    const dig = /^\d{3,}$/.test(T) ? T : '';
+    const poHit = (p) => {
+      const F = [['入仓号', ...(p.warehouse_nos || [])], ['物流单号', p.tracking_no], ['柜号', p.container_no], ['采购单号', p.po_no], ['需求批次', p.batch_name], ['金蝶入库', ...String(p.grn_nos || '').split(' ')]];
+      for (const [lab, ...vals] of F) for (const v of vals) { if (!v) continue; const n = norm(v); if (n.includes(T) || (dig && n.replace(/\D/g, '').includes(dig))) return { lab, v }; }
+      return null;
+    };
+    const pos = T.length >= 3 && dict.pos ? dict.pos.map((p) => [p, poHit(p)]).filter(([, h]) => h).slice(0, 5).map(([p, h]) => ({ ...p, hit: h })) : [];
+    return { deals, pos, custs, prods, emps, pages };
   }, [text, dict, role]);
   const jumps = P && rows ? jumpsOf(P, rows) : [];
   // 键盘上下走的顺序：问题的跳转 → 单号 → 客户 → 型号 → 员工 → 页面
@@ -197,6 +209,7 @@ function AskPanel({ onClose }) {
     if (P && rows && asked === text) jumps.forEach((J) => f.push(() => doJump(J)));
     if (hits) {
       hits.deals.forEach((d) => f.push(() => doJump({ kind: 'go', to: `deal/${d.id}` })));
+      hits.pos.forEach((p) => f.push(() => doJump({ kind: 'arch', a: { kind: 'po', id: p.id } })));
       hits.custs.forEach((c) => f.push(() => doJump({ kind: 'arch', a: { kind: 'customer', id: c.id } })));
       hits.prods.forEach((p) => f.push(() => doJump({ kind: 'arch', a: { kind: 'product', product: { id: p.id, model: p.model } } })));
       hits.emps.forEach((e) => f.push(() => doJump({ kind: 'arch', a: { kind: 'employee', id: e.id } })));
@@ -205,11 +218,11 @@ function AskPanel({ onClose }) {
     return f;
   }, [hits, P, rows, asked, text]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { list.current?.querySelector('.ask-hi')?.scrollIntoView({ block: 'nearest' }); }, [hi]);
-  const looksQ = looksLikeQuestion(text) && !hits?.deals.length;   // 打的是单号（搜到了单）就不当问题：单号里的「18-01」长得像日期
+  const looksQ = looksLikeQuestion(text) && !hits?.deals.length && !hits?.pos.length;   // 打的是单号（搜到了单）就不当问题：单号里的「18-01」长得像日期
   const enter = () => {
     if (hi >= 0 && flat[hi]) return flat[hi]();
     if (P && rows && asked === text && jumps[0]) return doJump(jumps[0]);
-    const nothing = hits && !hits.deals.length && !hits.custs.length && !hits.prods.length && !hits.emps.length && !hits.pages.length;
+    const nothing = hits && !hits.deals.length && !hits.pos.length && !hits.custs.length && !hits.prods.length && !hits.emps.length && !hits.pages.length;
     if (looksQ || nothing) return ask();
     if (flat[0]) return flat[0]();
     return ask();
@@ -293,6 +306,11 @@ function AskPanel({ onClose }) {
           {hits && <>
             {sec('单号', hits.deals.length)}{hits.deals.map((d) => { const i = idx++; return (
               <button type="button" key={d.id} className={`ask-hit ${cls(i)}`} onMouseEnter={() => setHi(i)} onClick={() => flat[i]()}><b className="mono">{d.biz_no}</b><span className="muted small">{d.customer}</span><span className="grow" /><span className="small muted">{String(d.created_at).slice(0, 10)}</span></button>); })}
+            {sec('采购单', hits.pos.length)}{hits.pos.map((p) => { const i = idx++; return (
+              <div key={p.id} className={`ask-hit ${cls(i)}`} onMouseEnter={() => setHi(i)} role="button" tabIndex={-1} onClick={() => flat[i]()}>
+                <span className="small muted">{p.hit.lab}</span><b className="mono">{p.hit.v}</b><span className="muted small">{p.po_no}{p.forwarder ? ` · ${p.forwarder}` : ''}{p.eta ? ` · 预计 ${dDate(p.eta)}` : ''}</span><span className="grow" />
+                <button type="button" className="btn sm" title="复制这个号，直接粘贴去用" onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(p.hit.v); e.currentTarget.textContent = '已复制'; }}>复制</button>
+              </div>); })}
             {sec('客户', hits.custs.length)}{hits.custs.map((c) => { const i = idx++; return (
               <div key={c.id} className={`ask-hit ${cls(i)}`} onMouseEnter={() => setHi(i)} role="button" tabIndex={-1} onClick={() => flat[i]()}>
                 <b>{c.name}</b><span className="muted small mono">{c.code}</span><span className="muted small">{c.city}</span><span className="grow" />
@@ -308,7 +326,7 @@ function AskPanel({ onClose }) {
               <button type="button" key={e.id} className={`ask-hit ${cls(i)}`} onMouseEnter={() => setHi(i)} onClick={() => flat[i]()}><b>{e.short_name}</b><span className="muted small">{e.emp_no || ''} {e.full_name && e.full_name !== e.short_name ? e.full_name : ''}</span></button>); })}
             {sec('页面', hits.pages.length)}{hits.pages.map(([r, v]) => { const i = idx++; return (
               <button type="button" key={r} className={`ask-hit ${cls(i)}`} onMouseEnter={() => setHi(i)} onClick={() => flat[i]()}><span>{v[0]}</span><b>{v[1]}</b></button>); })}
-            {!showQ && !hits.deals.length && !hits.custs.length && !hits.prods.length && !hits.emps.length && !hits.pages.length && <div className="small muted" style={{ padding: 8 }}>没有直接对上的。回车按问题理解。</div>}
+            {!showQ && !hits.deals.length && !hits.pos.length && !hits.custs.length && !hits.prods.length && !hits.emps.length && !hits.pages.length && <div className="small muted" style={{ padding: 8 }}>没有直接对上的。回车按问题理解。</div>}
           </>}
         </div>
       </div>

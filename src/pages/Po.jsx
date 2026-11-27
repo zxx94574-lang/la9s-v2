@@ -12,6 +12,7 @@ import Grid from '../components/Grid.jsx';
 import { ModelLink } from '../components/Archives.jsx';
 import { can, hasAny } from '../lib/domain.js';
 import { parsePackingBook } from '../lib/packingList.js';
+import { InboundInput } from '../components/CodeInput.jsx';
 import { ReceiveModal as LineReceive } from './Replenish.jsx';
 import { dDate, dt, qty, money, today, friendlyError } from '../lib/format.js';
 import { MetricStrip } from '../components/Metric.jsx';
@@ -347,7 +348,7 @@ export function PoForm({ init, onClose }) {
           {f.purpose === 'fob' && <div className="field"><label>FOB 项目（系统里有就选）</label><Choice value={f.fob_project_id} onChange={(v) => set('fob_project_id', v)} options={(fobs || []).map((x) => [x.id, x.fob_no])} empty="— 不挂项目 —" flat={false} /></div>}
           {f.purpose === 'fob' && !f.fob_project_id && <div className="field req"><label>FOB 客户（例 LA9S-KABRE）</label><input className="in" value={f.fob_customer || ''} onChange={(e) => set('fob_customer', e.target.value.toUpperCase())} /></div>}
           <div className="field req"><label>需求批次（例 20260715-KABRE海运-3批）</label><input className="in" value={f.batch_name} onChange={(e) => set('batch_name', e.target.value)} /></div>
-          <div className="field req"><label>入仓号（货代给的，例 CG2601995A）</label><input className="in" value={f.inbound_no} onChange={(e) => set('inbound_no', e.target.value.toUpperCase())} /></div>
+          <div className="field req" style={{ gridColumn: 'span 2' }}><label>入仓号（货代给的）</label><InboundInput value={String(f.inbound_no || '').split(/[\s/,;，；]+/).filter(Boolean)} onChange={(v) => set('inbound_no', v.join(' / '))} forwarder={f.forwarder} /></div>
           <div className="field req"><label>运输方式</label><OptChoice optKey="po_mode" title="运输方式" value={f.mode} onChange={(v) => set('mode', v)} options={[['sea', '海运'], ['air', '空运'], ['other', '其他']]} /></div>
           <div className="field req"><label>物流公司</label><OptChoice optKey="po_forwarder" title="物流公司" value={f.forwarder} onChange={(v) => set('forwarder', v)} options={[['赛时', '赛时'], ['捷道', '捷道'], ['古月', '古月'], ['速鹰', '速鹰'], ['利信达', '利信达']]} placeholder="选物流公司…" /></div>
           <div className="field req"><label>箱数</label><input className="in" inputMode="numeric" value={f.boxes} onChange={(e) => set('boxes', e.target.value.replace(/\D/g, ''))} /></div>
@@ -541,17 +542,18 @@ function PoLogistics({ po, docs, etaLog, canEdit, onEdit }) {
 function LogiModal({ po, onClose }) {
   const { role, toast, refresh } = useApp();
   const init = { mode: po.mode || 'sea', forwarder: po.forwarder || '', tracking_no: po.tracking_no || '', container_no: po.container_no || '', weight_vol: po.weight_vol || '',
-    freight_est: po.freight_est ?? '', freight_none: !!po.freight_none, batch_name: po.batch_name || '', warehouse_nos: (po.warehouse_nos || []).join(' / '), boxes: po.boxes ?? '', pcs: po.pcs ?? '',
+    freight_est: po.freight_est ?? '', freight_none: !!po.freight_none, batch_name: po.batch_name || '', warehouse_nos: [...(po.warehouse_nos || [])], boxes: po.boxes ?? '', pcs: po.pcs ?? '',
     shipped_on: dDate(po.shipped_on), eta: dDate(po.eta), eta_reason: '', arrived_on: dDate(po.arrived_on), cleared_on: dDate(po.cleared_on), picked_on: dDate(po.picked_on), supplier: po.supplier || '', note: po.note || '' };
   const [f, setF] = useState(init);
   const [busy, setBusy] = useState(false);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const etaChanged = po.eta && f.eta !== dDate(po.eta);
-  const ok = f.mode && f.forwarder.trim() && f.shipped_on && f.warehouse_nos.trim() && String(f.boxes) !== '' && (!etaChanged || f.eta_reason.trim()) && (!f.picked_on || po.has_pickup);
+  const ok = f.mode && f.forwarder.trim() && f.shipped_on && f.warehouse_nos.length > 0 && String(f.boxes) !== '' && (!etaChanged || f.eta_reason.trim()) && (!f.picked_on || po.has_pickup);
   const save = async () => {
     setBusy(true);
     try {
-      const p = Object.fromEntries(Object.entries(f).filter(([k, v]) => k === 'eta_reason' || v !== init[k]));
+      const p = Object.fromEntries(Object.entries(f).filter(([k, v]) => k === 'eta_reason' || (k === 'warehouse_nos' ? v.join('/') !== init[k].join('/') : v !== init[k])));
+      if (p.warehouse_nos) p.warehouse_nos = p.warehouse_nos.join(' / ');
       if (!etaChanged) delete p.eta_reason; if (!('eta' in p)) delete p.eta_reason;
       await call(role, `select app.set_po_info2($1,$2)`, [po.id, JSON.stringify(p)]);
       toast('已保存'); refresh(); onClose();
@@ -566,7 +568,7 @@ function LogiModal({ po, onClose }) {
         <div className="field req"><label>发货日</label><DatePicker value={f.shipped_on} onChange={(v) => set('shipped_on', v)} /></div>
         <div className="field"><label>预计到货{!po.eta && f.shipped_on && !f.eta ? '（不填 = 发货日 + 2 个半月）' : ''}</label><DatePicker value={f.eta} onChange={(v) => set('eta', v)} /></div>
         {etaChanged && <div className="field req" style={{ gridColumn: '1 / -1' }}><label>为什么改预计到货</label><OptNote optKey="po_eta_reason" value={f.eta_reason} onChange={(v) => set('eta_reason', v)} options={['船晚开', '中转慢', '清关慢', '国内晚发', '货代没给准信']} placeholder="例：船晚开 5 天" /></div>}
-        <div className="field req"><label>入仓号（多个用 / 隔开）</label><input className="in mono" value={f.warehouse_nos} onChange={(e) => set('warehouse_nos', e.target.value.toUpperCase())} placeholder="CG2602735A" /></div>
+        <div className="field req" style={{ gridColumn: 'span 2' }}><label>入仓号</label><InboundInput value={f.warehouse_nos} onChange={(v) => set('warehouse_nos', v)} forwarder={f.forwarder} /></div>
         <div className="field req"><label>箱数</label><input className="in" inputMode="numeric" value={f.boxes} onChange={(e) => set('boxes', e.target.value.replace(/\D/g, ''))} /></div>
         <div className="field"><label>件数（片）</label><input className="in" inputMode="numeric" value={f.pcs} onChange={(e) => set('pcs', e.target.value.replace(/\D/g, ''))} /></div>
         <div className="field"><label>需求批次</label><input className="in" value={f.batch_name} onChange={(e) => set('batch_name', e.target.value)} placeholder="20261123-KABRE海运-1" /></div>
