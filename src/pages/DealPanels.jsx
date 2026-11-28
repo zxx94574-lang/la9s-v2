@@ -1589,7 +1589,7 @@ function ReturnDecide({ r, mode, act, onClose }) {
   );
 }
 const CONFIRM_ROLE = { boss: '老板', staff: '店员', sales: '销售员', driver: '运货员', other: '其他人' };
-const SIGN_ROLES = [['boss', '老板'], ['staff', '店员'], ['sales', '销售员'], ['other', '其他人']];   // 409: 顺序 Frank 定
+// 409 签收身份：11-28 改成引用「联系人身份」（lib/optRegistry.js sign_roles），默认勾 老板 / 店员 / 销售员 / 其他人
 const normDigits = (v) => String(v || '').replace(/\D/g, '').slice(-10);
 function SignRow({ s, act, role, discs = [], lines = [], deal }) {
   const [disc, setDisc] = useState(false); const [decide, setDecide] = useState(null);
@@ -1619,7 +1619,7 @@ function SignRow({ s, act, role, discs = [], lines = [], deal }) {
           <div className="fgrid" style={{ marginTop: 8 }}>
             <FRow label="签收时间" req><DateTimeIn value={at} onChange={setAt} /></FRow>
             <FRow label="跟谁确认的" req><div className="stack" style={{ gap: 6, flex: 1, minWidth: 0 }}>
-              <OptChoice optKey="sign_roles" title="跟谁确认的（身份）" value={who.role} onChange={setRoleOf} options={SIGN_ROLES} flat={false} placeholder="选身份：老板 / 店员 / 销售员…" err={errs && !who.role} />
+              <OptChoice optKey="sign_roles" title="跟谁确认的（身份）" value={who.role} onChange={setRoleOf} flat={false} placeholder="选身份：老板 / 店员 / 销售员…" err={errs && !who.role} />
               {who.role && <ContactPick customerId={deal?.customer_id} value={who} onChange={(c) => setWho({ ...c, role: c.role || who.role })} errs={errs} askRole={false} placeholder="选是哪一位（可以搜名字 / 电话）" />}
               <div className="small muted">谁收的货就跟谁确认数量；老板不在国内，就跟店员确认。电话可以不填；新的人会自动存进客户档案的联系人。</div></div></FRow>
             <FRow label="签收凭证" req><PhotoInput value={photo} onChange={setPhoto} invalid={errs && !photo} label="客户照片 / WhatsApp / 通话截图" /></FRow>

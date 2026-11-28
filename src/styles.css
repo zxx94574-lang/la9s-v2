@@ -2472,3 +2472,54 @@ body { touch-action: manipulation; }
 .rgrid > .r3 { grid-column: 1 / -1 !important; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 /* 时间框（11-28）：浏览器自带 time 框按内容撑开，AM / PM 不被截 */
 input[type="time"].in { width: auto !important; min-width: 112px; flex: none; }
+/* 选项设置 · 飞书式（11-28） */
+.pill.t-sky { background: #d9f0ff; color: #075985; } .pill.t-teal { background: #d4f4ee; color: #0b6b5e; } .pill.t-lime { background: #ebf6cc; color: #4d6a00; }
+.pill.t-orange { background: #ffe9d6; color: #a14400; } .pill.t-pink { background: #fde3f0; color: #9d174d; } .pill.t-purple { background: #efe5ff; color: #6b21a8; } .pill.t-indigo { background: #e4e7ff; color: #3730a3; }
+.choice-btn.tone-t-sky .choice-v { color: #075985; } .choice-btn.tone-t-teal .choice-v { color: #0b6b5e; } .choice-btn.tone-t-lime .choice-v { color: #4d6a00; } .choice-btn.tone-t-orange .choice-v { color: #a14400; } .choice-btn.tone-t-pink .choice-v { color: #9d174d; } .choice-btn.tone-t-purple .choice-v { color: #6b21a8; } .choice-btn.tone-t-indigo .choice-v { color: #3730a3; }
+.ob-wrap { display: flex; flex-direction: column; gap: 10px; }
+.ob-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 12px; align-items: start; }
+.ob-col { background: #fff; border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 10px 8px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ob-col.wide { border: 0; padding: 0; }
+.ob-h { display: flex; align-items: center; gap: 6px; padding: 0 2px 4px; border-bottom: 1px solid var(--line-2); }
+.ob-h b { color: var(--brand); font-size: 14px; }
+.ob-item { display: flex; align-items: center; gap: 8px; min-height: 32px; flex-wrap: wrap; }
+.ob-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; cursor: text; user-select: none; padding: 2px 8px; border-radius: 6px; }
+.ob-name:not(.pill) { padding-left: 2px; }
+.ob-in { height: 30px; flex: 1; min-width: 80px; }
+.ob-x { margin-left: auto; width: 28px; height: 28px; border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; border-radius: 6px; cursor: pointer; opacity: 0; transition: opacity .15s, background .15s; }
+.ob-item:hover .ob-x, .ob-x:focus-visible { opacity: 1; } .ob-x:hover { background: var(--red-bg); color: var(--red); }
+@media (hover: none) { .ob-x { opacity: .6; } }
+.ob-dot { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid rgba(0,0,0,.12); cursor: pointer; padding: 0; transition: transform .12s; }
+.ob-dot:hover { transform: scale(1.15); } .ob-dot.none { background: #fff; border: 1.5px dashed #b6c2d2; }
+.ob-sw { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.1); cursor: pointer; padding: 0; transition: transform .12s; }
+.ob-sw:hover { transform: scale(1.15); } .ob-sw.on { box-shadow: 0 0 0 2px var(--brand); } .ob-sw.none { background: #fff; box-shadow: 0 0 0 1px #b6c2d2; background-image: linear-gradient(135deg, transparent 45%, #cbd5e1 45%, #cbd5e1 55%, transparent 55%); }
+.ob-dot.blue, .ob-sw.blue { background: var(--brand-soft); } .ob-dot.gray, .ob-sw.gray { background: var(--gray-bg); }
+.ob-dot.red, .ob-sw.red { background: var(--red-bg); } .ob-dot.amber, .ob-sw.amber { background: var(--amber-bg); } .ob-dot.green, .ob-sw.green { background: var(--green-bg); }
+.ob-dot.t-sky, .ob-sw.t-sky { background: #d9f0ff; } .ob-dot.t-teal, .ob-sw.t-teal { background: #d4f4ee; } .ob-dot.t-lime, .ob-sw.t-lime { background: #ebf6cc; } .ob-dot.t-orange, .ob-sw.t-orange { background: #ffe9d6; }
+.ob-dot.t-pink, .ob-sw.t-pink { background: #fde3f0; } .ob-dot.t-purple, .ob-sw.t-purple { background: #efe5ff; } .ob-dot.t-indigo, .ob-sw.t-indigo { background: #e4e7ff; }
+.ob-pal { position: fixed; z-index: 3000; background: #fff; border: 1px solid var(--line-2); border-radius: 12px; box-shadow: 0 10px 30px rgba(15,23,42,.14); padding: 10px; animation: popIn .14s ease-out; }
+.ob-pal-row { display: flex; flex-wrap: wrap; gap: 6px; } .ob-pal-t { font-size: 11px; color: var(--muted); margin: 8px 0 4px; }
+.ob-add { display: flex; gap: 6px; margin-top: 2px; } .ob-add .in { flex: 1; min-width: 0; height: 32px; border-style: dashed; }
+.ob-used { font-size: 12px; color: var(--muted); line-height: 1.5; } .ob-reffrom { font-size: 12px; color: var(--muted); }
+.ob-pick { cursor: pointer; } .ob-pick input { width: 16px; height: 16px; }
+.ob-attrs { display: flex; gap: 6px; width: 100%; padding-left: 26px; } .ob-attrs > * { flex: 1; min-width: 0; }
+.ob-dim { opacity: .35; } .ob-reset { align-self: flex-start; color: var(--muted); }
+/* 选项表行：紧凑一行一项（照飞书），⋮⋮ 悬停才显 */
+.ob-col .sort-row { border: 0; border-radius: 8px; padding: 1px 4px 1px 2px; gap: 4px; background: transparent; }
+.ob-col .sort-row:hover { background: #f4f7fc; }
+.ob-col .sort-row .sort-handle { opacity: 0; transition: opacity .15s; font-size: 13px; }
+.ob-col .sort-row:hover .sort-handle, .ob-col .sort-row.dragging .sort-handle { opacity: 1; }
+@media (hover: none) { .ob-col .sort-row .sort-handle { opacity: .5; } }
+.ob-col .sort-body > div { flex: 1; min-width: 0; }
+.ob-col .ob-item { min-height: 30px; }
+.ob-pal { width: auto !important; max-width: calc(100vw - 16px); }
+.ob-pal-row { flex-wrap: nowrap; }
+/* 色板 / 圆点用实色，一眼分得清；选项本身照样是浅底深字 */
+.ob-sw.blue, .ob-dot.blue { background: #6f9be0; } .ob-sw.gray, .ob-dot.gray { background: #a3afc0; }
+.ob-sw.red, .ob-dot.red { background: #ef6b62; } .ob-sw.amber, .ob-dot.amber { background: #f2b33d; } .ob-sw.green, .ob-dot.green { background: #4cb878; }
+.ob-sw.t-sky, .ob-dot.t-sky { background: #4fb8ef; } .ob-sw.t-teal, .ob-dot.t-teal { background: #36bfa6; } .ob-sw.t-lime, .ob-dot.t-lime { background: #a5c93a; } .ob-sw.t-orange, .ob-dot.t-orange { background: #f58f3c; }
+.ob-sw.t-pink, .ob-dot.t-pink { background: #ec74ad; } .ob-sw.t-purple, .ob-dot.t-purple { background: #a77ee8; } .ob-sw.t-indigo, .ob-dot.t-indigo { background: #7b84e6; }
+.ob-dot { width: 14px; height: 14px; border: 0; } .ob-dot.none { border: 1.5px dashed #b6c2d2; }
+.ob-attr-t { width: 100%; text-align: left; border: 0; background: none; padding: 0 0 2px 22px; margin-top: -4px; font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ob-attr-t:hover { color: var(--brand); }
+.ob-attrs { flex-direction: column; align-items: stretch; padding: 4px 0 6px 22px; } .ob-attrs label { display: flex; flex-direction: column; gap: 2px; }

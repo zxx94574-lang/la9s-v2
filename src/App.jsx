@@ -10,6 +10,7 @@ import * as Q from './db/queries.js';
 import Kpi from './pages/Kpi.jsx';
 import MarginPage from './pages/MarginPage.jsx';
 import RulesPage from './pages/RulesPage.jsx';
+import OptionsPage from './pages/OptionsPage.jsx';
 import CodeReview from './pages/CodeReview.jsx';
 import Report from './pages/Report.jsx';
 import { Changes, Health } from './pages/Changes.jsx';
@@ -253,6 +254,7 @@ export default function App() {
     case 'decisions': view = <Decisions />; break;
     case 'health': view = <Health />; break;
     case 'rules': view = <RulesPage />; break;
+    case 'options': view = <OptionsPage />; break;
     case 'codes': view = <CodeReview />; break;
     case 'staff': view = <Staff />; break;
     case 'sop': view = <Sop />; break;

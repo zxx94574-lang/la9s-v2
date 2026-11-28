@@ -11,10 +11,15 @@ import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Choice, Modal, SortList, OptionNote } from './ui.jsx';
 import { friendlyError } from '../lib/format.js';
+import { OPT_REG } from '../lib/optRegistry.js';
+import { OptionColumn } from './OptionBoard.jsx';
 
-const norm = (o) => (Array.isArray(o) ? [o[0], String(o[1] ?? o[0]), o[2]] : (o && typeof o === 'object' ? [o.v ?? o.value ?? o.id, String(o.l ?? o.label ?? o.name ?? ''), o.hint] : [o, String(o)]));
+export const norm = (o) => (Array.isArray(o) ? [o[0], String(o[1] ?? o[0]), o[2]] : (o && typeof o === 'object' ? [o.v ?? o.value ?? o.id, String(o.l ?? o.label ?? o.name ?? ''), o.hint] : [o, String(o)]));
 const normExtra = (x) => (typeof x === 'string' ? { v: x, l: x } : x);
-export const TONES = [['', '不上色'], ['red', '红'], ['amber', '黄'], ['green', '绿'], ['blue', '蓝'], ['gray', '灰']];
+// 11-28 飞书式调色：普通色（浅底深字，给选项分类用）+ 状态色（红黄绿只表示状态）
+export const PLAIN_TONES = [['', '不上色'], ['blue', '蓝'], ['t-sky', '天蓝'], ['t-teal', '青'], ['t-lime', '青柠'], ['t-orange', '橙'], ['t-pink', '粉'], ['t-purple', '紫'], ['t-indigo', '靛'], ['gray', '灰']];
+export const STATUS_TONES = [['red', '红 · 紧急 / 有问题'], ['amber', '黄 · 留意'], ['green', '绿 · 没问题']];
+export const TONES = [...PLAIN_TONES, ...STATUS_TONES];
 export function applyOpts(base, cfg, current) {
   const b = (base || []).map(norm); const c = cfg || {};
   const extra = (c.extra || []).map(normExtra).filter((x) => !b.some(([v]) => v === x.v)).map((x) => [x.v, x.l]);
@@ -23,10 +28,24 @@ export function applyOpts(base, cfg, current) {
   const hidden = new Set((c.hidden || []).map(String));
   return { all, shown: all.filter(([v]) => !hidden.has(String(v)) || String(v) === String(current ?? '')), hidden };
 }
+// 引用（11-28）：ref 组的名字 / 颜色 / 顺序跟着被引用的那一组，自己只存 pick = 能用哪几项
+export function applyRef(optKey, ownCfg, parentCfg, current) {
+  const reg = OPT_REG[optKey]; const p = applyOpts(OPT_REG[reg.ref]?.options?.() || [], parentCfg, current);
+  const pick = new Set((ownCfg?.pick || reg.pick || p.all.map(([v]) => v)).map(String));
+  const all = p.all.filter(([v]) => pick.has(String(v)) || String(v) === String(current ?? ''));
+  return { cfg: { color: parentCfg?.color || {} }, all, shown: all.filter(([v]) => !p.hidden.has(String(v)) || String(v) === String(current ?? '')), hidden: p.hidden };
+}
 export function useOpts(optKey, base, current) {
   const { org } = useApp();
-  const { data } = useData(async () => { if (!optKey) return {}; const [r] = await q(`select value from app.org_settings where org_id = $1 and key = $2`, [org, `opts:${optKey}`]); return r?.value || {}; }, [org, optKey]);
-  return { cfg: data || {}, ...applyOpts(base, data, current) };
+  const ref = OPT_REG[optKey]?.ref;
+  const { data } = useData(async () => {
+    if (!optKey) return {};
+    const rs = await q(`select key, value from app.org_settings where org_id = $1 and (key = $2 or key = $3)`, [org, `opts:${optKey}`, `opts:${ref || optKey}`]);
+    const m = Object.fromEntries(rs.map((r) => [r.key, r.value || {}]));
+    return { own: m[`opts:${optKey}`] || {}, par: m[`opts:${ref || optKey}`] || {} };
+  }, [org, optKey, ref]);
+  if (ref) return applyRef(optKey, data?.own, data?.par, current);
+  return { cfg: data?.own || {}, ...applyOpts(base ?? OPT_REG[optKey]?.options?.(), data?.own, current) };
 }
 // 后台按固定类别处理的选项组: 自己加的选项 → { base: 后台认的类别, label: 名字 }; 系统自带的 → { base: 值, label: null }
 export function optBase(cfg, value) {
@@ -48,25 +67,38 @@ export const optCfg = (optKey) => ALL_OPTS[optKey] || {};
 export function optName(optKey, value, baseMap, label) {
   if (label) return label;
   if (value == null || value === '') return '';
-  const c = ALL_OPTS[optKey] || {};
+  const k = OPT_REG[optKey]?.ref || optKey;
+  const c = ALL_OPTS[k] || {};
+  if (!baseMap && OPT_REG[k]?.options) baseMap = Object.fromEntries(OPT_REG[k].options().map(norm).map(([v, l]) => [v, l]));
   if (c.rename?.[value]) return c.rename[value];
   const x = (c.extra || []).map(normExtra).find((e) => e.v === value); if (x) return x.l;
   return (baseMap && baseMap[value]) || String(value).replace(/^x:/, '');
 }
 // 提交时: 选的值 → { base: 后台认的类别, label: 自己加的选项的名字 (系统自带的 = null) }
-export const optSubmit = (optKey, value) => optBase(ALL_OPTS[optKey], value);
+export const optSubmit = (optKey, value) => optBase(ALL_OPTS[OPT_REG[optKey]?.ref || optKey], value);
 
 export function OptChoice({ optKey, options, title, value, bases, data, fixed, coded, style, className = '', ...rest }) {   // coded: 旧写法, 不再用 (都能加了)
   const { role } = useApp();
+  const reg = OPT_REG[optKey];
   const { cfg, all, shown, hidden } = useOpts(optKey, options, value);
   const [edit, setEdit] = useState(false);
   const tone = cfg?.color?.[value];
+  if (edit && reg) return (
+    <span className={`choice-wrap ${className}`} style={style}>
+      <Choice value={value} options={shown} className={tone ? `tone-${tone}` : ''} {...rest} />
+      <OptColumnModal optKey={optKey} onClose={() => setEdit(false)} />
+    </span>);
   return (
     <span className={`choice-wrap ${className}`} style={style}>
       <Choice value={value} options={shown} className={tone ? `tone-${tone}` : ''} {...rest} />
       {role === 'admin' && optKey && <button type="button" className="opt-gear" title={`调整「${title || '这组选项'}」：${data ? '排序、隐藏' : fixed ? '改名、隐藏、排序、颜色' : '新增、改名、删除、隐藏、排序、颜色'}`} aria-label={`调整选项：${title || optKey}`} onClick={() => setEdit(true)}>⚙</button>}
       {edit && <OptEditor optKey={optKey} title={title} bases={bases} data={data} fixed={fixed} cfg={cfg} all={all} hidden={hidden} base={(options || []).map(norm)} onClose={() => setEdit(false)} />}
     </span>);
+}
+// 登记过的选项组：⚙ 打开的就是「选项设置」里那一列（同一份，两边改的是同一个东西）
+export function OptColumnModal({ optKey, onClose }) {
+  const reg = OPT_REG[optKey];
+  return <Modal title={`选项 · ${reg.title}`} onClose={onClose} footer={<button type="button" className="btn primary" onClick={onClose}>好了</button>}><OptionColumn optKey={optKey} wide /></Modal>;
 }
 
 export function OptEditor({ optKey, title, bases, data, fixed, cfg, all, hidden, base, onClose }) {
@@ -119,7 +151,8 @@ export function OptGear({ optKey, options, title, bases, data, fixed }) {
   if (role !== 'admin') return null;
   return (<>
     <button type="button" className="opt-gear" title={`调整「${title || '这组选项'}」`} aria-label={`调整选项：${title || optKey}`} onClick={() => setEdit(true)}>⚙</button>
-    {edit && <OptEditor optKey={optKey} title={title} bases={bases} data={data} fixed={fixed} cfg={cfg} all={all} hidden={hidden} base={(options || []).map(norm)} onClose={() => setEdit(false)} />}
+    {edit && OPT_REG[optKey] && <OptColumnModal optKey={optKey} onClose={() => setEdit(false)} />}
+    {edit && !OPT_REG[optKey] && <OptEditor optKey={optKey} title={title} bases={bases} data={data} fixed={fixed} cfg={cfg} all={all} hidden={hidden} base={(options || []).map(norm)} onClose={() => setEdit(false)} />}
   </>);
 }
 
@@ -128,4 +161,14 @@ export function OptNote({ optKey, title, options, value, onChange, placeholder }
   const { list } = useOptList(optKey, options);
   const names = list.map(([, l]) => l); const rest = names.filter((x) => x !== '其他');
   return (<div className="optnote"><OptionNote options={[...rest, ...(options.includes('其他') ? ['其他'] : [])]} value={value} onChange={onChange} placeholder={placeholder} /><OptGear optKey={optKey} options={options} title={title} /></div>);
+}
+
+// 选项表 / ⚙ 共用：一行行 { v, l, c, sys, base } → 存进 opts:<key> 的格式
+export function rowsToCfg(rows, base, withBases, prev) {
+  return { ...(prev?.pick ? { pick: prev.pick } : {}),
+    rename: Object.fromEntries(rows.filter((r) => r.sys && String(r.l).trim() !== (base.find(([v]) => String(v) === String(r.v))?.[1])).map((r) => [r.v, String(r.l).trim()])),
+    hidden: base.filter(([v]) => !rows.some((r) => String(r.v) === String(v))).map(([v]) => v),
+    order: rows.map((r) => r.v),
+    extra: rows.filter((r) => !r.sys).map((r) => (withBases ? { v: r.v, l: String(r.l).trim(), base: r.base } : { v: r.v, l: String(r.l).trim() })),
+    color: Object.fromEntries(rows.filter((r) => r.c).map((r) => [r.v, r.c])) };
 }

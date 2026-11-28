@@ -9,6 +9,7 @@ import ProductDrawer from './ProductDrawer.jsx';
 import { CustomerDrawer } from '../pages/Customers.jsx';
 import { EmpModal } from '../pages/Staff.jsx';
 import { PoDrawer } from '../pages/Po.jsx';
+import { customerOptions } from '../lib/customerOptions.js';
 import { staffOptions } from '../lib/staffOptions.js';
 
 const stop = (fn) => (e) => { e.stopPropagation(); e.preventDefault(); fn(); };
@@ -100,8 +101,8 @@ export function DealLink({ id, no, onOpen, children, peek = true }) {
 function EmpArchive({ id, onClose }) {
   const { org } = useApp();
   const { data } = useData(async () => {
-    const [staff, opt] = await Promise.all([q(Q.staffList, [org]), q(`select value from app.org_settings where org_id = $1 and key = 'staff_options'`, [org])]);
-    return { e: staff.find((x) => x.id === id), opts: staffOptions(opt[0]?.value) };
+    const [staff, opt, co] = await Promise.all([q(Q.staffList, [org]), q(`select value from app.org_settings where org_id = $1 and key = 'staff_options'`, [org]), q(`select value from app.org_settings where org_id = $1 and key = 'customer_options'`, [org])]);
+    return { e: staff.find((x) => x.id === id), opts: { ...staffOptions(opt[0]?.value), cities: customerOptions(co[0]?.value).cities } };
   }, [org, id]);
   if (!data?.e) return null;
   return <EmpModal e={data.e} opts={data.opts} onClose={onClose} />;

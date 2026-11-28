@@ -9,7 +9,8 @@ import Grid from './Grid.jsx';
 import { fmtPhone } from '../lib/phone.js';
 import { friendlyError } from '../lib/format.js';
 
-export const CONTACT_ROLES = [['boss', '老板'], ['staff', '店员'], ['driver', '运货员（收货人）'], ['sales', '销售员'], ['other', '其他人']];
+import { CONTACT_ROLES } from '../lib/optBases.js';
+export { CONTACT_ROLES };
 const ROLE_MAP = Object.fromEntries(CONTACT_ROLES);
 export const contactRole = (r) => optName('contact_roles', r, ROLE_MAP);
 const digits = (p) => String(p || '').replace(/\D/g, '').slice(-10);

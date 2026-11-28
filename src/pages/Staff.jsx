@@ -11,6 +11,8 @@ import { q, call } from '../db/client.js';
 import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, Modal, Drawer, DatePicker, MonthPicker, Thumb, FileDrop , PhoneInput, phoneValid, Choice, Info, Assumed, FRow, ConfirmBtn } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
+import OptionBoard from '../components/OptionBoard.jsx';
+import { customerOptions } from '../lib/customerOptions.js';
 import { ROLE_LABELS, hasAny } from '../lib/domain.js';
 import { staffOptions, optLabel, SYS_ROLES } from '../lib/staffOptions.js';
 import { money, today, ymd, dDate, dt, friendlyError } from '../lib/format.js';
@@ -24,8 +26,8 @@ export default function Staff() {
   const { org, role } = useApp();
   const [tab, setTab] = useState(role === 'country_manager' || role === 'sales_manager' ? 'pay' : 'staff');
   const { data } = useData(async () => {
-    const [staff, opt] = await Promise.all([q(Q.staffList, [org]), q(`select value from app.org_settings where org_id = $1 and key = 'staff_options'`, [org])]);
-    return { staff, opts: staffOptions(opt[0]?.value) };
+    const [staff, opt, co] = await Promise.all([q(Q.staffList, [org]), q(`select value from app.org_settings where org_id = $1 and key = 'staff_options'`, [org]), q(`select value from app.org_settings where org_id = $1 and key = 'customer_options'`, [org])]);
+    return { staff, opts: { ...staffOptions(opt[0]?.value), cities: customerOptions(co[0]?.value).cities } };   // 11-28：负责城市引用「通用 · 城市」
   }, [org]);
   const payrollOnly = role === 'country_manager' || role === 'sales_manager';   // 罗兰 (国家经理): 只看工资单, 起草 + 初审
   if (role !== 'admin' && !payrollOnly) return <div className="card card-b lock">员工与工资只有中方能看。</div>;
@@ -40,7 +42,7 @@ export default function Staff() {
         </div>
         {tab === 'staff' && <StaffTable staff={data.staff} opts={data.opts} />}
         {tab === 'pay' && <Payroll staff={data.staff} opts={data.opts} />}
-        {tab === 'opts' && <OptionsEditor opts={data.opts} />}
+        {tab === 'opts' && <div style={{ padding: 14 }}><OptionBoard home="staff" /></div>}
       </div>
     </>
   );
@@ -81,7 +83,7 @@ function StaffTable({ staff, opts }) {
     { key: 'position', label: '职位', w: 130, value: (e) => optLabel(opts.positions, cur(e, 'position')), edit: sel('position', opts.positions) },
     { key: 'joined_on', label: '入职日期', w: 110, value: (e) => cur(e, 'joined_on'), edit: (e) => ({ type: 'date', value: cur(e, 'joined_on'), onChange: (v, m) => saveCell(e, 'joined_on', v, m) }) },
     { key: 'tenure', label: '在职天数', w: 90, type: 'number', value: (e) => daysSince(e.active ? e.joined : null) ?? (e.joined && e.resigned ? Math.floor((new Date(e.resigned) - new Date(e.joined)) / 864e5) : null), render: (e) => { const d = e.active ? daysSince(e.joined) : (e.joined && e.resigned ? Math.floor((new Date(e.resigned) - new Date(e.joined)) / 864e5) : null); return d == null ? '' : <span title={e.active ? '从入职日期算到今天' : '入职到离职'}>{d.toLocaleString('en-US')}</span>; } },
-    { key: 'city', label: '负责城市', w: 100, value: (e) => cur(e, 'city'), edit: txt('city') },
+    { key: 'city', label: '负责城市', w: 100, value: (e) => optLabel(opts.cities, cur(e, 'city')), edit: sel('city', opts.cities) },
     { key: 'phone', label: '电话', w: 150, value: (e) => cur(e, 'phone'), render: (e) => fmtPhone(cur(e, 'phone')), edit: (e) => ({ type: 'text', value: cur(e, 'phone'), onChange: (v, m) => { const n = normPhone(v); if (!n.valid) return toast(`电话位数不对：${v}（+${n.cc} 要 ${n.need} 位）`, 'err'); saveCell(e, 'phone', n.formatted, m); } }) },
     { key: 'email', label: '邮箱', w: 190, value: (e) => cur(e, 'email'), edit: txt('email') },
     { key: 'address', label: '住址', w: 200, value: (e) => cur(e, 'address'), edit: txt('address') },
@@ -182,7 +184,7 @@ export function EmpModal({ e, opts, onClose }) {
       <fieldset className="lockset" disabled={locked}>
       <div className="grid2">
         {inp('emp_no', '工号（S + 三位数字，比如 S001；你自己编，离职不回收）', { ph: 'S001' })}{inp('full_name', '全称（大写，和证件一致）')}{inp('short_name', '简称 *（比如 Grace）')}
-        <div className="field"><label>电话</label><PhoneInput value={f.phone} onChange={(v) => setF((x) => ({ ...x, phone: v }))} /></div>{inp('city', '负责城市', { ph: 'Abidjan' })}{inp('address', '住址')}
+        <div className="field"><label>电话</label><PhoneInput value={f.phone} onChange={(v) => setF((x) => ({ ...x, phone: v }))} /></div><div className="field"><label>负责城市</label><Choice flat={false} value={f.city} onChange={(v) => setF((x) => ({ ...x, city: v }))} options={[['', '—'], ...(opts.cities || []).map((c) => [c.v, c.l]), ...(f.city && !(opts.cities || []).some((c) => c.v === f.city) ? [[f.city, f.city]] : [])]} placeholder="选城市…" /></div>{inp('address', '住址')}
         <div className="field"><label>邮箱</label><input className={`in ${emailBad ? 'err' : ''}`} inputMode="email" value={f.email} onChange={(x) => set('email')(x.target.value.trim())} />{emailBad && <span className="small red-t">格式不对</span>}</div>
         <div className="field"><label>部门</label><Select value={f.department} onChange={(v) => setF((x) => ({ ...x, department: v, position: opts.positions.find((p) => p.v === x.position && (!p.dept || p.dept === v)) ? x.position : '' }))} options={opts.departments} /></div>
         <div className="field"><label>职位</label><Select value={f.position} onChange={setPos} options={posOpts} /></div>
@@ -490,36 +492,3 @@ function UnconfirmModal({ label, onClose, onGo }) {
   );
 }
 
-// ───────── 选项设置 (部门 / 职位 / 销售类型) ─────────
-function OptionsEditor({ opts }) {
-  const { org, role, toast, refresh } = useApp();
-  const [o, setO] = useState(() => structuredClone(opts));
-  const upd = (list, i, k, v) => setO((x) => { const y = structuredClone(x); y[list][i][k] = v; return y; });
-  const add = (list, item) => setO((x) => ({ ...x, [list]: [...x[list], item] }));
-  const del = (list, i) => setO((x) => ({ ...x, [list]: x[list].filter((_, j) => j !== i) }));
-  const save = async (v) => { try { await call(role, `select app.set_org_setting($1,'staff_options',$2)`, [org, v == null ? null : JSON.stringify(v)]); toast(v ? '选项已保存' : '已恢复默认'); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } };
-  const block = (list, title, extra) => (
-    <div className="stack" style={{ gap: 6 }}>
-      <b>{title}</b>
-      {o[list].map((x, i) => (
-        <div key={i} className="row" style={{ gap: 6 }}>
-          <input className="in mono" style={{ maxWidth: 200 }} value={x.v} onChange={(e) => upd(list, i, 'v', e.target.value.toUpperCase())} title="代码（存进数据库、导出 Excel 用）" />
-          <input className="in" style={{ maxWidth: 180 }} value={x.l} onChange={(e) => upd(list, i, 'l', e.target.value)} title="显示名" />
-          {extra?.(x, i)}
-          <button type="button" className="btn sm ghost" onClick={() => del(list, i)}>×</button>
-        </div>))}
-      <div><button type="button" className="btn sm" onClick={() => add(list, list === 'positions' ? { v: '', l: '', dept: '', role: '' } : { v: '', l: '' })}>＋ 加一项</button></div>
-    </div>);
-  return (
-    <div className="stack" style={{ padding: 14, gap: 16 }}>
-      <div className="hint">左边是代码（存进数据库、导出 Excel 时用，英文大写），右边是显示名。职位可以指定属于哪个部门、默认给什么系统岗位。已经用掉的代码改了，旧记录不会跟着改。</div>
-      {block('departments', '部门')}
-      {block('positions', '职位', (x, i) => <>
-        <select className="in" style={{ maxWidth: 150 }} value={x.dept || ''} onChange={(e) => upd('positions', i, 'dept', e.target.value)}><option value="">任何部门</option>{o.departments.map((d) => <option key={d.v} value={d.v}>{d.l}</option>)}</select>
-        <select className="in" style={{ maxWidth: 140 }} value={x.role || ''} onChange={(e) => upd('positions', i, 'role', e.target.value)}><option value="">不登录</option>{SYS_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></>)}
-      {block('sales_channels', '销售类型（销售员细分）')}
-      <div className="row"><button type="button" className="btn" onClick={() => save(null)}>恢复默认</button><span className="grow" />
-        <button type="button" className="btn primary" onClick={() => save({ ...o, departments: o.departments.filter((x) => x.v), positions: o.positions.filter((x) => x.v), sales_channels: o.sales_channels.filter((x) => x.v) })}>保存选项</button></div>
-    </div>
-  );
-}

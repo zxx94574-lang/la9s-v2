@@ -22,6 +22,7 @@ export const ITEMS = {
   poprofit: ['¥', '按采购单利润', 'cn', ['admin']],   // 11-25 Frank   // 11-25: 从经营总览挪出来, 单独一页
   margin: ['％', '毛利分析', 'cn', ['admin']],
   rules: ['⚙', '规则参数', 'cn', ['admin']],   // 350
+  options: ['◈', '选项设置', 'cn', ['admin']],   // 11-28 飞书式选项表
   changes: ['≣', '变更记录', 'cn', ['admin']],   // 116
   decisions: ['✓', '审批', 'cn', ['admin']],   // 345
   health: ['♡', '系统健康', 'cn', ['admin']],   // 116
@@ -68,7 +69,7 @@ export const HUBS = {
   receipts: [['receipts', '收款与冲账'], ['balances', '客户总账'], ['cash', '资金账户']],
   pricing: [['pricing', '物料与定价'], ['materials', '物料名称'], ['codes', '编码甄别']],
   report: [['report', '月报'], ['margin', '毛利分析'], ['poprofit', '按采购单利润'], ['kpi', '时效与准确率']],
-  rules: [['rules', '规则参数'], ['decisions', '审批'], ['changes', '变更记录'], ['health', '系统健康']],
+  rules: [['rules', '规则参数'], ['options', '选项设置'], ['decisions', '审批'], ['changes', '变更记录'], ['health', '系统健康']],
 };
 export const HUB_LABEL = { stock: '库存与库位', replenish: '备货与采购', customers: '客户档案', hotline: '热线与拜访', receipts: '收款与总账', pricing: '物料与定价', report: '报告', rules: '规则与系统' };
 const HUB_CHILD = Object.fromEntries(Object.entries(HUBS).flatMap(([h, xs]) => xs.filter(([r]) => r !== h).map(([r]) => [r, h])));
