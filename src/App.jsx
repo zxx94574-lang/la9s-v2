@@ -23,6 +23,7 @@ import { resetPeriods, Ctx, Modal, useToasts, Info, useStickyPagehead, useInstan
 import { ArchiveHost } from './components/Archives.jsx';
 import { ExportPanel } from './components/SettingsPanels.jsx';
 import MePanel, { ViewAsBar, Avatar, useViewAs, currentUid, useMe, meName } from './components/MePanel.jsx';
+import PageEditorHost, { PageStyle } from './components/PageEditor.jsx';
 import { getViewAs, setViewAs, unlockView, lockView, touchUnlock, UNLOCK_MIN } from './lib/viewAs.js';
 import { loadAllOpts } from './components/Opts.jsx';
 import { RouteIcon, Icon, setIconOverride } from './components/Icons.jsx';
@@ -151,7 +152,7 @@ export default function App() {
   useEffect(() => {
     const k = (e) => {
       if (e.key !== 'Escape' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (document.querySelector('.overlay, .drawer-scrim, .menu, .per-menu, .dp-pop, .cell-pop, .ask-veil, .msheet, .ob-pal, .scrim')) return;
+      if (document.querySelector('.overlay, .drawer-scrim, .menu, .per-menu, .dp-pop, .cell-pop, .ask-veil, .msheet, .ob-pal, .scrim, .pe-dock')) return;
       const a = document.activeElement;
       if (a && (a.closest('input, textarea, select, [contenteditable="true"]') || a.closest('.tw, .grid-wrap, .gtable'))) return;
       navBack();
@@ -368,6 +369,7 @@ export default function App() {
             </div>
           </header>
 
+          <PageStyle /><PageEditorHost />
           <ViewAsBar peerLock={peerLock} onUnlock={() => setUnlockAsk(true)} onLock={() => { lockView(); toast('已锁上，回到只看'); }}
             onBack={() => { setViewAs(null); setCustomerSession(null); setRole('admin', true); go('dashboard'); toast('已切回你自己'); }} />
           <main className="content">
@@ -445,13 +447,13 @@ function ResetButton({ onReset }) {
   );
 }
 
-// 设置 → 布局编辑 (开发者级, 只中方): 打开后, 已接入的页面每个板块上方出现编辑条
+// 设置 → 页面编辑（11-28：每一页都能调 + 全站字号）
 function LayoutSwitch({ onDone }) {
   const on = useLayoutEdit();
   return (
-    <div className="field"><label>布局编辑 <Info>只中方。调板块顺序、宽度（12 列对齐）、显示 / 隐藏、间距；每页单独保存，全员一致，定下来点「锁定为正式版」。现在接入：经营总览，其他页面陆续接。</Info></label>
+    <div className="field"><label>页面编辑 <Info>只中方。打开后右边出一个面板：本页每块能拖顺序、调宽度、隐藏、调大小；「全站字号」能分别调页面标题、板块标题、大数字、表格、侧栏、整体内容。改完点保存，所有人看到的都一样。每一页都能调。</Info></label>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" className={`btn ${on ? '' : 'primary'}`} onClick={() => { setLayoutEdit(!on); onDone(); }}>{on ? '退出布局编辑' : '进入布局编辑'}</button>
+        <button type="button" className={`btn ${on ? '' : 'primary'}`} onClick={() => { setLayoutEdit(!on); onDone(); }}>{on ? '退出页面编辑' : '进入页面编辑'}</button>
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ import * as Q from '../db/queries.js';
 import { useApp, useData, Pill, DatePicker, usePeriod, PeriodBar } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { CustLink } from '../components/Archives.jsx';
-import { CallModal, ProspectModal, ResultPill, KIND, CALL_RESULTS } from '../components/Crm.jsx';
+import { CallModal, ProspectModal, ResultPill, KIND, CALL_RESULTS, resultName } from '../components/Crm.jsx';
 import { CustomerDrawer } from './Customers.jsx';
 import { can } from '../lib/domain.js';
 import { dDate, dt, today, periodRange } from '../lib/format.js';
@@ -60,7 +60,7 @@ export default function Hotline() {
     { key: 'name', label: '客户', w: 170, value: (r) => `${r.code || r.temp_code} ${r.name}`, render: (r) => <><span className="mono muted">{r.code || r.temp_code}</span> <CustLink id={r.customer_id} name={r.name} /></> },
     { key: 'line', label: '线', w: 60, value: (r) => (r.line === 'recycle' ? '回收' : '备件') },
     { key: 'channel', label: '方式', w: 80, value: (r) => ({ call: '电话', whatsapp: 'WhatsApp', visit: '上门' })[r.channel] },
-    { key: 'result', label: '结果', w: 100, value: (r) => (CALL_RESULTS.find((x) => x[0] === r.result) || [])[1], render: (r) => <ResultPill v={r.result} /> },
+    { key: 'result', label: '结果', w: 100, value: (r) => resultName(r.result), render: (r) => <ResultPill v={r.result} /> },
     { key: 'note', label: '说明', w: 240 },
     { key: 'next_follow_on', label: '下次跟进', w: 100, render: (r) => dDate(r.next_follow_on) },
     { key: 'staff', label: '回访人', w: 80 },

@@ -1,7 +1,7 @@
 // 11-26 Frank：界面分层 —— 在上层（侧栏、弹窗、下拉、底部卡片、点中的表格）里上下滑，只滑这一层；
 // 这一层滑到头了也不许带着后面的页面动。滑外面才滑页面。
 // 做法：全局拦 wheel / touchmove，事件落在某一层里时，找这一层里（含这一层）还能往这个方向滚的元素；一个都没有就 preventDefault。
-export const LAYERS = '.side, .scrim, .overlay, .menu, .per-menu, .msheet, .dp-pop, .cell-pop, .ask-veil, .tw-on, .drawer';
+export const LAYERS = '.side, .scrim, .overlay, .menu, .per-menu, .msheet, .dp-pop, .cell-pop, .ask-veil, .tw-on, .drawer, .pe-body';
 
 const canScroll = (el, dy) => {
   const st = getComputedStyle(el); if (!/(auto|scroll)/.test(st.overflowY)) return false;

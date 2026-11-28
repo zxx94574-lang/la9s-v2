@@ -9,7 +9,7 @@ import * as Q from '../db/queries.js';
 import { useApp, useData, Modal, PhotoInput, DatePicker, Thumb, PhoneInput, Choice, MoneyIn, usePeriod, PeriodBar, useKeep, clearKeep } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import CustomerSelect from '../components/CustomerSelect.jsx';
-import { ResultPill, FollowDate, VISIT_RESULTS } from '../components/Crm.jsx';
+import { ResultPill, FollowDate, resultName } from '../components/Crm.jsx';
 import { CustomerDrawer } from './Customers.jsx';
 import { can } from '../lib/domain.js';
 import { dDate, dt, today, friendlyError } from '../lib/format.js';
@@ -29,7 +29,7 @@ export default function Visits() {
     { key: 'name', label: '客户', w: 180, value: (r) => `${r.code || r.temp_code} ${r.name}`,
       render: (r) => <><span className="mono muted">{r.code || r.temp_code}</span> <CustLink id={r.customer_id} name={r.name} />{r.status === 'prospect' && <span className="muted small"> 潜客</span>}</> },
     { key: 'city', label: '城市', w: 90 },
-    { key: 'result', label: '结果', w: 90, value: (r) => (VISIT_RESULTS.find((x) => x[0] === r.result) || [])[1], render: (r) => <ResultPill v={r.result} visit /> },
+    { key: 'result', label: '结果', w: 90, value: (r) => resultName(r.result), render: (r) => <ResultPill v={r.result} /> },
     { key: 'products_wanted', label: '想要的货', w: 160 },
     { key: 'monthly_qty', label: '月用量', w: 70 },
     { key: 'buys_from', label: '现在从哪买', w: 110 },
@@ -112,7 +112,7 @@ function VisitModal({ onClose, initCust }) {
           <div className="field"><label>怎么拿货</label><OptChoice optKey="visit_transport" title="怎么拿货" value={f.transport} onChange={(v) => set('transport')(v)} options={baseOf('visit_transport')} empty="—" /></div>
           <div className="field"><label>附近同行</label><input className="in" value={f.nearby_suppliers} onChange={set('nearby_suppliers')} /></div>
         </div>
-        <div className="field req"><label>结果</label><OptChoice optKey="visit_results" title="拜访结果" value={f.result} onChange={(v) => set('result')(v)} options={VISIT_RESULTS} /></div>
+        <div className="field req"><label>结果</label><OptChoice optKey="visit_results" title="拜访结果" value={f.result} onChange={(v) => set('result')(v)} /></div>
         <div className="field"><label>说明</label><input className="in" value={f.note} onChange={set('note')} /></div>
         <div className="field"><label>下次跟进</label><FollowDate value={f.next_follow_on} onChange={set('next_follow_on')} /></div>
       </div>

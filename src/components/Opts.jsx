@@ -32,7 +32,8 @@ export function applyOpts(base, cfg, current) {
 export function applyRef(optKey, ownCfg, parentCfg, current) {
   const reg = OPT_REG[optKey]; const p = applyOpts(baseOf(reg.ref), parentCfg, current);
   const pick = new Set((ownCfg?.pick || reg.pick || p.all.map(([v]) => v)).map(String));
-  const all = p.all.filter(([v]) => pick.has(String(v)) || String(v) === String(current ?? ''));
+  const allow = reg.allow ? new Set(reg.allow.map(String)) : null;
+  const all = p.all.filter(([v]) => (pick.has(String(v)) && (!allow || allow.has(String(v)))) || String(v) === String(current ?? ''));
   return { cfg: { color: parentCfg?.color || {} }, all, shown: all.filter(([v]) => !p.hidden.has(String(v)) || String(v) === String(current ?? '')), hidden: p.hidden };
 }
 export function useOpts(optKey, base, current) {

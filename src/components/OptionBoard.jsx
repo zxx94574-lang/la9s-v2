@@ -100,7 +100,7 @@ export function OptionColumn({ optKey, q: kw = '', wide }) {
   // ── 引用列：名字 / 颜色跟着被引用的组，这里只勾能用的 ──
   if (g.ref) {
     const parent = OPT_REG[g.ref]; const prow = data.parent.rows;
-    const pick = new Set((data.own.pick || g.pick || prow.map((r) => r.v)).map(String));
+    const pick = new Set((data.own.pick || g.pick || prow.map((r) => r.v)).map(String).filter((v) => !g.allow || g.allow.includes(v)));
     const toggle = async (v) => {
       const n = new Set(pick); if (n.has(String(v))) n.delete(String(v)); else n.add(String(v));
       if (!n.size) return toast('至少留一项', 'err');
@@ -108,9 +108,10 @@ export function OptionColumn({ optKey, q: kw = '', wide }) {
     };
     return (
       <div className={`ob-col ${wide ? 'wide' : ''}`}>
-        <div className="ob-h"><b>{g.title}</b><span className="pill gray sm-pill">引用</span><span className="grow" /><span className="muted small">{pick.size} / {prow.length}</span></div>
+        <div className="ob-h"><b>{g.title}</b><span className="pill gray sm-pill">引用</span><span className="grow" /><span className="muted small">{pick.size} / {g.allow ? g.allow.length : prow.length}</span></div>
         <div className="ob-reffrom">选项来自「{parent.title}」，勾上的才能选。改名字、改颜色去「{parent.title}」那一列。</div>
-        {prow.map((r) => <label key={r.v} className="ob-item ob-pick"><input type="checkbox" checked={pick.has(String(r.v))} onChange={() => toggle(r.v)} /><span className={`ob-name ${r.c ? `pill ${r.c}` : ''}`}>{r.l}</span></label>)}
+        {prow.map((r) => { const no = g.allow && !g.allow.includes(String(r.v)); return (
+          <label key={r.v} className={`ob-item ob-pick ${no ? 'ob-no' : ''}`} title={no ? '这里用不了这一项（这类记录只认另外几种结果）' : ''}><input type="checkbox" disabled={no} checked={!no && pick.has(String(r.v))} onChange={() => toggle(r.v)} /><span className={`ob-name ${r.c ? `pill ${r.c}` : ''}`}>{r.l}</span></label>); })}
         {used}
       </div>);
   }

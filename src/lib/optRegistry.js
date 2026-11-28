@@ -3,7 +3,7 @@
 //   kind   = 'opts'：存 org_settings `opts:<key>`（和表单旁 ⚙ 同一份）；
 //            'list'：存在某个档案自己的设置里（store 的 path 那一段，元素 { v, l, c, ... }）。
 //   ref    = 引用另一组：名字 / 颜色跟着那一组走，这里只勾「能用其中哪几项」（存 opts:<key>.pick）。
-//   pick   = 引用时默认勾哪几项。
+//   pick   = 引用时默认勾哪几项；allow = 这里最多能勾哪几项（数据库只认这几种，别的灰掉）。
 //   used   = 用在哪（选项表每列底下显示，改之前知道会影响哪些地方）。
 //   sec    = 一块里再分段（订单那一块选项多，分 出库 · 签收 / 退货 / 快捷原因…）
 //   note   = 快捷原因（一排词 +「其他」手填），「其他」固定在最后、不能删。
@@ -11,7 +11,7 @@
 //   bases  = 新加的选项要选「按哪一类处理」（后台按那一类走，只是名字不同）。
 // 默认值：写在这里（options），或者由定义它的文件加载时 regBase(key, () => 常量) 报到（避免 lib 反过来 import 页面）。
 // 新做的选项组：在这里登记一行，表单里照常用 <OptChoice optKey=…>，选项设置页自动多一列。
-import { CONTACT_ROLES, UNLOCK_REASONS } from './optBases.js';
+import { CONTACT_ROLES, UNLOCK_REASONS, FOLLOW_RESULTS, CALL_CODES, VISIT_CODES } from './optBases.js';
 import { DEFAULT_STAFF_OPTIONS } from './staffOptions.js';
 import { DEFAULT_CUSTOMER_OPTIONS } from './customerOptions.js';
 import { NOTE_OPTIONS, SHIP_METHODS, CONFIRM_METHODS, RETURN_REASONS, FREIGHT_BASES, RETURN_BASES } from './domain.js';
@@ -62,8 +62,9 @@ export const OPT_REG = {
   shop_quality: { title: '门店 · 品质档', sec: '客户门店', home: 'customers', kind: 'opts', used: ['客户门店 · 店里库存'] },
 
   // ── 热线与拜访 ──
-  call_results: { title: '回访结果', home: 'crm', kind: 'opts', used: ['热线回访'] },
-  visit_results: { title: '拜访结果', home: 'crm', kind: 'opts', used: ['客户拜访'] },
+  follow_results: { title: '跟进结果', home: 'crm', kind: 'opts', options: arr(FOLLOW_RESULTS), fixed: true, used: ['热线回访（引用）', '客户拜访（引用）'] },
+  call_results: { title: '热线回访 · 结果', home: 'crm', kind: 'opts', ref: 'follow_results', pick: CALL_CODES, allow: CALL_CODES, used: ['热线回访'] },
+  visit_results: { title: '客户拜访 · 结果', home: 'crm', kind: 'opts', ref: 'follow_results', pick: VISIT_CODES, allow: VISIT_CODES, used: ['客户拜访'] },
   visit_activity: { title: '拜访 · 店铺做什么', home: 'crm', kind: 'opts', options: arr(['Réparation', 'Vente détail', 'Grossiste', 'Recyclage']), used: ['客户拜访'] },
   visit_transport: { title: '拜访 · 平时怎么拿货', home: 'crm', kind: 'opts', options: arr(['Yango moto', 'Taxi', 'Vient lui-même', 'Livreur']), used: ['客户拜访'] },
 
