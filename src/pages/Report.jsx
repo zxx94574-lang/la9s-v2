@@ -1,6 +1,7 @@
 // 月报 (Frank 11-25: 不要在经营总览上放大按钮; 单独一页, 所有数据捞进来, 给老板一眼看明白)
 // 口径照他自己的月报: 金额人民币「万元」截掉零头; 报告月取整月; XOF 按这个月定的汇率折 (默认 0.011, 每月存一次); 超期 = 超 21 天, 严重超期 = 超 120 天; 库龄 7 段
 // 顺序 = 老板读报告的顺序: 一句话结论 → 8 个关键数 → 销售 (达成 / 结构 / 客户 / 销售员) → 毛利与净利 → 回款与应收 → 库存 (库龄 / 周转 / 在途 / 滞销) → 运营 → 走势 → 文字版
+import { OPEX_TIP, STOCK_LOSS_SQL, estPay } from '../components/Dash2.jsx';
 import PLTable from '../components/PLTable.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
@@ -47,7 +48,7 @@ export default function Report() {
   const { budget: mBudget } = useBudget(month); const { lowPct } = useMarginRules();
   const a = `${month}-01`, b = lastDay(month);
   const { data } = useData(async () => {
-    const [lay, tr, snap, ar, rates, rcpt, exps, pay, custs, rets, dirs, deals, pend, prods] = await Promise.all([
+    const [lay, tr, snap, ar, rates, rcpt, exps, pay, custs, rets, dirs, deals, pend, prods, staffM, loss] = await Promise.all([
       call(role, `select * from app.dash_stock_layers($1)`, [org]), call(role, `select * from app.dash_transit($1)`, [org]),
       q(`select day::text as day, key, value from app.dash_snapshots where org_id = $1 and key in ('stock_cost', 'q120_cost', 'ar') order by day`, [org]),
       q(`select d.customer_id, c.name, coalesce(sum(d.due), 0) as due, max(current_date - d.first_shipped_at::date) as age, coalesce(c.credit_days, 30) as credit
@@ -55,9 +56,9 @@ export default function Report() {
       q(`select value from app.org_settings where org_id = $1 and key = 'report_rates'`, [org]),
       q(`select r.method::text as method, r.currency, sum(r.amount) as amount, count(*) as n from app.receipts r where r.org_id = $1 and r.received_on between $2::date and $3::date and r.voided_at is null group by 1, 2`, [org, a, b]),
       // 523: 资金流水里记的支出都算日常开支 (含订单运费); 上个月的也拿来做「较上月」
-      q(`select coalesce(m.category, '没选科目') as category, a.currency, (m.on_date >= $2::date) as cur, sum(m.amount) as amount from app.cash_moves m join app.cash_accounts a on a.id = m.account_id
-         where m.org_id = $1 and m.kind = 'expense' and m.status in ('approved', 'confirmed') and m.on_date between ($2::date - interval '1 month')::date and $3::date
-           and m.receipt_id is null and coalesce(m.category, '') not like '%退款%' group by 1, 2, 3`, [org, a, b]).catch(() => []),
+      q(`select case when m.kind = 'bank_out' then '没说明的流水出账（先按开支算）' else coalesce(m.category, '没选科目') end as category, a.currency, (m.on_date >= $2::date) as cur, sum(m.amount) as amount from app.cash_moves m join app.cash_accounts a on a.id = m.account_id
+         where m.org_id = $1 and m.on_date between ($2::date - interval '1 month')::date and $3::date and m.receipt_id is null
+           and ((m.kind = 'expense' and m.status in ('approved', 'confirmed', 'pending') and coalesce(m.category, '') not like '%退款%') or (m.kind = 'bank_out' and m.status = 'unexplained')) group by 1, 2, 3`, [org, a, b]).catch(() => []),
       q(`select (p.month = $2::date) as cur, coalesce(sum(coalesce(p.net, 0) + coalesce(p.cnps, 0)), 0) as v, count(*) as n from app.payroll p where p.org_id = $1 and p.month in ($2::date, ($2::date - interval '1 month')::date) group by 1`, [org, a]).catch(() => []),
       q(`select c.id, c.name, c.created_at, e.short_name as owner from app.customers c left join app.employees e on e.id = c.owner_employee_id where c.org_id = $1`, [org]).catch(() => q(`select id, name, created_at, null as owner from app.customers where org_id = $1`, [org])),
       q(`select count(*) as n, coalesce(sum(amount), 0) as amount from app.returns where org_id = $1 and requested_at::date between $2::date and $3::date`, [org, a, b]),
@@ -68,8 +69,10 @@ export default function Report() {
          where d.org_id = $1 and s.first_ship::date between $2::date and $3::date`, [org, a, b]).catch(() => [{}]),
       q(`select coalesce(sum(l.offer_qty), 0) as n from app.purchase_request_lines l join app.purchase_requests r on r.id = l.request_id where r.org_id = $1 and l.offer_qty is not null and r.status not in ('closed', 'cancelled', 'done')`, [org]).catch(() => [{ n: null }]),
       q(`select id, model from app.products where org_id = $1`, [org]),
+      q(`select coalesce(sum(coalesce(base_salary, 0) + coalesce(allowance, 0)), 0) as v, count(*) as n from app.employees where org_id = $1 and coalesce(active, true)`, [org]).catch(() => []),
+      q(STOCK_LOSS_SQL, [org, `${addMonth(month, -1)}-01`, b]).catch(() => []),
     ]);
-    return { lay, tr, snap, ar, rates: rates[0]?.value || {}, rcpt, exps, pay, custs, rets: rets[0], dirs: dirs[0] || {}, deals: deals[0] || {}, pendN: pend[0]?.n, model: Object.fromEntries(prods.map((p) => [p.id, p.model])) };
+    return { lay, tr, snap, ar, rates: rates[0]?.value || {}, rcpt, exps, pay, staffM: staffM?.[0], loss, prevA: `${addMonth(month, -1)}-01`, custs, rets: rets[0], dirs: dirs[0] || {}, deals: deals[0] || {}, pendN: pend[0]?.n, model: Object.fromEntries(prods.map((p) => [p.id, p.model])) };
   }, [org, role, tick, a, b]);
   const [rateIn, setRateIn] = useState(null);
   const rate = N(rateIn ?? data?.rates?.[month] ?? 0.011);
@@ -102,8 +105,14 @@ export default function Report() {
     const expCalc = (isCur) => {
       const expBy = {}; for (const e of (data.exps || []).filter((x) => !!x.cur === isCur)) { const xof = e.currency === 'XOF' ? N(e.amount) : e.currency === 'CNY' ? N(e.amount) / rate : N(e.amount) * 600; expBy[e.category] = (expBy[e.category] || 0) + c(xof); }
       const p = (data.pay || []).find((x) => !!x.cur === isCur); const hasPay = N(p?.n) > 0; const payV = c(N(p?.v));
-      const list = Object.entries(expBy).filter(([k]) => !(hasPay && /工资|薪|salaire|CNPS|社保/i.test(k))).map(([k, v]) => ({ k, v })).sort((x, y) => y.v - x.v);
+      for (const l of (data.loss || []).filter((x) => (x.d >= a) === isCur)) { const k = l.k === 'scrap' ? '报废的货（按成本）' : '库存盘亏 / 盘盈（按成本）'; expBy[k] = (expBy[k] || 0) + c(N(l.v)); }
+      const isPayK = (k) => /工资|薪|salaire|CNPS|社保/i.test(k);
+      const list = Object.entries(expBy).filter(([k, v]) => v && !(hasPay && isPayK(k))).map(([k, v]) => ({ k, v })).sort((x, y) => y.v - x.v);
       if (hasPay) list.unshift({ k: '工资（工资表，实发 + 社保）', v: payV });
+      else if (!list.some((e) => isPayK(e.k)) && N(data.staffM?.v) > 0) {   // 还没建工资表、资金流水里也没记 → 按月薪 + 补贴估（本月按天折算到今天）
+        const pa = isCur ? a : data.prevA; const pb = isCur ? (td < b ? td : b) : lastDay(addMonth(month, -1));
+        list.unshift({ k: `工资（估算：${data.staffM.n} 人月薪 + 补贴，还没建工资表）`, v: c(estPay(N(data.staffM.v), pa, pb)), est: true });
+      }
       return { list, T: list.reduce((s, e) => s + e.v, 0) };
     };
     const { list: expList, T: expT } = expCalc(true); const expPrevT = expCalc(false).T;
@@ -191,7 +200,7 @@ export default function Report() {
               all: { rev: R.cur.v, qty: R.cur.q, cost: R.cur.cost, gp: R.cur.pf, gpPct: mg, exp: R.expT, net: R.cur.pf - R.expT, netPct: R.cur.v ? (R.cur.pf - R.expT) / R.cur.v * 100 : null } }}
             cmp={R.prev.v || R.expPrevT ? { label: '较上月', baseName: '上月', base: { rev: R.prev.v, qty: R.prev.q, cost: R.prev.cost, gp: R.prev.pf, gpPct: R.prev.v ? R.prev.pf / R.prev.v * 100 : null, exp: R.expPrevT, net: R.prev.pf - R.expPrevT, netPct: R.prev.v ? (R.prev.pf - R.expPrevT) / R.prev.v * 100 : null } } : null}
             expTip={R.expList.length ? R.expList.map((e) => `${e.k} ${wan1(e.v)}`).join('\n') : '这个月没有记支出'}
-            note="日常开支 = 资金流水里记的所有支出（含订单运费）+ 工资表；退给客户的钱不算。" /></div>
+            note={<span data-tip={OPEX_TIP}>开支 = 系统里记的所有花销（工资、运费、水电、手续费、盘亏报废…）{R.expList.some((e) => e.est) ? '；工资还没建工资表，先按月薪估' : ''}</span>} /></div>
           <div><h4>要注意</h4><ul className="rp-warn">
             {R.cur.loss > 0 && <li className="red-t2">{R.cur.loss} 行卖亏了，共亏 {wan1(R.cur.lossV)} 万（订单总览 → 亏损诊断）</li>}
             {R.cur.miss > 0 && <li>{qty(R.cur.miss)} 片没有成本，没算进毛利</li>}

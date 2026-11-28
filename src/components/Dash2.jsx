@@ -29,6 +29,23 @@ const shiftM = (d, n) => { const x = new Date(d + 'T00:00:00Z'); const day = x.g
 const daysBetween = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 864e5);
 
 // 数字: 全数 = 千分位; 简写 = ≥ 100 万写 M (两位小数), ≥ 1 万写 K (一位小数)
+// 11-28 净利 = 毛利 − 一切花销（Frank：工资、电费、水费、客户运费、手续费… 全都要算）
+export const OPEX_TIP = '日常开支 = 一切花销：资金流水里记的所有支出（订单运费、电费、水费、交通、办事处… 含还在等审批的）+ 没说明的流水出账（先按开支算）+ 工资（有工资表用工资表 实发 + 社保；还没建就按员工月薪 + 补贴估）+ 库存盘亏 / 报废的货（按到岸成本）。收款手续费已经在毛利里扣了；退给客户的钱不算；运费只算一次。';
+export const STOCK_LOSS_SQL = `select m.at::date::text as d, case when w.kind = 'scrap' then 'scrap' else 'shrink' end as k,
+    sum((case when w.kind = 'scrap' then m.qty else -m.qty end) * coalesce(app.landed_cost_at(p.rmb_cost, p.freight_xof, ps.rmb_per_xof, ps.round_to), 0)) as v,
+    sum(case when w.kind = 'scrap' then m.qty else -m.qty end) as n
+  from app.stock_moves m join app.stock_items si on si.id = m.stock_item_id join app.warehouses w on w.id = si.warehouse_id
+  join app.products p on p.id = si.product_id left join app.price_settings ps on ps.org_id = w.org_id
+  where w.org_id = $1 and m.at >= $2::date and m.at < ($3::date + 1)
+    and ((m.reason = 'adjust' and w.kind in ('local', 'fob')) or (w.kind = 'scrap' and m.qty > 0))
+  group by 1, 2`;
+// 一个月的工资按天折算到 [a, b]（跨月逐月算）
+export function estPay(monthly, a, b) {
+  let t = 0; let d = new Date(`${a}T00:00:00`); const e = new Date(`${b}T00:00:00`);
+  while (d <= e) { const dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); t += monthly / dim; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); }
+  return Math.round(t);
+}
+
 export function fmtN(v, cur, short) {
   if (v == null || Number.isNaN(Number(v))) return '—';
   v = Number(v); if (Math.abs(v) < 0.005) v = 0;
@@ -148,10 +165,13 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
   // 「较平均」= 跟前 3 期平均比 (和卡片上的 ▲ 同一个基数), 所以开支也要拿前 3 期的.
   const wins = useMemo(() => baseWindows(from, to), [from, to]);
   const w0 = wins.reduce((a, [x]) => (x < a ? x : a), from);
-  const { data: mv } = useData(() => q(`select m.on_date::text as d, coalesce(m.category, '没选科目') as category, a.currency, m.amount
+  const { data: mv } = useData(() => q(`select m.on_date::text as d, case when m.kind = 'bank_out' then '没说明的流水出账（先按开支算）' else coalesce(m.category, '没选科目') end as category, a.currency, m.amount
     from app.cash_moves m join app.cash_accounts a on a.id = m.account_id
-    where m.org_id = $1 and m.kind = 'expense' and m.status in ('approved', 'confirmed') and m.on_date >= $2::date and m.on_date <= $3::date
-      and m.receipt_id is null and coalesce(m.category, '') not like '%退款%'`, [org, w0, to]).catch(() => []), [org, w0, to, tick]);
+    where m.org_id = $1 and m.on_date >= $2::date and m.on_date <= $3::date and m.receipt_id is null
+      and ((m.kind = 'expense' and m.status in ('approved', 'confirmed', 'pending') and coalesce(m.category, '') not like '%退款%') or (m.kind = 'bank_out' and m.status = 'unexplained'))`, [org, w0, to]).catch(() => []), [org, w0, to, tick]);
+  // 11-28 Frank「任何花销都要算进净利」: 还没建工资表的月份按员工月薪 + 补贴估; 盘亏 / 报废的货按成本算
+  const { data: staffM } = useData(() => q(`select coalesce(sum(coalesce(base_salary, 0) + coalesce(allowance, 0)), 0) as v, count(*) as n from app.employees where org_id = $1 and coalesce(active, true)`, [org]).catch(() => []), [org, tick]);
+  const { data: lossM } = useData(() => q(STOCK_LOSS_SQL, [org, w0, to]).catch(() => []), [org, w0, to, tick]);
   const { data: payM } = useData(() => q(`select p.month::text as mon, coalesce(sum(coalesce(p.net, 0) + coalesce(p.cnps, 0)), 0) as v, count(*) as n
     from app.payroll p where p.org_id = $1 and p.month >= date_trunc('month', $2::date)::date and p.month <= $3::date group by 1`, [org, w0, to]).catch(() => []), [org, w0, to, tick]);
   const { data: psd } = useData(() => q(`select rmb_per_xof, xof_per_usd from app.price_settings where org_id = $1`, [org]), [org, tick]);
@@ -160,15 +180,20 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
   const isPayCat = (k) => /工资|薪|salaire|CNPS|社保/i.test(k);
   const expOf = useCallback((a, b) => {
     const by = {};
+    for (const e of lossM || []) { if (e.d < a || e.d > b || !N(e.v)) continue; const nm = e.k === 'scrap' ? '报废的货（按成本）' : '库存盘亏 / 盘盈（按成本）'; const x = by[nm] || (by[nm] = { id: nm, name: nm, v: 0, n: 0 }); x.v += conv(N(e.v)); x.n += N(e.n); }
     for (const e of mv || []) { if (e.d < a || e.d > b) continue; const x = by[e.category] || (by[e.category] = { id: e.category, name: e.category, v: 0, n: 0 }); x.v += conv(toXof(N(e.amount), e.currency, ps)); x.n += 1; }
     const pm = (payM || []).filter((x) => x.mon >= `${a.slice(0, 7)}-01` && x.mon <= b);
     const pv = conv(pm.reduce((t, x) => t + N(x.v), 0)); const hasPay = pm.some((x) => N(x.n) > 0);
     let list = Object.values(by).sort((x, y) => y.v - x.v);
     if (hasPay) list = [{ id: '__pay', name: `工资（工资表 ${pm.length} 个月，实发 + 社保）`, v: pv, n: pm.reduce((t, x) => t + N(x.n), 0) }, ...list.filter((e) => !isPayCat(e.name))];
-    return { list, T: list.reduce((t, e) => t + e.v, 0), hasPay };
-  }, [mv, payM, ps, s.cur]);   // eslint-disable-line react-hooks/exhaustive-deps
+    else if (!list.some((e) => isPayCat(e.name)) && N(staffM?.[0]?.v) > 0) {   // 没工资表、资金流水里也没记工资 → 按月薪 + 补贴估（按天折算）
+      const est = estPay(N(staffM[0].v), a, b);
+      if (est > 0) list = [{ id: '__payest', name: `工资（估算：${staffM[0].n} 人月薪 + 补贴，还没建工资表）`, v: conv(est), n: N(staffM[0].n), est: true }, ...list];
+    }
+    return { list, T: list.reduce((t, e) => t + e.v, 0), hasPay, est: list.some((e) => e.est) };
+  }, [mv, payM, ps, s.cur, staffM, lossM]);   // eslint-disable-line react-hooks/exhaustive-deps
   const E = useMemo(() => expOf(from, to), [expOf, from, to]);
-  const expShown = E.list; const expT = E.T; const hasPay = E.hasPay;
+  const expShown = E.list; const expT = E.T; const hasPay = E.hasPay || E.est;
   // 窗口名: 整月 → 「10 月」, 其他 → 「10-01~10-26」
   const wName = (a, b) => (a.slice(8) === '01' && a.slice(0, 7) === b.slice(0, 7) ? `${Number(a.slice(5, 7))} 月` : `${a.slice(5)}~${b.slice(5)}`);
   const cmp = useMemo(() => {
@@ -257,7 +282,7 @@ export function SalesSec({ all, from, to, transit, onAlert }) {
             all: { rev: T.all.rev, qty: T.all.qty, cost: T.all.cost, gp: T.all.profit, gpPct: T.all.pct, exp: expT, net: T.all.profit - expT, netPct: T.all.known ? (T.all.profit - expT) / T.all.known * 100 : null } }}
           links={{ rev: { loc: goOrders, fob: goFob, all: goMargin }, qty: { loc: goOrders, fob: goFob, all: goMargin }, cost: goMargin, gp: goMargin, exp: goCash }}
           expTip={`${expShown.length ? expShown.map((e) => `${e.name} ${s.f(e.v)}`).join('\n') : '这段时间没有记支出'}\n点开看资金流水里的支出`}
-          note={<span data-tip="日常开支 = 资金流水里这段时间记的所有支出（订单运费、日常维护、办事处…）+ 工资表（实发 + 社保）；退给客户的钱不算。运费只算一次：毛利里不再扣。">{hasPay ? '' : '这段时间还没建工资表，净利里没扣工资。'}开支只记在合计里；只算系统里记了的。</span>} />
+          note={<span data-tip={OPEX_TIP}>{E.est ? '工资还没建工资表，先按月薪估。' : ''}开支 = 系统里记的所有花销，只记在合计里。</span>} />
       </Detail>}
       <div className="d2-row">
         <DCard small title="本地备货" to={['orders', '订单总览']} open={o1 === 'local'} onFold={() => { setExp({}); tg1('local'); }} foot={<span>{T.loc.n} 单 · {T.loc.c} 位客户</span>}><div className="d2-sub">{cells(T.loc, 'local', false)}</div></DCard>
