@@ -1,6 +1,7 @@
 // 338 / 339 (Frank 11-17): 挂在单据上的任务 —— 任何「要人去问 / 去核对」的事, 从这张单直接派出去, 自动带单号和客户;
 // 类型: 问付款计划 (结果 = 哪天付多少 + 截图) / 对账事项 / 核对一件事 / 其他. 复用中方指令 (收到 → 完成填结果 → 中方确认).
 import React, { useState } from 'react';
+import { regBase } from '../lib/optRegistry.js';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from './Opts.jsx';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Modal, FRow, Choice, DatePicker, Pill, Thumb, Info } from './ui.jsx';
@@ -139,3 +140,5 @@ export function PlanTodo() {
         </div>))}
     </div>);
 }
+// 选项设置页读默认值（11-28）
+regBase('task_types', () => TASK_TYPES);

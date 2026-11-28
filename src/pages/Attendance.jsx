@@ -2,6 +2,7 @@
 // 手机打开 → 点「上班打卡 / 下班打卡」→ 浏览器给定位 → 系统找最近的工作地点, 记「在 / 不在」, 第一次上班卡超过上班时间算迟到.
 // 中方: 今天谁打了卡、在不在地方; 每月汇总 (出勤天数、迟到、不在地方); 维护工作地点 (仓库 / 办公室 / 各个市场, 可以站在那里点「用我现在的位置」).
 import { hasAny } from '../lib/domain.js';
+import { baseOf } from '../lib/optRegistry.js';
 import { readIntent, useIntent } from '../components/MobileSheet.jsx';
 import React, { useState } from 'react';
 import AttCalendar from '../components/AttCalendar.jsx';
@@ -356,7 +357,7 @@ function OffhoursCard() {
       {who && <Modal title={`放行 ${who.name}（只今天）`} onClose={() => setWho(null)}
         footer={<><button type="button" className="btn" onClick={() => setWho(null)}>取消</button><span className="grow" /><button type="button" className="btn primary" disabled={!why.trim()} onClick={async () => {
           try { await call(role, `select app.grant_access_unlock($1,$2,$3)`, [org, who.employee_id, why]); toast(`已放行 ${who.name}，今天能再登录`); setWho(null); refresh(); } catch (e) { toast(friendlyError(e), 'err'); } }}>放行</button></>}>
-        <div className="field req"><label>为什么放行</label><OptNote optKey="unlock_reason" value={why} onChange={setWhy} options={['今晚盘点', '急单要出', '补录今天的单', '其他']} placeholder="例：今晚盘点" /></div>
+        <div className="field req"><label>为什么放行</label><OptNote optKey="unlock_reason" value={why} onChange={setWhy} options={baseOf('unlock_reason')} placeholder="例：今晚盘点" /></div>
       </Modal>}
     </div>
   );

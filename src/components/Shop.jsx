@@ -2,6 +2,7 @@
 // 收银越简单越好: 点货 → 数量 → (价格默认是他定的零售价) → 收钱 → 一单就完, 进今天的流水. 以后接扫码枪.
 // 他店里的账和我们的应收 / 资金账户完全分开; 他看不到我们的价格和成本.
 import React, { useMemo, useState } from 'react';
+import { regBase } from '../lib/optRegistry.js';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Pill, Info, Modal, MoneyIn, Drawer, usePeriod, PeriodBar } from './ui.jsx';
 import Grid from './Grid.jsx';
@@ -217,3 +218,6 @@ function AccountDrawer({ r, onClose }) {
       </>}
     </Drawer>);
 }
+// 选项设置页读默认值（11-28）
+regBase('shop_pay', () => PAYS);
+regBase('shop_quality', () => QUALITIES.filter((x) => x !== 'LA&9S'));

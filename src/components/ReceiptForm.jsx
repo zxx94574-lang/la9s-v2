@@ -2,6 +2,7 @@
 // 3 modes only (待改 28) · receipt currency → the order currency at a locked rate written one way only (待改 30)
 // · live preview sentence + before/after (待改 31) · info bar next to the modes (待改 32) · orders open in a drawer (待改 34)
 import { DealLink } from './Archives.jsx';
+import { regBase } from '../lib/optRegistry.js';
 import { OptChoice, OptNote, OptGear, optName, optSubmit, useOptList } from './Opts.jsx';
 import { ImpactFor } from './Impact.jsx';
 const VOID_WHY = ['金额输错', '小数点输错', '客户 / 订单选错', '重复登记', '客户没付成功'];
@@ -385,3 +386,5 @@ export function ReceiptDone({ sum, onClose }) {
       </div>
     </div>);
 }
+// 选项设置页读默认值（11-28）
+regBase('note_void_receipt', () => VOID_WHY);

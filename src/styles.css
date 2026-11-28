@@ -2144,7 +2144,7 @@ button.dchip:not(.red):not(.amber):not(.green) { color: var(--brand); cursor: po
 .ask-bar .ask-ico { background: var(--brand); color: #fff; width: 28px; height: 28px; flex: 0 0 auto; }
 .ask-ph { flex: 1 1 auto; min-width: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ask-kbd { flex: 0 0 auto; font: 600 11px/1 ui-monospace, monospace; color: var(--brand); background: var(--brand-soft); border-radius: 6px; padding: 5px 7px; }
-@media (max-width: 760px) { .ask-bar { flex: 0 0 auto; width: 40px; max-width: 40px; padding: 0; justify-content: center; margin: 0 0 0 auto; } .ask-bar .ask-ph, .ask-bar .ask-kbd { display: none; } }
+@media (max-width: 1180px) { .ask-bar { flex: 0 0 auto; width: 40px; max-width: 40px; padding: 0; justify-content: center; margin: 0 0 0 auto; } .ask-bar .ask-ph, .ask-bar .ask-kbd { display: none; } }
 .new-wrap { position: relative; }
 .new-btn { height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--brand-line); background: var(--brand-soft); color: var(--brand); font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .new-btn:active { transform: scale(.95); }
@@ -2566,3 +2566,15 @@ input[type="time"].in { width: auto !important; min-width: 112px; flex: none; }
 .me-head { flex-wrap: wrap; }
 .me-switch { margin-left: auto; flex: 1 1 280px; max-width: 380px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 @media (max-width: 640px) { .me-switch { max-width: none; margin-left: 0; flex-basis: 100%; padding-top: 12px; border-top: 1px solid var(--line-2); } }
+
+.ob-base { display: flex; flex-direction: column; gap: 4px; }
+
+/* 选项表：分段 + 瀑布流（列高低不齐也不留空洞） */
+.ob-board { display: block; columns: 250px; column-gap: 12px; }
+.ob-board > .ob-col { break-inside: avoid; margin-bottom: 12px; width: 100%; }
+.ob-secwrap + .ob-secwrap { margin-top: 6px; }
+.ob-sec { font-weight: 700; font-size: 15px; color: var(--ink, #0b1220); margin: 4px 0 8px; display: flex; align-items: center; gap: 10px; }
+.ob-sec::after { content: ''; flex: 1; height: 1px; background: var(--line-2); }
+.ob-item { flex-wrap: nowrap; } .ob-item:has(.ob-attrs, .ob-attr-t) { flex-wrap: wrap; }
+.ob-item .ob-name { flex: 0 1 auto; }
+.ob-item .ob-name { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }

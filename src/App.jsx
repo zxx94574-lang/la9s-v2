@@ -147,6 +147,17 @@ export default function App() {
   const navBack = useCallback(() => { const h = hist.current; if (h.i > 0) { navIntent.current = -1; location.hash = h.list[h.i - 1].hash || '#/'; } }, []);
   const navFwd = useCallback(() => { const h = hist.current; if (h.i < h.list.length - 1) { navIntent.current = 1; location.hash = h.list[h.i + 1].hash || '#/'; } }, []);
   useEffect(() => store.set('la9s.navgroups3', openGroups), [openGroups]);
+  // 543 (Frank 11-28)：整页 Esc = 返回上一步。有弹窗 / 抽屉 / 下拉 / 搜索开着、或光标在输入框 / 表格里时不管（那时 Esc 是关那一层 / 取消编辑）
+  useEffect(() => {
+    const k = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (document.querySelector('.overlay, .drawer-scrim, .menu, .per-menu, .dp-pop, .cell-pop, .ask-veil, .msheet, .ob-pal, .scrim')) return;
+      const a = document.activeElement;
+      if (a && (a.closest('input, textarea, select, [contenteditable="true"]') || a.closest('.tw, .grid-wrap, .gtable'))) return;
+      navBack();
+    };
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
+  }, [navBack]);
   useEffect(() => { if (org) q(`select value from app.org_settings where org_id = $1 and key = 'nav'`, [org]).then((r) => setNavCfg(r[0]?.value || null)); }, [org, tick]);
   // 权限配置 (11-09): 开局和每次 refresh 读一遍, can() 立即按新配置走
   const [permTick, setPermTick] = useState(0);

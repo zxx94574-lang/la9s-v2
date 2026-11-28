@@ -2,6 +2,7 @@
 // ② 「和金蝶对账」—— 金蝶导出的表拖进来, 自动认是哪种, 比出五类结果, 每次对账存一份.
 // 系统不往金蝶写, 只记单号、对状态.
 import { hasAny, seesPrice } from '../lib/domain.js';
+import { baseOf } from '../lib/optRegistry.js';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Modal, FileDrop, Info, Assumed, Choice, Pill } from './ui.jsx';
@@ -186,7 +187,7 @@ export function KdRecon() {
             { key: 'status', label: '处理', w: 240, value: (i) => (i.status === 'handled' ? `已处理：${i.handle_note || ''}` : '没处理'), render: (i) => (i.status === 'handled' ? <span className="small">✓ {i.handle_note}</span> : <span className="pill amber">没处理</span>) }]} />
       </>}
       {note && <Modal title="这一条是怎么回事" onClose={() => setNote(null)} footer={<><button type="button" className="btn" onClick={() => setNote(null)}>取消</button><button type="button" className="btn primary" disabled={!note.v.trim()} onClick={() => handle(note.i, note.v, false)}>标成处理过</button></>}>
-        <div className="field req"><label>原因 / 怎么处理的</label><OptNote optKey="note_kd_recon" title="对账差异的原因" options={['金蝶还没录，已安排补录', '系统漏做单据，已补', '金蝶录错，已让财务改', '发错编码，已做编码更正', '已盘点调整', '其他']} value={note.v} onChange={(v) => setNote({ ...note, v })} /></div>
+        <div className="field req"><label>原因 / 怎么处理的</label><OptNote optKey="note_kd_recon" title="对账差异的原因" options={baseOf('note_kd_recon')} value={note.v} onChange={(v) => setNote({ ...note, v })} /></div>
       </Modal>}
     </div>);
 }

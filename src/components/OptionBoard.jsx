@@ -5,7 +5,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, SortList, Choice, Info } from './ui.jsx';
 import { applyOpts, loadAllOpts, norm, rowsToCfg, PLAIN_TONES, STATUS_TONES } from './Opts.jsx';
-import { OPT_REG, groupsOf, refsTo } from '../lib/optRegistry.js';
+import { OPT_REG, groupsOf, refsTo, baseOf } from '../lib/optRegistry.js';
 import { SYS_ROLES } from '../lib/staffOptions.js';
 import { ROLES } from '../lib/domain.js';
 import { friendlyError } from '../lib/format.js';
@@ -27,7 +27,7 @@ async function readGroup(org, key) {
     return { raw, rows: list.map((x) => ({ ...x, c: x.c || '', sys: sys.has(String(x.v)) })) };
   }
   const raw = (await getSetting(org, `opts:${key}`)) || {};
-  const base = (g.options?.() || []).map(norm);
+  const base = baseOf(key).map(norm);
   const { all, hidden } = applyOpts(base, raw);
   const extras = (raw.extra || []).map((x) => (typeof x === 'string' ? { v: x, l: x } : x));
   return { raw, base, rows: all.filter(([v]) => !hidden.has(String(v))).map(([v, l]) => ({ v, l, c: raw.color?.[v] || '', sys: base.some(([b]) => String(b) === String(v)), base: extras.find((e) => e.v === v)?.base })) };
@@ -38,7 +38,7 @@ async function writeGroup(role, org, key, data, rows) {
     const clean = rows.map(({ sys, ...x }) => { const y = { ...x }; if (!y.c) delete y.c; return y; });   // eslint-disable-line no-unused-vars
     await putSetting(role, org, g.store, { ...data.raw, [g.path]: clean });
   } else {
-    await putSetting(role, org, `opts:${key}`, rowsToCfg(rows, data.base, false, data.raw));
+    await putSetting(role, org, `opts:${key}`, rowsToCfg(rows, data.base, !!g.bases, data.raw));
     await loadAllOpts(org);
   }
 }
@@ -87,6 +87,8 @@ export function OptionColumn({ optKey, q: kw = '', wide }) {
   const { data } = useData(() => readGroup(org, optKey), [org, optKey, ver]);
   const [rows, setRows] = useState(null);
   const [nw, setNw] = useState('');
+  const baseList = g.bases ? g.bases() : null;
+  const [nb, setNb] = useState(() => baseList?.[baseList.length - 1]?.[0] ?? '');
   useEffect(() => { if (data && !g.ref) setRows(data.rows); }, [data, g.ref]);
   if (!data || (!g.ref && !rows)) return <div className="ob-col"><div className="ob-h"><b>{g.title}</b></div><div className="muted small">加载中…</div></div>;
   const commit = async (next, msg = '已保存，全站立即生效') => {
@@ -117,7 +119,7 @@ export function OptionColumn({ optKey, q: kw = '', wide }) {
   const add = () => {
     const t = (g.upper ? nw.toUpperCase() : nw).trim(); if (!t) return;
     if (rows.some((r) => r.l === t || String(r.v) === t)) return toast('已经有这个选项了', 'err');
-    const item = { v: t, l: t, c: '', sys: false, ...(g.attrs ? { dept: '', role: '' } : {}) };
+    const item = { v: g.bases ? `x:${t}` : t, l: t, c: '', sys: false, ...(g.bases ? { base: nb } : {}), ...(g.attrs ? { dept: '', role: '' } : {}) };
     const oth = g.note ? rows.findIndex((r) => r.v === '其他') : -1;   // 快捷原因：「其他」永远最后
     commit(oth >= 0 ? [...rows.slice(0, oth), item, ...rows.slice(oth)] : [...rows, item], `已加「${t}」`); setNw('');
   };
@@ -129,12 +131,14 @@ export function OptionColumn({ optKey, q: kw = '', wide }) {
         <div className={hit(r) ? '' : 'ob-dim'}>
           <Item r={r} upper={g.upper} locked={locked(r)} onChange={(patch) => commit(rows.map((x) => (x.v === r.v ? { ...x, ...patch } : x)))}
             onDelete={() => { if (rows.length <= 1) return toast('至少留一项', 'err'); commit(rows.filter((x) => x.v !== r.v), `已删掉「${r.l}」`); }}
-            extra={g.attrs && depts ? <PosAttrs r={r} org={org} onChange={(patch) => commit(rows.map((x) => (x.v === r.v ? { ...x, ...patch } : x)))} /> : null} />
+            extra={g.attrs && depts ? <PosAttrs r={r} org={org} onChange={(patch) => commit(rows.map((x) => (x.v === r.v ? { ...x, ...patch } : x)))} /> : (baseList && !r.sys ? <span className="ob-attr-t" style={{ cursor: 'default' }}>按「{baseList.find(([b]) => b === r.base)?.[1] || r.base}」处理</span> : null)} />
         </div>)} />
+      {g.fixed ? <div className="ob-used">这几项是系统按它算账 / 算库存的固定类别：能改名、排序、调色，不能新增；要加新的类别告诉 Claude。</div> : <>
       <div className="ob-add">
         <input className="in" placeholder="＋ 加一项，回车" value={nw} onChange={(e) => setNw(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} />
         {nw.trim() && <button type="button" className="btn sm primary" onClick={add}>加</button>}
       </div>
+      {baseList && nw.trim() && <label className="small muted ob-base">新的这项按哪一类处理<Choice flat={false} size="sm" value={nb} options={baseList} onChange={setNb} /></label>}</>}
       {used}{refs}
       {(g.kind === 'list' ? Array.isArray(data.raw[g.path]) : Object.keys(data.raw || {}).some((k) => k !== 'pick')) &&
         <button type="button" className="btn sm ghost ob-reset" onClick={() => commit(g.kind === 'list' ? g.defaults().map((x) => ({ ...x, c: '', sys: true })) : data.base.map(([v, l]) => ({ v, l, c: '', sys: true })), '已恢复成系统默认')}>恢复成系统默认</button>}
@@ -162,11 +166,16 @@ function PosAttrs({ r, org, onChange }) {
 export default function OptionBoard({ home, q: kw = '' }) {
   const groups = groupsOf(home);
   const k = kw.trim().toLowerCase();
-  const shown = k ? groups.filter((g) => g.title.toLowerCase().includes(k) || g.used.some((u) => u.toLowerCase().includes(k)) || (g.options?.() || g.defaults?.() || []).some((o) => String(norm(o)[1]).toLowerCase().includes(k))) : groups;
+  const shown = k ? groups.filter((g) => g.title.toLowerCase().includes(k) || g.used.some((u) => u.toLowerCase().includes(k)) || (g.defaults?.() || baseOf(g.key)).some((o) => String(norm(o)[1]).toLowerCase().includes(k))) : groups;
   return (
     <div className="ob-wrap">
       <div className="row small muted" style={{ gap: 6 }}>双击改名 · 点圆点改颜色 · 拖 ⋮⋮ 排序 · 改完自动保存
         <Info>改的是全站同一份：表单旁边的 ⚙ 打开的也是这里。删掉的选项以后不能再选，用过它的老记录照样显示原来的名字。标了「引用」的列，选项来自另一列，这里只勾哪几项能用。</Info></div>
-      {shown.length ? <div className="ob-board">{shown.map((g) => <OptionColumn key={g.key} optKey={g.key} q={kw} />)}</div> : <div className="empty">没有找到「{kw}」</div>}
+      {!shown.length && <div className="empty">没有找到「{kw}」</div>}
+      {[...new Set(shown.map((g) => g.sec || ''))].map((sec) => (
+        <div key={sec || '_'} className="ob-secwrap">
+          {sec && <div className="ob-sec">{sec}</div>}
+          <div className="ob-board">{shown.filter((g) => (g.sec || '') === sec).map((g) => <OptionColumn key={g.key} optKey={g.key} q={kw} />)}</div>
+        </div>))}
     </div>);
 }

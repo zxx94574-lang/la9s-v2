@@ -1,4 +1,5 @@
 import { showDone, DoneHost } from '../components/Done.jsx';
+import { baseOf, regBase } from '../lib/optRegistry.js';
 import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 // 采购单与到货 (Frank 2026-11-13, 待改 299 / 302) —— 国内初略版
 // 规矩: 采购单分「本地备货」「FOB」(一张单只有一种); 国内发了货才有采购单 → 没下推入库的部分一律算在途;
@@ -349,8 +350,8 @@ export function PoForm({ init, onClose }) {
           {f.purpose === 'fob' && !f.fob_project_id && <div className="field req"><label>FOB 客户（例 LA9S-KABRE）</label><input className="in" value={f.fob_customer || ''} onChange={(e) => set('fob_customer', e.target.value.toUpperCase())} /></div>}
           <div className="field req"><label>需求批次（例 20260715-KABRE海运-3批）</label><input className="in" value={f.batch_name} onChange={(e) => set('batch_name', e.target.value)} /></div>
           <div className="field req" style={{ gridColumn: '1 / -1' }}><label>入仓号（货代给的）</label><InboundInput value={String(f.inbound_no || '').split(/[\s/,;，；]+/).filter(Boolean)} onChange={(v) => set('inbound_no', v.join(' / '))} forwarder={f.forwarder} /></div>
-          <div className="field req"><label>运输方式</label><OptChoice optKey="po_mode" title="运输方式" value={f.mode} onChange={(v) => set('mode', v)} options={[['sea', '海运'], ['air', '空运'], ['other', '其他']]} /></div>
-          <div className="field req"><label>物流公司</label><OptChoice optKey="po_forwarder" title="物流公司" value={f.forwarder} onChange={(v) => set('forwarder', v)} options={[['赛时', '赛时'], ['捷道', '捷道'], ['古月', '古月'], ['速鹰', '速鹰'], ['利信达', '利信达']]} placeholder="选物流公司…" /></div>
+          <div className="field req"><label>运输方式</label><OptChoice optKey="po_mode" title="运输方式" value={f.mode} onChange={(v) => set('mode', v)} options={baseOf('po_mode')} /></div>
+          <div className="field req"><label>物流公司</label><OptChoice optKey="po_forwarder" title="物流公司" value={f.forwarder} onChange={(v) => set('forwarder', v)} options={baseOf('po_forwarder')} placeholder="选物流公司…" /></div>
           <div className="field req"><label>箱数</label><input className="in" inputMode="numeric" value={f.boxes} onChange={(e) => set('boxes', e.target.value.replace(/\D/g, ''))} /></div>
           <div className="field"><label>物流单号 / 提单号</label><input className="in mono" value={f.tracking_no} onChange={(e) => set('tracking_no', e.target.value.toUpperCase())} /></div>
           <div className="field half req"><label>发货日</label><DatePicker value={f.shipped_on} onChange={(v) => set('shipped_on', v)} /></div>
@@ -564,11 +565,11 @@ function LogiModal({ po, onClose }) {
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><button type="button" className="btn primary" disabled={busy || !ok} title={f.picked_on && !po.has_pickup ? '还差：先在「文件」里传提货单' : ''} onClick={save}>保存</button></>}>
       <div className="rgrid">
         <div className="rsec">发货</div>
-        <div className="field req"><label>运输方式</label><OptChoice optKey="po_mode" title="运输方式" value={f.mode} onChange={(v) => set('mode', v)} options={[['sea', '海运'], ['air', '空运'], ['other', '其他']]} /></div>
-        <div className="field req"><label>物流公司</label><OptChoice optKey="po_forwarder" title="物流公司" value={f.forwarder} onChange={(v) => set('forwarder', v)} options={[['赛时', '赛时'], ['捷道', '捷道'], ['古月', '古月'], ['速鹰', '速鹰'], ['利信达', '利信达']]} placeholder="选物流公司…" /></div>
+        <div className="field req"><label>运输方式</label><OptChoice optKey="po_mode" title="运输方式" value={f.mode} onChange={(v) => set('mode', v)} options={baseOf('po_mode')} /></div>
+        <div className="field req"><label>物流公司</label><OptChoice optKey="po_forwarder" title="物流公司" value={f.forwarder} onChange={(v) => set('forwarder', v)} options={baseOf('po_forwarder')} placeholder="选物流公司…" /></div>
         <div className="field half req"><label>发货日</label><DatePicker value={f.shipped_on} onChange={(v) => set('shipped_on', v)} /></div>
         <div className="field half"><label>预计到货{!po.eta && f.shipped_on && !f.eta ? '（不填 = 发货日 + 2 个半月）' : ''}</label><DatePicker value={f.eta} onChange={(v) => set('eta', v)} /></div>
-        {etaChanged && <div className="field req" style={{ gridColumn: '1 / -1' }}><label>为什么改预计到货</label><OptNote optKey="po_eta_reason" value={f.eta_reason} onChange={(v) => set('eta_reason', v)} options={['船晚开', '中转慢', '清关慢', '国内晚发', '货代没给准信']} placeholder="例：船晚开 5 天" /></div>}
+        {etaChanged && <div className="field req" style={{ gridColumn: '1 / -1' }}><label>为什么改预计到货</label><OptNote optKey="po_eta_reason" value={f.eta_reason} onChange={(v) => set('eta_reason', v)} options={baseOf('po_eta_reason')} placeholder="例：船晚开 5 天" /></div>}
         <div className="field req" style={{ gridColumn: '1 / -1' }}><label>入仓号</label><InboundInput value={f.warehouse_nos} onChange={(v) => set('warehouse_nos', v)} forwarder={f.forwarder} /></div>
         <div className="field half req"><label>箱数</label><input className="in" inputMode="numeric" value={f.boxes} onChange={(e) => set('boxes', e.target.value.replace(/\D/g, ''))} /></div>
         <div className="field half"><label>件数（片）</label><input className="in" inputMode="numeric" value={f.pcs} onChange={(e) => set('pcs', e.target.value.replace(/\D/g, ''))} /></div>
@@ -591,3 +592,6 @@ function LogiModal({ po, onClose }) {
     </Modal>
   );
 }
+// 选项设置页读默认值（11-28）
+regBase('po_doc_kind', () => DOC_KINDS);
+regBase('po_gap_results', () => GAP_RESULTS);

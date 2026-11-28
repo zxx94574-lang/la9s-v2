@@ -1,4 +1,5 @@
 import { submitDecision } from '../lib/decision.js';
+import { baseOf, regBase } from '../lib/optRegistry.js';
 import { RuleGear } from '../components/Rules.jsx';
 import { DocSettings } from '../components/SettingsPanels.jsx';
 import { showDone } from '../components/Done.jsx';
@@ -129,7 +130,7 @@ export function CancelModal({ deal, act, onClose }) {
           <button type="button" className="btn primary" onClick={() => act(['picked', 'ordered', 'confirmed', 'reviewed'].includes(deal.status) ? '已作废：请把已拿出的货放回原库位（预占已释放）' : '订单已作废，预占已释放（可在「订单总览 → 已作废」恢复）', `select app.cancel_deal($1,$2)`, [deal.id, reason]).then(onClose, () => {})}>确认作废</button></>}>
         <div className="stack">
           <div className="hint">作废不是删除：单子进「已作废」列表，随时可以恢复。</div>
-          <OptNote optKey="note_cancel" title="作废原因" options={['客户不要了', '价格谈不拢', '重复下单', '没货', '其他']} value={reason} onChange={setReason} />
+          <OptNote optKey="note_cancel" title="作废原因" options={baseOf('note_cancel')} value={reason} onChange={setReason} />
         </div>
       </Modal>
   );
@@ -1651,3 +1652,6 @@ function BinChoose({ l }) {
   return (<div className="tick-bins"><span className="small muted">从哪拿：</span>{String(l.bins).split(' · ').map((x) => { const c = x.split(' ')[0]; return (
     <button type="button" key={c} className={`chip sm ${l.pick_bin === c ? 'on' : ''}`} onClick={() => set(l.pick_bin === c ? null : c)}>{x}</button>); })}</div>);
 }
+// 选项设置页读默认值（11-28）
+regBase('disc_kind', () => Object.entries(DISC_KIND));
+regBase('disc_where', () => Object.entries(DISC_WHERE));

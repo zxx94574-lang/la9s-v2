@@ -2,6 +2,7 @@
 // 公户在员工名下 → 到账先挂在账户上（不动客户欠款），中方认领到客户才冲账；热线报「客户说付了」自动找对得上的到账。
 // 持有人最多压 500 万、最长 7 天（每个账户自己设）；交款要中方确认收到才算；支出超过审批线要中方批。
 import { RuleGear } from '../components/Rules.jsx';
+import { regBase } from '../lib/optRegistry.js';
 import { useControls, CONTROL_TABS, ControlPanels, ControlAlerts, RefundModal } from './CashControls.jsx';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
 import PublicHeld from '../components/PublicHeld.jsx';
@@ -408,3 +409,5 @@ function AccountModal({ acc, onClose }) {
     </Modal>
   );
 }
+// 选项设置页读默认值（11-28）
+regBase('expense_cats', () => EXPENSE_CATS);

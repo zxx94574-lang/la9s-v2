@@ -1,6 +1,7 @@
 // 客户档案 (Frank 2026-10-29): 一个客户一张档案 —— 正式 / 潜客 / 回收 都在这里.
 // 欠款上限和账期只预警不拦截 (THOMAS 这类有协议的大客户照常出货); 档位、正式编码、上限、账期只中方改.
 import { RuleGear } from '../components/Rules.jsx';
+import OptionBoard from '../components/OptionBoard.jsx';
 import { TaskModal, CustomerTasks } from '../components/Tasks.jsx';
 import { ContactsCard } from '../components/Contacts.jsx';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
@@ -21,7 +22,6 @@ import { DealLink, EmpLink } from '../components/Archives.jsx';
 import { money, qty, dDate, dt, today, friendlyError } from '../lib/format.js';
 import { SUPPLY, customerOptions, optLabel, selOpts } from '../lib/customerOptions.js';
 import { optTag } from '../lib/tableOptions.js';
-import { OptionRows } from '../components/TableOptions.jsx';
 
 // 页签 (Frank 11-08): 全部 / 本地备货客户 / FOB / 潜客回收 / 欠款预警 / 今天跟进 / 按销售员 (+ 中方的「选项设置」)
 const TABS = [['all', '全部'], ['local', '本地备货客户'], ['fob', 'FOB'], ['prospect', '潜客回收'], ['warn', '欠款预警'], ['follow', '今天跟进'], ['byowner', '按销售员'], ['opts', '选项设置']];
@@ -109,7 +109,7 @@ export default function Customers() {
       </div>
       <div className="card">
         <div className="tabs">{TABS.filter(([k]) => (price || !['warn', 'byowner'].includes(k)) && (k !== 'opts' || role === 'admin')).map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l} {!['byowner', 'opts'].includes(k) && <span className="muted small">{n(k)}</span>}</button>)}</div>
-        {tab === 'byowner' ? <ByOwner /> : tab === 'opts' ? <CustomerOptionsEditor opts={O} /> : <Grid id="customers2" table="customers" pin="name" columns={cols} rows={rows} onRowClick={(c) => setOpen(c.id)} empty="这一类没有客户" tools={seesPrice(role) ? <><span className="small muted">订单占比看</span><Choice size="sm" flat={false} width={120} value={shareK} onChange={setShareK} options={SHARE_RANGES} /><ShareNote /></> : null}
+        {tab === 'byowner' ? <ByOwner /> : tab === 'opts' ? <div className="card-b"><OptionBoard home="customers" /><div className="small muted" style={{ marginTop: 8 }}>城市、联系人身份几块都用，放在「选项设置 → 通用」。</div></div> : <Grid id="customers2" table="customers" pin="name" columns={cols} rows={rows} onRowClick={(c) => setOpen(c.id)} empty="这一类没有客户" tools={seesPrice(role) ? <><span className="small muted">订单占比看</span><Choice size="sm" flat={false} width={120} value={shareK} onChange={setShareK} options={SHARE_RANGES} /><ShareNote /></> : null}
           tools={canEdit ? <Info>点一下选格子，再点一下改，改完自动保存；行号旁 ↗ 打开客户抽屉。城市 / 店铺类型 / 跟进状态等选项在「选项设置」里加，表头漏斗按它筛。</Info> : null} />}
       </div>
       {open && <CustomerDrawer id={open} onClose={() => setOpen(null)} />}
@@ -393,29 +393,6 @@ function ByOwner() {
 }
 
 // 客户资料的选项 (Frank 11-08): 城市 / 市场 / 店铺类型 / 跟进状态 的可选项, 以及中方自己加的列 (例「种类」) —— 保存后客户表自动多一列单选, 表头漏斗能按它筛
-function CustomerOptionsEditor({ opts }) {
-  const { org, role, toast, refresh } = useApp();
-  const [o, setO] = useState(() => structuredClone(opts));
-  const upd = (path, v) => setO((x) => { const y = structuredClone(x); let t = y; for (let i = 0; i < path.length - 1; i++) t = t[path[i]]; t[path[path.length - 1]] = v; return y; });
-  const save = async (v) => {
-    try {
-      const clean = v && { ...v, cities: v.cities.filter((x) => x.v), markets: v.markets.filter((x) => x.v), shop_types: v.shop_types.filter((x) => x.v), follow_statuses: v.follow_statuses.filter((x) => x.v),   // 颜色 c 跟着存
-        custom: undefined };
-      await call(role, `select app.set_org_setting($1,'customer_options',$2)`, [org, clean ? JSON.stringify(clean) : null]); toast(clean ? '选项已保存，客户表已更新' : '已恢复默认'); refresh();
-    } catch (e) { toast(friendlyError(e), 'err'); }
-  };
-  const items = (list, get, setPath) => <OptionRows items={list} upper={!['cities', 'markets'].includes(setPath[0])} onChange={(v) => upd(setPath, v)} />;
-  const block = (key, title) => <div className="stack" style={{ gap: 6 }}><b>{title}</b>{items(o[key], null, [key])}</div>;
-  return (
-    <div className="stack" style={{ padding: 14, gap: 18 }}>
-      <div className="hint">左边代码（英文大写，存数据库 / 导出用），右边显示名。保存后客户表对应列的下拉就是这些项，表头漏斗按它们筛。供货方式只有「本地备货 / FOB」两种，不在这里改。要**自己加列**（例「种类」「来源」）：回到客户表，表格右上角的小 ⚙——每张表都有。</div>
-      <div className="grid2">{block('cities', '城市')}{block('markets', '市场')}{block('shop_types', '店铺类型')}{block('follow_statuses', '跟进状态')}</div>
-      <div className="row"><button type="button" className="btn" onClick={() => save(null)}>恢复默认</button><span className="grow" />
-        <button type="button" className="btn primary" onClick={() => save(o)}>保存选项</button></div>
-    </div>
-  );
-}
-
 function CustHistory({ c }) {
   const { org, role, tick } = useApp();
   const { data } = useData(() => call(role, `select * from app.archive_history($1,'customer',$2)`, [org, c.id]).catch(() => []), [org, role, c.id, tick]);

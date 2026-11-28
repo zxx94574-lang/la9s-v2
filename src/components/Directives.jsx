@@ -1,6 +1,7 @@
 // 227 ② (Frank 11-05 定稿): 中方指令 —— 中方给员工下达任务; 员工必须自己点「收到」、做完自己点「完成」并填结果 (文字 / 照片); 中方确认才关闭
 // 没点「收到」的: 打开系统强制弹窗; 超过 4 小时 (可设) 没点收到 → 在中方待办里标红, 由中方打电话
 import { RuleGear } from './Rules.jsx';
+import { regBase } from '../lib/optRegistry.js';
 import React, { useEffect, useState } from 'react';
 import { q, call } from '../db/client.js';
 import { USERS } from '../db/bootstrap.js';
@@ -537,3 +538,5 @@ export function DirBar() {
     </div>
   );
 }
+// 选项设置页读默认值（11-28）
+regBase('directive_type', () => DIR_TYPES);

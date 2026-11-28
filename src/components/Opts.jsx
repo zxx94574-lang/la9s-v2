@@ -11,7 +11,7 @@ import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Choice, Modal, SortList, OptionNote } from './ui.jsx';
 import { friendlyError } from '../lib/format.js';
-import { OPT_REG } from '../lib/optRegistry.js';
+import { OPT_REG, baseOf } from '../lib/optRegistry.js';
 import { OptionColumn } from './OptionBoard.jsx';
 
 export const norm = (o) => (Array.isArray(o) ? [o[0], String(o[1] ?? o[0]), o[2]] : (o && typeof o === 'object' ? [o.v ?? o.value ?? o.id, String(o.l ?? o.label ?? o.name ?? ''), o.hint] : [o, String(o)]));
@@ -30,7 +30,7 @@ export function applyOpts(base, cfg, current) {
 }
 // 引用（11-28）：ref 组的名字 / 颜色 / 顺序跟着被引用的那一组，自己只存 pick = 能用哪几项
 export function applyRef(optKey, ownCfg, parentCfg, current) {
-  const reg = OPT_REG[optKey]; const p = applyOpts(OPT_REG[reg.ref]?.options?.() || [], parentCfg, current);
+  const reg = OPT_REG[optKey]; const p = applyOpts(baseOf(reg.ref), parentCfg, current);
   const pick = new Set((ownCfg?.pick || reg.pick || p.all.map(([v]) => v)).map(String));
   const all = p.all.filter(([v]) => pick.has(String(v)) || String(v) === String(current ?? ''));
   return { cfg: { color: parentCfg?.color || {} }, all, shown: all.filter(([v]) => !p.hidden.has(String(v)) || String(v) === String(current ?? '')), hidden: p.hidden };
@@ -45,7 +45,7 @@ export function useOpts(optKey, base, current) {
     return { own: m[`opts:${optKey}`] || {}, par: m[`opts:${ref || optKey}`] || {} };
   }, [org, optKey, ref]);
   if (ref) return applyRef(optKey, data?.own, data?.par, current);
-  return { cfg: data?.own || {}, ...applyOpts(base ?? OPT_REG[optKey]?.options?.(), data?.own, current) };
+  return { cfg: data?.own || {}, ...applyOpts(base ?? baseOf(optKey), data?.own, current) };
 }
 // 后台按固定类别处理的选项组: 自己加的选项 → { base: 后台认的类别, label: 名字 }; 系统自带的 → { base: 值, label: null }
 export function optBase(cfg, value) {
@@ -69,7 +69,7 @@ export function optName(optKey, value, baseMap, label) {
   if (value == null || value === '') return '';
   const k = OPT_REG[optKey]?.ref || optKey;
   const c = ALL_OPTS[k] || {};
-  if (!baseMap && OPT_REG[k]?.options) baseMap = Object.fromEntries(OPT_REG[k].options().map(norm).map(([v, l]) => [v, l]));
+  if (!baseMap && OPT_REG[k]) baseMap = Object.fromEntries(baseOf(k).map(norm).map(([v, l]) => [v, l]));
   if (c.rename?.[value]) return c.rename[value];
   const x = (c.extra || []).map(normExtra).find((e) => e.v === value); if (x) return x.l;
   return (baseMap && baseMap[value]) || String(value).replace(/^x:/, '');
@@ -157,7 +157,8 @@ export function OptGear({ optKey, options, title, bases, data, fixed }) {
 }
 
 // 快捷原因 (一排词 + 「其他」手填): 带 ⚙ 的版本. 「其他」永远在最后、不能删 (它是手填的入口).
-export function OptNote({ optKey, title, options, value, onChange, placeholder }) {
+export function OptNote({ optKey, title, options: opt0, value, onChange, placeholder }) {
+  const options = opt0 || baseOf(optKey);
   const { list } = useOptList(optKey, options);
   const names = list.map(([, l]) => l); const rest = names.filter((x) => x !== '其他');
   return (<div className="optnote"><OptionNote options={[...rest, ...(options.includes('其他') ? ['其他'] : [])]} value={value} onChange={onChange} placeholder={placeholder} /><OptGear optKey={optKey} options={options} title={title} /></div>);

@@ -1,6 +1,7 @@
 // 客户档案 / 热线回访 / 销售拜访 shared pieces (Frank 2026-10-29).
 // 回访结果用选项不手打; 下次跟进日期一键 (明天 / 3 天 / 一周 / 自选); 新潜客自动临时编码.
 import React, { useState } from 'react';
+import { regBase } from '../lib/optRegistry.js';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from './Opts.jsx';
 import { call, q } from '../db/client.js';
 import { useApp, Modal, Pill, PhotoInput, DatePicker , PhoneInput, Choice } from './ui.jsx';
@@ -91,3 +92,6 @@ export function ProspectModal({ onClose, onDone, kind = 'spare' }) {
     </Modal>
   );
 }
+// 选项设置页读默认值（11-28）
+regBase('call_results', () => CALL_RESULTS);
+regBase('visit_results', () => VISIT_RESULTS);

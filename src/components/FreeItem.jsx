@@ -1,6 +1,7 @@
 // 389 (Frank 11-18): 「没编码的新货」补全 —— 先种类 → 型号 (可选可输、自动大写、有相似的提示) → 区分 / 级别 (HD / QHD / OLED / 原装…) → 数量 → 备注.
 // 同一个机型不同质量是两种货, 所以区分 / 级别单独一格. FOB / 采购 / 询单共用. onAdd({ category_id, category, model, grade, qty, note })
 import React, { useMemo, useState } from 'react';
+import { regBase } from '../lib/optRegistry.js';
 import { Choice, MoneyIn, useApp } from './ui.jsx';
 import { OptChoice } from './Opts.jsx';
 
@@ -32,3 +33,5 @@ export default function FreeItem({ categories, catalog, onAdd, label = '没编�
       {like.length > 0 && <div className="small amber-t" style={{ marginTop: 4 }}>已经有相似的编码：{like.join('、')} —— 是同一种货就直接在上面选，不要当新货。</div>}
     </div>);
 }
+// 选项设置页读默认值（11-28）
+regBase('item_grades', () => GRADES);

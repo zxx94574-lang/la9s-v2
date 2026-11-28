@@ -2,6 +2,7 @@
 //   等安排找货 → 打勾找货 + 照片 → 销售单 -O2 → 客户确认 (截图) → 复检 → 并进原单一起出库.
 // 原单已经确认 / 复检好的那批不动; 货一发出去就不能再开新的追加批.
 import React, { useMemo, useState } from 'react';
+import { baseOf } from '../lib/optRegistry.js';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Modal, PhotoInput, Pill, Info, Assumed, FRow } from './ui.jsx';
 import { OptChoice, OptNote, OptGear, useOptList, optName } from './Opts.jsx';
@@ -181,7 +182,7 @@ function Review({ addon, employees }) {
             <span className="num">{qty(c(l))}<small>/ {qty(l.qty_picked)}</small></span>
             <button type="button" className="step" disabled={c(l) >= N(l.qty_picked)} onClick={() => setCnt({ ...cnt, [l.id]: c(l) + 1 })} aria-label="多一片">＋</button>
           </span>
-          {c(l) < N(l.qty_picked) && <div className="tick-why"><span className="small">实点少 {qty(N(l.qty_picked) - c(l))} 片，原因：</span><OptNote optKey="note_review_less" title="少发的原因" options={['货损', '数错了', '型号拿错']} value={why[l.id] || ''} onChange={(v) => setWhy({ ...why, [l.id]: v })} err={errs && !why[l.id]} /></div>}
+          {c(l) < N(l.qty_picked) && <div className="tick-why"><span className="small">实点少 {qty(N(l.qty_picked) - c(l))} 片，原因：</span><OptNote optKey="note_review_less" title="少发的原因" options={baseOf('note_review_less')} value={why[l.id] || ''} onChange={(v) => setWhy({ ...why, [l.id]: v })} err={errs && !why[l.id]} /></div>}
         </div>))}
       <div className="rgrid">
         <div><PeoplePick step="review" label={<>复核人 <Info>复核人不能是找货的那个人（中方除外）。</Info></>} employees={role === 'admin' ? employees : employees.filter((e) => e.id !== addon.picker_employee_id)} value={reviewer} onChange={setReviewer} errs={errs} /></div>
@@ -237,7 +238,7 @@ export function AddonPanel({ deal, addon, employees }) {
         <AddonLines addon={addon} price={price} cur={deal.currency} />
       </div>}
       {cancel && <Modal title={`取消追加批 3.${addon.no}？`} risk="yellow" onClose={() => setCancel(false)} footer={<><button type="button" className="btn" onClick={() => setCancel(false)}>不取消</button><button type="button" className="btn danger" onClick={doCancel}>取消这一批</button></>}>
-        <div className="stack"><div className="field req"><label>为什么取消</label><OptNote optKey="note_addon_cancel" title="取消追加批的原因" options={['客户不要了', '没货', '加错了', '改成开新单']} value={reason} onChange={setReason} err={!reason.trim()} /></div>
+        <div className="stack"><div className="field req"><label>为什么取消</label><OptNote optKey="note_addon_cancel" title="取消追加批的原因" options={baseOf('note_addon_cancel')} value={reason} onChange={setReason} err={!reason.trim()} /></div>
           <div className="hint">取消以后预占的库存放掉，这一批留记录不删。原单不受影响。</div></div>
       </Modal>}
     </div>);

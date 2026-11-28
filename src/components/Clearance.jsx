@@ -2,6 +2,7 @@
 // 生效期间: ① 自动成为适用客户的单价 (比档位价低才生效, 规则在 0059 tier_price)  ② 卖价不低于它的行不被「会亏」拦住 (0052).
 // 卖价不低于生效清仓价的行, 不再被「会亏」拦住 (规则在 0052).
 import { submitDecision } from '../lib/decision.js';
+import { regBase } from '../lib/optRegistry.js';
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Modal, FRow, Info, Choice, DatePicker, Pill, Assumed, MoneyIn, TierPill } from './ui.jsx';
@@ -77,3 +78,5 @@ export default function ClearanceCard({ products }) {
       </Modal>}
     </div>);
 }
+// 选项设置页读默认值（11-28）
+regBase('promo_names', () => NAMES);

@@ -2,6 +2,7 @@
 // 事前 LossGate: 有卖价低于成本的行 → 这张单推不下去; 员工只看到「这几行价格要中方批」(不出成本), 中方看到每行亏多少 + 批准 (必须写原因).
 // 事后 LossReview: 已出库整单亏的 → 中方必须选结论 + 写原因才能关; LossTodo: 待办最顶上的数字块.
 import { OptChoice } from './Opts.jsx';
+import { regBase } from '../lib/optRegistry.js';
 import React, { useState } from 'react';
 import { q, call } from '../db/client.js';
 import { useApp, useData, Choice, Pill, Assumed } from './ui.jsx';
@@ -101,3 +102,6 @@ export function LossTodo() {
         </div>))}
     </div>);
 }
+// 选项设置页读默认值（11-28）
+regBase('loss_conclusions', () => LOSS_CONCLUSIONS);
+regBase('loss_ok_reasons', () => WHY_OK);

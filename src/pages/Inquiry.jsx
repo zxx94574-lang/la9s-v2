@@ -3,6 +3,7 @@
 // 这个页面: 员工建询单 (销售只列自己名下的客户) + 询单列表 (中方: 转成报价; 大家: 标已联系 / 没成交).
 // 游客和客户账号用的是同一个询单表, 入口在 Guest.jsx / Portal.jsx.
 import { hasAny } from '../lib/domain.js';
+import { regBase } from '../lib/optRegistry.js';
 import { RuleGear } from '../components/Rules.jsx';
 import React, { useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
@@ -211,3 +212,8 @@ export function InquiryTodo() {
       </div> : <div className="card-b small muted">没有等处理的询单。</div>}
     </div>);
 }
+// 选项设置页读默认值（11-28）
+regBase('inq_invalid', () => INVALID);
+regBase('inq_lost', () => LOST);
+regBase('inq_wave', () => WAVE);
+regBase('inq_yango', () => YANGO);

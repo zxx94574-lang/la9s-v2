@@ -1,5 +1,6 @@
 // 销售拜访 (Frank 2026-10-29): 照飞书 Fiche de visite 的字段. 新店现场建潜客 (临时编码), 门店照片必拍.
 import { CustLink } from '../components/Archives.jsx';
+import { baseOf } from '../lib/optRegistry.js';
 import React, { useEffect, useState } from 'react';
 import { takeWorkCust } from '../lib/dirWork.js';
 import { OptChoice, OptNote, OptGear, optName, optSubmit } from '../components/Opts.jsx';
@@ -104,11 +105,11 @@ function VisitModal({ onClose, initCust }) {
         <div className="grid2">
           <div className="field req"><label>门店照片</label><PhotoInput value={f.photo} onChange={set('photo')} label="拍门店" invalid={tried && !f.photo} /></div>
           <div className="field"><label>位置</label><div className="row" style={{ gap: 6 }}><input className="in" value={f.location} onChange={set('location')} placeholder="地标 / 坐标" /><button type="button" className="btn sm" onClick={locate}>⌖ 定位</button></div></div>
-          <div className="field"><label>主营</label><OptChoice optKey="visit_activity" title="店铺做什么" value={f.activity} onChange={(v) => set('activity')(v)} options={['Réparation', 'Vente détail', 'Grossiste', 'Recyclage']} empty="—" /></div>
+          <div className="field"><label>主营</label><OptChoice optKey="visit_activity" title="店铺做什么" value={f.activity} onChange={(v) => set('activity')(v)} options={baseOf('visit_activity')} empty="—" /></div>
           <div className="field"><label>想要的货</label><input className="in" value={f.products_wanted} onChange={set('products_wanted')} placeholder="LCD TECNO / BATTERY …" /></div>
           <div className="field"><label>月用量（件）</label><MoneyIn className="in" inputMode="numeric" value={f.monthly_qty} onChange={(e) => set('monthly_qty')(e.target.value.replace(/\D/g, ''))} style={{ maxWidth: 120 }} /></div>
           <div className="field"><label>现在从哪买</label><input className="in" value={f.buys_from} onChange={set('buys_from')} placeholder="Adjamé / 某某批发" /></div>
-          <div className="field"><label>怎么拿货</label><OptChoice optKey="visit_transport" title="怎么拿货" value={f.transport} onChange={(v) => set('transport')(v)} options={['Yango moto', 'Taxi', 'Vient lui-même', 'Livreur']} empty="—" /></div>
+          <div className="field"><label>怎么拿货</label><OptChoice optKey="visit_transport" title="怎么拿货" value={f.transport} onChange={(v) => set('transport')(v)} options={baseOf('visit_transport')} empty="—" /></div>
           <div className="field"><label>附近同行</label><input className="in" value={f.nearby_suppliers} onChange={set('nearby_suppliers')} /></div>
         </div>
         <div className="field req"><label>结果</label><OptChoice optKey="visit_results" title="拜访结果" value={f.result} onChange={(v) => set('result')(v)} options={VISIT_RESULTS} /></div>
