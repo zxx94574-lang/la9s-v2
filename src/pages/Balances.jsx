@@ -159,34 +159,37 @@ function CustomerReturnModal({ customerId, name, onClose }) {
       toast(`已提交 ${n} 张退货单（批次 ${batch}），等中方审批`); refresh(); onClose();
     } catch (e) { toast(`${n ? `已提交 ${n} 张，` : ''}${friendlyError(e)}`, 'err'); refresh(); } finally { setBusy(false); }
   };
+  const missing = [!photo && '实物照片', !reason?.trim() && '具体原因', type === 'other' && !typeNote.trim() && '「其他」是什么', !prod && '型号', prod && !(sum > 0) && '退货数量', rows.some((l) => N(split[l.line_id]) > maxOf(l)) && '数量超过可退'].filter(Boolean).join('、');
+  const pickProd = (v) => { setProd(v); const rs = (data || []).filter((l) => l.product_id === v); auto(total, rs); };
   return (
     <Modal wide title={`按客户退货 · ${name}`} onClose={onClose}
-      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={busy} onClick={submit}>提交退货申请（同一批次）</button></>}>
+      footer={<><button type="button" className="btn" onClick={onClose}>取消</button><button type="button" className="btn primary" disabled={busy || !!missing} title={missing ? `还差：${missing}` : ''} onClick={submit}>提交退货申请（同一批次）</button></>}>
       {!data ? <div className="empty">加载中…</div> : (
         <div className="stack">
-          <div className="hint">客户一次退的货分散在几张单里：选型号和总数量，系统按最近出库的单先分摊（可改），一次生成同一批次的几张退货单，各自挂原单原行。</div>
-          <div className="row" style={{ gap: 14, alignItems: 'flex-end' }}>
-            <div className="field req"><label>型号</label>
-              <select className="in" value={prod} onChange={(e) => { setProd(e.target.value); const rs = (data || []).filter((l) => l.product_id === e.target.value); auto(total, rs); }}>
-                <option value="">请选择</option>{products.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-            <div className="field req"><label>退货总数量</label><MoneyIn className="in" inputMode="numeric" style={{ width: 120 }} value={total} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setTotal(v); auto(v); }} /></div>
-            {prod && <span className="hint">该客户这个型号最多可退 {cap} 件</span>}
-          </div>
-          {prod && <Grid id="cret-split" noTools rowKey={(l) => l.line_id} rows={rows} columns={[
-            { key: 'biz_no', label: '订单', w: 150, render: (l) => <DealLink id={l.deal_id} no={l.biz_no} /> },
-            { key: 'last_shipped', label: '出库日期', w: 100, render: (l) => dDate(l.last_shipped) },
-            { key: 'qty_shipped', label: '出库数量', w: 80 },
-            { key: 'unit_price', label: '单价', w: 90, render: (l) => money(l.unit_price, l.currency) },
-            { key: 'rq', label: '本次退货数量', w: 120, edit: (l) => ({ type: 'number', value: split[l.line_id] || '', placeholder: '0', invalid: N(split[l.line_id]) > maxOf(l),
-              hint: N(split[l.line_id]) > maxOf(l) ? <span className="red-t">最多可退 {maxOf(l)}</span> : null, onChange: (v) => setSplit({ ...split, [l.line_id]: v.replace(/\D/g, '') }) }) },
-          ]} foot={() => ({ biz_no: '合计', rq: `${qty(sum)} 件${N(total) && sum !== N(total) ? `（总数 ${total}）` : ''}` })} />}
-          <div className="row" style={{ gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div className="field req"><label>收到退货的时间</label><DateTimeIn value={at} onChange={setAt} /></div>
-            <div className="field req"><label>实物照片（不是盒子）</label><PhotoInput value={photo} onChange={setPhoto} invalid={errs && !photo} label="拍退回的货" /></div>
-          </div>
+          {/* 11-28：和「按原单退货」同一套顺序 ① 收到 → ② 为什么 → ③ 退多少 */}
+          <div className="pd-sec"><b>① 收到退货</b> <Info>收到货才做退货单；没收到不做</Info>
+            <div className="row" style={{ gap: 14, marginTop: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div className="field req"><label>收到退货的时间</label><DateTimeIn value={at} onChange={setAt} /></div>
+              <div className="field req"><label>实物照片（不是盒子；少量要看得清几片，多量拍整体）</label><PhotoInput value={photo} onChange={setPhoto} invalid={errs && !photo} label="拍退回的货" /></div>
+            </div></div>
+          <b>② 退的什么、为什么</b>
           <div className="field req"><label>退货类型</label><div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><OptChoice optKey="return_types" title="退货类型" bases={RETURN_BASES} value={type} onChange={(k) => setType(k)} options={Object.entries(RETURN_REASONS)} />
             {type === 'other' && <input className={`in ${errs && !typeNote.trim() ? 'invalid' : ''}`} style={{ width: 260 }} autoFocus value={typeNote} onChange={(e) => setTypeNote(e.target.value)} placeholder="「其他」是什么？（必填）" />}</div></div>
           <div className="field req"><label>具体原因</label><OptNote optKey="note_return" title="退货的具体原因" options={NOTE_OPTIONS.return} value={reason} onChange={setReason} /></div>
+          <div className="row" style={{ gap: 8 }}><b>③ 退多少</b><Info>客户一次退的货分散在几张单里：选型号和总数量，系统按最近出库的单先分摊（可以改），一次生成同一批次的几张退货单，各自挂原单原行。批准后货先进待检仓，好货回原仓、坏货进报废仓。</Info></div>
+          <div className="row" style={{ gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div className="field req"><label>型号</label><Choice flat={false} value={prod} onChange={pickProd} options={products} placeholder="选这个客户买过的型号…" /></div>
+            <div className="field req"><label>退货总数量{prod ? `（最多 ${cap}）` : ''}</label><MoneyIn className="in" inputMode="numeric" style={{ width: 120 }} value={total} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setTotal(v); auto(v); }} /></div>
+            {prod && cap > 0 && <button type="button" className="btn sm" onClick={() => { setTotal(String(cap)); auto(cap); }}>全部退回</button>}
+          </div>
+          {prod && <Grid id="cret-split" noTools rowKey={(l) => l.line_id} rows={rows} columns={[
+            { key: 'biz_no', label: '订单', w: 150, render: (l) => <DealLink id={l.deal_id} no={l.biz_no} /> },
+            { key: 'rq', label: '本次退货数量', w: 120, edit: (l) => ({ type: 'number', value: split[l.line_id] || '', placeholder: '0', invalid: N(split[l.line_id]) > maxOf(l),
+              hint: N(split[l.line_id]) > maxOf(l) ? <span className="red-t">最多可退 {maxOf(l)}</span> : null, onChange: (v) => setSplit({ ...split, [l.line_id]: v.replace(/\D/g, '') }) }) },
+            { key: 'last_shipped', label: '出库日期', w: 100, render: (l) => dDate(l.last_shipped) },
+            { key: 'qty_shipped', label: '出库数量', w: 80 },
+            { key: 'unit_price', label: '单价', w: 90, render: (l) => money(l.unit_price, l.currency) },
+          ]} foot={() => ({ biz_no: '合计', rq: `${qty(sum)} 件${N(total) && sum !== N(total) ? `（总数 ${total}）` : ''}` })} />}
         </div>
       )}
     </Modal>

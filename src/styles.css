@@ -820,7 +820,8 @@ td.cell-price-low { background: #fdf0f0 !important; }
 
 /* 199 收款表单: 两列网格, 标签右对齐 */
 .rgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 24px; max-width: 980px; }
-@media (max-width: 900px) { .rgrid { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .rgrid > * { grid-column: 1 / -1 !important; } .rgrid > .half { grid-column: auto !important; align-self: end; } .rgrid { gap: 6px 12px; } }
+@media (max-width: 300px) { .rgrid > .half { grid-column: 1 / -1 !important; } }
 
 /* 看板重做 (11-09 总盘点): 四个数 + 要你处理的 + 趋势; 其余收进「更多」 */
 .kpis.k4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -2462,3 +2463,12 @@ body { touch-action: manipulation; }
 .code-chip button:hover { opacity: 1; }
 .fmt-grid { display: grid; grid-template-columns: 80px 80px 70px 1fr auto auto; gap: 6px 8px; align-items: center; }
 @media (max-width: 640px) { .fmt-grid { grid-template-columns: 1fr 1fr 1fr; } }
+
+/* 表单分段（11-28）：.rgrid 里一行小标题 + 细线，不套框；.r3 = 一排三个短格子（到港 / 清关 / 提货） */
+.rgrid { row-gap: 12px; }
+.rgrid > .rsec { grid-column: 1 / -1 !important; font-weight: 700; font-size: 13px; color: var(--brand); padding-top: 12px; margin-top: 2px; border-top: 1px solid var(--line-2); display: flex; align-items: baseline; gap: 8px; }
+.rgrid > .rsec:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.rgrid > .rsec .muted { font-weight: 400; }
+.rgrid > .r3 { grid-column: 1 / -1 !important; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+/* 时间框（11-28）：浏览器自带 time 框按内容撑开，AM / PM 不被截 */
+input[type="time"].in { width: auto !important; min-width: 112px; flex: none; }

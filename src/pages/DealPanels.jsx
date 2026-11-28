@@ -1210,6 +1210,15 @@ export function ReturnPanel({ deal, lines, returns, act, role }) {
   const pendingQty = (l) => returns.filter((r) => r.status === 'requested').flatMap((r) => r.lines).filter((x) => x.deal_line_id === l.id).reduce((a, x) => a + N(x.qty), 0);
   const maxOf = (l) => N(l.qty_shipped) - N(l.qty_returned) - pendingQty(l);
   const returnable = lines.filter((l) => maxOf(l) > 0);
+  const retMissing = (f) => {
+    const miss = [];
+    if (!f.photo) miss.push('实物照片');
+    if (!f.reason) miss.push('具体原因');
+    if (f.type === 'other' && !f.typeNote?.trim()) miss.push('「其他」是什么');
+    if (!returnable.some((l) => N(f.q[l.id]) > 0)) miss.push('退货数量');
+    else if (returnable.some((l) => N(f.q[l.id]) > maxOf(l))) miss.push('数量超过可退');
+    return miss.join('、');
+  };
   return (
     <>
       <div className="card">
@@ -1221,7 +1230,7 @@ export function ReturnPanel({ deal, lines, returns, act, role }) {
       {form && (
         <Modal wide title={`按原单退货 · ${deal.biz_no}`} onClose={() => setForm(null)}
           footer={<><button type="button" className="btn" onClick={() => setForm(null)}>取消</button>
-            <button type="button" className="btn primary" onClick={async () => {
+            <button type="button" className="btn primary" disabled={!!retMissing(form)} title={retMissing(form) ? `还差：${retMissing(form)}` : ''} onClick={async () => {
               const ls = Object.entries(form.q).filter(([, v]) => N(v) > 0).map(([line_id, v]) => ({ line_id, qty: N(v) }));
               if (!ls.length) return toast('请填写至少一行退货数量', 'err');
               const over = returnable.find((l) => N(form.q[l.id]) > maxOf(l));
@@ -1232,24 +1241,26 @@ export function ReturnPanel({ deal, lines, returns, act, role }) {
               const ty = optSubmit('return_types', form.type); await act('退货已登记，等中方审批', `select app.set_opt_label('return_reason', app.request_return($1,$2,$3,$4,null,$5,$6), $7)`, [deal.id, ty.base, form.type === 'other' ? `其他：${form.typeNote.trim()} · ${form.reason}` : form.reason, JSON.stringify(ls), new Date(form.at).toISOString(), form.photo, ty.label]).then(() => { showDone({ kind: 'ret', deal: deal.id }); setForm(null); }, () => {});
             }}>提交退货申请</button></>}>
           <div className="stack">
-            <div className="card card-b" style={{ background: 'var(--amber-bg)' }}><b>① 收到退货</b> <span className="small muted">收到货才做退货单；没收到不做</span>
+            <div className="pd-sec"><b>① 收到退货</b> <Info>收到货才做退货单；没收到不做</Info>
               <div className="row" style={{ gap: 14, marginTop: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <div className="field req"><label>收到退货的时间</label><DateTimeIn value={form.at} onChange={(v) => setForm({ ...form, at: v })} /></div>
                 <div className="field req"><label>实物照片（不是盒子；少量要看得清几片，多量拍整体）</label><PhotoInput value={form.photo} onChange={(v) => setForm({ ...form, photo: v })} invalid={form.errs && !form.photo} label="拍退回的货" /></div>
               </div></div>
-            <b>② 退的什么、为什么</b>
+            <div className="row" style={{ gap: 8 }}><b>② 退的什么、为什么</b><Info>批准后：货先进待检仓，客户总账冲减退货金额（已付过的转成预付款）。检验后好货回原仓，坏货进报废仓。不做换货：要新货请另开新单。</Info></div>
             <div className="field req"><label>退货类型</label>
               <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><OptChoice optKey="return_types" title="退货类型" bases={RETURN_BASES} value={form.type} onChange={(k) => setForm({ ...form, type: k })} options={Object.entries(RETURN_REASONS)} />
                 {form.type === 'other' && <input className={`in ${form.errs && !form.typeNote?.trim() ? 'invalid' : ''}`} style={{ width: 260 }} autoFocus value={form.typeNote || ''} onChange={(e) => setForm({ ...form, typeNote: e.target.value })} placeholder="「其他」是什么？（必填）" />}</div></div>
             <div className="field req"><label>具体原因</label><OptNote optKey="note_return" title="退货的具体原因" options={NOTE_OPTIONS.return} value={form.reason} onChange={(v) => setForm({ ...form, reason: v })} /></div>
+            <div className="row" style={{ gap: 8 }}><b>③ 退多少</b><span className="grow" />
+              <button type="button" className="btn sm" onClick={() => setForm({ ...form, q: Object.fromEntries(returnable.map((l) => [l.id, String(maxOf(l))])) })}>全部退回</button>
+              {Object.values(form.q).some((v) => N(v) > 0) && <button type="button" className="btn sm" onClick={() => setForm({ ...form, q: {} })}>清空</button>}</div>
             <Grid id="return-form" noTools columns={[
               { key: 'code', label: '编码', w: 60 }, { key: 'category', label: '种类', w: 90 }, { key: 'model', label: '型号', w: 100, render: (l) => <ModelLink id={l.product_id} model={l.model} /> },
               { key: 'qty_shipped', label: '出库数量', w: 70, render: (l) => qty(l.qty_shipped) },
               { key: 'rq', label: '本次退货数量', w: 120, edit: (l) => ({ type: 'number', value: form.q[l.id] || '', placeholder: '0',
                 invalid: N(form.q[l.id]) > maxOf(l), hint: N(form.q[l.id]) > maxOf(l) ? <span className="red-t">最多可退 {maxOf(l)}</span> : (maxOf(l) < N(l.qty_shipped) ? `最多可退 ${maxOf(l)}` : null),
                 onChange: (v) => setForm({ ...form, q: { ...form.q, [l.id]: v.replace(/\D/g, '') } }) }) },
-            ]} rows={returnable} />
-            <div className="hint">批准后：货先进待检仓、客户总账冲减退货金额（已付过的转成预付款）。检验后好货回原仓，坏货进报废仓。不做换货：要新货请另开新单。</div>
+            ]} rows={returnable} foot={(rows) => ({ code: '合计', rq: `${qty(rows.reduce((a, l) => a + N(form.q[l.id]), 0))} 件` })} />
           </div>
         </Modal>
       )}

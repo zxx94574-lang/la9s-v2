@@ -348,13 +348,13 @@ export function PoForm({ init, onClose }) {
           {f.purpose === 'fob' && <div className="field"><label>FOB 项目（系统里有就选）</label><Choice value={f.fob_project_id} onChange={(v) => set('fob_project_id', v)} options={(fobs || []).map((x) => [x.id, x.fob_no])} empty="— 不挂项目 —" flat={false} /></div>}
           {f.purpose === 'fob' && !f.fob_project_id && <div className="field req"><label>FOB 客户（例 LA9S-KABRE）</label><input className="in" value={f.fob_customer || ''} onChange={(e) => set('fob_customer', e.target.value.toUpperCase())} /></div>}
           <div className="field req"><label>需求批次（例 20260715-KABRE海运-3批）</label><input className="in" value={f.batch_name} onChange={(e) => set('batch_name', e.target.value)} /></div>
-          <div className="field req" style={{ gridColumn: 'span 2' }}><label>入仓号（货代给的）</label><InboundInput value={String(f.inbound_no || '').split(/[\s/,;，；]+/).filter(Boolean)} onChange={(v) => set('inbound_no', v.join(' / '))} forwarder={f.forwarder} /></div>
+          <div className="field req" style={{ gridColumn: '1 / -1' }}><label>入仓号（货代给的）</label><InboundInput value={String(f.inbound_no || '').split(/[\s/,;，；]+/).filter(Boolean)} onChange={(v) => set('inbound_no', v.join(' / '))} forwarder={f.forwarder} /></div>
           <div className="field req"><label>运输方式</label><OptChoice optKey="po_mode" title="运输方式" value={f.mode} onChange={(v) => set('mode', v)} options={[['sea', '海运'], ['air', '空运'], ['other', '其他']]} /></div>
           <div className="field req"><label>物流公司</label><OptChoice optKey="po_forwarder" title="物流公司" value={f.forwarder} onChange={(v) => set('forwarder', v)} options={[['赛时', '赛时'], ['捷道', '捷道'], ['古月', '古月'], ['速鹰', '速鹰'], ['利信达', '利信达']]} placeholder="选物流公司…" /></div>
           <div className="field req"><label>箱数</label><input className="in" inputMode="numeric" value={f.boxes} onChange={(e) => set('boxes', e.target.value.replace(/\D/g, ''))} /></div>
           <div className="field"><label>物流单号 / 提单号</label><input className="in mono" value={f.tracking_no} onChange={(e) => set('tracking_no', e.target.value.toUpperCase())} /></div>
-          <div className="field req"><label>发货日</label><DatePicker value={f.shipped_on} onChange={(v) => set('shipped_on', v)} /></div>
-          <div className="field"><label>预计到货（不填 = 发货日 + 2 个半月）</label><DatePicker value={f.eta} onChange={(v) => set('eta', v)} /></div>
+          <div className="field half req"><label>发货日</label><DatePicker value={f.shipped_on} onChange={(v) => set('shipped_on', v)} /></div>
+          <div className="field half"><label>预计到货（不填 = 发货日 + 2 个半月）</label><DatePicker value={f.eta} onChange={(v) => set('eta', v)} /></div>
           <div className="field"><label>供应商</label><input className="in" value={f.supplier} onChange={(e) => set('supplier', e.target.value)} /></div>
         </div>
         <Grid id="po-form-lines" noTools rows={lines.map((l, i) => ({ ...l, _i: i }))} rowKey={(l) => l._i} columns={[
@@ -563,24 +563,29 @@ function LogiModal({ po, onClose }) {
     <Modal wide title={`物流信息：${po.po_no}`} onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>取消</button><span className="grow" /><button type="button" className="btn primary" disabled={busy || !ok} title={f.picked_on && !po.has_pickup ? '还差：先在「文件」里传提货单' : ''} onClick={save}>保存</button></>}>
       <div className="rgrid">
+        <div className="rsec">发货</div>
         <div className="field req"><label>运输方式</label><OptChoice optKey="po_mode" title="运输方式" value={f.mode} onChange={(v) => set('mode', v)} options={[['sea', '海运'], ['air', '空运'], ['other', '其他']]} /></div>
         <div className="field req"><label>物流公司</label><OptChoice optKey="po_forwarder" title="物流公司" value={f.forwarder} onChange={(v) => set('forwarder', v)} options={[['赛时', '赛时'], ['捷道', '捷道'], ['古月', '古月'], ['速鹰', '速鹰'], ['利信达', '利信达']]} placeholder="选物流公司…" /></div>
-        <div className="field req"><label>发货日</label><DatePicker value={f.shipped_on} onChange={(v) => set('shipped_on', v)} /></div>
-        <div className="field"><label>预计到货{!po.eta && f.shipped_on && !f.eta ? '（不填 = 发货日 + 2 个半月）' : ''}</label><DatePicker value={f.eta} onChange={(v) => set('eta', v)} /></div>
+        <div className="field half req"><label>发货日</label><DatePicker value={f.shipped_on} onChange={(v) => set('shipped_on', v)} /></div>
+        <div className="field half"><label>预计到货{!po.eta && f.shipped_on && !f.eta ? '（不填 = 发货日 + 2 个半月）' : ''}</label><DatePicker value={f.eta} onChange={(v) => set('eta', v)} /></div>
         {etaChanged && <div className="field req" style={{ gridColumn: '1 / -1' }}><label>为什么改预计到货</label><OptNote optKey="po_eta_reason" value={f.eta_reason} onChange={(v) => set('eta_reason', v)} options={['船晚开', '中转慢', '清关慢', '国内晚发', '货代没给准信']} placeholder="例：船晚开 5 天" /></div>}
-        <div className="field req" style={{ gridColumn: 'span 2' }}><label>入仓号</label><InboundInput value={f.warehouse_nos} onChange={(v) => set('warehouse_nos', v)} forwarder={f.forwarder} /></div>
-        <div className="field req"><label>箱数</label><input className="in" inputMode="numeric" value={f.boxes} onChange={(e) => set('boxes', e.target.value.replace(/\D/g, ''))} /></div>
-        <div className="field"><label>件数（片）</label><input className="in" inputMode="numeric" value={f.pcs} onChange={(e) => set('pcs', e.target.value.replace(/\D/g, ''))} /></div>
-        <div className="field"><label>需求批次</label><input className="in" value={f.batch_name} onChange={(e) => set('batch_name', e.target.value)} placeholder="20261123-KABRE海运-1" /></div>
+        <div className="field req" style={{ gridColumn: '1 / -1' }}><label>入仓号</label><InboundInput value={f.warehouse_nos} onChange={(v) => set('warehouse_nos', v)} forwarder={f.forwarder} /></div>
+        <div className="field half req"><label>箱数</label><input className="in" inputMode="numeric" value={f.boxes} onChange={(e) => set('boxes', e.target.value.replace(/\D/g, ''))} /></div>
+        <div className="field half"><label>件数（片）</label><input className="in" inputMode="numeric" value={f.pcs} onChange={(e) => set('pcs', e.target.value.replace(/\D/g, ''))} /></div>
+        <div className="rsec">单号与费用</div>
         <div className="field"><label>物流单号 / 提单号</label><input className="in mono" value={f.tracking_no} onChange={(e) => set('tracking_no', e.target.value.toUpperCase())} placeholder="MSKU1234567" /></div>
-        <div className="field"><label>柜号（+ 封条号）</label><input className="in mono" value={f.container_no} onChange={(e) => set('container_no', e.target.value.toUpperCase())} /></div>
-        <div className="field"><label>重量 / 体积</label><input className="in" value={f.weight_vol} onChange={(e) => set('weight_vol', e.target.value)} placeholder="820kg · 6.2方" /></div>
-        <div className="field"><label>预估物流费 CNY</label><div className="row" style={{ gap: 8 }}><input className="in" inputMode="decimal" disabled={f.freight_none} value={f.freight_none ? '' : f.freight_est} onChange={(e) => set('freight_est', e.target.value.replace(/[^\d.]/g, ''))} />
+        <div className="field"><label>需求批次</label><input className="in" value={f.batch_name} onChange={(e) => set('batch_name', e.target.value)} placeholder="20261123-KABRE海运-1" /></div>
+        <div className="field half"><label>柜号（+ 封条号）</label><input className="in mono" value={f.container_no} onChange={(e) => set('container_no', e.target.value.toUpperCase())} /></div>
+        <div className="field half"><label>重量 / 体积</label><input className="in" value={f.weight_vol} onChange={(e) => set('weight_vol', e.target.value)} placeholder="820kg · 6.2方" /></div>
+        <div className="field"><label>预估物流费 CNY</label><div className="row" style={{ gap: 10, flexWrap: 'nowrap' }}><input className="in" style={{ flex: 1, minWidth: 0 }} inputMode="decimal" disabled={f.freight_none} value={f.freight_none ? '' : f.freight_est} onChange={(e) => set('freight_est', e.target.value.replace(/[^\d.]/g, ''))} />
           <label className="row small" style={{ gap: 4, whiteSpace: 'nowrap' }}><input type="checkbox" checked={f.freight_none} onChange={(e) => set('freight_none', e.target.checked)} />无物流费</label></div></div>
-        <div className="field"><label>到港</label><DatePicker value={f.arrived_on} onChange={(v) => set('arrived_on', v)} /></div>
-        <div className="field"><label>清关完</label><DatePicker value={f.cleared_on} onChange={(v) => set('cleared_on', v)} /></div>
-        <div className="field"><label>已提货{!po.has_pickup ? '（要先传提货单）' : ''}</label><DatePicker value={f.picked_on} onChange={(v) => set('picked_on', v)} /></div>
         <div className="field"><label>供应商</label><input className="in" value={f.supplier} onChange={(e) => set('supplier', e.target.value)} /></div>
+        <div className="rsec">到货进度 <span className="muted small">到了哪步填哪步</span></div>
+        <div className="r3">
+          <div className="field"><label>到港</label><DatePicker value={f.arrived_on} onChange={(v) => set('arrived_on', v)} /></div>
+          <div className="field"><label>清关完</label><DatePicker value={f.cleared_on} onChange={(v) => set('cleared_on', v)} /></div>
+          <div className="field"><label>已提货{!po.has_pickup ? '（要先传提货单）' : ''}</label><DatePicker value={f.picked_on} onChange={(v) => set('picked_on', v)} /></div>
+        </div>
         <div className="field" style={{ gridColumn: '1 / -1' }}><label>备注（只写说明，单号都有自己的格子）</label><input className="in" value={f.note} onChange={(e) => set('note', e.target.value)} /></div>
       </div>
     </Modal>
