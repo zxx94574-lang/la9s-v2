@@ -32,7 +32,7 @@ export const ITEMS = {
   orders: ['≡', '订单总览', 'sales', []],
   inquiry: ['？', '询单', 'sales', ['admin', 'manager', 'sales_manager', 'hotline', 'sales']],   // 391: 没有定价权的人的前门
   fob: ['◷', 'FOB 项目', 'sales', ['admin', 'manager', 'hotline', 'sales', 'finance']],
-  accounts: ['◎', '客户账号', 'cust', ['admin']],
+  accounts: ['◎', '账号管理', 'cn', ['admin']],   // 11-28：中方 / 员工 / 客户 · 门店 的账号一页
   customers: ['♧', '客户档案', 'cust', ['admin', 'manager', 'hotline', 'sales', 'finance']],
   hotline: ['☎', '热线回访', 'cust', ['admin', 'manager', 'hotline', 'sales']],
   visits: ['⌖', '客户拜访', 'cust', ['admin', 'hotline', 'sales']],
@@ -64,12 +64,12 @@ export const ITEMS = {
 export const HUBS = {
   stock: [['stock', '库存'], ['bins', '库位与盘点']],
   replenish: [['replenish', '备货看板'], ['unmet', '未满足需求'], ['purchase', '物资申请'], ['po', '采购单与到货']],
-  customers: [['customers', '客户档案'], ['stores', '门店'], ['accounts', '客户账号']],
+  customers: [['customers', '客户档案'], ['stores', '门店']],
   hotline: [['hotline', '热线回访'], ['visits', '客户拜访']],
   receipts: [['receipts', '收款与冲账'], ['balances', '客户总账'], ['cash', '资金账户']],
   pricing: [['pricing', '物料与定价'], ['materials', '物料名称'], ['codes', '编码甄别']],
   report: [['report', '月报'], ['margin', '毛利分析'], ['poprofit', '按采购单利润'], ['kpi', '时效与准确率']],
-  rules: [['rules', '规则参数'], ['options', '选项设置'], ['decisions', '审批'], ['changes', '变更记录'], ['health', '系统健康']],
+  rules: [['rules', '规则参数'], ['options', '选项设置'], ['accounts', '账号管理'], ['decisions', '审批'], ['changes', '变更记录'], ['health', '系统健康']],
 };
 export const HUB_LABEL = { stock: '库存与库位', replenish: '备货与采购', customers: '客户档案', hotline: '热线与拜访', receipts: '收款与总账', pricing: '物料与定价', report: '报告', rules: '规则与系统' };
 const HUB_CHILD = Object.fromEntries(Object.entries(HUBS).flatMap(([h, xs]) => xs.filter(([r]) => r !== h).map(([r]) => [r, h])));

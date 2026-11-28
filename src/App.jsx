@@ -11,6 +11,7 @@ import Kpi from './pages/Kpi.jsx';
 import MarginPage from './pages/MarginPage.jsx';
 import RulesPage from './pages/RulesPage.jsx';
 import OptionsPage from './pages/OptionsPage.jsx';
+import AccountsPage from './pages/AccountsPage.jsx';
 import CodeReview from './pages/CodeReview.jsx';
 import Report from './pages/Report.jsx';
 import { Changes, Health } from './pages/Changes.jsx';
@@ -56,7 +57,7 @@ import Staff from './pages/Staff.jsx';
 import Sop from './pages/Sop.jsx';
 import Kingdee from './pages/Kingdee.jsx';
 import { StoresHq, PortalShop, PortalOrders, PortalBalance, PortalStores } from './pages/Portal.jsx';
-import { ShopPos, ShopStock, CustomerAccounts } from './components/Shop.jsx';
+import { ShopPos, ShopStock } from './components/Shop.jsx';
 import { buildNav, NavEditor, HubTabs, hubOf, ITEMS, visibleTo } from './components/Nav.jsx';
 
 const store = {
@@ -279,7 +280,7 @@ export default function App() {
     case 'p/shop': view = <PortalShop />; break;
     case 'p/pos': view = <ShopPos />; break;
     case 'p/stock': view = <ShopStock />; break;
-    case 'accounts': view = <CustomerAccounts />; break;
+    case 'accounts': view = <AccountsPage />; break;
     case 'p/orders': view = <PortalOrders />; break;
     case 'p/balance': view = <PortalBalance />; break;
     case 'p/stores': view = <PortalStores />; break;
@@ -391,7 +392,7 @@ export default function App() {
           <div className="stack">
             <div className="small muted">{REAL ? '真实数据快照：在这里操作只存在本浏览器，不会写回金蝶 / 飞书。' : '演示版 · 虚构数据。'}数据保存在本浏览器，刷新不丢。</div>
             {role === 'admin' && <LayoutSwitch onDone={() => setSettings(false)} />}
-            {role === 'admin' && <div className="field"><label>规则与系统参数 <Info>所有阈值、开关、权限表、发货文件都在这一页：顶上按订单流程和日常工作排好，点哪个环节只看那里的规则。</Info></label><div><button type="button" className="btn" onClick={() => { setSettings(false); go('rules'); }}>打开规则与系统参数 ›</button> <button type="button" className="btn" onClick={() => { try { sessionStorage.setItem('la9s.rules.area', 'sys'); } catch { /* */ } setSettings(false); go('rules'); }}>权限表 · 发货文件 ›</button> <button type="button" className="btn" onClick={() => { setSettings(false); go('options'); }}>选项设置 ›</button></div></div>}
+            {role === 'admin' && <div className="field"><label>规则与系统参数 <Info>所有阈值、开关、权限表、发货文件都在这一页：顶上按订单流程和日常工作排好，点哪个环节只看那里的规则。</Info></label><div><button type="button" className="btn" onClick={() => { setSettings(false); go('rules'); }}>打开规则与系统参数 ›</button> <button type="button" className="btn" onClick={() => { try { sessionStorage.setItem('la9s.rules.area', 'sys'); } catch { /* */ } setSettings(false); go('rules'); }}>权限表 · 发货文件 ›</button> <button type="button" className="btn" onClick={() => { setSettings(false); go('options'); }}>选项设置 ›</button> <button type="button" className="btn" onClick={() => { setSettings(false); go('accounts'); }}>账号管理 ›</button></div></div>}
             <ExportPanel />
             {!SERVER && <>
             <div className="field"><label>演示数据 <Info>{isPersistent() ? '数据存在本浏览器（IndexedDB），换设备不同步。' : '当前浏览器不允许存储。'}</Info></label>

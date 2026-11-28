@@ -39,12 +39,14 @@ export function useToasts() {
 // ── modal ──
 // risk (11-18 Frank 第 7 点, 变动两级确认): 'red' = 大变动 (动钱 / 动库存 / 改客户已确认的东西) → 确认后自动通知中方; 'yellow' = 小变动, 再核对一次
 export function Modal({ title, onClose, children, footer, wide, risk, center }) {   // center: 通知类, 手机上放屏幕中间 (533)
+  const ov = useRef(null);
   useEffect(() => {
-    const k = (e) => e.key === 'Escape' && onClose?.();
+    // Esc 只关最上面那个弹窗（11-28）：弹窗叠弹窗时，下面的不跟着关
+    const k = (e) => { if (e.key !== 'Escape' || e.defaultPrevented) return; const all = document.querySelectorAll('.overlay'); if (ov.current && all.length && all[all.length - 1] !== ov.current) return; e.preventDefault(); onClose?.(); };
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
   }, [onClose]);
   return (
-    <div className={`overlay ${center ? 'center' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
+    <div ref={ov} className={`overlay ${center ? 'center' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-label={title}>
         <div className="modal-h"><h2>{title}</h2><button className="close-x" onClick={onClose} aria-label="关闭">×</button></div>
         {risk && <div className={`risk-strip ${risk}`}>{risk === 'red' ? '大变动：确认之后会自动通知中方（红色事件），留在记录里。' : '小变动：确认前再核对一遍。'}</div>}
@@ -549,7 +551,8 @@ export function BigNum({ children, size = 26, min = 13, style, className }) {
 
 // right-side drawer that keeps the page underneath (and its form state) alive (待改 34)
 export function Drawer({ title, onClose, children, actions }) {
-  useEffect(() => { const k = (e) => e.key === 'Escape' && onClose(); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onClose]);
+  // Esc 只关最上面一层（11-28 Frank）：抽屉里又开了弹窗时，先关弹窗
+  useEffect(() => { const k = (e) => { if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('.drawer-scrim ~ .overlay')) return; e.preventDefault(); onClose(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onClose]);
   return createPortal(
     <div className="drawer-scrim" onClick={onClose}>
       <aside className="drawer" onClick={(e) => e.stopPropagation()}>
