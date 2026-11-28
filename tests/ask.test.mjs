@@ -143,3 +143,42 @@ test('日期按钮：本周 / 上周 / 某周 / 某天 的起止和按钮上的�
   // 月初：1 号是周一的月份，上周落在上个月最后一周
   assert.deepEqual(periodRange('lastweek', new Date(2026, 5, 3)), ['2026-05-25', '2026-05-31']);
 });
+
+// 11-28 筛选条件：档位 / 付款 / 卡在哪步 / 订单状态 / 采购单进度 / 用途
+// [问法, 期望（只查写了的字段）]
+const FILT = [
+  ['S档位的订单', { tier: 'S', subject: null, pk: 'month' }],
+  ['S 档 本月销量', { tier: 'S', metric: 'qty' }],
+  ['档位 S 的客户上个月卖了多少', { tier: 'S', pk: 'm:2026-10' }],
+  ['SS A10 销量', { tier: null, model: 'SS A10' }],
+  ['批发客户的订单', { tier: 'WHOLESALE' }],
+  ['Retail 本月销售额', { tier: 'RETAIL', metric: 'amount' }],
+  ['维修店上个月的订单', { tier: 'REPAIR', pk: 'm:2026-10' }],
+  ['零售价', { tier: null }],
+  ['没付清的订单', { pay: 'unpaid', from: '2000-01-01' }],
+  ['已付清的订单', { pay: 'paid' }],
+  ['付了一部分的订单', { pay: 'partial' }],
+  ['待出库的订单', { step: 'ship', from: '2000-01-01' }],
+  ['上个月还没发货的订单', { step: 'ship', pk: 'm:2026-10' }],
+  ['没签收的单', { step: 'sign' }],
+  ['已取消的订单', { light: 'cancelled' }],
+  ['Thomas 进行中的订单', { light: 'active', cust: 'THOMAS AJM' }],
+  ['上个月的采购订单', { subject: 'po', pk: 'm:2026-10', poStage: null }],
+  ['上个月已经采购成交的订单，看看哪些已经入库了', { subject: 'po', pk: 'm:2026-10', poStage: 'recv' }],
+  ['在途的采购单', { subject: 'po', poStage: 'transit', from: '2000-01-01' }],
+  ['还没入库的采购单', { subject: 'po', poStage: 'transit' }],
+  ['FOB 到港的货柜', { subject: 'po', poStage: 'arrived', purpose: 'fob' }],
+  ['本地备货 过了预计还没到的采购单', { subject: 'po', poStage: 'late', purpose: 'local' }],
+  ['本月 PO', { subject: 'po', pk: 'month' }],
+];
+test('筛选条件：档位 / 付款 / 卡在哪步 / 采购单', () => {
+  for (const [t, exp] of FILT) {
+    const p = parse(t, dict, NOW);
+    for (const [k, v] of Object.entries(exp)) {
+      const got = k === 'cust' ? p.cust?.name || null : p[k] ?? null;
+      assert.equal(got, v, `「${t}」的 ${k}：期望 ${v}，得到 ${got}`);
+    }
+    assert.equal(looksLikeQuestion(t) || t === '零售价', true, `「${t}」回车应按问题理解`);
+    if (t !== '零售价' && t !== 'SS A10 销量') assert.equal(p.blank, false, `「${t}」不该算没听懂`);
+  }
+});

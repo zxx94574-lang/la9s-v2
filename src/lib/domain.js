@@ -191,6 +191,8 @@ export const EVENT_LABELS = {
 };
 
 // 订单三色灯 + 卡在哪一步 (Frank 11-09 19:10): 红 = 已取消, 黄 = 进行中, 绿 = 已完成 (全部出库 + 全部签收 + 收清 + 退货都对完账)
+// 付款状态（订单总览「付款」筛选 + 智能搜索共用）
+export const dealPay = (d) => (!(Number(d.shipped_amount) > 0) ? 'none' : Number(d.due) <= 0 ? 'paid' : Number(d.allocated_amount) > 0 ? 'partial' : 'unpaid');
 export const LIGHT_LABEL = { done: '已完成', active: '进行中', cancelled: '已取消' };
 export function dealLight(d) {
   if (!d) return 'active';

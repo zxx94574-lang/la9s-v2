@@ -6,9 +6,9 @@ import { DocPeek, DocNo } from '../components/DocPeek.jsx';
 // 到货时按箱勾「到了哪些箱」→ 一次下推一张采购入库单 (本地进 LA / 9S, FOB 进 FOB 仓); 少到的差额只有中方能关, 必须选结果 + 传凭证.
 // 箱单 (飞书「98.箱单 › 科特」里那种 Excel) 直接拖进来: 按内容认页签 (页签名字不可靠), 读需求批次 / 入仓号 / 每箱型号数量 / 单价 / 金蝶料号.
 import { OptChoice, OptNote } from '../components/Opts.jsx';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, useData, Pill, Modal, Info, PhotoInput, FileDrop, Drawer, Thumb, DatePicker, Choice, ConfirmBtn } from '../components/ui.jsx';
+import { useApp, useData, Pill, Modal, Info, PhotoInput, FileDrop, Drawer, Thumb, DatePicker, Choice, ConfirmBtn, usePeriod, PeriodBar } from '../components/ui.jsx';
 import Grid from '../components/Grid.jsx';
 import { ModelLink } from '../components/Archives.jsx';
 import { can, hasAny } from '../lib/domain.js';
@@ -34,6 +34,33 @@ export function stageOf(p) {
   if (p.shipped_on) return ['在路上', 'blue'];
   return ['还没发货', 'gray'];
 }
+// 11-28: 采购单清单的筛选（页面上的小块 + 智能搜索跳过来共用一套）。日期 = 下单日，没有就发货日 / 建单日
+const toYmd = (v) => (v instanceof Date ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}` : String(v || '').slice(0, 10));   // 数据库日期回来可能是 Date
+export const poDate = (p) => toYmd(p.ordered_on || p.shipped_on || p.created_at);
+export const PO_STAGES = [['transit', '在途 / 没到齐'], ['arrived', '到港没入库'], ['recv', '已入库'], ['late', '过了预计还没到'], ['all', '全部']];
+export function poStageIs(p, k) {
+  if (k === 'transit') return p.status !== 'closed';
+  if (k === 'recv') return p.status === 'closed' || N(p.received) > 0;
+  if (k === 'arrived') return p.status !== 'closed' && !!p.arrived_on && !(N(p.received) > 0);
+  if (k === 'late') return stageOf(p)[0] === '过了预计还没到';
+  if (k === 'done') return p.status === 'closed';
+  return true;
+}
+export function poMatch(p, { from, to, stage, purpose } = {}) {
+  const d = poDate(p);
+  if (from && from !== '2000-01-01' && (!d || d < from)) return false;
+  if (to && d && d > to) return false;
+  if (stage && !poStageIs(p, stage)) return false;
+  if (purpose === 'fob' && p.purpose !== 'fob') return false;
+  if (purpose === 'local' && p.purpose === 'fob') return false;
+  return true;
+}
+// 智能搜索 → 采购单：带时间 / 到货进度 / 用途，到了自动筛好
+export function poJump(go, j) {
+  try { sessionStorage.setItem('la9s.po.jump', JSON.stringify(j)); } catch { /* ignore */ }
+  go('po'); setTimeout(() => window.dispatchEvent(new Event('la9s-po-jump')), 50);
+}
+const readPoJump = () => { try { const j = JSON.parse(sessionStorage.getItem('la9s.po.jump')); sessionStorage.removeItem('la9s.po.jump'); return j; } catch { return null; } };
 export const GAP_RESULTS = ['破损', '少发', '国内取消', '丢失', '补发中（另开单）', '其他'];
 
 export const poListSql = `
@@ -92,15 +119,24 @@ export function PoLink({ id, no }) {
 
 export default function PoPage() {
   const { org, role } = useApp();
-  const [f, setF] = useState('transit');
+  const [jump0] = useState(readPoJump);
+  const [f, setF] = useState(jump0?.stage || 'transit');
+  const [purp, setPurp] = useState(jump0?.purpose || '');   // 本地备货 / FOB
+  const [fromAsk, setFromAsk] = useState(!!jump0);
+  const P = usePeriod('po', 'all', !jump0 ? null : jump0.from && jump0.from !== '2000-01-01' ? (jump0.pk && jump0.pk !== 'custom' && jump0.pk !== 'all' ? { period: jump0.pk } : { period: 'custom', custom: [jump0.from, jump0.to] }) : { period: 'all' });
+  useEffect(() => { const h = () => { const j = readPoJump(); if (!j) return; setF(j.stage || 'all'); setPurp(j.purpose || ''); setFromAsk(true);
+    if (j.from && j.from !== '2000-01-01') { if (j.pk && j.pk !== 'custom' && j.pk !== 'all') P.setPeriod(j.pk); else { P.setPeriod('custom'); P.setCustom([j.from, j.to]); } } else P.setPeriod('all'); };
+    window.addEventListener('la9s-po-jump', h); return () => window.removeEventListener('la9s-po-jump', h); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [imp, setImp] = useState(false);
   const [edit, setEdit] = useState(null);
   const [view, setView] = useState('po');   // 按订单看 / 按明细看
   const { data } = useData(() => q(poListSql, [org]), [org]);
   const { data: detail } = useData(() => (view === 'line' ? q(poLinesSql, [org]) : Promise.resolve(null)), [org, view]);
   if (!data) return <div className="empty">加载中…</div>;
-  const rows = data.filter((p) => (f === 'transit' ? p.status !== 'closed' : f === 'done' ? p.status === 'closed' : f === 'fob' ? p.purpose === 'fob' : f === 'local' ? p.purpose !== 'fob' : true));
-  const n = (k) => data.filter((p) => (k === 'transit' ? p.status !== 'closed' : k === 'done' ? p.status === 'closed' : k === 'fob' ? p.purpose === 'fob' : k === 'local' ? p.purpose !== 'fob' : true)).length;
+  const inPeriod = data.filter((p) => poMatch(p, { from: P.from, to: P.to, purpose: purp }));
+  const rows = inPeriod.filter((p) => poStageIs(p, f));
+  const n = (k) => inPeriod.filter((p) => poStageIs(p, k)).length;
+  const ids = new Set(rows.map((p) => p.id));
   const cols = [
     { key: 'po_no', label: '采购单号', w: 190, render: (p) => <PoLink id={p.id} no={p.po_no} /> },
     { key: 'purpose', label: '用途', w: 90, value: (p) => PURPOSE[p.purpose || 'unknown'][0], render: (p) => <Pill tone={PURPOSE[p.purpose || 'unknown'][1]}>{PURPOSE[p.purpose || 'unknown'][0]}</Pill> },
@@ -122,7 +158,6 @@ export default function PoPage() {
     { key: 'kd', label: '金蝶状态', w: 170, value: (p) => kdState(p)[0], render: (p) => <Pill tone={kdState(p)[1]}>{kdState(p)[0]}</Pill> },
     { key: 'kd_no', label: '金蝶采购入库单号', w: 170, value: (p) => kdState(p)[2], render: (p) => <span className="mono small">{kdState(p)[2]}</span> },
   ];
-  const filt = (p) => (f === 'transit' ? p.status !== 'closed' : f === 'done' ? p.status === 'closed' : f === 'fob' ? p.purpose === 'fob' : f === 'local' ? p.purpose !== 'fob' : true);
   const lineCols = [
     { key: 'po_no', label: '采购单号', w: 190, render: (l) => <PoLink id={l.po_id} no={l.po_no} /> },
     { key: 'purpose', label: '用途', w: 90, value: (l) => PURPOSE[l.purpose || 'unknown'][0], render: (l) => <Pill tone={PURPOSE[l.purpose || 'unknown'][1]}>{PURPOSE[l.purpose || 'unknown'][0]}</Pill> },
@@ -139,6 +174,10 @@ export default function PoPage() {
     { key: 'shipped_on', label: '发货日', w: 100, render: (l) => dDate(l.shipped_on) },
     { key: 'eta', label: '预计到', w: 100, render: (l) => dDate(l.eta) },
   ];
+  const chips = <div className="chips po-chips">{PO_STAGES.filter(([k]) => k !== 'late' || f === 'late' || n('late') > 0).map(([k, l]) => (
+    <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} <b>{n(k)}</b></button>))}
+    <span className="chips-sep" />{[['', '全部用途'], ['local', '本地备货'], ['fob', 'FOB']].map(([k, l]) => (
+    <button type="button" key={k || 'any'} className={`chip ${purp === k ? 'on' : ''}`} onClick={() => setPurp(k)}>{l}</button>))}</div>;
   return (
     <>
       <div className="pagehead"><div><div className="eyebrow">Commandes d’achat</div>
@@ -147,16 +186,22 @@ export default function PoPage() {
         {can(role, 'po_edit') && <button type="button" className="btn" onClick={() => setImp(true)}>⇪ 导入箱单</button>}
         {can(role, 'po_edit') && <button type="button" className="btn primary" onClick={() => setEdit({ purpose: 'local', lines: [] })}>＋ 新建采购单</button>}
       </div>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 8 }}><PeriodBar p={P} all /><span className="small muted">按下单日（没有就按发货日）</span></div>
+      {(fromAsk || purp) && <div className={`banner of-bar ${fromAsk ? 'ask' : ''}`} style={{ marginBottom: 8 }}>
+        {fromAsk && <span className="pill blue">⌕ 智能搜索带过来的</span>}<span>只看</span>
+        {P.period !== 'all' && <span className="ask-chip">{P.period === 'custom' ? `${P.from} – ${P.to}` : `${P.from.slice(5)} – ${P.to.slice(5)}`}<button type="button" aria-label="去掉" onClick={() => P.setPeriod('all')}>×</button></span>}
+        {f !== 'all' && <span className="ask-chip">{PO_STAGES.find((x) => x[0] === f)?.[1] || f}<button type="button" aria-label="去掉" onClick={() => setF('all')}>×</button></span>}
+        {purp && <span className="ask-chip">{purp === 'fob' ? 'FOB' : '本地备货'}<button type="button" aria-label="去掉" onClick={() => setPurp('')}>×</button></span>}
+        <span className="small muted">{rows.length} 张</span><span className="grow" />
+        <button type="button" className="btn sm" onClick={() => { P.setPeriod('all'); setF('all'); setPurp(''); setFromAsk(false); }}>清除全部筛选</button></div>}
       <MetricStrip tag="本月" ids={['po.late']} from={periodRange('month')[0]} to={periodRange('month')[1]} />
       <div className="card">
         <div className="card-h" style={{ justifyContent: 'flex-end' }}><div className="seg"><button type="button" className={view === 'po' ? 'on' : ''} onClick={() => setView('po')}>按订单看</button><button type="button" className={view === 'line' ? 'on' : ''} onClick={() => setView('line')}>按明细看</button></div></div>
-        {view === 'line' ? <Grid id="po-lines" columns={lineCols} rows={(detail || []).filter(filt)} empty={detail ? '没有明细' : '加载中…'}
+        {view === 'line' ? <Grid id="po-lines" columns={lineCols} rows={(detail || []).filter((l) => ids.has(l.po_id))} empty={detail ? '没有明细' : '加载中…'}
           foot={(rs) => ({ po_no: `${rs.length} 行`, qty: qty(rs.reduce((a, l) => a + N(l.qty), 0)), received: qty(rs.reduce((a, l) => a + N(l.received), 0)), transit: qty(rs.reduce((a, l) => a + (l.status === 'closed' ? 0 : transitOf(l)), 0)) })}
-          tools={<div className="chips">{[['transit', '在途 / 没到齐'], ['done', '已到齐'], ['local', '本地备货'], ['fob', 'FOB'], ['all', '全部']].map(([k, l]) => (
-            <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} <b>{n(k)}</b></button>))}</div>} />
+          tools={chips} />
         : <Grid id="po-list" table="purchase_orders" columns={cols} rows={rows} empty="没有采购单"
-          tools={<div className="chips">{[['transit', '在途 / 没到齐'], ['done', '已到齐'], ['local', '本地备货'], ['fob', 'FOB'], ['all', '全部']].map(([k, l]) => (
-            <button type="button" key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>{l} <b>{n(k)}</b></button>))}</div>} />}
+          tools={chips} />}
       </div>
       {imp && <PackingImport onClose={() => setImp(false)} />}
       {edit && <PoForm init={edit} onClose={() => setEdit(null)} />}

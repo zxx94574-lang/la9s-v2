@@ -84,6 +84,25 @@ const G_DEAL = /订单|单子|commande|\border|facture|invoice/i;
 // 按单词找人名 / 客户名时，这些问话常用词不当名字（否则打「stock」会去找叫 STOCK… 的客户）
 const STOPW = /^(xof|cny|usd|fcfa|cfa|pcs|the|and|for|all|par|pour|les|des|une|qui|who|how|much|many|what|combien|balance|solde|stock|sales?|ventes?|vendu|sold|clients?|customers?|orders?|commandes?|today|yesterday|week|month|year|quarter|semaine|mois|ann[ée]e|trimestre|jours?|days?|last|past|this|cette|dernier|derni[eè]re|aujourd|hier|tout|toutes?|montant|amount|revenue|payments?|paid|paiement|retours?|returns?|stocks?|inventory|dispo|model|models|mod[eè]les?|daily|chaque|each|per|par|jour|vendeur|seller|staff|outstanding|unpaid|impay[ée]s?|dettes?|cr[ée]ances?|first|second|third|fourth|premi[eè]re|deuxi[eè]me|troisi[eè]me|quatri[eè]me)$/i;
 
+// ── 筛选条件（11-28 Frank「S 档位的订单」「上个月的采购单，哪些已经入库」）：档位 / 付款 / 卡在哪步 / 订单状态 / 采购单进度 / 用途
+// 档位：S 要挨着「档 / 级 / 客户」才算（免得型号里的 S 被当成档位）
+export const TIER_RX = [['S', /(?:^|[^A-Za-z0-9])S\s*(?:档|级|类客户|客户|tier)|(?:档位|档|tier|级别)\s*(?:是|=|为|:|：)?\s*S(?![A-Za-z0-9])|\bs[- ]?tier\b/i],
+  ['WHOLESALE', /wholesale|批发(?!价)|grossiste/i], ['RETAIL', /retail|零售(?!价|员)|d[ée]taillant/i], ['REPAIR', /repair\s*(?:shop|档|客户)|维修(?:店|铺|客户|档)|r[ée]parateur/i]];
+export const TIER_NAME = { S: 'S', WHOLESALE: 'Wholesale', RETAIL: 'Retail', REPAIR: 'Repair' };
+const PAY_RX = [['partial', /付了一部分|部分付款|部分收款|付了部分|partiel|partial/i], ['unpaid', /没付|未付|没给钱|没收钱|没收款|没回款|没结清|未结清|没收清|欠款的|unpaid|impay/i], ['paid', /已付清|付清了?的|收清|结清|已结|paid in full|sold[ée]e?s?\b/i]];
+export const PAY_NAME = { partial: '付了一部分', paid: '已付清', unpaid: '没付' };
+const STEP_RX = [['ship', /待出库|待发货|没出库|未出库|还没出库|没发货|未发货|还没发货|[àa] livrer|not shipped/i], ['sign', /待签收|没签收|未签收|还没签收|没对账|未对账/i],
+  ['pick', /待找货|没找货|还没找货|找货中/i], ['so', /待开销售单|没开销售单|待客户确认/i], ['quote', /待确认的报价|报价中|还在报价|没确认的报价/i], ['pay', /待收款/i]];
+export const STEP_NAME = { ship: '卡在出库', sign: '卡在签收', pick: '卡在找货', so: '卡在销售单', quote: '卡在报价', pay: '卡在收款' };
+const LIGHT_RX = [['cancelled', /已取消|取消了|作废|annul|cancel/i], ['done', /已完成|完成了的|做完的|termin[ée]|completed/i], ['active', /进行中|没完成|未完成|在途的订单|en cours|in progress/i]];
+export const LIGHT_NAME = { cancelled: '已取消', done: '已完成', active: '进行中' };
+// 采购单：说到「采购 / 进货 / PO / 到港 / 在途 / 货柜」就是问采购单
+const W_PO = /采购|进货单|\bpo\b|purchase|commandes? d.?achat|bons? de commande|到港|货柜|柜子|海运|空运|入仓号|在途/i;
+const PO_STAGE_RX = [['late', /延误|延迟|晚到|过了预计|超期|\blate\b|retard/i], ['transit', /在途|在路上|没到齐|没到|未到|还没到|未入库|没入库|还没入库|in transit|en (?:route|transit)|pas (?:encore )?arriv/i],
+  ['arrived', /到港|清关|arriv[ée]s? au port/i], ['recv', /已入库|入库了|入了库|入库的|已到齐|到齐|已收货|收货了|到货了|已到货|received|r[ée]ceptionn|re[çc]us?\b/i]];
+export const PO_STAGE_NAME = { transit: '在途 / 没到齐', late: '过了预计还没到', arrived: '到港没入库', recv: '已入库' };
+const first = (rx, t) => (rx.find(([, r]) => r.test(t)) || [null])[0];
+
 export const METRIC = [['qty', '销量（片）'], ['amount', '销售额'], ['recv', '收款'], ['ret', '退货'], ['ar', '欠款（现在）'], ['stock', '库存（现在）']];
 export const NOW = new Set(['ar', 'stock']);   // 这两个看的是「现在」，不看时间段
 export const GROUP = [['customer', '按客户'], ['model', '按型号'], ['category', '按种类'], ['employee', '按销售员'], ['day', '按天'], ['deal', '按订单']];
@@ -117,15 +136,25 @@ export function parse(text, dict, now = new Date()) {
   if (['recv', 'ar'].includes(metric) && ['model', 'category', 'day', 'deal'].includes(group)) group = metric === 'ar' && group === 'deal' ? 'deal' : 'customer';
   if (metric === 'stock' && !['model', 'category'].includes(group)) group = model ? 'model' : cat ? 'model' : 'category';
   // said：话里真的说到了哪几样（没说到的是默认值，界面上标「默认」）；blank = 一样都没听懂 → 界面直说没听懂，并记进「没听懂的问法」
-  const said = { when: !whenDefault, metric: metricSaid, group: groupSaid, who: !!(emp || cust || cat || model) };
-  return { from, to, when, pk, emp, cust, custAlt, cat, model, metric, group, said, blank: !said.when && !said.metric && !said.group && !said.who };
+  // 筛选条件：说了就带上，跳到清单时自动筛好
+  const subject = W_PO.test(t) ? 'po' : null;
+  const tier = first(TIER_RX, t); const pay = subject ? null : first(PAY_RX, t); const step = subject ? null : first(STEP_RX, t); const light = subject ? null : first(LIGHT_RX, t);
+  const poStage = subject ? first(PO_STAGE_RX, t) : null;
+  const purpose = /\bfob\b/i.test(t) ? 'fob' : /本地备货|本地货|\blocal\b/i.test(t) ? 'local' : null;
+  const said = { when: !whenDefault, metric: metricSaid, group: groupSaid, who: !!(emp || cust || cat || model), filt: !!(subject || tier || pay || step || light) };
+  // 采购单没说时间 = 全部时间（在途的货跨好几个月），说了按下单日
+  // 卡在某一步 / 没付 / 进行中 = 要跟进的单，没说时间也看全部（上个月的没出库照样要出）
+  const openish = step || light === 'active' || pay === 'unpaid' || pay === 'partial';
+  const W = (subject || openish) && whenDefault ? { from: '2000-01-01', to, when: '全部时间', pk: 'all' } : { from, to, when, pk };
+  return { ...W, emp, cust, custAlt, cat, model, metric, group, said, subject, tier, pay, step, light, poStage, purpose,
+    blank: !said.when && !said.metric && !said.group && !said.who && !said.filt };
 }
 
 
 // 问话的样子（有时间 / 看什么 / 怎么分的词）→ 回车直接按问题理解
 export const QUESTION = new RegExp([/今天|昨天|前天|本周|上周|本月|上个?月|今年|去年|近\s*\d|最近|所有|全部|\d{1,2}\s*月|[一二三四五六七八九十]+月|季度?|第\s*\S\s*周|\bQ[1-4]\b|销量|卖|销售|金额|多少|收款|回款|退货|欠|balance|余额|库存|还有|按|每|谁|清单/,
   /today|yesterday|this (?:week|month|year|quarter)|last (?:week|month|year|quarter|\d)|how (?:much|many)|\bsold\b|\bsales\b|aujourd|\bhier\b|cette (?:semaine|ann[ée]e)|ce (?:mois|trimestre)|derniers? jours|combien|vendu|ventes|trimestre|semaine|week of|\b(?:janvier|f[ée]vrier|mars|avril|juin|juillet|ao[uû]t|septembre|octobre|novembre|d[ée]cembre|january|february|march|april|june|july|august|september|october|november|december)\b|年度|\d{4}\s*年|\d{1,2}[-/]\d{1,2}|depuis|historique|all time|最后一周/,
-  W_AR, W_STOCK, W_RECV, W_RET, W_AMT, G_DAY].map((r) => r.source).join('|'), 'i');
+  W_AR, W_STOCK, W_RECV, W_RET, W_AMT, G_DAY, W_PO, /档位|[^A-Za-z0-9]S\s*档|^S\s*档|批发|零售|维修店|已入库|入库|待出库|待签收|没签收|未签收|还没发货|没发货|已完成|已取消|进行中|付清|付了一部分|部分付/].map((r) => r.source).join('|'), 'i');
 
 
 // 回车算不算「问题」：有问话的词，或者话里说了时间（「mois dernier」「l'an dernier」这种只有时间的也算）

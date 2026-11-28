@@ -16,7 +16,7 @@ import { MultiPick, Schemes } from '../components/FilterBar.jsx';
 import Inquiry from './Inquiry.jsx';
 import { OPEN_DRAFT } from './QuoteNew.jsx';
 import { USERS } from '../db/bootstrap.js';
-import { STATUS, TIERS, seesPrice, can, dealLight, stuckOf, LIGHT_LABEL, STEPS, reachedStep } from '../lib/domain.js';
+import { STATUS, TIERS, seesPrice, can, dealLight, stuckOf, LIGHT_LABEL, STEPS, reachedStep, dealPay } from '../lib/domain.js';
 import { money, qty, dt, periodRange, PERIODS } from '../lib/format.js';
 
 const GROUPS = [['', '全部状态'], ['open', '进行中'], ['quoted,hotline_ok', '只报价'], ['picking,picked', '找货中'], ['ordered', '待客户确认'], ['confirmed,reviewed', '待复检 / 待出库'], ['partial,shipped', '已出库'], ['unpaid', '已出库未收清'], ['cancelled', '已作废']];
@@ -42,10 +42,10 @@ export default function Orders() {
   // 229 (Frank 11-11): 筛选条 —— 客户 / 档位 / 机型 / 付款, 可叠加; 「按机型看」给出片数和金额; 可存成筛选方案
   const olinesRaw = useData(() => q(Q.orderLines, [org, from, to]), [org, from, to]).data;
   const olines = useMemo(() => olinesRaw || [], [olinesRaw]);
-  const [fcust, setFcust] = useState(jump?.cust ? [jump.cust] : []); const [ftier, setFtier] = useState([]); const [fmodel, setFmodel] = useState(jump?.model ? [jump.model] : []); const [fpay, setFpay] = useState([]); const [fcat, setFcat] = useState(jump?.cat || ''); const [femp, setFemp] = useState(jump?.emp || ''); const [fromAsk, setFromAsk] = useState(!!jump?.ask);   // 507: 档案「共 N 张」/ 指令「去做」跳过来带客户 / 机型
+  const [fcust, setFcust] = useState(jump?.cust ? [jump.cust] : []); const [ftier, setFtier] = useState(jump?.tier ? [jump.tier] : []); const [fmodel, setFmodel] = useState(jump?.model ? [jump.model] : []); const [fpay, setFpay] = useState(jump?.pay ? [jump.pay] : []); const [fcat, setFcat] = useState(jump?.cat || ''); const [femp, setFemp] = useState(jump?.emp || ''); const [fromAsk, setFromAsk] = useState(!!jump?.ask);   // 507: 档案「共 N 张」/ 指令「去做」跳过来带客户 / 机型
   // 507: 已经在订单总览, 又从档案「共 N 张」/ 指令跳过来 → 照样换筛选
   useEffect(() => { const f = () => { let j = null; try { j = JSON.parse(sessionStorage.getItem('la9s.orders.jump')); sessionStorage.removeItem('la9s.orders.jump'); } catch { /* ignore */ } if (!j) return;
-    if (j.ask) { setFcust(j.cust ? [j.cust] : []); setFmodel(j.model ? [j.model] : []); setFcat(j.cat || ''); setFemp(j.emp || ''); setFromAsk(true); setLight(''); setStepF(''); setText(''); setFtier([]); setFpay([]); }
+    if (j.ask) { setFcust(j.cust ? [j.cust] : []); setFmodel(j.model ? [j.model] : []); setFcat(j.cat || ''); setFemp(j.emp || ''); setFromAsk(true); setLight(j.light || ''); setStepF(j.step || ''); setText(''); setFtier(j.tier ? [j.tier] : []); setFpay(j.pay ? [j.pay] : []); }
     else { if (j.cust) setFcust([j.cust]); if (j.model) setFmodel([j.model]); }
     if (j.from) { if (j.pk && j.pk !== 'custom') setPeriod(j.pk); else { setPeriod('custom'); setCustom([j.from, j.to]); } } };
     window.addEventListener('la9s-orders-jump', f); return () => window.removeEventListener('la9s-orders-jump', f); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -53,7 +53,6 @@ export default function Orders() {
   const [gridShown, setGridShown] = useState(null);   // 表格里筛出来的行 + 机型条件 → 「按机型看」跟着同一套筛选
   const curFilter = { period, custom: period === 'custom' ? custom : null, light, fcust, ftier, fmodel, fpay, mode, text };
   const applyScheme = (f) => { if (f.period) setPeriod(f.period); if (f.period === 'custom' && f.custom) setCustom(f.custom); setLight(f.light || ''); setFcust(f.fcust || []); setFtier(f.ftier || []); setFmodel(f.fmodel || []); setFpay(f.fpay || []); setMode(f.mode || 'orders'); setText(f.text || ''); setTier(''); setGrp(''); };
-  const payOf = (d) => (!(Number(d.shipped_amount) > 0) ? 'none' : Number(d.due) <= 0 ? 'paid' : Number(d.allocated_amount) > 0 ? 'partial' : 'unpaid');
   const voidedAll = useData(() => q(Q.voidedDeals, [org]), [org]).data || [];
   const voided = voidedAll.filter((d) => { const t = String(d.updated_at || '').slice(0, 10); return t >= from && t <= to; });   // 11-25: 已作废也跟右上角的时间段（按作废日期）
   const catDeals = useMemo(() => new Set(olines.filter((l) => l.category === fcat).map((l) => l.deal_id)), [olines, fcat]);
@@ -65,7 +64,7 @@ export default function Orders() {
     if (tier && d.tier !== tier) return false;
     if (fcust.length && !fcust.includes(d.customer_id)) return false;
     if (ftier.length && !ftier.includes(d.tier)) return false;
-    if (fpay.length && !fpay.includes(payOf(d))) return false;
+    if (fpay.length && !fpay.includes(dealPay(d))) return false;
     if (fmodel.length && !modelDeals.has(d.id)) return false;
     if (fcat && !catDeals.has(d.id)) return false;
     if (femp && d.owner_employee_id !== femp) return false;
@@ -94,7 +93,7 @@ export default function Orders() {
       {d.planned_ship_date && ['confirmed', 'reviewed', 'partial'].includes(d.status) && dDate(d.planned_ship_date) <= today() && <Pill tone={dDate(d.planned_ship_date) < today() ? 'red' : 'amber'}>{dDate(d.planned_ship_date) < today() ? '过期未出库' : '今天该出库'}</Pill>}</> },
     { key: 'cats', label: '种类', w: 130, value: (d) => catsOf.get(d.id) || '', render: (d) => <span className="small">{catsOf.get(d.id) || ''}</span> },
     { key: 'models', label: '机型', w: 220, value: (d) => d.models || '', render: (d) => <span className="small" title={d.models || ''}>{d.models || ''}</span> },
-    { key: 'pay', label: '付款', w: 100, value: (d) => PAY_LABEL[payOf(d)], render: (d) => { const k = payOf(d); return k === 'none' ? <span className="muted small">还没出库</span> : <Pill tone={k === 'paid' ? 'green' : k === 'partial' ? 'amber' : 'red'}>{PAY_LABEL[k]}</Pill>; } },
+    { key: 'pay', label: '付款', w: 100, value: (d) => PAY_LABEL[dealPay(d)], render: (d) => { const k = dealPay(d); return k === 'none' ? <span className="muted small">还没出库</span> : <Pill tone={k === 'paid' ? 'green' : k === 'partial' ? 'amber' : 'red'}>{PAY_LABEL[k]}</Pill>; } },
     { key: 'line_count', label: '型号数', w: 60 },
     { key: 'qty', label: '件数', w: 70, render: (d) => qty(['quoted', 'hotline_ok'].includes(d.status) ? d.qty_req : d.qty_supply) },
     ...(price ? [
@@ -179,10 +178,12 @@ export default function Orders() {
             ]} foot={(rs) => ({ model: '合计', pcs: `${qty(rs.reduce((a, r) => a + r.pcs, 0))} 片`, ...(price ? { amount: money(rs.reduce((a, r) => a + r.amount, 0)) } : {}) })} />
           </>
         ) : null}
-        {(fcust.length > 0 || fmodel.length > 0 || fcat || femp) && <div className={`banner of-bar ${fromAsk ? 'ask' : ''}`} style={{ marginBottom: 8 }}>
+        {(fcust.length > 0 || fmodel.length > 0 || fcat || femp || ftier.length > 0 || fpay.length > 0) && <div className={`banner of-bar ${fromAsk ? 'ask' : ''}`} style={{ marginBottom: 8 }}>
           {fromAsk && <span className="pill blue">⌕ 智能搜索带过来的</span>}<span>只看</span>
           {fcust.map((c) => <span key={c} className="ask-chip">客户 {(custOpts.find((x) => x[0] === c)?.[1] || '').split(' · ')[0] || '…'}<button type="button" aria-label="去掉" onClick={() => setFcust(fcust.filter((x) => x !== c))}>×</button></span>)}
           {femp && <span className="ask-chip">销售员 {(data || []).find((d) => d.owner_employee_id === femp)?.owner_name || '…'} 名下<button type="button" aria-label="去掉" onClick={() => setFemp('')}>×</button></span>}
+          {ftier.map((t) => <span key={t} className="ask-chip">档位 {TIERS[t] || t}<button type="button" aria-label="去掉" onClick={() => setFtier(ftier.filter((x) => x !== t))}>×</button></span>)}
+          {fpay.map((t) => <span key={t} className="ask-chip">{PAY_LABEL[t] || t}<button type="button" aria-label="去掉" onClick={() => setFpay(fpay.filter((x) => x !== t))}>×</button></span>)}
           {fcat && <span className="ask-chip">种类 {fcat}<button type="button" aria-label="去掉" onClick={() => setFcat('')}>×</button></span>}
           {fmodel.map((m) => <span key={m} className="ask-chip">机型 {m}<button type="button" aria-label="去掉" onClick={() => setFmodel(fmodel.filter((x) => x !== m))}>×</button></span>)}
           <span className="small muted">{period === 'custom' && custom ? `${custom[0]} – ${custom[1]} · ` : ''}{rows.length} 张</span><span className="grow" />

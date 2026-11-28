@@ -6,7 +6,7 @@
 // 经营总览原来那套页面内拖板块（components/Layout.jsx）照旧，跟着同一个开关打开。
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { q, call } from '../db/client.js';
-import { useApp, SortList, Info } from './ui.jsx';
+import { useApp, Info, ConfirmBtn } from './ui.jsx';
 import { setLayoutEdit, useLayoutEdit } from './Layout.jsx';
 import { friendlyError } from '../lib/format.js';
 
@@ -32,24 +32,64 @@ function headText(el) {
 }
 const keyText = (t) => t.replace(/[\d,.%·:：()（）\s]+/g, ' ').trim();
 
-// 认板块：返回 { box, items: [{ key, label, el }] }
-function scan() {
-  const m = document.querySelector('main.content'); if (!m) return null;
-  let box = m;
-  let kids = [...box.children].filter((e) => !e.matches(FIXED));
-  if (kids.length === 1 && !kids[0].matches('.card, .lay-grid') && kids[0].children.length >= 3) { box = kids[0]; kids = [...box.children].filter((e) => !e.matches(FIXED)); }
-  const seen = {};
-  const items = kids.map((el) => {
-    const txt = headText(el);
-    const cls = [...el.classList].filter((c) => !['card', 'row', 'stack', 'pe-hl', 'pe-sel'].includes(c))[0] || el.tagName.toLowerCase();
-    let key = `${cls}|${keyText(txt)}`; seen[key] = (seen[key] || 0) + 1; if (seen[key] > 1) key += `#${seen[key]}`;
-    el.dataset.pe = key;
-    const NAMED = { pgsum: '小总览', 'mt-strip': '指标条', 'd2-attn': '要你注意的', tabs: '页签', digest: '今日数字', 'rp-kpis': '关键数' };
-    const label = el.matches('.lay-grid') ? '看板（里面的小板块在页面上直接拖）' : (NAMED[cls] || txt || cls);
-    return { key, label, el };
-  });
+// 认板块：返回 { items: [{ key, label, el, parent, canSplit }] }
+// 11-28：整页只有一张大卡片（员工与工资、选项设置…）→ 自动往卡片里面看一层；任何卡片也能在页面上点「拆开」把里面的小块分出来单独调
+const FIXED_IN = `${FIXED}, .card-h, .tabs, .hub-tabs, .seg-bar`;
+const NAMED = { pgsum: '小总览', 'mt-strip': '指标条', 'd2-attn': '要你注意的', tabs: '页签', digest: '今日数字', 'rp-kpis': '关键数' };
+const realKids = (el, fixed) => [...el.children].filter((e) => !e.matches(fixed) && !e.matches('style, script, .pe-skip'));
+function label(el, cls, txt) {
+  if (el.matches('.lay-grid')) return '看板（里面的小板块在页面上直接拖）';
+  if (NAMED[cls]) return NAMED[cls];
+  if (txt && /[^\d\s,.%·:：()（）/+\-]/.test(txt)) return txt;
+  if (el.querySelector('.period-bar')) return '日期按钮';
+  if (el.matches('.banner, .of-bar')) return '筛选提示';
+  if (el.querySelector('.tw')) return '表格';
+  const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  return t ? (t.length > 14 ? `${t.slice(0, 14)}…` : t) : '一块';
+}
+function tag(box, fixed, prefix, seen, out, parent) {
   box.dataset.peBox = '1';
-  return { box, items };
+  realKids(box, fixed).forEach((el) => {
+    const txt = headText(el);
+    const cls = [...el.classList].filter((c) => !['card', 'row', 'stack', 'pe-hl', 'pe-sel', 'pe-split'].includes(c))[0] || el.tagName.toLowerCase();
+    let key = `${prefix}${cls}|${keyText(txt)}`; seen[key] = (seen[key] || 0) + 1; if (seen[key] > 1) key += `#${seen[key]}`;
+    el.dataset.pe = key;
+    const inner = el.querySelector(':scope > .card-b') || el;
+    const canSplit = el.matches('.card') && !inner.matches('.grid') && realKids(inner, FIXED_IN).filter((x) => !x.matches('.grid')).length >= 2;
+    out.push({ key, label: label(el, cls, txt), el, parent, canSplit });
+  });
+}
+function scan(split = []) {
+  const m = document.querySelector('main.content'); if (!m) return null;
+  document.querySelectorAll('[data-pe-box]').forEach((x) => { delete x.dataset.peBox; });
+  let box = m;
+  let kids = realKids(box, FIXED);
+  if (kids.length === 1 && !kids[0].matches('.card, .lay-grid') && kids[0].children.length >= 3) { box = kids[0]; kids = realKids(box, FIXED); }
+  const seen = {}; const items = [];
+  tag(box, FIXED, '', seen, items, null);
+  // 往里拆：设置里点过「拆开」的，或者整页就一张大卡片
+  // 整页就一块：一层层往里找，直到里面有两块以上（碰到表格就停：一张表没什么可拆的）
+  let autoInner = null;
+  if (items.length === 1) {
+    let el = items[0].el;
+    for (let d = 0; d < 4; d += 1) {
+      if (el.matches('.grid')) break;
+      const inner = el.querySelector(':scope > .card-b') || el; const ks = realKids(inner, FIXED_IN);
+      if (ks.length >= 2) { if (!inner.matches('.grid')) autoInner = inner; break; }
+      if (ks.length !== 1 || ks[0].matches('.tw, table')) break;
+      el = ks[0];
+    }
+    if (autoInner) items[0].canSplit = true;
+  }
+  const auto = autoInner ? [items[0].key] : [];
+  [...new Set([...split, ...auto])].forEach((k) => {
+    const it = items.find((x) => x.key === k); if (!it || !it.canSplit) return;
+    const inner = auto.includes(k) && autoInner ? autoInner : (it.el.querySelector(':scope > .card-b') || it.el);
+    it.el.classList.add('pe-split'); it.split = true; it.auto = auto.includes(k) && !split.includes(k);
+    tag(inner, FIXED_IN, `${k}>`, seen, items, k);
+  });
+  const oneTable = items.length <= 1 && !!m.querySelector('.tw');
+  return { items, oneTable };
 }
 
 function cssFor(cfg, type, edit) {
@@ -58,11 +98,11 @@ function cssFor(cfg, type, edit) {
   TYPE_CATS.forEach(([k, , sel]) => { const z = Number(t[k] || 1); if (z && z !== 1) out.push(`${sel} { zoom: ${z}; }`); });
   const b = cfg?.blocks || {};
   const keys = Object.keys(b);
-  const flow = edit || keys.some((k) => b[k].span && b[k].span !== 12) || Array.isArray(cfg?.order);
+  const flow = edit || keys.some((k) => b[k].span && b[k].span !== 12) || Array.isArray(cfg?.order) || (cfg?.split || []).length > 0;
   if (flow) {
     out.push('[data-pe-box] { display: flex !important; flex-direction: row !important; flex-wrap: wrap !important; align-items: flex-start; gap: 16px; }');
     out.push('[data-pe-box] > * { flex: 0 0 100%; min-width: 0; margin-top: 0 !important; margin-bottom: 0 !important; }');
-    out.push('[data-pe-box] > .hub-tabs, [data-pe-box] > .pagehead, [data-pe-box] > .viewas-bar, [data-pe-box] > .lay-bar { order: -100; }');
+    out.push('[data-pe-box] > .hub-tabs, [data-pe-box] > .pagehead, [data-pe-box] > .viewas-bar, [data-pe-box] > .lay-bar, [data-pe-box] > .card-h, [data-pe-box] > .tabs { order: -100; }');
   }
   (cfg?.order || []).forEach((k, i) => out.push(`[data-pe="${CSS.escape(k)}"] { order: ${i}; }`));
   keys.forEach((k) => {
@@ -72,9 +112,14 @@ function cssFor(cfg, type, edit) {
     if (v.hidden) out.push(edit ? `${s} { opacity: .35; outline: 2px dashed #b6c2d2; outline-offset: 2px; }` : `${s} { display: none !important; }`);
   });
   if (flow) out.push('@media (max-width: 760px) { [data-pe-box] > * { flex-basis: 100% !important; } }');
-  if (edit) out.push('[data-pe].pe-hl, [data-pe].pe-sel { outline: 2px solid var(--brand) !important; outline-offset: 3px; border-radius: 12px; }');
+  if (edit) out.push('[data-pe].pe-hl { outline: 2px dashed var(--brand) !important; outline-offset: 3px; border-radius: 12px; } [data-pe].pe-sel { outline: 2px solid var(--brand) !important; outline-offset: 3px; border-radius: 12px; } .pe-split > [data-pe] { outline: 1px dashed #c9d3e0; outline-offset: 2px; border-radius: 8px; }');
   return out.join('\n');
 }
+
+// 浮窗位置 / 收起（本机记住）
+const POS_KEY = 'la9s.pe.win';
+const readWin = () => { try { return JSON.parse(localStorage.getItem(POS_KEY)) || {}; } catch { return {}; } };
+const clampPos = (x, y, w, h) => [Math.max(8, Math.min(x, window.innerWidth - Math.min(w, window.innerWidth - 16) - 8)), Math.max(8, Math.min(y, window.innerHeight - Math.min(h, 60) - 8))];
 
 export default function PageEditorHost() {
   const { org, role, toast } = useApp();
@@ -87,7 +132,10 @@ export default function PageEditorHost() {
   const [items, setItems] = useState([]);
   const [tab, setTab] = useState('blocks');
   const [sel, setSel] = useState(null);
-  const styleEl = useRef(null);
+  const [win, setWin] = useState(readWin);      // { x, y, min }
+  const [tb, setTb] = useState(null);            // 选中板块上的小工具条位置
+  const [oneTable, setOneTable] = useState(false);
+  const styleEl = useRef(null); const winEl = useRef(null);
   useEffect(() => { const f = () => setPage(pageKey()); window.addEventListener('hashchange', f); return () => window.removeEventListener('hashchange', f); }, []);
   const load = useCallback(async () => {
     const rs = await q(`select key, value from app.org_settings where org_id = $1 and (key = $2 or key = 'ui_type')`, [org, `layout2:${page}`]);
@@ -95,51 +143,79 @@ export default function PageEditorHost() {
     setSaved(m[`layout2:${page}`] || {}); setType(m.ui_type || {});
   }, [org, page]);
   useEffect(() => { load().catch(() => {}); setDraft(null); setSel(null); }, [load]);
-  useEffect(() => { if (!edit) { setDraft(null); setTdraft(null); } document.body.classList.toggle('pe-editing', !!edit && role === 'admin'); return () => document.body.classList.remove('pe-editing'); }, [edit, role]);
+  useEffect(() => { if (!edit) { setDraft(null); setTdraft(null); setSel(null); } }, [edit]);
+  const putWin = (w) => { setWin(w); try { localStorage.setItem(POS_KEY, JSON.stringify(w)); } catch { /* ignore */ } };
 
+  const cfg = draft || saved;
+  const tcfg = tdraft || type;
+  const splitKey = JSON.stringify(cfg.split || []);
   // 页面变了就重新认板块
   useEffect(() => {
     if (!edit) return undefined;
     let raf = 0;
-    const run = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const r = scan(); if (r) setItems((old) => { const n = r.items.map(({ key, label }) => ({ key, label })); return JSON.stringify(old) === JSON.stringify(n) ? old : n; }); }); };
+    const split = JSON.parse(splitKey);
+    const run = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const r = scan(split); if (r) setOneTable(r.oneTable); if (r) setItems((old) => { const n = r.items.map(({ key, label: l, parent, canSplit, split: sp, auto }) => ({ key, label: l, parent, canSplit, split: !!sp, auto: !!auto })); return JSON.stringify(old) === JSON.stringify(n) ? old : n; }); }); };
     run();
     const m = document.querySelector('main.content');
-    const ob = new MutationObserver(run);
+    const ob = new MutationObserver((ms) => { if (ms.some((x) => !x.target.closest?.('.pe-tb'))) run(); });
     if (m) ob.observe(m, { childList: true, subtree: true });
     return () => { ob.disconnect(); cancelAnimationFrame(raf); };
-  }, [page, edit]);
+  }, [page, edit, splitKey]);
 
-  const cfg = draft || saved;
-  const tcfg = tdraft || type;
   useEffect(() => {
     if (!styleEl.current) { styleEl.current = document.createElement('style'); styleEl.current.id = 'pe-style'; document.head.appendChild(styleEl.current); }
     styleEl.current.textContent = edit ? cssFor(cfg, tcfg, true) : '';
   }, [cfg, tcfg, edit, items]);
 
-  // 编辑时：鼠标停在板块上 / 点板块，在面板里对上
+  // 编辑时：鼠标停在板块上虚线框，点一下选中（页面上冒出小工具条，改了马上看到）
   useEffect(() => {
     if (!edit) return undefined;
-    const over = (e) => { const b = e.target.closest?.('[data-pe]'); document.querySelectorAll('[data-pe].pe-hl').forEach((x) => x !== b && x.classList.remove('pe-hl')); if (b && !e.target.closest('.pe-dock')) b.classList.add('pe-hl'); };
-    const down = (e) => { if (e.target.closest('.pe-dock')) return; const b = e.target.closest?.('[data-pe]'); if (b) setSel(b.dataset.pe); };
+    const inUi = (t) => t.closest?.('.pe-win, .pe-tb, .modal-back, .overlay');
+    const pick = (t) => { const all = []; let x = t.closest?.('[data-pe]'); while (x) { all.push(x); x = x.parentElement?.closest('[data-pe]'); } return all[0] || null; };
+    const over = (e) => { if (inUi(e.target)) return; const b = pick(e.target); document.querySelectorAll('[data-pe].pe-hl').forEach((x) => x !== b && x.classList.remove('pe-hl')); if (b) b.classList.add('pe-hl'); };
+    const down = (e) => { if (inUi(e.target)) return; const b = pick(e.target); if (b) setSel(b.dataset.pe); };
     document.addEventListener('pointerover', over); document.addEventListener('pointerdown', down, true);
     return () => { document.removeEventListener('pointerover', over); document.removeEventListener('pointerdown', down, true); document.querySelectorAll('.pe-hl').forEach((x) => x.classList.remove('pe-hl')); };
   }, [edit]);
+  // 选中的板块：描边 + 工具条跟着它（滚动 / 改宽度都跟）
   useEffect(() => {
     document.querySelectorAll('[data-pe].pe-sel').forEach((x) => x.classList.remove('pe-sel'));
-    if (edit && sel) { const el = document.querySelector(`[data-pe="${CSS.escape(sel)}"]`); el?.classList.add('pe-sel'); document.querySelector(`.pe-row[data-k="${CSS.escape(sel)}"]`)?.scrollIntoView({ block: 'nearest' }); }
-  }, [sel, edit, items]);
+    if (!edit || !sel) { setTb(null); return undefined; }
+    const el = document.querySelector(`[data-pe="${CSS.escape(sel)}"]`); if (!el) { setTb(null); return undefined; }
+    el.classList.add('pe-sel');
+    document.querySelector(`.pe-row[data-k="${CSS.escape(sel)}"]`)?.scrollIntoView({ block: 'nearest' });
+    let raf = 0;
+    const place = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const r = el.getBoundingClientRect(); const z = parseFloat(getComputedStyle(el).zoom) || 1;
+      setTb((o) => { const n = { top: Math.max(64, r.top * (z !== 1 ? 1 : 1) - 44), left: Math.max(8, Math.min(r.left, window.innerWidth - 620)), w: r.width, off: r.bottom < 60 || r.top > window.innerHeight }; return o && o.top === n.top && o.left === n.left && o.off === n.off ? o : n; }); }); };
+    place();
+    window.addEventListener('scroll', place, true); window.addEventListener('resize', place);
+    const ro = new ResizeObserver(place); ro.observe(el); ro.observe(document.body);
+    return () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place); ro.disconnect(); cancelAnimationFrame(raf); };
+  }, [sel, edit, items, cfg]);
+  // Esc：先取消选中，再关编辑
+  useEffect(() => {
+    if (!edit) return undefined;
+    const k = (e) => { if (e.key !== 'Escape' || e.defaultPrevented) return; if (document.querySelector('.modal-back, .overlay')) return; e.preventDefault(); if (sel) setSel(null); };
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
+  }, [edit, sel]);
 
   if (!edit || role !== 'admin') return null;
-  const order = (() => { const ks = items.map((i) => i.key); const o = (cfg.order || []).filter((k) => ks.includes(k)); ks.forEach((k) => { if (!o.includes(k)) o.splice(Math.min(ks.indexOf(k), o.length), 0, k); }); return o; })();
-  const rows = order.map((k) => items.find((i) => i.key === k)).filter(Boolean);
   const blk = (k) => cfg.blocks?.[k] || {};
   const setBlk = (k, patch) => setDraft((d) => { const x = structuredClone(d || saved || {}); x.blocks = { ...(x.blocks || {}), [k]: { ...(x.blocks?.[k] || {}), ...patch } }; return x; });
-  const dirty = !!draft || !!tdraft;
+  // 顺序：同一层（同一个外框）里排
+  const orderOf = (list) => { const ks = list.map((i) => i.key); const o = (cfg.order || []).filter((k) => ks.includes(k)); ks.forEach((k) => { if (!o.includes(k)) o.splice(Math.min(ks.indexOf(k), o.length), 0, k); }); return o.map((k) => list.find((i) => i.key === k)); };
+  const top = orderOf(items.filter((i) => !i.parent));
+  const kidsOf = (k) => orderOf(items.filter((i) => i.parent === k));
+  const setOrder = (list) => setDraft((d) => { const x = { ...(d || saved || {}) }; const keep = (x.order || []).filter((k) => !list.includes(k)); x.order = [...keep, ...list]; return x; });
+  const move = (k, dir) => { const it = items.find((i) => i.key === k); if (!it) return; const sib = it.parent ? kidsOf(it.parent) : top; const i = sib.findIndex((x) => x.key === k); const j = i + dir; if (j < 0 || j >= sib.length) return; const n = sib.map((x) => x.key); [n[i], n[j]] = [n[j], n[i]]; setOrder(n); };
+  const toggleSplit = (k) => setDraft((d) => { const x = { ...(d || saved || {}) }; const sp = new Set(x.split || []); if (sp.has(k)) sp.delete(k); else sp.add(k); x.split = [...sp]; return x; });
+  const changes = (() => { let n = 0; if (draft) { const a = JSON.stringify(saved.order || []) !== JSON.stringify(draft.order || saved.order || []); n += a ? 1 : 0; Object.keys(draft.blocks || {}).forEach((k) => { if (JSON.stringify(draft.blocks[k]) !== JSON.stringify(saved.blocks?.[k] || {})) n += 1; }); if (JSON.stringify(draft.split || []) !== JSON.stringify(saved.split || [])) n += 1; } if (tdraft) n += TYPE_CATS.filter(([k]) => Number(tdraft[k] || 1) !== Number(type[k] || 1)).length; return n; })();
+  const dirty = changes > 0;
   const save = async () => {
     try {
       if (draft) await call(role, `select app.set_org_setting($1,$2,$3)`, [org, `layout2:${page}`, JSON.stringify(draft)]);
       if (tdraft) await call(role, `select app.set_org_setting($1,$2,$3)`, [org, 'ui_type', JSON.stringify(tdraft)]);
-      await load(); setDraft(null); setTdraft(null); toast('已保存，所有人看到的都一样');
+      await load(); setDraft(null); setTdraft(null); toast('已保存，所有人看到的都一样（变更记录里有）');
     } catch (e) { toast(friendlyError(e), 'err'); }
   };
   const resetPage = async () => {
@@ -147,47 +223,78 @@ export default function PageEditorHost() {
   };
   const h1 = document.querySelector('main.content .pagehead h1');
   const title = (h1 ? [...h1.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim() : '') || page;
-  return (
-    <div className="pe-dock" role="dialog" aria-label="页面编辑">
-      <div className="pe-h"><b>页面编辑</b><span className="muted small">{title}</span><span className="grow" /><button type="button" className="close-x sm" aria-label="关" onClick={() => setLayoutEdit(false)}>✕</button></div>
-      <div className="seg sm pe-tabs">{[['blocks', '本页板块'], ['type', '全站字号']].map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
-      <div className="pe-body">
-        {tab === 'blocks' ? (<>
-          <div className="small muted">拖 ⋮⋮ 调顺序；页面上点哪块，这里就对上哪块。 <Info>页面标题和顶上的页签固定不动。手机上所有板块都占整行。改完点下面「保存」才对所有人生效；不保存关掉就作废。</Info></div>
-          {rows.length <= 1 && <div className="empty">这一页只有一块，没什么可排的。字号可以在「全站字号」里调。</div>}
-          {rows.length > 1 && <SortList items={rows} keyOf={(r) => r.key} gap={6} onChange={(n) => setDraft((d) => ({ ...(d || saved || {}), order: n.map((r) => r.key) }))} render={(r) => {
-            const b = blk(r.key);
-            return (
-              <div className={`pe-row ${sel === r.key ? 'on' : ''} ${b.hidden ? 'off' : ''}`} data-k={r.key} onMouseEnter={() => document.querySelector(`[data-pe="${CSS.escape(r.key)}"]`)?.classList.add('pe-hl')} onMouseLeave={() => document.querySelector(`[data-pe="${CSS.escape(r.key)}"]`)?.classList.remove('pe-hl')} onClick={() => { setSel(r.key); document.querySelector(`[data-pe="${CSS.escape(r.key)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }}>
-                <div className="pe-row-h"><b>{r.label}</b><span className="grow" />
-                  <button type="button" className={`btn sm ${b.hidden ? '' : 'ghost'}`} onClick={(e) => { e.stopPropagation(); setBlk(r.key, { hidden: !b.hidden }); }}>{b.hidden ? '已隐藏 · 点开' : '隐藏'}</button></div>
-                <div className="pe-row-c" onClick={(e) => e.stopPropagation()}>
-                  <span className="muted small">宽</span><div className="seg xs">{SPANS.map(([v, l]) => <button type="button" key={v} className={(b.span || 12) === v ? 'on' : ''} onClick={() => setBlk(r.key, { span: v })}>{l}</button>)}</div>
-                  <span className="muted small">大小</span><div className="seg xs">{SIZES.map(([v, l]) => <button type="button" key={v} className={(b.size || 1) === v ? 'on' : ''} onClick={() => setBlk(r.key, { size: v })}>{l}</button>)}</div>
+  const selIt = items.find((i) => i.key === sel);
+  const selLabel = selIt?.label || '';
+  // 拖浮窗：按住标题栏拖
+  const drag = (e) => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    const r = winEl.current.getBoundingClientRect(); const dx = e.clientX - r.left; const dy = e.clientY - r.top;
+    const mv = (ev) => { const [x, y] = clampPos(ev.clientX - dx, ev.clientY - dy, r.width, r.height); winEl.current.style.left = `${x}px`; winEl.current.style.top = `${y}px`; winEl.current.style.right = 'auto'; winEl.current.style.bottom = 'auto'; };
+    const up = (ev) => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); const [x, y] = clampPos(ev.clientX - dx, ev.clientY - dy, r.width, r.height); putWin({ ...win, x, y }); };
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+  };
+  const pos = win.x != null ? (() => { const [x, y] = clampPos(win.x, win.y, 320, 200); return { left: x, top: y }; })() : { right: 16, bottom: 16 };
+  const b = sel ? blk(sel) : {};
+  const sib = selIt ? (selIt.parent ? kidsOf(selIt.parent) : top) : [];
+  const si = sib.findIndex((x) => x.key === sel);
+  const Row = ({ r, depth }) => { const bb = blk(r.key); return (
+    <div className={`pe-row ${sel === r.key ? 'on' : ''} ${bb.hidden ? 'off' : ''}`} data-k={r.key} style={depth ? { marginLeft: 14 } : null}
+      onMouseEnter={() => document.querySelector(`[data-pe="${CSS.escape(r.key)}"]`)?.classList.add('pe-hl')} onMouseLeave={() => document.querySelector(`[data-pe="${CSS.escape(r.key)}"]`)?.classList.remove('pe-hl')}
+      onClick={() => { setSel(r.key); document.querySelector(`[data-pe="${CSS.escape(r.key)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }}>
+      <span className="pe-row-n">{r.label}</span>
+      {(bb.span && bb.span !== 12) ? <span className="pe-tag">{SPANS.find((x) => x[0] === bb.span)?.[1]}</span> : null}
+      {(bb.size && bb.size !== 1) ? <span className="pe-tag">{SIZES.find((x) => x[0] === bb.size)?.[1]}</span> : null}
+      <button type="button" className={`pe-eye ${bb.hidden ? 'off' : ''}`} title={bb.hidden ? '已隐藏，点一下显示' : '隐藏'} aria-label={bb.hidden ? '显示' : '隐藏'} onClick={(e) => { e.stopPropagation(); setBlk(r.key, { hidden: !bb.hidden }); }}>{bb.hidden ? '◌' : '●'}</button>
+    </div>); };
+  const tree = (list, depth = 0) => list.map((r) => <React.Fragment key={r.key}><Row r={r} depth={depth} />{r.split && tree(kidsOf(r.key), depth + 1)}</React.Fragment>);
+  return (<>
+    {tb && sel && !tb.off && <div className="pe-tb" style={{ top: tb.top, left: tb.left }} onPointerDown={(e) => e.stopPropagation()}>
+      <b className="pe-tb-n" title={selLabel}>{selLabel}</b>
+      <button type="button" className="btn xs" disabled={si <= 0} title="往前挪" onClick={() => move(sel, -1)}>↑</button>
+      <button type="button" className="btn xs" disabled={si < 0 || si >= sib.length - 1} title="往后挪" onClick={() => move(sel, 1)}>↓</button>
+      <span className="pe-tb-sep" />
+      <div className="seg xs" title="宽度（手机上一律整行）">{SPANS.map(([v, l]) => <button type="button" key={v} className={(b.span || 12) === v ? 'on' : ''} onClick={() => setBlk(sel, { span: v })}>{l}</button>)}</div>
+      <div className="seg xs" title="这一块的字和数字一起放大缩小">{SIZES.map(([v, l]) => <button type="button" key={v} className={(b.size || 1) === v ? 'on' : ''} onClick={() => setBlk(sel, { size: v })}>{l}</button>)}</div>
+      <button type="button" className={`btn xs ${b.hidden ? 'primary' : ''}`} onClick={() => setBlk(sel, { hidden: !b.hidden })}>{b.hidden ? '显示' : '隐藏'}</button>
+      {selIt?.canSplit && !selIt.auto && <button type="button" className="btn xs" title={selIt.split ? '里面的小块合回一整块' : '把这张卡片里面的小块分开，单独排 / 调宽 / 隐藏'} onClick={() => toggleSplit(sel)}>{selIt.split ? '合起来' : '拆开'}</button>}
+      <button type="button" className="close-x sm" aria-label="取消选中" onClick={() => setSel(null)}>✕</button>
+    </div>}
+    <div ref={winEl} className={`pe-win ${win.min ? 'min' : ''}`} style={pos} role="dialog" aria-label="页面编辑">
+      <div className="pe-h" onPointerDown={drag} title="按住这里可以拖到别处">
+        <span className="pe-grip">⋮⋮</span><b>页面编辑</b><span className="muted small">{title}</span><span className="grow" />
+        {dirty && <span className="pill amber">{changes} 处没保存</span>}
+        <button type="button" className="pe-ic" aria-label={win.min ? '展开' : '收起'} title={win.min ? '展开' : '收起成一条，页面看得更全'} onClick={() => putWin({ ...win, min: !win.min })}>{win.min ? '▢' : '–'}</button>
+        <button type="button" className="pe-ic" aria-label="关" title={dirty ? '关掉 = 没保存的改动不要了' : '关'} onClick={() => setLayoutEdit(false)}>✕</button></div>
+      {!win.min && <>
+        <div className="seg sm pe-tabs">{[['blocks', '本页板块'], ['type', '全站字号']].map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
+        <div className="pe-body">
+          {tab === 'blocks' ? (<>
+            <div className="small muted">在页面上点哪块，哪块上面就出小工具条，改了马上看到。 <Info>拖：按住这个小窗的标题栏拖到不挡的地方；「–」收起成一条。页面标题和顶上的页签固定不动；手机上所有板块都占整行。卡片里面还有小块的，点「拆开」就能把里面的分开调。改完点「保存」才对所有人生效，改动会进「变更记录」。</Info></div>
+            {items.length <= 1 && <div className="empty">{oneTable ? <>这一页就是一张表，没有别的块可排。<br />表格的列：表格右上角「列」里显示 / 隐藏，表头拖动调顺序；字大小在上面「全站字号 → 表格」。</> : '这一页只有一块，没什么可排的。字号可以在「全站字号」里调。'}</div>}
+            {items.length > 1 && <div className="pe-list">{tree(top)}</div>}
+          </>) : (<>
+            <div className="small muted">全站一起变，所有页面、所有人。</div>
+            {TYPE_CATS.map(([k, l, , hint]) => { const v = Number(tcfg[k] || 1); return (
+              <div key={k} className="pe-type">
+                <div className="row" style={{ gap: 6, flexWrap: 'nowrap' }}><b>{l}</b><span className="muted small pe-hint">{hint}</span><span className="grow" /><b className="pe-pct">{Math.round(v * 100)}%</b></div>
+                <div className="row" style={{ gap: 8, flexWrap: 'nowrap' }}>
+                  <button type="button" className="btn xs" onClick={() => setTdraft({ ...tcfg, [k]: Math.max(0.8, +(v - 0.05).toFixed(2)) })}>A−</button>
+                  <input type="range" min={80} max={150} step={5} value={Math.round(v * 100)} onChange={(e) => setTdraft({ ...tcfg, [k]: Number(e.target.value) / 100 })} style={{ flex: 1, minWidth: 0 }} aria-label={l} />
+                  <button type="button" className="btn xs" onClick={() => setTdraft({ ...tcfg, [k]: Math.min(1.5, +(v + 0.05).toFixed(2)) })}>A＋</button>
                 </div>
-              </div>);
-          }} />}
-        </>) : (<>
-          <div className="small muted">全站一起变，所有页面、所有人。</div>
-          {TYPE_CATS.map(([k, l, , hint]) => { const v = Number(tcfg[k] || 1); return (
-            <div key={k} className="pe-type">
-              <div className="row" style={{ gap: 6 }}><b>{l}</b><span className="muted small">{hint}</span><span className="grow" /><b className="pe-pct">{Math.round(v * 100)}%</b></div>
-              <div className="row" style={{ gap: 8, flexWrap: 'nowrap' }}>
-                <button type="button" className="btn sm" onClick={() => setTdraft({ ...tcfg, [k]: Math.max(0.8, +(v - 0.05).toFixed(2)) })}>A−</button>
-                <input type="range" min={80} max={150} step={5} value={Math.round(v * 100)} onChange={(e) => setTdraft({ ...tcfg, [k]: Number(e.target.value) / 100 })} style={{ flex: 1 }} aria-label={l} />
-                <button type="button" className="btn sm" onClick={() => setTdraft({ ...tcfg, [k]: Math.min(1.5, +(v + 0.05).toFixed(2)) })}>A＋</button>
-              </div>
-            </div>); })}
-          <button type="button" className="btn sm ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setTdraft({})}>字号全部恢复 100%</button>
-        </>)}
-      </div>
-      <div className="pe-foot">
-        {tab === 'blocks' && <button type="button" className="btn sm ghost" onClick={resetPage}>本页恢复默认</button>}
-        <span className="grow" />
-        {dirty && <button type="button" className="btn sm" onClick={() => { setDraft(null); setTdraft(null); }}>不改了</button>}
-        <button type="button" className="btn sm primary" disabled={!dirty} title={dirty ? '' : '还没改东西'} onClick={save}>保存（所有人）</button>
-      </div>
-    </div>);
+              </div>); })}
+            <button type="button" className="btn sm ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setTdraft({})}>字号全部恢复 100%</button>
+          </>)}
+        </div>
+        <div className="pe-foot">
+          {tab === 'blocks' && <ConfirmBtn className="btn sm ghost" title="本页恢复默认？" body="这一页的顺序、宽度、隐藏、拆开全部回到原样，所有人一起变。" onOk={resetPage}>本页恢复默认</ConfirmBtn>}
+          <span className="grow" />
+          {dirty && <button type="button" className="btn sm" onClick={() => { setDraft(null); setTdraft(null); }}>不改了</button>}
+          <button type="button" className="btn sm primary" disabled={!dirty} title={dirty ? '' : '还没改东西'} onClick={save}>保存（所有人）</button>
+        </div>
+      </>}
+    </div>
+  </>);
 }
 
 // 不在编辑时也要按保存的设置显示：PageEditorHost 只在编辑时出面板，样式另由 PageStyle 常驻
@@ -210,9 +317,9 @@ export function PageStyle() {
     if (!el.current) { el.current = document.createElement('style'); el.current.id = 'pe-style-live'; document.head.appendChild(el.current); }
     el.current.textContent = css;
     // 打 data-pe 标记（React 换页 / 刷新后重新打）
-    let raf = 0; const run = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(scan); };
+    let raf = 0; const run = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => scan(state.cfg?.split || [])); };
     run(); const m = document.querySelector('main.content'); const ob = new MutationObserver(run); if (m) ob.observe(m, { childList: true, subtree: true });
     return () => { ob.disconnect(); cancelAnimationFrame(raf); };
-  }, [css, edit, page]);
+  }, [css, edit, page, state]);
   return null;
 }

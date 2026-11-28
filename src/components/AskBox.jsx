@@ -3,7 +3,9 @@
 // 不用外部 AI（数据不出这台电脑 / 服务器）：本地听懂「谁 / 哪个客户 / 哪个型号或种类 / 什么时候 / 看什么 / 按什么分」，
 // 听懂的部分显示成一排小块，点 × 去掉、点分组换一种分法；结果是一张表 + 一句话，客户 / 型号 / 员工都能点开。
 // 销量 = 出库（作废的不算，退货另列）；员工 = 订单上的归属销售员（激励也按这个算）；金额一律折成 XOF。
-import { hasAny } from '../lib/domain.js';
+import { hasAny, dealLight, dealPay, reachedStep, STEPS } from '../lib/domain.js';
+import { orders as ORDERS_SQL } from '../db/queries.js';
+import { poListSql, poMatch, poJump, stageOf } from '../pages/Po.jsx';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { q } from '../db/client.js';
 import { useApp, useData, Choice } from './ui.jsx';
@@ -11,17 +13,33 @@ import { ordersJump } from '../lib/dirWork.js';
 import { ITEMS, visibleTo } from './Nav.jsx';
 import { presetPeriod } from './ui.jsx';
 import { periodRange, ymd, dDate } from '../lib/format.js';
-import { parse, METRIC, NOW, GROUP, looksLikeQuestion } from '../lib/askParse.js';   // 关键词全在 lib/askParse.js（纯函数，tests/ask.test.mjs 回归）
+import { parse, METRIC, NOW, GROUP, looksLikeQuestion, TIER_NAME, PAY_NAME, STEP_NAME, LIGHT_NAME, PO_STAGE_NAME } from '../lib/askParse.js';   // 关键词全在 lib/askParse.js（纯函数，tests/ask.test.mjs 回归）
 
 const fmt = (n) => Math.round(Number(n || 0)).toLocaleString('en-US');
 const norm = (s) => String(s || '').toUpperCase().replace(/[\s_\-·.]+/g, '');
 
 const KEY = { customer: ['c.id', 'c.name'], model: ['p.model', 'p.model'], category: ['cat.name', 'cat.name'], employee: ['e.id', "coalesce(e.short_name, '（无归属）')"], day: ['s.shipped_at::date', "to_char(s.shipped_at::date, 'MM-DD')"], deal: ['d.id', 'd.biz_no'] };
+// 11-28: 带「档位 / 付款 / 卡在哪步 / 订单状态」的问法 → 按订单列（跟订单总览同一套口径，没出库的单也算）
+export const orderMode = (P) => !P.subject && (!!(P.pay || P.step || P.light) || (!!P.tier && (P.group === 'deal' || !P.said?.metric)));
 async function run(org, P) {
+  if (P.subject === 'po') {   // 采购单：按下单日 + 到货进度 + 用途，跟采购单页同一个筛选函数
+    const all = await q(poListSql, [org]);
+    return all.filter((p) => poMatch(p, { from: P.from, to: P.to, stage: P.poStage, purpose: P.purpose }) && (!P.model || String(p.models || '').toUpperCase().includes(P.model.toUpperCase())))
+      .map((p) => ({ k: p.id, poid: p.id, label: [p.po_no, p.batch_name].filter(Boolean).join(' · '), n: 1, qty: Number(p.qty) || 0, amount: Number(p.received) || 0, right: stageOf(p)[0], recv: Number(p.received) > 0 || p.status === 'closed' }));
+  }
+  if (orderMode(P)) {
+    const ds = await q(ORDERS_SQL, [org, P.from, P.to]);
+    const catIds = P.cat ? new Set((await q(`select distinct l.deal_id::text as id from app.deal_lines l join app.products p on p.id = l.product_id where p.category_id = $1`, [P.cat.id])).map((r) => r.id)) : null;
+    return ds.filter((d) => (!P.tier || d.tier === P.tier) && (!P.cust || d.customer_id === P.cust.id) && (!P.emp || d.owner_employee_id === P.emp.id)
+      && (!P.pay || dealPay(d) === P.pay) && (!P.light || dealLight(d) === P.light) && (!P.step || (d.status !== 'cancelled' && STEPS[reachedStep(d) + 1]?.key === P.step))
+      && (!P.model || String(d.models || '').toUpperCase().split(' / ').includes(P.model.toUpperCase())) && (!catIds || catIds.has(String(d.id))))
+      .map((d) => ({ k: d.id, did: d.id, cid: d.customer_id, label: `${d.biz_no} · ${d.customer_name}`, n: 1, qty: Number(d.qty_supply || d.qty_req) || 0, amount: d.currency === 'XOF' ? Number(d.amount) || 0 : 0, due: Math.max(0, Number(d.due) || 0) }));
+  }
   const args = [org, P.from, P.to]; const w = [];
   const add = (sql, v) => { args.push(v); w.push(sql.replace('?', `$${args.length}`)); };
   if (P.emp) add('d.owner_employee_id = ?', P.emp.id);
   if (P.cust) add('d.customer_id = ?', P.cust.id);
+  if (P.tier && P.metric !== 'stock') add('c.tier::text = ?', P.tier);
   if (P.cat && P.metric !== 'recv') add('p.category_id = ?', P.cat.id);
   if (P.model && P.metric !== 'recv') add('p.model = ?', P.model);
   const W = w.length ? ' and ' + w.join(' and ') : '';
@@ -40,6 +58,7 @@ async function run(org, P) {
     const a2 = [org]; const w2 = [];
     if (P.emp) { a2.push(P.emp.id); w2.push(`c.owner_employee_id = $${a2.length}`); }
     if (P.cust) { a2.push(P.cust.id); w2.push(`c.id = $${a2.length}`); }
+    if (P.tier) { a2.push(P.tier); w2.push(`c.tier::text = $${a2.length}`); }
     return q(`select ${k[0]}::text as k, ${k[1]} as label, max(c.id::text) as cid, max(e.id::text) as eid, count(*)::int as n, 0 as qty, sum(v.due * ${xof}) as amount
       from app.v_deal_due v join app.deals d on d.id = v.deal_id join app.customers c on c.id = v.customer_id left join app.employees e on e.id = c.owner_employee_id
       where v.org_id = $1 and v.due > 0 ${w2.length ? 'and ' + w2.join(' and ') : ''} group by 1, 2 order by amount desc limit 3000`, a2);
@@ -67,14 +86,28 @@ async function run(org, P) {
     where d.org_id = $1 and s.voided_at is null and s.shipped_at::date between $2::date and $3::date ${W} group by 1, 2 order by ${P.metric === 'amount' ? 'amount' : 'qty'} desc limit 3000`, args);
 }
 
-const EX = ['Thomas 今年所有销售清单', 'Thomas 的 balance', 'Koffi 昨天对应客户的销量', '本月每个销售员卖了多少钱', '现在谁欠款最多', '近 7 天收款按客户', '电池盖库存'];
+const EX = ['S 档本月的订单', '上个月的采购单，哪些已经入库', '待出库的订单', 'Thomas 今年所有销售清单', 'Thomas 的 balance', 'Koffi 昨天对应客户的销量', '本月每个销售员卖了多少钱', '现在谁欠款最多', '近 7 天收款按客户', '电池盖库存'];
 
 // 去哪看（一键跳转，到了自动筛好）：每种问法给一个主按钮，必要时再给一两个
 function jumpsOf(P, rows) {
   const J = [];
   const day = (x) => x.slice(5);
   const range = P.from === '2000-01-01' ? '全部时间' : `${day(P.from)} – ${day(P.to)}`;
-  const ordersJ = { kind: 'orders', j: { cust: P.cust?.id, model: P.model, cat: P.cat?.name, emp: P.emp?.id, from: P.from, to: P.to, pk: P.pk, ask: true } };
+  const ordersJ = { kind: 'orders', j: { cust: P.cust?.id, model: P.model, cat: P.cat?.name, emp: P.emp?.id, from: P.from, to: P.to, pk: P.pk === 'all' ? 'custom' : P.pk, ask: true, tier: P.tier, pay: P.pay, step: P.step, light: P.light } };
+  const filtTxt = [P.tier && `${TIER_NAME[P.tier]} 档`, P.pay && PAY_NAME[P.pay], P.step && STEP_NAME[P.step], P.light && LIGHT_NAME[P.light]].filter(Boolean);
+  if (P.subject === 'po') {
+    const what = [P.purpose === 'fob' ? 'FOB' : P.purpose === 'local' ? '本地备货' : '', P.poStage ? PO_STAGE_NAME[P.poStage] : ''].filter(Boolean).join(' · ');
+    J.push({ kind: 'po', j: { from: P.from, to: P.to, pk: P.pk, stage: P.poStage || 'all', purpose: P.purpose || '' }, label: `打开采购单与到货${what ? `：${what}` : ''}`, sub: `已筛好 · ${range}（按下单日）；到了每张单的物流进度都在表里` });
+    if (P.poStage === 'recv') J.push({ kind: 'po', j: { from: P.from, to: P.to, pk: P.pk, stage: 'transit', purpose: P.purpose || '' }, label: '同一段时间还没到齐的', sub: '在途 / 部分入库' });
+    else if (P.poStage !== 'transit') J.push({ kind: 'po', j: { from: P.from, to: P.to, pk: P.pk, stage: 'recv', purpose: P.purpose || '' }, label: '只看已入库的', sub: '含部分入库' });
+    return J;
+  }
+  if (filtTxt.length) {   // 说了档位 / 付款 / 卡在哪步 → 订单总览筛好放第一个
+    const who = [P.cust?.name, P.emp ? `${P.emp.short_name} 名下` : null, P.cat?.name, P.model, ...filtTxt].filter(Boolean).join(' · ');
+    J.push({ ...ordersJ, label: `打开订单总览：${who}`, sub: `已筛好 · ${range}（按下单日期）；到了还能一键清除` });
+    if (P.metric === 'ar' && !P.cust) J.push({ kind: 'go', to: 'balances', label: '客户欠款清单', sub: '全部客户的 Balance' });
+    return J;
+  }
   if (P.metric === 'ar') {
     if (P.cust) J.push({ ...{ kind: 'go', to: `customer/${P.cust.id}` }, label: `打开 ${P.cust.name} 的总账`, sub: '看 Balance、发对账单、把收款冲到订单' });
     else if (rows?.length === 1 && rows[0].cid) J.push({ kind: 'go', to: `customer/${rows[0].cid}`, label: `打开 ${rows[0].label} 的总账`, sub: '看 Balance、冲订单' });
@@ -175,6 +208,7 @@ function AskPanel({ onClose }) {
     try { sessionStorage.setItem('la9s.ask.last', text); } catch { /* ignore */ }
     onClose();
     if (J.kind === 'orders') ordersJump(go, J.j);
+    else if (J.kind === 'po') poJump(go, J.j);
     else if (J.kind === 'stock') { try { sessionStorage.setItem('la9s.stock.q', J.q); } catch { /* ignore */ } go('stock'); setTimeout(() => window.dispatchEvent(new Event('la9s-stock-q')), 50); }
     else if (J.kind === 'arch') openArchive(J.a);
     else { if (J.period) presetPeriod(J.period[0], J.period[1] || 'custom', J.period[2]); go(J.to); }   // 11-25: 收款页也把时间带过去
@@ -237,6 +271,15 @@ function AskPanel({ onClose }) {
   const say = P && rows ? (() => {
     const who = [P.emp ? `${P.emp.short_name}${P.metric === 'ar' || P.group === 'customer' ? ' 名下' : ''}` : null, P.cust?.name, P.cat?.name, P.model].filter(Boolean).join(' · ') || '全公司';
     const g = GROUP.find((x) => x[0] === P.group)?.[1].replace('按', '') || '';
+    if (P.subject === 'po') { const st = P.poStage ? PO_STAGE_NAME[P.poStage] : ''; const pu = P.purpose === 'fob' ? 'FOB ' : P.purpose === 'local' ? '本地备货 ' : '';
+      if (!rows.length) return `${P.when}（按下单日）：没有${pu}${st ? `「${st}」的` : ''}采购单。`;
+      const rc = rows.filter((r) => r.recv).length;
+      return `${P.when}（按下单日）：${pu}${st ? `「${st}」` : ''}采购单 ${rows.length} 张，共 ${fmt(tot.qty)} 片${P.poStage ? '' : `；已入库（含部分）${rc} 张，没入库 ${rows.length - rc} 张`}。`; }
+    if (orderMode(P)) { const ft = [P.tier && `${TIER_NAME[P.tier]} 档`, P.pay && PAY_NAME[P.pay], P.step && STEP_NAME[P.step], P.light && LIGHT_NAME[P.light]].filter(Boolean).join(' · ');
+      const w2 = [P.emp ? `${P.emp.short_name} 名下` : null, P.cust?.name, P.cat?.name, P.model].filter(Boolean).join(' · ');
+      if (!rows.length) return `${w2 ? w2 + ' ' : ''}${P.when}：没有「${ft}」的订单。`;
+      const due = rows.reduce((a, r) => a + (r.due || 0), 0);
+      return `${w2 ? w2 + ' ' : ''}${P.when}「${ft}」订单 ${rows.length} 张 · ${fmt(tot.qty)} 片 · ${fmt(tot.amount)} XOF${due > 0 ? `，还欠 ${fmt(due)}` : ''}。`; }
     if (!rows.length) return `${who} ${NOW.has(P.metric) ? '现在' : P.when}：没有${({ recv: '收款', ret: '退货', ar: '欠款', stock: '库存' })[P.metric] || '出库'}。`;
     if (P.metric === 'recv') return `${who} ${P.when}：收款 ${fmt(tot.amount)} XOF，${tot.n} 笔。`;
     if (P.metric === 'ar') return P.cust ? `${P.cust.name} 现在欠 ${fmt(tot.amount)} XOF，${tot.n} 张单没收清。` : `${who} 现在：欠款 ${fmt(tot.amount)} XOF，${tot.n} 张单没收清，${rows.length} 个${g}；最多 ${rows[0].label}（${fmt(rows[0].amount)}）。`;
@@ -244,7 +287,9 @@ function AskPanel({ onClose }) {
     return `${who} ${P.when}：${P.metric === 'ret' ? '退货' : '出库'} ${fmt(tot.qty)} 片 · ${fmt(tot.amount)} XOF · ${tot.n} 单${rows.length > 1 ? `，最多 ${rows[0].label}（${fmt(P.metric === 'amount' ? rows[0].amount : rows[0].qty)}${P.metric === 'amount' ? ' XOF' : ' 片'}）` : ''}。`;
   })() : '';
   const rowJump = (r) => {
-    const base = { cust: P.cust?.id, model: P.model, cat: P.cat?.name, emp: P.emp?.id, from: P.from, to: P.to, pk: P.pk, ask: true };
+    const base = { cust: P.cust?.id, model: P.model, cat: P.cat?.name, emp: P.emp?.id, from: P.from, to: P.to, pk: P.pk === 'all' ? 'custom' : P.pk, ask: true, tier: P.tier };
+    if (r.poid) return doJump({ kind: 'arch', a: { kind: 'po', id: r.poid } });
+    if (orderMode(P) && r.did) return doJump({ kind: 'go', to: `deal/${r.did}` });
     if (P.metric === 'stock') return doJump({ kind: 'stock', q: r.label });
     if (P.group === 'deal') return doJump({ kind: 'go', to: `deal/${r.did || r.k}` });
     if (['ar', 'recv'].includes(P.metric)) return r.cid && P.group === 'customer' ? doJump({ kind: 'go', to: `customer/${r.cid}` }) : doJump({ kind: 'go', to: 'balances' });
@@ -282,24 +327,31 @@ function AskPanel({ onClose }) {
           {showQ && <div className="ask-ans">
             <div className="ask-chips">
               <span className="small muted">听懂的：</span>
-              {NOW.has(P.metric) ? chip('现在') : <>
+              {NOW.has(P.metric) && !P.subject && !orderMode(P) ? chip('现在') : <>
                 {whenKey(P) ? <Choice size="sm" value={whenKey(P)} onChange={(v) => tweak(whenPatch(v))} flat={false} options={WHEN_OPTS} /> : <span className="ask-chip" title="点右边的 × 回到本月">{P.when}<button type="button" aria-label="回到本月" onClick={() => tweak(whenPatch('month'))}>×</button></span>}
-                <span className="small muted ask-range">{P.from === '2000-01-01' ? '' : `${P.from.slice(5)}${P.to !== P.from ? ' – ' + P.to.slice(5) : ''}`}{P.said && !P.said.when ? ' · 没说时间，按本月' : ''}</span></>}
+                <span className="small muted ask-range">{P.from === '2000-01-01' ? '' : `${P.from.slice(5)}${P.to !== P.from ? ' – ' + P.to.slice(5) : ''}`}{P.said && !P.said.when ? (P.from === '2000-01-01' ? ' · 没说时间，看全部' : ' · 没说时间，按本月') : ''}</span></>}
               {P.emp && chip(`销售员 ${P.emp.short_name}`, () => tweak({ emp: null }))}
               {P.cust && chip(`客户 ${P.cust.name}`, () => tweak({ cust: null, custAlt: [] }))}
               {P.cat && chip(`种类 ${P.cat.name}`, () => tweak({ cat: null }))}
               {P.model && chip(`型号 ${P.model}`, () => tweak({ model: null }))}
-              <Choice size="sm" value={P.metric} onChange={(v) => tweak({ metric: v })} flat={false} options={METRIC} />
-              <Choice size="sm" value={P.group} onChange={(v) => tweak({ group: v })} flat={false} options={GROUP.filter(([k]) => (P.metric === 'stock' ? ['model', 'category'].includes(k) : P.metric === 'ar' ? ['customer', 'employee', 'deal'].includes(k) : P.metric !== 'recv' || !['model', 'category', 'deal'].includes(k)))} />
+              {P.subject === 'po' && chip('采购单', () => tweak({ subject: null, poStage: null, purpose: null }))}
+              {P.poStage && chip(PO_STAGE_NAME[P.poStage], () => tweak({ poStage: null }))}
+              {P.purpose && chip(P.purpose === 'fob' ? 'FOB' : '本地备货', () => tweak({ purpose: null }))}
+              {P.tier && chip(`档位 ${TIER_NAME[P.tier]}`, () => tweak({ tier: null }))}
+              {P.pay && chip(PAY_NAME[P.pay], () => tweak({ pay: null }))}
+              {P.step && chip(STEP_NAME[P.step], () => tweak({ step: null }))}
+              {P.light && chip(LIGHT_NAME[P.light], () => tweak({ light: null }))}
+              {!P.subject && !orderMode(P) && <><Choice size="sm" value={P.metric} onChange={(v) => tweak({ metric: v })} flat={false} options={METRIC} />
+              <Choice size="sm" value={P.group} onChange={(v) => tweak({ group: v })} flat={false} options={GROUP.filter(([k]) => (P.metric === 'stock' ? ['model', 'category'].includes(k) : P.metric === 'ar' ? ['customer', 'employee', 'deal'].includes(k) : P.metric !== 'recv' || !['model', 'category', 'deal'].includes(k)))} /></>}
             </div>
             {P.custAlt?.length > 0 && <div className="small muted">不是这个客户？{P.custAlt.map((c) => <button type="button" key={c.id} className="linkbtn small" style={{ marginLeft: 6 }} onClick={() => tweak({ cust: c, custAlt: [P.cust, ...P.custAlt.filter((x) => x.id !== c.id)] })}>{c.name}</button>)}</div>}
             {P.blank && <div className="ask-miss">没听懂「{asked}」。下面是默认的：本月 · 销量 · 按销售员；点上面的小块可以改，或者换个说法。这句话已经记下来，方便以后加关键词。</div>}
             {say && <div className="ask-say">{say}</div>}
             {jumps.length > 0 && <div className="ask-jumps">{jumps.map((J, i) => (
               <button type="button" key={i} className={`ask-jump ${i === 0 ? 'main' : ''} ${cls(i)}`} onClick={() => doJump(J)}><b>{J.label} →</b><small>{J.sub}</small></button>))}</div>}
-            {top.length > 1 && <div className="ask-top">{top.map((r) => (
+            {top.length > (P.subject || orderMode(P) ? 0 : 1) && <div className="ask-top">{top.map((r) => (
               <button type="button" key={r.k} className="ask-tr" title="点了直接打开" onClick={() => rowJump(r)}>
-                <span className="ask-tl">{r.label}</span><span className="grow" />{!['recv', 'ar'].includes(P.metric) && <span className="muted small">{fmt(r.qty)} 片</span>}<b>{fmt(r.amount)}</b></button>))}
+                <span className="ask-tl">{r.label}</span><span className="grow" />{r.right ? <><span className="muted small">{fmt(r.qty)} 片</span><span className="small">{r.right}</span></> : <>{!['recv', 'ar'].includes(P.metric) && <span className="muted small">{fmt(r.qty)} 片</span>}<b>{fmt(r.amount)}</b></>}</button>))}
               {rows.length > top.length && <div className="small muted" style={{ padding: '4px 8px' }}>还有 {rows.length - top.length} 个，跳过去看全部</div>}</div>}
           </div>}
           {busy && <div className="small muted">算一下…</div>}

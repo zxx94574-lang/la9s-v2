@@ -152,7 +152,7 @@ export default function App() {
   useEffect(() => {
     const k = (e) => {
       if (e.key !== 'Escape' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (document.querySelector('.overlay, .drawer-scrim, .menu, .per-menu, .dp-pop, .cell-pop, .ask-veil, .msheet, .ob-pal, .scrim, .pe-dock')) return;
+      if (document.querySelector('.overlay, .drawer-scrim, .menu, .per-menu, .dp-pop, .cell-pop, .ask-veil, .msheet, .ob-pal, .scrim, .pe-win, .pe-tb')) return;
       const a = document.activeElement;
       if (a && (a.closest('input, textarea, select, [contenteditable="true"]') || a.closest('.tw, .grid-wrap, .gtable'))) return;
       navBack();
