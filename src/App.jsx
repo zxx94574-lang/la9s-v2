@@ -21,6 +21,8 @@ import { DirectiveGate, DirBar } from './components/Directives.jsx';
 import { resetPeriods, Ctx, Modal, useToasts, Info, useStickyPagehead, useInstantTips, useExplainDisabled } from './components/ui.jsx';
 import { ArchiveHost } from './components/Archives.jsx';
 import { ExportPanel } from './components/SettingsPanels.jsx';
+import MePanel, { ViewAsBar, Avatar, useViewAs, currentUid, useMe, meName } from './components/MePanel.jsx';
+import { getViewAs, setViewAs, unlockView, lockView, touchUnlock, UNLOCK_MIN } from './lib/viewAs.js';
 import { loadAllOpts } from './components/Opts.jsx';
 import { RouteIcon, Icon, setIconOverride } from './components/Icons.jsx';
 import { loadGridAlign } from './lib/gridPrefs.js';
@@ -81,7 +83,18 @@ export default function App() {
   const [tick, setTick] = useState(0);
   const [toast, toastView] = useToasts();
   useExplainDisabled(toast);   // 11-27: 点灰掉的主按钮 → 说还差什么
-  const [settings, setSettings] = useState(false);
+  const [settings, setSettings] = useState(false);   // 系统设置（只有中方）
+  const [mePanel, setMePanel] = useState(false);     // 11-28 头像 =「我的」
+  const [unlockAsk, setUnlockAsk] = useState(false);
+  const viewAs = useViewAs();
+  // 演示 / 真实单机版只有中方一个人用：没走切换就停在别的员工岗位（比如老的浏览器记录），也当成「以这个身份查看 · 只看」，顶上有「切回我自己」
+  useEffect(() => {
+    if (SERVER || viewAs || role === 'admin' || ['boss', 'clerk', 'guest'].includes(role) || !ROLES[role]) return;
+    setViewAs({ kind: 'staff', role, name: ROLES[role].label, sub: ROLES[role].label, key: `role:${role}`, unlockUntil: 0 });
+  }, [role, viewAs]);
+  const [, setAvTick] = useState(0);
+  useEffect(() => { const f = () => setAvTick((x) => x + 1); window.addEventListener('la9s:avatar', f); return () => window.removeEventListener('la9s:avatar', f); }, []);
+  useEffect(() => { const f = () => touchUnlock(); window.addEventListener('pointerdown', f, true); return () => window.removeEventListener('pointerdown', f, true); }, []);
   const [drawer, setDrawer] = useState(false);
   const [openGroups, setOpenGroups] = useState(() => store.get('la9s.navgroups3', {}));
   const [navCfg, setNavCfg] = useState(null);
@@ -180,13 +193,14 @@ export default function App() {
 
   // 0106 (Frank 11-27): 下班卡后锁系统 —— 本地员工打了下班卡 / 过了晚上截止 / 早上开门前, 进不了系统; 每分钟查一次, 打卡后马上查
   const [lock, setLock] = useState(null);
+  const [peerLock, setPeerLock] = useState(false);   // 中方以员工身份查看时：那个员工现在被下班锁着（只提示，不锁中方）
   useEffect(() => {
     if (!org || !boot.ready || customerSession()) return undefined;
     let alive = true;
-    const chk = async () => { try { const [{ s }] = await call(role, `select app.offhours_state($1) as s`, [org]); if (alive) setLock(s?.locked ? s : null); } catch { /* 迁移还没到 / 数据库没好 */ } };
+    const chk = async () => { try { const [{ s }] = await call(role, `select app.offhours_state($1) as s`, [org]); if (!alive) return; if (getViewAs()) { setLock(null); setPeerLock(!!s?.locked); } else { setPeerLock(false); setLock(s?.locked ? s : null); } } catch { /* 迁移还没到 / 数据库没好 */ } };
     chk(); const t = setInterval(chk, 60e3); window.addEventListener('la9s:punched', chk);
     return () => { alive = false; clearInterval(t); window.removeEventListener('la9s:punched', chk); };
-  }, [org, role, boot.ready]);
+  }, [org, role, boot.ready, viewAs]);
   useEffect(() => { if (lock && SERVER) logout().catch(() => {}); }, [lock]);   // 线上: 真的退出登录 (明天要重新登)
   const go = useCallback((path) => { location.hash = '#/' + path; }, []);
   const refresh = useCallback(() => setTick((t) => t + 1), []);
@@ -235,7 +249,9 @@ export default function App() {
   if (role === 'cn_support' && !['todo', 'sop', 'stock', 'po', 'purchase', 'replenish'].includes(page)) page = 'todo';
   if (role === 'cn_business' && !['todo', 'sop', 'stock', 'purchase'].includes(page)) page = 'todo';
   // 11-26 配权限：打开（或首页按钮落到）自己岗位看不到的页 → 回到我的待办（库管员、销售员的首页就是待办）
-  const home = !portal && ITEMS.dashboard && !visibleTo('dashboard', role, navCfg) ? 'todo' : 'dashboard';
+  const homeOpts = [['dashboard', '经营总览'], ['todo', '我的待办'], ['orders', '订单总览']].filter(([k]) => ITEMS[k] && visibleTo(k, role, navCfg));
+  const homePref = store.get(`la9s.home.${role}`, '');
+  const home = !portal && homePref && homeOpts.some(([k]) => k === homePref) ? homePref : (!portal && ITEMS.dashboard && !visibleTo('dashboard', role, navCfg) ? 'todo' : 'dashboard');
   if (!portal && ITEMS[page] && !page.startsWith('p/') && !visibleTo(page, role, navCfg)) page = 'todo';
   if (role === 'cn_finance' && !['todo', 'sop', 'po', 'cnfin'].includes(page)) page = 'todo';
   let view;
@@ -336,10 +352,12 @@ export default function App() {
               {!portal && <button type="button" className="btn icon-btn hide-m" onClick={() => go('todo')} aria-label="待办" title="我的待办">
                 🔔{(overdueN > 0 || todoCount > 0) && <span className={`badge ${overdueN ? 'hot' : ''}`} title={overdueN ? `${overdueN} 张超过 24 小时没发货` : ''}>{overdueN || todoCount}</span>}
               </button>}
-              <button type="button" className="set-btn" onClick={() => setSettings(true)} aria-label="设置" title="设置：语言、岗位、规则、导出、数据">⚙<span className="set-role">{t(ROLES[role]?.label || '')}</span></button>
+              <MeButton role={role} onClick={() => setMePanel(true)} />
             </div>
           </header>
 
+          <ViewAsBar peerLock={peerLock} onUnlock={() => setUnlockAsk(true)} onLock={() => { lockView(); toast('已锁上，回到只看'); }}
+            onBack={() => { setViewAs(null); setCustomerSession(null); setRole('admin', true); go('dashboard'); toast('已切回你自己'); }} />
           <main className="content">
             {/* Frank 11-11 (224 ⑤): 说明小字不占版面, 收进右上角 ⓘ; 只有「存不住数据」这种真问题才显示红条 */}
             {!isPersistent() && <div className="demo-banner"><span className="dot warn" /><span>浏览器禁止存储，关闭页面后数据会重置</span></div>}
@@ -369,24 +387,11 @@ export default function App() {
       </div>
 
       {settings && (
-        <Modal title="设置" onClose={() => setSettings(false)}>
+        <Modal title="系统设置" onClose={() => setSettings(false)}>
           <div className="stack">
-            <div className="field"><label>语言 <Info>已翻译：导航、岗位、订单状态、流程步骤、给客户的单据（报价单、销售单、Balance）。其余页面文字还是中文，按页面陆续补。</Info></label>
-              <div className="seg">{LANGS.map(([k, l]) => <button type="button" key={k} className={lang === k ? 'on' : ''} onClick={() => changeLang(k)}>{l}</button>)}</div>
-
-            </div>
-            {/* 11-25 Frank：语言、岗位从顶栏挪进设置，给智能搜索腾地方 */}
-            <div className="field"><label>{SERVER ? '我的岗位' : '当前岗位（演示：切换看每个人能做什么）'}</label>
-              {SERVER && <div className="small muted" style={{ marginBottom: 6 }}>{serverMe()?.email}</div>}
-              <div className="role-grid">{Object.entries(ROLES).filter(([k]) => !SERVER || serverMe()?.roles.includes(k)).map(([k, r]) => (
-                <button type="button" key={k} className={`role-opt ${k === role ? 'on' : ''}`} onClick={() => { setRole(k); setSettings(false); }}><b>{t(r.label)}</b><small>{r.desc}</small></button>))}</div>
-              <div className="row" style={{ gap: 6, marginTop: 6 }}>
-                {!SERVER && <button type="button" className="btn sm" onClick={() => { setSettings(false); go('login'); }}>客户入口（登录 / 游客）</button>}
-                {SERVER && <button type="button" className="btn sm" onClick={doLogout}>退出登录</button>}</div>
-            </div>
             <div className="small muted">{REAL ? '真实数据快照：在这里操作只存在本浏览器，不会写回金蝶 / 飞书。' : '演示版 · 虚构数据。'}数据保存在本浏览器，刷新不丢。</div>
             {role === 'admin' && <LayoutSwitch onDone={() => setSettings(false)} />}
-            {role === 'admin' && <div className="field"><label>规则与系统参数 <Info>所有阈值、开关、权限表、发货文件都在这一页：顶上按订单流程和日常工作排好，点哪个环节只看那里的规则。</Info></label><div><button type="button" className="btn" onClick={() => { setSettings(false); go('rules'); }}>打开规则与系统参数 ›</button> <button type="button" className="btn" onClick={() => { try { sessionStorage.setItem('la9s.rules.area', 'sys'); } catch { /* */ } setSettings(false); go('rules'); }}>权限表 · 发货文件 ›</button></div></div>}
+            {role === 'admin' && <div className="field"><label>规则与系统参数 <Info>所有阈值、开关、权限表、发货文件都在这一页：顶上按订单流程和日常工作排好，点哪个环节只看那里的规则。</Info></label><div><button type="button" className="btn" onClick={() => { setSettings(false); go('rules'); }}>打开规则与系统参数 ›</button> <button type="button" className="btn" onClick={() => { try { sessionStorage.setItem('la9s.rules.area', 'sys'); } catch { /* */ } setSettings(false); go('rules'); }}>权限表 · 发货文件 ›</button> <button type="button" className="btn" onClick={() => { setSettings(false); go('options'); }}>选项设置 ›</button></div></div>}
             <ExportPanel />
             {!SERVER && <>
             <div className="field"><label>演示数据 <Info>{isPersistent() ? '数据存在本浏览器（IndexedDB），换设备不同步。' : '当前浏览器不允许存储。'}</Info></label>
@@ -397,8 +402,18 @@ export default function App() {
           </div>
         </Modal>
       )}
+      {mePanel && <MePanel onClose={() => setMePanel(false)} onSystem={() => { setMePanel(false); setSettings(true); }} lang={lang} changeLang={changeLang}
+        homeOpts={homeOpts} homePref={homePref || home} setHomePref={(k) => { store.set(`la9s.home.${role}`, k); setTick((x) => x + 1); toast('下次打开先看这一页'); }} />}
+      {unlockAsk && viewAs && (
+        <Modal risk="yellow" title={`解锁修改 · ${viewAs.name}`} onClose={() => setUnlockAsk(false)}
+          footer={<><button type="button" className="btn" onClick={() => setUnlockAsk(false)}>取消</button><span className="grow" /><button type="button" className="btn primary" onClick={() => { unlockView(); setUnlockAsk(false); toast(`已解锁，${UNLOCK_MIN} 分钟没动会自动锁上`); }}>解锁</button></>}>
+          <div className="stack" style={{ gap: 8 }}>
+            <div>解锁后，你在这里做的改动（建单、改价、收款…）<b>记在你自己名下</b>，不算 {viewAs.name} 做的。</div>
+            <div className="small muted">切回你自己，或者 {UNLOCK_MIN} 分钟没操作，就自动锁回「只看」。</div>
+          </div>
+        </Modal>)}
       {msheet && msheet !== 'more' && <ActionSheet kind={msheet} onClose={() => setMsheet(null)} />}
-      {msheet === 'more' && <MoreSheet cfg={navCfg} onClose={() => setMsheet(null)} onSettings={() => setSettings(true)} onMenu={() => setNavEdit(true)} />}
+      {msheet === 'more' && <MoreSheet cfg={navCfg} onClose={() => setMsheet(null)} onSettings={() => setMePanel(true)} onMenu={() => setNavEdit(true)} />}
       {navEdit && <NavEditor cfg={navCfg} onClose={() => setNavEdit(false)} />}
       <ArchiveHost arch={arch} onClose={() => setArch(null)} />
       {toastView}
@@ -460,4 +475,10 @@ function LockScreen({ lock, demoSwitch }) {
       </div>
     </div>
   );
+}
+
+// 右上角头像（11-28：设置和账号合并成「我的」）
+function MeButton({ role, onClick }) {
+  const uid = currentUid(role); const me = useMe(uid); const name = meName(me, role);
+  return <button type="button" className="me-btn" onClick={onClick} aria-label="我的" title={`我的：${name}`}><Avatar uid={uid} name={name} size={30} /><span className="me-btn-t">{name}</span></button>;
 }

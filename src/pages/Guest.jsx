@@ -5,9 +5,10 @@
 //     「复制清单图片」什么都不用填 → 一张清单图 (带销售员编号和时间, 不带价格), 自己发 WhatsApp 给销售员
 // 现在这版没有服务器: 登录在本浏览器里验证; 验证码没法真的发到手机, 演示时直接显示在页面上 (部署后改成 WhatsApp / 短信发).
 import CatFilter from '../components/CatFilter.jsx';
+import { setViewAs } from '../lib/viewAs.js';
 import React, { useMemo, useRef, useState } from 'react';
 import { toBlob } from 'html-to-image';
-import { callAnon, setCustomerSession, getOrg, REAL } from '../db/client.js';
+import { callAnon, setCustomerSession, getOrg, REAL, SERVER } from '../db/client.js';
 import { useApp, useData, Pill, Modal, MoneyIn, Choice } from '../components/ui.jsx';
 import { DEFAULT_CUSTOMER_OPTIONS } from '../lib/customerOptions.js';
 import { friendlyError, dt } from '../lib/format.js';
@@ -48,8 +49,14 @@ export function CustomerLogin() {
         <div className="seg" style={{ width: '100%' }}>
           <button type="button" className={tab === 'acc' ? 'on' : ''} style={{ flex: 1 }} onClick={() => setTab('acc')}>账号登录 · Compte</button>
           <button type="button" className={tab === 'guest' ? 'on' : ''} style={{ flex: 1 }} onClick={() => setTab('guest')}>游客 · Visiteur</button>
+          {!SERVER && <button type="button" className={tab === 'staff' ? 'on' : ''} style={{ flex: 1 }} onClick={() => setTab('staff')}>员工 · Employé</button>}
         </div>
-        {tab === 'acc' ? (
+        {tab === 'staff' ? (
+          <div className="stack" style={{ gap: 10, marginTop: 14 }}>
+            <p className="small">员工用工号 + 密码登录（上服务器后开）。演示版不用密码，点下面直接回到中方。</p>
+            <button type="button" className="btn primary lg" onClick={() => { setViewAs(null); setCustomerSession(null); setRole('admin', true); go('dashboard'); }}>进入 · 中方</button>
+          </div>
+        ) : tab === 'acc' ? (
           <div className="stack" style={{ gap: 10, marginTop: 14 }}>
             <div className="field"><label>{T('账号（手机号）', 'Téléphone / identifiant')}</label>
               <input className="in" autoComplete="username" inputMode="tel" value={f.login} onChange={(e) => setF({ ...f, login: e.target.value })} /></div>

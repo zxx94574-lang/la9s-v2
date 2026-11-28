@@ -78,7 +78,7 @@ export function AttList({ items }) {
 }
 const ACK_MIN = 5;
 const lateMin = (d) => Math.floor((Date.now() - new Date(d.created_at).getTime()) / 60e3);
-const beep = () => { try { const C = window.AudioContext || window.webkitAudioContext; const c = new C(); const o = c.createOscillator(); const g = c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.value = 0.08; o.start(); o.stop(c.currentTime + 0.35); } catch { /* 浏览器不让响就算了 */ } };
+const beep = () => { try { if (localStorage.getItem('la9s.sound') === 'off') return; const C = window.AudioContext || window.webkitAudioContext; const c = new C(); const o = c.createOscillator(); const g = c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.value = 0.08; o.start(); o.stop(c.currentTime + 0.35); } catch { /* 浏览器不让响就算了 */ } };
 export function DirectiveGate() {
   const { role, toast, refresh } = useApp();
   const mine = useMine();

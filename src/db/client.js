@@ -225,8 +225,31 @@ export function callAnon(sql, params = []) {
   });
 }
 
-export function call(role, sql, params = []) {
+// 中方「以别人的身份查看」（11-28 Frank）：默认只看 —— 会改数据的一律拦下；解锁后用中方本人的身份写（创建人 = 中方）。
+// 拦的办法：写操作都走 call()；SQL 里有 insert / update / delete，或调用了 volatile 的 app 函数 = 会改数据。查询照常放行。
+let viewGuard = null;   // () => 'locked' | 'unlocked' | null
+export const setViewGuard = (fn) => { viewGuard = fn; };
+const VOL = new Map();
+async function isWrite(sql) {
+  if (/\b(insert\s+into|update\s+app\.|delete\s+from)\b/i.test(sql)) return true;
+  const names = [...new Set([...sql.matchAll(/app\.([a-z_0-9]+)\s*\(/gi)].map((m) => m[1].toLowerCase()))];
+  const miss = names.filter((n) => !VOL.has(n));
+  if (miss.length) {
+    const rs = await exclusive(async () => (await db.query(`select p.proname, bool_or(p.provolatile = 'v') as w from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'app' and p.proname = any($1) group by 1`, [miss])).rows);
+    miss.forEach((n) => VOL.set(n, !!rs.find((r) => r.proname === n)?.w));
+  }
+  return names.some((n) => VOL.get(n));
+}
+export async function call(role, sql, params = []) {
   if (SERVER) return srvExec(sql, params);   // 线上: 一律用登录账号本人的身份, 岗位只决定看到哪些菜单
+  const g = viewGuard?.();
+  if (g && await isWrite(sql)) {
+    if (g === 'locked') { const e = new Error('现在是「只看」：要改东西，先点顶上的「解锁修改」'); e.viewOnly = true; throw e; }
+    role = 'admin';   // 已解锁：用中方本人的身份写
+  }
+  return callAs(role, sql, params);
+}
+function callAs(role, sql, params) {
   const uid = role === 'boss' && custUid ? custUid : USERS[role];
   return exclusive(async () => {
     await db.query(`select set_config('request.jwt.claim.sub', $1, false)`, [uid]);
